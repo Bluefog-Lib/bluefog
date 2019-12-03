@@ -1,0 +1,6 @@
+
+mpi4py==3.0.2
+networkx==2.2
+pytest==5.3.1
+tensorboardX==1.9
+tqdm==4.31.1
