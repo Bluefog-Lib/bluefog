@@ -15,8 +15,8 @@ before_install:
     - pip install torch
 
 install:
-    pip install .
-    python setup.py build_ext -i
+    - pip install .
+    - python setup.py build_ext -i
 
 script:
     - make test
