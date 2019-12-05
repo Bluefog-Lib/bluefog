@@ -12,6 +12,7 @@ addons:
 
 before_install:
     - ./scripts/install_mpi.sh openmpi
+    - pip install torch
 
 install:
     pip install .
