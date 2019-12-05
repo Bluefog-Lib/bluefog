@@ -5,7 +5,7 @@ python:
 os: linux
 
 before_install:
-    - ./script/install_mpi.sh openmpi
+    - ./scripts/install_mpi.sh openmpi
 
 install:
     pip install .
