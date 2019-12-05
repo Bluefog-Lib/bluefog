@@ -1,0 +1,14 @@
+language: python
+python:
+    - "3.7"
+
+os: linux
+
+before_install:
+    - ./script/install-mpi.sh openmpi
+
+install:
+    pip install .
+
+script:
+    - make test
