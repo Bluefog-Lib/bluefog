@@ -4,6 +4,12 @@ python:
 
 os: linux
 
+addons:
+    apt:
+      update: true
+    homebrew:
+      update: true
+
 before_install:
     - ./scripts/install_mpi.sh openmpi
 
