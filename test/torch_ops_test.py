@@ -273,6 +273,7 @@ class BasicsTests(unittest.TestCase):
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
 
+    @unittest.skip
     def test_win_create_and_sync_and_free(self):
         """Test that the window create and free objects correctly."""
         size = bf.size()
