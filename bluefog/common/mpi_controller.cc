@@ -280,7 +280,8 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
       MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
                      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                      mpi_win_ptr.get());
-      mpi_ctx_.win_map[name] = mpi_win_ptr;
+      mpi_ctx_.send_win_map[name] = mpi_win_ptr;
+      mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
     } else if (std::find(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end(),
                          rank) != neighbor_in_ranks_.end()) {
       // Receiver
@@ -290,12 +291,14 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
                      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                      mpi_win_ptr.get());
       mpi_win_vec.push_back(mpi_win_ptr);
+      mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
     } else {
       // Just participate in a collective call.
       auto mpi_win_ptr = std::make_shared<MPI_Win>();
       MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL,
                      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                      mpi_win_ptr.get());
+      mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
     }
   }
 
@@ -307,18 +310,21 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
 }
 
 Status MPIController::WinFree(const std::string& name) {
-  auto it = mpi_ctx_.win_map.find(name);
+  auto it = mpi_ctx_.win_map_with_order.find(name);
+  auto send_it = mpi_ctx_.send_win_map.find(name);
   auto neighbor_it = mpi_ctx_.neighbor_win_map.find(name);
-  if (it == mpi_ctx_.win_map.end() ||
+  if (it == mpi_ctx_.win_map_with_order.end() ||
+      send_it == mpi_ctx_.send_win_map.end() ||
       neighbor_it == mpi_ctx_.neighbor_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
-  // MPI_Win_free(it->second.get());
-  mpi_ctx_.win_map.erase(it);
-  // for(auto neighbor_win: neighbor_it->second) {
-  //   MPI_Win_free(neighbor_win.get());
-  // }
+
+  mpi_ctx_.send_win_map.erase(send_it);
   mpi_ctx_.neighbor_win_map.erase(neighbor_it);
+  for (auto win_ptr : it->second) {
+    MPI_Win_free(win_ptr.get());
+  }
+  mpi_ctx_.win_map_with_order.erase(it);
 
   return Status::OK();
 }
@@ -339,8 +345,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
-  auto it = mpi_ctx_.win_map.find(entry.tensor_name);
-  if (it == mpi_ctx_.win_map.end()) {
+  auto it = mpi_ctx_.send_win_map.find(entry.tensor_name);
+  if (it == mpi_ctx_.send_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
   }
   MPI_Win mpi_win = *(it->second);

@@ -160,7 +160,10 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.bluefog:
     # This distributed optimizer uses neighbor communication.
-    optimizer = bf.DistributedConsensusOptimizer(
+    # optimizer = bf.DistributedConsensusOptimizer(
+    #     optimizer, named_parameters=model.named_parameters()
+    # )
+    optimizer = bf.DistributedBluefogOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
 else:

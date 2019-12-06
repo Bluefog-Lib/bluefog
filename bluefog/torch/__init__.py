@@ -26,6 +26,7 @@ if not os.getenv("BLUEFOG_PY_IMPL"):
     from bluefog.torch.mpi_ops_c import mpi_threads_supported
     from bluefog.torch.mpi_ops_c import win_create, win_free, win_sync
     from bluefog.torch.mpi_ops_c import win_put, win_put_blocking
+    from bluefog.torch.mpi_ops_c import win_wait, win_poll
 else:
     from bluefog.torch.mpi_ops import allreduce, allreduce_async
     from bluefog.torch.mpi_ops import allgather, allgather_async
@@ -366,13 +367,9 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
-        self._in_degree = load_topology().in_degree(rank())
         if size() > 1:
             self._register_window()
             self._register_hooks()
-
-    def __del__(self):
-        self._unregister_window()
 
     def _register_hooks(self):
         for param_group in self.param_groups:
@@ -386,21 +383,10 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 name = self._parameter_names.get(p)
                 if name is None:
                     raise KeyError(
-                        "Cannot find parameter {} in the _parameter_names dictionary".format(p))
+                        "Cannot find parameter {} in the _parameter_names dictionary".format(name))
                 if not win_create(p.data, name):
                     raise ValueError(
-                        "Cannot allocate MPI window for the parameter {}".format(p))
-
-    def _unregister_window(self):
-        for param_group in self.param_groups:
-            for p in param_group["params"]:
-                name = self._parameter_names.get(p)
-                if name is None:
-                    raise KeyError(
-                        "Cannot find parameter {} in the _parameter_names dictionary".format(p))
-                if not win_free(name):
-                    raise ValueError(
-                        "Cannot allocate MPI window for the parameter {}".format(p))
+                        "Cannot allocate MPI window for the parameter {}".format(name))
 
     def _make_hook(self, p):
         def hook(*ignore):
@@ -408,14 +394,6 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             name = self._parameter_names.get(p)
             handle = win_put(tensor=p.data, name=name)
             self._handles[p] = handle
-
-            sum_neighbor = win_sync(name=name)
-
-            # Update p to the average of neighbors.
-            with torch.no_grad():
-                p.add_(sum_neighbor)
-                p.div_(self._in_degree+1)
-
         return hook
 
     def _win_put_async(self, p):
@@ -436,8 +414,12 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
         # Here synchronize just to make sure win_put ops is finished
         # in one iteration.
-        for p, handle in self._handles.items():
-            _ = synchronize(handle)
+        with torch.no_grad():
+            for p, handle in self._handles.items():
+                _ = win_wait(handle)
+                name = self._parameter_names.get(p)
+                # Update p to the average of neighbors.
+                p.set_(win_sync(name=name))
 
         self._handles.clear()
         self._synchronized = True

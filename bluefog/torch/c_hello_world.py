@@ -73,6 +73,5 @@ win_put_blocking(torch.Tensor([[1, 2, 3], [4, 5, 6]]).mul(rank+1), name="win_cre
 time.sleep(0.01)
 result = win_sync(name="win_create_test")
 print(rank, "--win_sync: ", result)
-assert win_free(name="win_create_test")
 
 MPI_LIB_CTYPES.bluefog_shutdown()

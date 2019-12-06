@@ -110,6 +110,7 @@ int DoWinFree(const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   if (!win_storage_manager.UnregisterWinName(name)) {
+    LOG(ERROR) << "Cannot unregister win " << name;
     return 0;
   }
   Status status = WindowFree(name);

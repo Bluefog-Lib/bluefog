@@ -505,7 +505,7 @@ def win_poll(handle: int) -> bool:
     return mpi_lib.bluefog_torch_win_poll(handle) != 0
 
 
-def win_wait(handle: int) -> torch.Tensor:
+def win_wait(handle: int) -> bool:
     if handle not in _handle_map:
         return None
     mpi_lib.bluefog_torch_win_wait(handle)

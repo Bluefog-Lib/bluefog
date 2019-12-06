@@ -164,17 +164,14 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
     MPI_Comm_free(&graph_comm);
   }
 
-  // for(auto& p: win_map) {
-  //   MPI_Win_free(p.second.get());
-  // }
-  win_map.clear();
-
-  // for(auto& p: neighbor_win_map) {
-  //   for(auto& np: p.second){
-  //     MPI_Win_free(np.get());
-  //   }
-  // }
+  send_win_map.clear();
   neighbor_win_map.clear();
+  for(auto& kv: win_map_with_order) {
+    for(auto& win_p: kv.second){
+      MPI_Win_free(win_p.get());
+    }
+  }
+  win_map_with_order.clear();
 
   if (should_finalize) {
     ctx_manager.EnvFinalize();

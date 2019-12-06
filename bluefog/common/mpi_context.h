@@ -74,11 +74,15 @@ struct MPIContext {
   MPI_Comm graph_comm;
 
   // MPI Window used for one-sided communication
-  std::unordered_map<std::string, std::shared_ptr<MPI_Win>> win_map;
+  std::unordered_map<std::string, std::shared_ptr<MPI_Win>> send_win_map;
 
-  // MPI_Win 
+  // MPI_Win for receiving the data from neighbors
   std::unordered_map<std::string, std::vector<std::shared_ptr<MPI_Win>>>
       neighbor_win_map;
+  
+  // MPI_Win with order. Because Win_free is collective ops.
+  std::unordered_map<std::string, std::vector<std::shared_ptr<MPI_Win>>>
+    win_map_with_order;
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;
