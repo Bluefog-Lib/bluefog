@@ -11,7 +11,9 @@ on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed machine learning fast,
 fault-tolerant, friendly to heterogeneuous environment, and easy to use.
 
-REPOSITORY IS STILL A WORK IN PROGRESS.
+.. Note::
+
+    This repository is still under development. Please check it later.
 
 .. toctree::
    :maxdepth: 2
