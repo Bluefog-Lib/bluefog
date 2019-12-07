@@ -40,8 +40,7 @@ class BasicsTests(unittest.TestCase):
         # print("Size: ", true_size, size)
         assert true_size == size
 
-    @unittest.skip("Annoying numpy.ufunc warnings.")
-    def test_topology(self):
+    def test_set_and_load_topology(self):
         _, size = mpi_env_rank_and_size()
         if size == 4:
             expected_topology = nx.DiGraph(np.array(
@@ -52,22 +51,10 @@ class BasicsTests(unittest.TestCase):
         else:
             expected_topology = PowerTwoRingGraph(size)
         bf.init()
-        actual_topology = bf.load_topology()
-        assert isinstance(actual_topology, nx.DiGraph)
+        _, _, topology = bf.load_topology()
+        assert isinstance(topology, nx.DiGraph)
         np.testing.assert_array_equal(
-            nx.to_numpy_array(expected_topology), nx.to_numpy_array(actual_topology))
-
-    @unittest.skip("Not implemented in C yet.")
-    def test_set_and_load_topology(self):
-        _, size = mpi_env_rank_and_size()
-        ring_graph = BiRingGraph(size)
-        bf.set_topology(ring_graph)
-        returned_graph = bf.load_topology()
-
-        assert isinstance(returned_graph, nx.DiGraph)
-
-        np.testing.assert_array_equal(
-            nx.to_numpy_array(ring_graph), nx.to_numpy_array(returned_graph))
+            nx.to_numpy_array(expected_topology), nx.to_numpy_array(topology))
 
 
 if __name__ == "__main__":

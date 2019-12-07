@@ -98,9 +98,15 @@ class BlueFogBasics(object):
         """A funnction that return the virtual topology MPI used.
 
         Returns:
-            networkx.DiGraph: Topology
+            in_neighbour_ranks: A list of incoming neighbor ranks.
+            out_neighbor_ranks: A list of outgoing neighbor ranks.
+            topology: networkx.DiGraph.
         """
-        return self._topology
+        if self._topology is None:
+            return [], [], None
+        in_neighbour_ranks = list(self._topology.predecessors(self.rank()))
+        out_neighbor_ranks = list(self._topology.successors(self.rank()))
+        return in_neighbour_ranks, out_neighbor_ranks, self._topology
 
     def set_topology(self, topology: networkx.DiGraph = None):
         """A funnction that set the virtual topology MPI used.
