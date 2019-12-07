@@ -1,0 +1,322 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>BlueFog Development Guide &mdash; Bluefog 0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="The Structure of Codebase" href="code_structure.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> Bluefog
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">API:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Development:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Development Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#check-your-development-environment">0. Check your development environment.</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#install-the-package-locally">1. Install the package locally</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#build-customer-c-extension">2. Build customer C extension</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#run-test">3. Run Test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#code-style-and-lint">4. Code Style And Lint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#faq-for-mac-users">5. FAQ for Mac users:</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Bluefog</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>BlueFog Development Guide</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/devel_guide.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="bluefog-development-guide">
+<h1>BlueFog Development Guide<a class="headerlink" href="#bluefog-development-guide" title="Permalink to this headline">¶</a></h1>
+<p>Please follow the listed steps to start the development.</p>
+<div class="section" id="check-your-development-environment">
+<h2>0. Check your development environment.<a class="headerlink" href="#check-your-development-environment" title="Permalink to this headline">¶</a></h2>
+<p>Due to limited time and the preliminary phase of this project, we didn’t
+extensively test our project on the various environments. In order to
+avoid some potential pitfall, please make sure that <code class="docutils literal notranslate"><span class="pre">python&gt;=3.7</span></code> and
+<code class="docutils literal notranslate"><span class="pre">gcc&gt;=4.0</span></code> and supporting <code class="docutils literal notranslate"><span class="pre">std=C++11</span></code> in your development
+environment. We recommend using <a class="reference external" href="https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html">conda</a> as python environment control.
+Also, prefer to use Mac OS or Linux-base system. Lastly, we relied on
+the MPI implementation, please install <code class="docutils literal notranslate"><span class="pre">open-mpi&gt;=4.0</span></code> [<a class="reference external" href="https://www.open-mpi.org/software/ompi/v4.0/">Download</a>
+and <a class="reference external" href="https://www.open-mpi.org/faq/?category=building#easy-build">Instruction</a>]. (MPI-CH may be fine but not tested yet.)</p>
+<p>WARNING: Making sure that there is only one MPI implementation is
+installed on your machine.</p>
+</div>
+<div class="section" id="install-the-package-locally">
+<h2>1. Install the package locally<a class="headerlink" href="#install-the-package-locally" title="Permalink to this headline">¶</a></h2>
+<p>Under the root folder, i.e. <code class="docutils literal notranslate"><span class="pre">python</span></code> folder, run the this command
+first.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install -e . --verbose
+</pre></div>
+</div>
+<p>The -e means <a class="reference external" href="https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs">“editable”</a>, so changes you make to files in the bluefog
+directory will take effect without reinstalling the package. In
+contrast, if you do python setup.py install, files will be copied from
+the bluefog directory to a directory of Python packages (often something
+like <code class="docutils literal notranslate"><span class="pre">/home/{USER}/anaconda3/lib/python3.7/site-packages/bluefog</span></code>).
+This means that changes you make to files in the bluefog directory will
+not have any effect.</p>
+</div>
+<div class="section" id="build-customer-c-extension">
+<h2>2. Build customer C extension<a class="headerlink" href="#build-customer-c-extension" title="Permalink to this headline">¶</a></h2>
+<p>We heavily relied on the C extension in this project. Unlike python
+file, whenever you modified the C files, you have to re-compile it and
+generate the shared library out.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python setup.py build_ext -i
+</pre></div>
+</div>
+<p>where -i means the in-place build. If your environment is fine, it
+should be able to generate a file like <code class="docutils literal notranslate"><span class="pre">mpi_lib.cpython-37m-darwin.so</span></code>
+under <code class="docutils literal notranslate"><span class="pre">/bluefog/torch</span></code> folder. (You may have different “middle” name
+based on your system and enviroment).</p>
+</div>
+<div class="section" id="run-test">
+<h2>3. Run Test<a class="headerlink" href="#run-test" title="Permalink to this headline">¶</a></h2>
+<p>To check the setup and build is correct or not, run</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">make</span> <span class="n">test</span>
+</pre></div>
+</div>
+<p>to see if all tests can pass or not. So far the test is based on python
+implementation, in order to test your c extension is built correctly,
+please run</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BLUEFOG_LOG_LEVEL</span><span class="o">=</span>debug mpirun -n <span class="m">2</span> python bluefog/torch/c_hello_world.py
+</pre></div>
+</div>
+<p>as well. Currently, we are in the phase of transferring from python
+implementation into C++ implementation. We still keep both
+implementations. By default, we use C++ implementation. If you want to
+use python implementation, just set the environment variable:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">BLUEFOG_PY_IMPL</span><span class="o">=</span><span class="mi">1</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="code-style-and-lint">
+<h2>4. Code Style And Lint<a class="headerlink" href="#code-style-and-lint" title="Permalink to this headline">¶</a></h2>
+<p>It is important to keep the code style and lint consistent throughout
+the whole project.</p>
+<p>For python, we use normal pylint, which is specified in the
+<code class="docutils literal notranslate"><span class="pre">.pylintrc</span></code> file. Python docstring style is <a class="reference external" href="http://google.github.io/styleguide/pyguide.html#383-functions-and-methods">google style</a>. It is
+recommended to have an editor to run <code class="docutils literal notranslate"><span class="pre">pylint</span></code> easily (But do not turn
+on format-on-save.) Otherwise, remember to run <code class="docutils literal notranslate"><span class="pre">pylint</span> <span class="pre">{FILENANE}</span></code> on
+your changes.</p>
+<p>For C++, we use <code class="docutils literal notranslate"><span class="pre">clang-tidy</span></code>? I am not very familiar with C++ format.
+Right now, we have a simple <code class="docutils literal notranslate"><span class="pre">.clang-format</span></code> file. I just use vscode
+<code class="docutils literal notranslate"><span class="pre">clang-format</span></code> plugin.</p>
+</div>
+<div class="section" id="faq-for-mac-users">
+<h2>5. FAQ for Mac users:<a class="headerlink" href="#faq-for-mac-users" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li><p>If my default python version is 2, how to set the default python
+version to 3?</p></li>
+</ol>
+<p><strong>Answer</strong>: alias python=python3</p>
+<ol class="arabic simple" start="2">
+<li><p>If my pytorch is not well installed, how to reinstall pytorch?</p></li>
+</ol>
+<p><strong>Answer</strong>: Uninstall torch: pip uninstall torch</p>
+<p>Install torch: pip3 install torch torchvision</p>
+<ol class="arabic simple" start="3">
+<li><p>I got the following error when executing “BLUEFOG_LOG_LEVEL=debug
+mpirun -n 2 python bluefog/torch/c_hello_world.py”. How to address
+this issue? Error: File “bluefog/torch/c_hello_world.py”, line 36
+print(f“Rank: {rank}, local rank: {local_rank} Size: {size}, local
+size: {local_size}”) ^ SyntaxError: invalid syntax</p></li>
+</ol>
+<p><strong>Answer</strong>: you should precise python3 using the following command:
+BLUEFOG_LOG_LEVEL=debug mpirun -n 2 python3
+bluefog/torch/c_hello_world.py</p>
+<ol class="arabic simple" start="4">
+<li><p>If I get the following error when executing “make test” command, how
+to address this issue? Error: Test error: There are not enough slots
+available in the system to satisfy the 4</p></li>
+</ol>
+<p><strong>Answer</strong>: Reason: there are not enough physical CPU cores (the test
+requires 4) in your machine. In order to address this issue, you should
+first use “sysctl hw.physicalcpu hw.logicalcpu” command to know the
+number of physical CPU cores. Assume that you have 2 physical CPU cores
+in your machine, you need to modify 4 in python/Makefile to 2. Then, the
+issue is resolved.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="code_structure.html" class="btn btn-neutral float-left" title="The Structure of Codebase" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Bicheng Ying
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

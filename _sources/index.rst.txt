@@ -1,0 +1,28 @@
+.. Bluefog documentation master file, created by
+   sphinx-quickstart on Mon Dec  2 20:20:32 2019.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Welcome to Bluefog's documentation!
+===================================
+
+Bluefog is a distributed training framework for PyTorch based
+on diffusion/consensus-type algorithm.
+The goal of Bluefog is to make distributed machine learning fast,
+fault-tolerant, friendly to heterogeneuous environment, and easy to use.
+
+REPOSITORY IS STILL A WORK IN PROGRESS.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API:
+
+   Bluefog Torch API <torch_api>
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Development:
+
+   Codebase Structure <code_structure>
+   Development Guide <devel_guide>
+
