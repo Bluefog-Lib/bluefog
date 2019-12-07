@@ -11,7 +11,7 @@ class BlueFogBasics(object):
 
     def __init__(self, pkg_path, *args):
         full_path = util.get_extension_full_path(pkg_path, *args)
-        self.topology = None
+        self._topology = None
         self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
     def init(self, topology: networkx.DiGraph = None, comm=None) -> None:
@@ -97,13 +97,10 @@ class BlueFogBasics(object):
     def load_topology(self) -> networkx.DiGraph:
         """A funnction that return the virtual topology MPI used.
 
-        Raises:
-            BlueFogError: If Bluefog has not been initialized.
-
         Returns:
             networkx.DiGraph: Topology
         """
-        return self.topology
+        return self._topology
 
     def set_topology(self, topology: networkx.DiGraph = None):
         """A funnction that set the virtual topology MPI used.
@@ -136,4 +133,4 @@ class BlueFogBasics(object):
         if ret != 1:
             raise RuntimeError(
                 "Cannot set topology correctly. Has Bluefog been initialized? use bf.init()")
-        self.topology = topology
+        self._topology = topology
