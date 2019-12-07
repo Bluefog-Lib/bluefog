@@ -154,37 +154,20 @@
             
   <div class="section" id="the-structure-of-codebase">
 <h1>The Structure of Codebase<a class="headerlink" href="#the-structure-of-codebase" title="Permalink to this headline">¶</a></h1>
-<p>The structure of this codebase is a little messy due to historical
-reasons.</p>
-<p>One the top level, it looks like this</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>├── IndependentApp
-├── __tests__
-├── android
-├── app
-├── ios
-├── python
-└── ...
-</pre></div>
-</div>
-<p>where <code class="docutils literal notranslate"><span class="pre">IndependentApp,</span> <span class="pre">android,</span> <span class="pre">ios</span></code>, etc are the old project that
-related to APP idea, which can be ignored for now (2019Q2).</p>
-<p>The recent <em>bluefog</em> project is all located under <code class="docutils literal notranslate"><span class="pre">python</span></code> folder.
-Under it, the structure looks like:</p>
+<p>One the top level, the structure of this codebase looks like:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>├── bluefog
 ├── docs
 ├── examples
-├── obsolete
-├── setup.py
 ├── <span class="nb">test</span>
+├── setup.py
 └── ...
 </pre></div>
 </div>
-<p>The obsolete folder contains some old experimental code, which can be
-ignored (If you want to put some scratch or random test and keep on
-github for a while, this is the place). Main project code is under
-<code class="docutils literal notranslate"><span class="pre">bluefog</span></code> folder, <code class="docutils literal notranslate"><span class="pre">examples</span></code> folder contains the usage code for
-users, (served as e2e test as well) and <code class="docutils literal notranslate"><span class="pre">test</span></code> folder for test of
-course. Overall, our repository shares a very similar organization like
+<p>Main project code is under <code class="docutils literal notranslate"><span class="pre">bluefog</span></code> folder, <code class="docutils literal notranslate"><span class="pre">examples</span></code> folder
+contains the usage code for users, (served as e2e test as well) and
+<code class="docutils literal notranslate"><span class="pre">test</span></code> folder for test of course. <code class="docutils literal notranslate"><span class="pre">docs</span></code> folder contains the
+document including API, docker usagem, algorithm explaination, development etc.
+Overall, our repository shares a very similar organization like
 <a class="reference external" href="https://github.com/horovod/horovod">horovod</a> repository.</p>
 </div>
 
