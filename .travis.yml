@@ -12,7 +12,7 @@ addons:
 
 before_install:
     - ./scripts/install_mpi.sh mpich
-    - pip install torch
+    - pip install torch sphinx
 
 install:
     - pip install .
@@ -20,3 +20,14 @@ install:
 
 script:
     - make test
+    - cd docs && make html
+    - touch _build/html/.nojekyll
+
+deploy:
+    provider: pages
+    skip_cleanup: true
+    github_token: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
+    keep_history: true
+    local_dir: docs/_build/html/
+    on:
+        branch: master
