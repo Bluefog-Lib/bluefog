@@ -1,3 +1,4 @@
+from typing import List
 import torch
 
 from bluefog.torch import mpi_lib  # C library
@@ -461,7 +462,8 @@ def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 
 
-def win_put(tensor: torch.Tensor, name: str) -> int:
+def win_put(tensor: torch.Tensor, name: str,
+            dst_ranks: List[int] = None) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
     win_put operation is really finished.
@@ -471,18 +473,20 @@ def win_put(tensor: torch.Tensor, name: str) -> int:
         name: The unique name to associate the window object.
         dst_ranks: The source ranks to put the value for. If not provided, it will
             put into all neighbors' shared memory defined by virtual topology.
-            warnings.warn("dst_ranks has not been implemented yet.")
 
     Returns:
         A handle to the allgather operation that can be used with `win_poll()` or
         `win_wait()`.
     """
     function = _check_function(_win_put_function_factory, tensor)
-    handle = getattr(mpi_lib, function)(tensor, name)
+    dst_ranks = [] if dst_ranks is None else dst_ranks
+    handle = getattr(mpi_lib, function)(tensor, name, dst_ranks)
     _win_handle_map[handle] = name
     return handle
 
-def win_put_blocking(tensor: torch.Tensor, name: str) -> bool:
+
+def win_put_blocking(tensor: torch.Tensor, name: str,
+                     dst_ranks: List[int] = None) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
     is finished.
@@ -496,7 +500,61 @@ def win_put_blocking(tensor: torch.Tensor, name: str) -> bool:
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put(tensor, name)
+    handle = win_put(tensor, name, dst_ranks)
+    win_wait(handle)
+    # TODO(ybc) Error handling.
+    return True
+
+
+def _win_get_function_factory(tensor):
+    return 'bluefog_torch_win_get_' + tensor.type().replace('.', '_')
+
+
+def win_get(tensor: torch.Tensor, name: str,
+            src_ranks: List[int] = None, average: bool = True) -> int:
+    """ Passively get the tensor(s) from neighbors' shared window memory.
+    The input tensor is also the in-place output.
+
+    Args:
+        tensor: A tensor to get the result, should have same shape and type of
+            the window object associated with name.
+        name: The unique name to associate the window object.
+        src_ranks: The source ranks to get the value from. If not provided, it will
+            get all neighbors' values defined by virtual topology.
+        average: A flag indicating whether to compute average or summation,
+                 defaults to average.
+
+    Returns:
+        A handle to the allgather operation that can be used with `poll()` or
+        `synchronize()`.
+    """
+    function = _check_function(_win_get_function_factory, tensor)
+    src_ranks = [] if src_ranks is None else src_ranks
+    handle = getattr(mpi_lib, function)(
+        tensor, name, src_ranks, average)
+    _win_handle_map[handle] = name
+    return handle
+
+
+def win_get_blocking(tensor: torch.Tensor, name: str,
+                     src_ranks: List[int] = None, average: bool = True) -> torch.Tensor:
+    """ Passively get the tensor(s) from neighbors' shared window memory.
+    The input tensor is also the in-place output.
+
+    Args:
+        tensor: A tensor to get the result, should have same shape and type of
+            the window object associated with name.
+        name: The unique name to associate the window object.
+        src_ranks: The source ranks to get the value from. If not provided, it will
+            get all neighbors' values defined by virtual topology.
+        average: A flag indicating whether to compute average or summation,
+                 defaults to average.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
+        processes (or all neighbor processes).
+    """
+    handle = win_get(tensor, name, src_ranks, average)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True

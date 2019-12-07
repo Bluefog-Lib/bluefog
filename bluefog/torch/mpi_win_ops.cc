@@ -117,7 +117,8 @@ int DoWinFree(const std::string& name) {
   return status.ok() ? 1 : 0;
 }
 
-int DoWinPut(::torch::Tensor tensor, const std::string& name) {
+int DoWinPut(::torch::Tensor tensor, const std::string& name,
+             const std::vector<int>& dst_ranks) {
   ThrowIfError(common::CheckInitialized());
 
   auto device = GetDeviceID(tensor);
@@ -130,6 +131,14 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name) {
       });
 
   ThrowIfError(enqueue_result);
+  return handle;
+}
+
+int DoWinGet(::torch::Tensor tensor, const std::string& name,
+             const std::vector<int>& src_ranks, bool average) {
+  ThrowIfError(common::CheckInitialized());
+  auto handle = win_handle_manager.AllocateHandle();
+  LOG(ERROR) << "WIN_PUT has not been implemented yet.";
   return handle;
 }
 
@@ -178,6 +187,17 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_put_torch_cuda_LongTensor", &DoWinPut);
   m.def("bluefog_torch_win_put_torch_cuda_FloatTensor", &DoWinPut);
   m.def("bluefog_torch_win_put_torch_cuda_DoubleTensor", &DoWinPut);
+#endif
+
+  m.def("bluefog_torch_win_get_torch_IntTensor", &DoWinGet);
+  m.def("bluefog_torch_win_get_torch_LongTensor", &DoWinGet);
+  m.def("bluefog_torch_win_get_torch_FloatTensor", &DoWinGet);
+  m.def("bluefog_torch_win_get_torch_DoubleTensor", &DoWinGet);
+#if HAVE_CUDA
+  m.def("bluefog_torch_win_get_torch_cuda_IntTensor", &DoWinGet);
+  m.def("bluefog_torch_win_get_torch_cuda_LongTensor", &DoWinGet);
+  m.def("bluefog_torch_win_get_torch_cuda_FloatTensor", &DoWinGet);
+  m.def("bluefog_torch_win_get_torch_cuda_DoubleTensor", &DoWinGet);
 #endif
 
   m.def("bluefog_torch_win_free", &DoWinFree);

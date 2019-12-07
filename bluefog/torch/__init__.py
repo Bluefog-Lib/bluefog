@@ -26,6 +26,7 @@ if not os.getenv("BLUEFOG_PY_IMPL"):
     from bluefog.torch.mpi_ops_c import mpi_threads_supported
     from bluefog.torch.mpi_ops_c import win_create, win_free, win_sync
     from bluefog.torch.mpi_ops_c import win_put, win_put_blocking
+    from bluefog.torch.mpi_ops_c import win_get, win_get_blocking
     from bluefog.torch.mpi_ops_c import win_wait, win_poll
 else:
     from bluefog.torch.mpi_ops import allreduce, allreduce_async

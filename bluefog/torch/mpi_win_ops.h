@@ -2,6 +2,7 @@
 #define BLUEFOG_TORCH_MPI_WIN_OPS_H
 
 #include <mutex>
+#include <vector>
 
 #include "../common/common.h"
 #include "adapter.h"
@@ -70,9 +71,9 @@ WIN_SYNC_H(torch_cuda_FloatTensor, THCudaTensor)
 WIN_SYNC_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
-#define WIN_PUT_H(torch_Tensor, THTensor)                     \
-  extern "C" int bluefog_torch_win_put_##torch_Tensor(        \
-      THTensor* tensor, char* name);
+#define WIN_PUT_H(torch_Tensor, THTensor)              \
+  extern "C" int bluefog_torch_win_put_##torch_Tensor( \
+      THTensor* tensor, char* name, const std::vector<int>& dst_ranks);
 
 WIN_PUT_H(torch_IntTensor, THIntTensor)
 WIN_PUT_H(torch_LongTensor, THLongTensor)
@@ -84,6 +85,23 @@ WIN_PUT_H(torch_cuda_IntTensor, THCudaIntTensor)
 WIN_PUT_H(torch_cuda_LongTensor, THCudaLongTensor)
 WIN_PUT_H(torch_cuda_FloatTensor, THCudaTensor)
 WIN_PUT_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
+#endif
+
+#define WIN_GET_H(torch_Tensor, THTensor)                              \
+  extern "C" int bluefog_torch_win_GET_##torch_Tensor(                 \
+      THTensor* tensor, char* name, const std::vector<int>& src_ranks, \
+      bool average);
+
+WIN_GET_H(torch_IntTensor, THIntTensor)
+WIN_GET_H(torch_LongTensor, THLongTensor)
+WIN_GET_H(torch_FloatTensor, THFloatTensor)
+WIN_GET_H(torch_DoubleTensor, THDoubleTensor)
+
+#if HAVE_CUDA
+WIN_GET_H(torch_cuda_IntTensor, THCudaIntTensor)
+WIN_GET_H(torch_cuda_LongTensor, THCudaLongTensor)
+WIN_GET_H(torch_cuda_FloatTensor, THCudaTensor)
+WIN_GET_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
 extern "C" int bluefog_torch_win_free(char* name);
