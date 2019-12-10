@@ -326,7 +326,7 @@ def _neighbor_allreduce_async(tensor, output, average, name):
     return handle
 
 
-def neighbor_allreduce(tensor: torch.Tensor, average: bool = True, 
+def neighbor_allreduce(tensor: torch.Tensor, average: bool = True,
                        name: str = None) -> torch.Tensor:
     """
     A function that performs averaging or summation of the input tensor

@@ -54,7 +54,7 @@ def _check_extension_lambda(ext_base_name, fn, fn_desc, verbose):
         try:
             ext = importlib.import_module('.' + ext_base_name, 'bluefog')
             result = fn(ext)
-        except:
+        except:  # pylint: disable=bare-except
             traceback.print_exc()
             result = None
 
