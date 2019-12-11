@@ -11,6 +11,11 @@
 namespace bluefog {
 namespace torch {
 
+using ::bluefog::common::bluefog_neighbor_size;
+using ::bluefog::common::bluefog_rank;
+using ::bluefog::common::bluefog_size;
+using ::bluefog::common::Status;
+
 // static here means Local/private variable.
 static HandleManager handle_manager;
 
@@ -62,7 +67,7 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
 
   auto device = GetDeviceID(tensor);
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
-  std::shared_ptr<Tensor> bf_output = nullptr;
+  std::shared_ptr<common::Tensor> bf_output = nullptr;
   if (bluefog_rank() == root_rank) {
     if (tensor.data_ptr() != output.data_ptr()) {
       // TODO(ybc) Check the cuda device case here. 

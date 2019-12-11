@@ -3,6 +3,8 @@
 namespace bluefog {
 namespace torch {
 
+using ::bluefog::common::Status;
+
 int HandleManager::AllocateHandle() {
   int handle = last_handle_.fetch_add(1) + 1;
   std::lock_guard<std::mutex> guard(mutex_);

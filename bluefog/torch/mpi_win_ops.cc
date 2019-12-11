@@ -14,6 +14,9 @@
 namespace bluefog {
 namespace torch {
 
+using ::bluefog::common::bluefog_neighbor_size;
+using ::bluefog::common::Status;
+
 // static here means Local/private variable.
 static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
@@ -57,7 +60,7 @@ bool WinTorchStorageManager::UnregisterWinName(const std::string& name) {
 void WinTorchStorageManager::ClearAll() { tensors_map_.clear(); }
 
 bool WinTorchStorageManager::GetStorageByname(
-    const std::string& name, std::vector<std::shared_ptr<Tensor>>& tensors) {
+    const std::string& name, std::vector<std::shared_ptr<common::Tensor>>& tensors) {
   if (tensors_map_.find(name) == tensors_map_.end()) {
     return false;
   }
@@ -85,7 +88,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 
   auto device = GetDeviceID(tensor);
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
-  std::vector<std::shared_ptr<Tensor>> bf_neighbor_tensors;
+  std::vector<std::shared_ptr<common::Tensor>> bf_neighbor_tensors;
 
   if (!win_storage_manager.RegisterWinName(name, device, bf_tensor)) return 0;
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
@@ -98,7 +101,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 int DoWinSync(::torch::Tensor tensor, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
-  Status status = WindowSync(name);
+  Status status = common::WindowSync(name);
 
   // Average with neighbors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, tensor)) return 0;
@@ -113,7 +116,7 @@ int DoWinFree(const std::string& name) {
     LOG(ERROR) << "Cannot unregister win " << name;
     return 0;
   }
-  Status status = WindowFree(name);
+  Status status = common::WindowFree(name);
   return status.ok() ? 1 : 0;
 }
 

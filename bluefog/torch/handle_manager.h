@@ -11,18 +11,16 @@
 namespace bluefog {
 namespace torch {
 
-using namespace bluefog::common;
-
 class HandleManager {
  public:
   int AllocateHandle();
-  void MarkDone(int handle, const Status& status);
+  void MarkDone(int handle, const common::Status& status);
   bool PollHandle(int handle);
-  std::shared_ptr<Status> ReleaseHandle(int handle);
+  std::shared_ptr<common::Status> ReleaseHandle(int handle);
 
  private:
   std::atomic_int last_handle_;
-  std::unordered_map<int, std::shared_ptr<Status>> results_;
+  std::unordered_map<int, std::shared_ptr<common::Status>> results_;
   std::mutex mutex_;
 };
 

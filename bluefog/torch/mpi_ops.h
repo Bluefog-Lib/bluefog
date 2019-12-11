@@ -11,8 +11,6 @@
 namespace bluefog {
 namespace torch {
 
-using namespace bluefog::common;
-
 #define ALLREDUCE_H(torch_Tensor, THTensor)                                    \
   extern "C" int bluefog_torch_allreduce_async_##torch_Tensor(                 \
       THTensor* tensor, THTensor* output, int average, char* name);

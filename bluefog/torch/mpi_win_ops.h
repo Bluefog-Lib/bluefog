@@ -15,27 +15,26 @@
 namespace bluefog {
 namespace torch {
 
-using namespace bluefog::common;
-
 class WinTorchStorageManager {
  public:
   WinTorchStorageManager() = default;
   WinTorchStorageManager(const WinTorchStorageManager&) = delete;
 
-  bool RegisterWinName(const std::string& name, int device, std::shared_ptr<TorchTensor> tensor);
+  bool RegisterWinName(const std::string& name, int device,
+                       std::shared_ptr<TorchTensor> tensor);
   bool UnregisterWinName(const std::string& name);
   bool GetStorageByname(const std::string& name,
-                        std::vector<std::shared_ptr<Tensor>>& tensors);
+                        std::vector<std::shared_ptr<common::Tensor>>& tensors);
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
   void ClearAll();
 
  private:
   // A local storage for neighbor's remote memory access.
-  // All tensors are associated with an unique name and duplicated for the 
+  // All tensors are associated with an unique name and duplicated for the
   // number of in-degree neighbors.
   std::unordered_map<std::string, std::vector<std::shared_ptr<TorchTensor>>>
       tensors_map_;
-  
+
   mutable std::mutex mutex_;
 };
 
