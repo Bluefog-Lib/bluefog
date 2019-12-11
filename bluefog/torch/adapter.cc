@@ -5,6 +5,12 @@
 namespace bluefog {
 namespace torch {
 
+using ::bluefog::common::DataType;
+using ::bluefog::common::Framework;
+using ::bluefog::common::Status;
+using ::bluefog::common::StatusType;
+using ::bluefog::common::OpContext;
+
 TorchTensor::TorchTensor(::torch::Tensor tensor) : tensor_(tensor) {}
 
 const DataType TorchTensor::dtype() const {
@@ -30,8 +36,8 @@ const DataType TorchTensor::dtype() const {
   }
 }
 
-const TensorShape TorchTensor::shape() const {
-  TensorShape shape;
+const common::TensorShape TorchTensor::shape() const {
+  common::TensorShape shape;
   for (int idx = 0; idx < tensor_.dim(); ++idx) {
     shape.AddDim(tensor_.size(idx));
   }
@@ -102,14 +108,14 @@ TorchOpContext::TorchOpContext(int device, ::torch::Tensor output)
 
 Status
 TorchOpContext::AllocatePersistent(int64_t size,
-                                   std::shared_ptr<PersistentBuffer>* tensor) {
+                                   std::shared_ptr<common::PersistentBuffer>* tensor) {
   // Allocation errors are handled using PyTorch exceptions.
   *tensor = std::make_shared<TorchPersistentBuffer>(device_, size);
   return Status::OK();
 }
 
-Status TorchOpContext::AllocateOutput(TensorShape shape,
-                                      std::shared_ptr<Tensor>* tensor) {
+Status TorchOpContext::AllocateOutput(common::TensorShape shape,
+                                      std::shared_ptr<common::Tensor>* tensor) {
   std::vector<int64_t> shape_vector;
   shape_vector.reserve(shape.dims());
   for (int idx = 0; idx < shape.dims(); ++idx) {
@@ -122,7 +128,7 @@ Status TorchOpContext::AllocateOutput(TensorShape shape,
 }
 
 Status TorchOpContext::AllocateZeros(int64_t num_elements, DataType dtype,
-                                     std::shared_ptr<Tensor>* tensor) {
+                                     std::shared_ptr<common::Tensor>* tensor) {
   with_device device_context(device_);
   auto torch_data_type = GetTorchDataType(dtype);
   ::torch::DeviceType device_type =

@@ -9,13 +9,11 @@
 namespace bluefog {
 namespace torch {
 
-using namespace bluefog::common;
-
-class TorchTensor : public Tensor {
+class TorchTensor : public common::Tensor {
  public:
   TorchTensor(::torch::Tensor tensor);
-  virtual const DataType dtype() const override;
-  virtual const TensorShape shape() const override;
+  virtual const common::DataType dtype() const override;
+  virtual const common::TensorShape shape() const override;
   virtual const void* data() const override;
   virtual int64_t size() const override;
 
@@ -27,38 +25,38 @@ class TorchTensor : public Tensor {
   ::torch::Tensor tensor_;
 };
 
-::torch::ScalarType GetTorchDataType(DataType dtype);
+::torch::ScalarType GetTorchDataType(common::DataType dtype);
 
-class TorchPersistentBuffer : public PersistentBuffer {
-public:
+class TorchPersistentBuffer : public common::PersistentBuffer {
+ public:
   TorchPersistentBuffer(int device, int64_t size);
-  virtual const void*
-  AccessData(std::shared_ptr<OpContext> context) const override;
+  virtual const void* AccessData(
+      std::shared_ptr<common::OpContext> context) const override;
 
-private:
+ private:
   int device_ = CPU_DEVICE_ID;
   ::torch::Tensor tensor_;
 };
 
-class TorchOpContext : public OpContext {
-public:
+class TorchOpContext : public common::OpContext {
+ public:
   TorchOpContext(int device, ::torch::Tensor output);
-  virtual Status
-  AllocatePersistent(int64_t size,
-                     std::shared_ptr<PersistentBuffer>* tensor) override;
-  virtual Status AllocateOutput(TensorShape shape,
-                                std::shared_ptr<Tensor>* tensor) override;
-  virtual Status AllocateZeros(int64_t num_elements, DataType dtype,
-                                std::shared_ptr<Tensor>* tensor) override;
-  virtual Framework framework() const override;
+  virtual common::Status AllocatePersistent(
+      int64_t size, std::shared_ptr<common::PersistentBuffer>* tensor) override;
+  virtual common::Status AllocateOutput(
+      common::TensorShape shape,
+      std::shared_ptr<common::Tensor>* tensor) override;
+  virtual common::Status AllocateZeros(
+      int64_t num_elements, common::DataType dtype,
+      std::shared_ptr<common::Tensor>* tensor) override;
+  virtual common::Framework framework() const override;
 
-private:
+ private:
   int device_ = CPU_DEVICE_ID;
   ::torch::Tensor output_;
 };
 
-
-void ThrowIfError(Status status);
+void ThrowIfError(common::Status status);
 
 }  // namespace torch
 }  // namespace bluefog
