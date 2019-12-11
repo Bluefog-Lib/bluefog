@@ -93,6 +93,11 @@ bool RunLoopOnce(BluefogGlobalState& state) {
           << "Processing WIN_PUT on " << entry.tensor_name;
       state.controller->WinPut(entry);
       break;
+    case MPIOpsType::WIN_GET:
+      LOG(TRACE, bluefog_global.controller->GetRank())
+          << "Processing WIN_PUT on " << entry.tensor_name;
+      LOG(ERROR) << "WIN_GET have not been implemented yet.";
+      break;
     default:
       throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
     }
@@ -330,6 +335,26 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  if (status.ok()) {
+    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
+  }
+  return status;
+}
+
+Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
+                             const std::string& name, const int device,
+                             StatusCallback callback) {
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.tensor = tensor;
+  e.device = device;
+  e.callback = callback;
+  e.mpi_ops_type = MPIOpsType::WIN_GET;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;

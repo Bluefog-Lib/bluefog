@@ -128,6 +128,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
 
+  // TODO(ybc) Add dst_ranks into API
   auto enqueue_result = EnqueuTensorWindowPut(
       bf_tensor, name, device, [handle](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
@@ -140,8 +141,19 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 int DoWinGet(::torch::Tensor tensor, const std::string& name,
              const std::vector<int>& src_ranks, bool average) {
   ThrowIfError(common::CheckInitialized());
+
+  auto device = GetDeviceID(tensor);
+  auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
-  LOG(ERROR) << "WIN_PUT has not been implemented yet.";
+
+  // TODO(ybc) Add src_ranks into API
+  auto enqueue_result = EnqueuTensorWindowGet(
+      bf_tensor, name, device, [handle](const Status& status) {
+        win_handle_manager.MarkDone(handle, status);
+      });
+
+  ThrowIfError(enqueue_result);
+
   return handle;
 }
 

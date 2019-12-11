@@ -85,6 +85,10 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
                              const std::string& name, const int device,
                              StatusCallback callback);
 
+Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
+                             const std::string& name, const int device,
+                             StatusCallback callback);
+
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, int device);
