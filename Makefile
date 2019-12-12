@@ -13,6 +13,6 @@ clean_build:
 	rm -R build
 
 clean_so:
-	rm ./bluefog/torch/mpi_lib.*.so
+	rm ./bluefog/torch/mpi_lib.*.so; rm ./bluefog/tensorflow/mpi_lib.*.so
 
 clean_all: clean_build clean_so

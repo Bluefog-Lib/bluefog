@@ -36,6 +36,7 @@ with open('requirements.txt') as f:
     reqs = list(f.read().strip().split('\n'))
 
 
+bluefog_tensorflow_mpi_lib = Extension('bluefog.tensorflow.mpi_lib', [])
 bluefog_torch_mpi_lib = Extension('bluefog.torch.mpi_lib', [])
 
 
@@ -220,6 +221,7 @@ def get_common_options(build_ext):
     LINK_FLAGS = link_flags + shlex.split(mpi_flags)
     LIBRARY_DIRS = []
     LIBRARIES = []
+    EXTRA_OBJECTS = []
 
     return dict(MACROS=MACROS,
                 INCLUDES=INCLUDES,
@@ -227,7 +229,57 @@ def get_common_options(build_ext):
                 COMPILE_FLAGS=COMPILE_FLAGS,
                 LINK_FLAGS=LINK_FLAGS,
                 LIBRARY_DIRS=LIBRARY_DIRS,
-                LIBRARIES=LIBRARIES)
+                LIBRARIES=LIBRARIES,
+                EXTRA_OBJECTS=EXTRA_OBJECTS)
+
+
+def check_tf_version():
+    try:
+        import tensorflow
+        if LooseVersion(tensorflow.__version__) < LooseVersion('1.1.0'):
+            raise DistutilsPlatformError(
+                'Your TensorFlow version %s is outdated.  '
+                'Bluefog requires tensorflow>=1.1.0' % tensorflow.__version__)
+    except ImportError:
+        raise DistutilsPlatformError(
+            'import tensorflow failed, is it installed?\n\n%s' % traceback.format_exc())
+
+
+def build_tf_extension(build_ext, global_options):
+    # Backup the options, preventing other plugins access libs that
+    # compiled with compiler of this plugin
+    options = copy.deepcopy(global_options)
+    import tensorflow as tf
+
+    tf_compile_flags = tf.sysconfig.get_compile_flags()
+    tf_link_flags = tf.sysconfig.get_link_flags()
+    have_cuda = tf.test.is_built_with_cuda()
+    updated_macros = set_macro(
+        options['MACROS'], 'HAVE_CUDA', str(int(have_cuda)))
+    print(tf_compile_flags, tf_link_flags, have_cuda)
+
+    if have_cuda:
+        cuda_include_dirs, cuda_lib_dirs = get_cuda_dirs(
+            build_ext, options['COMPILE_FLAGS'])
+        options['INCLUDES'] += cuda_include_dirs
+        options['LIBRARY_DIRS'] += cuda_lib_dirs
+        options['LIBRARIES'] += ['cudart']
+        print('INFO: Try Tensorflow extension with CUDA.')
+
+    bluefog_tensorflow_mpi_lib.define_macros = updated_macros
+    bluefog_tensorflow_mpi_lib.include_dirs = options['INCLUDES']
+    bluefog_tensorflow_mpi_lib.sources = options['SOURCES'] + [
+        "bluefog/tensorflow/adapter.cc"
+    ]
+    bluefog_tensorflow_mpi_lib.extra_compile_args = (
+        options['COMPILE_FLAGS'] + tf_compile_flags)
+    bluefog_tensorflow_mpi_lib.extra_link_args = (
+        options['LINK_FLAGS'] + tf_link_flags)
+    bluefog_tensorflow_mpi_lib.library_dirs = options['LIBRARY_DIRS']
+    bluefog_tensorflow_mpi_lib.libraries = options['LIBRARIES']
+    bluefog_tensorflow_mpi_lib.extra_objects = options['EXTRA_OBJECTS']
+
+    build_ext.build_extension(bluefog_tensorflow_mpi_lib)
 
 
 def dummy_import_torch():
@@ -332,6 +384,21 @@ class custom_build_ext(_build_ext):
         if not os.environ.get('BLUEFOG_WITHOUT_PYTORCH'):
             dummy_import_torch()
 
+        if not os.environ.get('BLUEFOG_WITHOUT_TENSORFLOW'):
+            try:
+                check_tf_version()
+                build_tf_extension(self, options)
+                built_plugins.append(True)
+                print('INFO: Tensorflow extension is built successfully.')
+            except: # pylint: disable=bare-except
+                if not os.environ.get('BLUEFOG_WITHOUT_TENSORFLOW'):
+                    print(
+                        'INFO: Unable to build TensorFlow plugin, will skip it.\n\n'
+                        '%s' % traceback.format_exc(), file=sys.stderr)
+                    built_plugins.append(False)
+                else:
+                    raise
+
         if not os.environ.get('BLUEFOG_WITHOUT_PYTORCH'):
             try:
                 check_torch_version()
@@ -366,7 +433,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
-    ext_modules=[bluefog_torch_mpi_lib],
+    ext_modules=[bluefog_torch_mpi_lib, bluefog_tensorflow_mpi_lib],
     cmdclass={"build_ext": custom_build_ext},
     install_requires=reqs,
     extras_require=EXTRAS,
