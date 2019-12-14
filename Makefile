@@ -9,6 +9,9 @@ test_torch_basic:
 test_torch_ops:
 	${MPIRUN} -np 4 ${PYTEST} ./test/torch_ops_test.py
 
+test_tensorflow_basic:
+	${PYTEST} ./test/tensorflow_basics_test.py && ${MPIRUN} -np 4 ${PYTEST} ./test/tensorflow_basics_test.py
+
 clean_build:
 	rm -R build
 

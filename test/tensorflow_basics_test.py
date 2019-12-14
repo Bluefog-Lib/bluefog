@@ -7,16 +7,17 @@ import warnings
 import numpy as np
 import networkx as nx
 import pytest
+import tensorflow as tf
 
 from common import mpi_env_rank_and_size
-import bluefog.torch as bf
+import bluefog.tensorflow as bf
 from bluefog.common.topology_util import PowerTwoRingGraph, BiRingGraph
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
-class BasicsTests(unittest.TestCase):
+class BasicsTests(tf.test.TestCase):
     """
     Tests for basics.py
     """
@@ -59,4 +60,4 @@ class BasicsTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    tf.test.main()
