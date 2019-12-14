@@ -11,6 +11,8 @@
 namespace bluefog {
 namespace tensorflow {
 
+::tensorflow::Status ConvertStatus(const common::Status& status);
+common::Status ConvertStatus(const ::tensorflow::Status& status);
 
 class TFPersistentBuffer : public common::PersistentBuffer {
  public:

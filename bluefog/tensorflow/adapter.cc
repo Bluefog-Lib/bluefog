@@ -5,20 +5,37 @@
 namespace bluefog {
 namespace tensorflow {
 
-common::Status ConvertStatus(const common::Status& status) {
-  switch (status.type()) {
-    case common::StatusType::OK:
+common::Status ConvertStatus(const ::tensorflow::Status& status) {
+  switch (status.code()) {
+    case ::tensorflow::error::Code::OK:
       return common::Status::OK();
-    case common::StatusType::UNKNOWN_ERROR:
-      return common::Status::UnknownError(status.reason());
-    case common::StatusType::PRECONDITION_ERROR:
-      return common::Status::PreconditionError(status.reason());
-    case common::StatusType::ABORTED:
-      return common::Status::Aborted(status.reason());
-    case common::StatusType::INVALID_ARGUMENT:
-      return common::Status::InvalidArgument(status.reason());
+    case ::tensorflow::error::Code::UNKNOWN:
+      return common::Status::UnknownError(status.error_message());
+    case ::tensorflow::error::Code::FAILED_PRECONDITION:
+      return common::Status::PreconditionError(status.error_message());
+    case ::tensorflow::error::Code::ABORTED:
+      return common::Status::Aborted(status.error_message());
+    case ::tensorflow::error::Code::INVALID_ARGUMENT:
+      return common::Status::InvalidArgument(status.error_message());
     default:
       return common::Status::UnknownError("Unknown error.");
+  }
+}
+
+::tensorflow::Status ConvertStatus(const common::Status& status) {
+  switch (status.type()) {
+  case common::StatusType::OK:
+    return ::tensorflow::Status::OK();
+  case common::StatusType::UNKNOWN_ERROR:
+    return ::tensorflow::errors::Unknown(status.reason());
+  case common::StatusType::PRECONDITION_ERROR:
+    return ::tensorflow::errors::FailedPrecondition(status.reason());
+  case common::StatusType::ABORTED:
+    return ::tensorflow::errors::Aborted(status.reason());
+  case common::StatusType::INVALID_ARGUMENT:
+    return ::tensorflow::errors::InvalidArgument(status.reason());
+  default:
+    return ::tensorflow::errors::Unknown("Unknown error.");
   }
 }
 
@@ -105,7 +122,7 @@ common::Status TFOpContext::AllocatePersistent(
   try {
     *tensor = std::make_shared<TFPersistentBuffer>(context_, size);
     return common::Status::OK();
-  } catch (common::Status& status) {
+  } catch (::tensorflow::Status& status) {
     return ConvertStatus(status);
   }
 }
