@@ -6,7 +6,6 @@ import torch
 
 from bluefog.common.util import get_extension_full_path
 import bluefog.common.topology_util as topology_util
-from bluefog.torch import mpi_lib  # C library
 
 from bluefog.torch.mpi_ops_c import allreduce, allreduce_async
 from bluefog.torch.mpi_ops_c import allgather, allgather_async
