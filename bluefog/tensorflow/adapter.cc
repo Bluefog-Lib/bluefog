@@ -24,18 +24,18 @@ common::Status ConvertStatus(const ::tensorflow::Status& status) {
 
 ::tensorflow::Status ConvertStatus(const common::Status& status) {
   switch (status.type()) {
-  case common::StatusType::OK:
-    return ::tensorflow::Status::OK();
-  case common::StatusType::UNKNOWN_ERROR:
-    return ::tensorflow::errors::Unknown(status.reason());
-  case common::StatusType::PRECONDITION_ERROR:
-    return ::tensorflow::errors::FailedPrecondition(status.reason());
-  case common::StatusType::ABORTED:
-    return ::tensorflow::errors::Aborted(status.reason());
-  case common::StatusType::INVALID_ARGUMENT:
-    return ::tensorflow::errors::InvalidArgument(status.reason());
-  default:
-    return ::tensorflow::errors::Unknown("Unknown error.");
+    case common::StatusType::OK:
+      return ::tensorflow::Status::OK();
+    case common::StatusType::UNKNOWN_ERROR:
+      return ::tensorflow::errors::Unknown(status.reason());
+    case common::StatusType::PRECONDITION_ERROR:
+      return ::tensorflow::errors::FailedPrecondition(status.reason());
+    case common::StatusType::ABORTED:
+      return ::tensorflow::errors::Aborted(status.reason());
+    case common::StatusType::INVALID_ARGUMENT:
+      return ::tensorflow::errors::InvalidArgument(status.reason());
+    default:
+      return ::tensorflow::errors::Unknown("Unknown error.");
   }
 }
 
@@ -125,6 +125,44 @@ common::Status TFOpContext::AllocatePersistent(
   } catch (::tensorflow::Status& status) {
     return ConvertStatus(status);
   }
+}
+
+common::Status TFOpContext::AllocateOutput(
+    common::TensorShape shape, std::shared_ptr<common::Tensor>* tensor) {
+  ::tensorflow::TensorShape tf_shape;
+  for (int idx = 0; idx < shape.dims(); ++idx) {
+    tf_shape.AddDim(shape.dim_size(idx));
+  }
+  ::tensorflow::Tensor* tf_tensor;
+  ::tensorflow::Status status =
+      context_->allocate_output(0, tf_shape, &tf_tensor);
+  if (status.ok()) {
+    *tensor = std::make_shared<TFTensor>(*tf_tensor);
+  }
+#if HAVE_CUDA
+  // On GPU allocation is asynchronous, we need to wait for it to
+  // complete.
+  auto device_context = context_->op_device_context();
+  if (device_context != nullptr) {
+    device_context->stream()->BlockHostUntilDone();
+  }
+#endif
+  return ConvertStatus(status);
+}
+
+common::Status TFOpContext::AllocateZeros(
+    int64_t num_elements, common::DataType dtype,
+    std::shared_ptr<common::Tensor>* tensor) {
+  return common::Status::PreconditionError(
+      "AllocateZeros is not supported for TensorFlow yet.");
+}
+
+common::Framework TFOpContext::framework() const {
+  return common::Framework::TENSORFLOW;
+}
+
+::tensorflow::OpKernelContext* TFOpContext::GetKernelContext() const {
+  return context_;
 }
 
 }  // namespace tensorflow
