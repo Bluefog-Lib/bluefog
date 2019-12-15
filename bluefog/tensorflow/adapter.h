@@ -8,6 +8,10 @@
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
+#if HAVE_CUDA
+#include "tensorflow/stream_executor/stream.h"
+#endif
+
 namespace bluefog {
 namespace tensorflow {
 

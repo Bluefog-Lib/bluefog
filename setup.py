@@ -269,7 +269,8 @@ def build_tf_extension(build_ext, global_options):
     bluefog_tensorflow_mpi_lib.define_macros = updated_macros
     bluefog_tensorflow_mpi_lib.include_dirs = options['INCLUDES']
     bluefog_tensorflow_mpi_lib.sources = options['SOURCES'] + [
-        "bluefog/tensorflow/adapter.cc"
+        "bluefog/tensorflow/adapter.cc",
+        "bluefog/tensorflow/mpi_ops.cc"
     ]
     bluefog_tensorflow_mpi_lib.extra_compile_args = (
         options['COMPILE_FLAGS'] + tf_compile_flags)
