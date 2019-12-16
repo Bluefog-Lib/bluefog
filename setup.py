@@ -7,7 +7,7 @@ import textwrap
 import traceback
 
 
-from distutils.errors import CompileError, \
+from distutils.errors import CompileError, DistutilsError, \
     DistutilsPlatformError, DistutilsSetupError, LinkError
 from distutils.version import LooseVersion
 
@@ -391,7 +391,7 @@ class custom_build_ext(_build_ext):
                 build_tf_extension(self, options)
                 built_plugins.append(True)
                 print('INFO: Tensorflow extension is built successfully.')
-            except: # pylint: disable=bare-except
+            except:  # pylint: disable=bare-except
                 if not os.environ.get('BLUEFOG_WITHOUT_TENSORFLOW'):
                     print(
                         'INFO: Unable to build TensorFlow plugin, will skip it.\n\n'
@@ -413,6 +413,14 @@ class custom_build_ext(_build_ext):
                     built_plugins.append(False)
                 else:
                     raise
+
+        if not built_plugins:
+            raise DistutilsError(
+                'TensorFlow and PyTorch plugins were excluded from build. Aborting.')
+
+        if not any(built_plugins):
+            raise DistutilsError(
+                'None of TensorFlow or PyTorch plugins were built. See errors above.')
 
 
 setup(
