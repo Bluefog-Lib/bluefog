@@ -83,3 +83,31 @@ def _allreduce_grad(op, grad):
       The gradient with respect to the input of the op.
     """
     return _allreduce(grad)
+
+def allreduce(tensor, average=True, device=''):
+    """Perform an allreduce on a tf.Tensor or tf.IndexedSlices.
+
+    This function performs a bandwidth-optimal ring allreduce on the input
+    tensor. If the input is an tf.IndexedSlices, the function instead does an
+    allgather on the values and the indices, effectively doing an allreduce on
+    the represented tensor.
+
+    Arguments:
+        tensor: tf.Tensor, tf.Variable, or tf.IndexedSlices to reduce.
+                The shape of the input must be identical across all ranks.
+        average: If True, computes the average over all ranks.
+                 Otherwise, computes the sum over all ranks.
+        device: Device to be used for dense tensors.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`, summed across all
+        processes.
+    """
+    if isinstance(tensor, tf.IndexedSlices):
+        raise ValueError("Do not support Sparse or Indexed Slices Tensor yet.")
+    else:
+        with tf.device(device):
+            bluefog_size = tf.cast(size(), dtype=tensor.dtype)
+            summed_tensor = _allreduce(tensor)
+            new_tensor = (summed_tensor / bluefog_size) if average else summed_tensor
+        return new_tensor
