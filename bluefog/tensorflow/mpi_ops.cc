@@ -40,7 +40,6 @@ class BluefogAllreduceOp : public AsyncOpKernel {
     auto node_name = name();
     auto device = GetDeviceID(context);
     auto tensor = context->input(0);
-    bool average = average_;
     ::tensorflow::Tensor* output;
     OP_REQUIRES_OK_ASYNC(
         context, context->allocate_output(0, tensor.shape(), &output), done);
@@ -50,18 +49,12 @@ class BluefogAllreduceOp : public AsyncOpKernel {
     auto bf_output = std::make_shared<TFTensor>(*output);
     auto enqueue_result = common::EnqueueTensorAllreduce(
         bf_tensor, bf_output, node_name, device,
-        [context, average, done](const common::Status& status) {
-          if (average) {
-
-          }
+        [context, done](const common::Status& status) {
           context->SetStatus(ConvertStatus(status));
           done();
         });
     OP_REQUIRES_OK_ASYNC(context, ConvertStatus(enqueue_result), done);
   }
-
-private:
-  bool average_;
 };
 
 REGISTER_KERNEL_BUILDER(Name("BluefogAllreduce").Device(::tensorflow::DEVICE_CPU),
