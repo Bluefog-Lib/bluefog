@@ -91,5 +91,40 @@ class OpsTests(tf.test.TestCase):
             self.assertTrue(diff <= threshold,
                             "bf.allreduce produces incorrect results")
 
+    def test_horovod_allreduce_gpu(self):
+        """Test that the allreduce works on GPUs."""
+        # Only do this test if there are GPUs available.
+        if not tf.test.is_gpu_available(cuda_only=True):
+            return
+
+        local_rank = bf.local_rank()
+        size = bf.size()
+
+        dtypes = [tf.int32, tf.int64, tf.float32, tf.float64]
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            with tf.device("/gpu:%d" % local_rank):
+                tensor = self.random_uniform(
+                    [17] * dim, -100, 100, dtype=dtype)
+                summed = bf.allreduce(tensor, average=False)
+            multiplied = tensor * size
+            max_difference = tf.reduce_max(tf.abs(summed - multiplied))
+
+            # Threshold for floating point equality depends on number of
+            # ranks, since we're comparing against precise multiplication.
+            if size <= 3 or dtype in [tf.int32, tf.int64]:
+                threshold = 0
+            elif size < 10:
+                threshold = 1e-4
+            elif size < 15:
+                threshold = 5e-4
+            else:
+                return
+
+            diff = self.evaluate(max_difference)
+            self.assertTrue(diff <= threshold,
+                            "bf.allreduce on GPU produces incorrect results")
+
+
 if __name__ == "__main__":
     tf.test.main()
