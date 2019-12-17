@@ -65,7 +65,7 @@ REGISTER_KERNEL_BUILDER(Name("BluefogAllreduce").Device(::tensorflow::DEVICE_GPU
 #endif
 
 REGISTER_OP("BluefogAllreduce")
-    .Attr("T: {int32, int64, float16, float32, float64}")
+    .Attr("T: {int32, int64, float32, float64}")
     .Input("tensor: T")
     .Output("sum: T")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {

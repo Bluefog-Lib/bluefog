@@ -66,7 +66,7 @@ class OpsTests(tf.test.TestCase):
     def test_bluefog_allreduce_cpu(self):
         """Test on CPU that the allreduce correctly sums 1D, 2D, 3D tensors."""
         size = bf.size()
-        dtypes = [tf.int32, tf.float32]
+        dtypes = [tf.int32, tf.int64, tf.float32, tf.float64]
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             with tf.device("/cpu:0"):
