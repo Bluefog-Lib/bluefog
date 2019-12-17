@@ -28,6 +28,14 @@ else:
         tf.enable_eager_execution(config=config)
 
 
+def random_uniform(*args, **kwargs):
+    if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
+        tf.random.set_seed(12345)
+        return tf.random.uniform(*args, **kwargs)
+    tf.set_random_seed(12345)
+    return tf.random_uniform(*args, **kwargs)
+
+
 class OpsTests(tf.test.TestCase):
     """
     Tests for bluefog/tensorflow/mpi_ops.py
@@ -55,22 +63,14 @@ class OpsTests(tf.test.TestCase):
         else:
             return sess.run(tensors)
 
-    def random_uniform(self, *args, **kwargs):
-        if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
-            tf.random.set_seed(12345)
-            return tf.random.uniform(*args, **kwargs)
-        else:
-            tf.set_random_seed(12345)
-            return tf.random_uniform(*args, **kwargs)
-
     def test_bluefog_allreduce_cpu(self):
         """Test on CPU that the allreduce correctly sums 1D, 2D, 3D tensors."""
         size = bf.size()
-        dtypes = [tf.int32, tf.int64, tf.float16, tf.float32, tf.float64]
+        dtypes = [tf.int32, tf.float32]
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             with tf.device("/cpu:0"):
-                tensor = self.random_uniform(
+                tensor = random_uniform(
                     [17] * dim, -100, 100, dtype=dtype)
                 summed = bf.allreduce(tensor, average=False)
             multiplied = tensor * size
@@ -89,7 +89,7 @@ class OpsTests(tf.test.TestCase):
 
             diff = self.evaluate(max_difference)
             self.assertTrue(diff <= threshold,
-                            "hvd.allreduce produces incorrect results")
+                            "bf.allreduce produces incorrect results")
 
 if __name__ == "__main__":
     tf.test.main()
