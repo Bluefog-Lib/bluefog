@@ -111,3 +111,38 @@ def allreduce(tensor, average=True, device=''):
             summed_tensor = _allreduce(tensor)
             new_tensor = (summed_tensor / bluefog_size) if average else summed_tensor
         return new_tensor
+    
+
+def broadcast(tensor, root_rank, name=None):
+    """An op which broadcasts the input tensor on root rank to the same input tensor
+    on all other Bluefog processes.
+
+    The broadcast operation is keyed by the name of the op. The tensor type and
+    shape must be the same on all Bluefog processes for a given name. The broadcast
+    will not start until all processes are ready to send and receive the tensor.
+
+    Returns:
+      A tensor of the same shape and type as `tensor`, with the value broadcasted
+      from root rank.
+    """
+    if name is None and not _executing_eagerly():
+        name = 'BluefogBroadcast_%s' % _normalize_name(tensor.name)
+    return MPI_LIB.bluefog_broadcast(tensor, name=name, root_rank=root_rank)
+
+
+@ops.RegisterGradient('BluefogBroadcast')
+def _broadcast_grad(op, grad):
+    """Gradient for broadcast op.
+
+    Args:
+      op: An operation.
+      grad: `Tensor` gradient with respect to the output of the op.
+
+    Returns:
+      The gradient with respect to the input of the op.
+    """
+    root_rank = op.get_attr('root_rank')
+    grad_reduced = _allreduce(grad)
+    if rank() != root_rank:
+        return grad_reduced * 0
+    return grad_reduced

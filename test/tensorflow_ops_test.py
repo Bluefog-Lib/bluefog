@@ -125,6 +125,33 @@ class OpsTests(tf.test.TestCase):
             self.assertTrue(diff <= threshold,
                             "bf.allreduce on GPU produces incorrect results")
 
+    def test_horovod_broadcast(self):
+        """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
+        rank = bf.rank()
+        size = bf.size()
+
+        # This test does not apply if there is only one worker.
+        if size == 1:
+            return
+
+        dtypes = [tf.int32, tf.int64, tf.float32,
+                  tf.float64, tf.bool]
+        dims = [1, 2, 3]
+        root_ranks = list(range(size))
+        for dtype, dim, root_rank in itertools.product(dtypes, dims, root_ranks):
+            tensor = tf.ones([17] * dim) * rank
+            root_tensor = tf.ones([17] * dim) * root_rank
+            if dtype == tf.bool:
+                tensor = tensor % 2
+                root_tensor = root_tensor % 2
+            tensor = tf.cast(tensor, dtype=dtype)
+            root_tensor = tf.cast(root_tensor, dtype=dtype)
+            broadcasted_tensor = bf.broadcast(tensor, root_rank)
+            self.assertTrue(
+                self.evaluate(tf.reduce_all(tf.equal(
+                    tf.cast(root_tensor, tf.int32), tf.cast(broadcasted_tensor, tf.int32)))),
+                "bf.broadcast produces incorrect broadcasted tensor")
+
 
 if __name__ == "__main__":
     tf.test.main()

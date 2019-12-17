@@ -19,7 +19,7 @@ install:
 
 script:
     - mv bluefog _bluefog  # Force to use installed package instead of local one
-    - make test
+    - make test_torch
     - cd docs && make html
     - touch _build/html/.nojekyll
 

@@ -12,7 +12,7 @@ from bluefog.tensorflow.mpi_ops import init, shutdown
 from bluefog.tensorflow.mpi_ops import size, local_size, rank, local_rank
 from bluefog.tensorflow.mpi_ops import load_topology, set_topology
 from bluefog.tensorflow.mpi_ops import mpi_threads_supported
-from bluefog.tensorflow.mpi_ops import allreduce
+from bluefog.tensorflow.mpi_ops import allreduce, broadcast
 
 full_path = get_extension_full_path(__file__, 'mpi_lib')
 
@@ -62,3 +62,6 @@ tensor = random_uniform(
 print("Previous: ", tensor)
 summed = allreduce(tensor, average=False)
 print("Allreduce: ", summed)
+
+result = broadcast(tf.ones(shape=[3]) * (rank+1), root_rank=0)
+print("Broadcast: ", result)

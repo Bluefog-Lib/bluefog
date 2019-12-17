@@ -1,7 +1,7 @@
 MPIRUN = mpirun
 PYTEST = pytest
 
-test: test_torch
+test: test_torch test_tensorflow
 test_torch: test_torch_basic test_torch_ops
 test_tensorflow: test_tensorflow_basic test_tensorflow_ops
 
