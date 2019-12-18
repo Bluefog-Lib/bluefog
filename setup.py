@@ -236,10 +236,10 @@ def get_common_options(build_ext):
 def check_tf_version():
     try:
         import tensorflow
-        if LooseVersion(tensorflow.__version__) < LooseVersion('1.1.0'):
+        if LooseVersion(tensorflow.__version__) < LooseVersion('1.7.0'):
             raise DistutilsPlatformError(
                 'Your TensorFlow version %s is outdated.  '
-                'Bluefog requires tensorflow>=1.1.0' % tensorflow.__version__)
+                'Bluefog requires tensorflow>=1.7.0' % tensorflow.__version__)
     except ImportError:
         raise DistutilsPlatformError(
             'import tensorflow failed, is it installed?\n\n%s' % traceback.format_exc())

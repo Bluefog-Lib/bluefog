@@ -13,3 +13,19 @@ else:
 def _executing_eagerly():
     """Returns true if eager execution is supported and enabled."""
     return _has_eager and context.executing_eagerly()
+
+
+def _cache(f):
+    cache = dict()
+
+    def wrapper(*args):
+        key = (args, _executing_eagerly())
+
+        if key in cache:
+            return cache[key]
+        else:
+            retval = f(*args)
+            cache[key] = retval
+            return retval
+
+    return wrapper
