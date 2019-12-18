@@ -91,7 +91,7 @@ class OpsTests(tf.test.TestCase):
             self.assertTrue(diff <= threshold,
                             "bf.allreduce produces incorrect results")
 
-    def test_horovod_allreduce_gpu(self):
+    def test_bluefog_allreduce_gpu(self):
         """Test that the allreduce works on GPUs."""
         # Only do this test if there are GPUs available.
         if not tf.test.is_gpu_available(cuda_only=True):
@@ -125,7 +125,7 @@ class OpsTests(tf.test.TestCase):
             self.assertTrue(diff <= threshold,
                             "bf.allreduce on GPU produces incorrect results")
 
-    def test_horovod_broadcast(self):
+    def test_bluefog_broadcast(self):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
         rank = bf.rank()
         size = bf.size()
@@ -151,6 +151,40 @@ class OpsTests(tf.test.TestCase):
                 self.evaluate(tf.reduce_all(tf.equal(
                     tf.cast(root_tensor, tf.int32), tf.cast(broadcasted_tensor, tf.int32)))),
                 "bf.broadcast produces incorrect broadcasted tensor")
+
+    def test_bluefog_allgather(self):
+        """Test that the allgather correctly gathers 1D, 2D, 3D tensors."""
+        rank = bf.rank()
+        size = bf.size()
+
+        dtypes = [tf.int32, tf.int64, tf.float32, tf.float64, tf.bool]
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = tf.ones([17] * dim) * rank
+            if dtype == tf.bool:
+                tensor = tensor % 2
+            tensor = tf.cast(tensor, dtype=dtype)
+            gathered = bf.allgather(tensor)
+
+            gathered_tensor = self.evaluate(gathered)
+            self.assertEqual(list(gathered_tensor.shape),
+                             [17 * size] + [17] * (dim - 1))
+
+            for i in range(size):
+                rank_tensor = tf.slice(gathered_tensor,
+                                       [i * 17] + [0] * (dim - 1),
+                                       [17] + [-1] * (dim - 1))
+                self.assertEqual(list(rank_tensor.shape), [17] * dim)
+                # tf.equal() does not support tf.uint16 as of TensorFlow 1.2,
+                # so need to cast rank_tensor to tf.int32.
+                if dtype == tf.bool:
+                    value = i % 2
+                else:
+                    value = i
+                self.assertTrue(
+                    self.evaluate(tf.reduce_all(
+                        tf.equal(tf.cast(rank_tensor, tf.int32), value))),
+                    "bf.allgather produces incorrect gathered tensor")
 
 
 if __name__ == "__main__":
