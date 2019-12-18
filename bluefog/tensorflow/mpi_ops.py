@@ -111,7 +111,7 @@ def allreduce(tensor, average=True, device=''):
             summed_tensor = _allreduce(tensor)
             new_tensor = (summed_tensor / bluefog_size) if average else summed_tensor
         return new_tensor
-    
+
 
 def broadcast(tensor, root_rank, name=None):
     """An op which broadcasts the input tensor on root rank to the same input tensor
@@ -146,3 +146,47 @@ def _broadcast_grad(op, grad):
     if rank() != root_rank:
         return grad_reduced * 0
     return grad_reduced
+
+def allgather(tensor, name=None):
+    """An op which concatenates the input tensor with the same input tensor on
+    all other Bluefog processes.
+
+    The concatenation is done on the first dimension, so the input tensors on the
+    different processes must have the same rank and shape, except for the first
+    dimension, which is allowed to be different.
+
+    Returns:
+      A tensor of the same type as `tensor`, concatenated on dimension zero
+      across all processes. The shape is identical to the input shape, except for
+      the first dimension, which may be greater and is the sum of all first
+      dimensions of the tensors in different Bluefog processes.
+    """
+    if name is None and not _executing_eagerly():
+        name = 'BluefogAllgather_%s' % _normalize_name(tensor.name)
+    return MPI_LIB.bluefog_allgather(tensor, name=name)
+
+
+@ops.RegisterGradient('BluefogAllgather')
+def _allgather_grad(op, grad):
+    """Gradient for allgather op.
+
+    Args:
+      op: An operation.
+      grad: `Tensor` gradient with respect to the output of the op.
+
+    Returns:
+      The gradient with respect to the input of the op.
+    """
+    grad = _allreduce(grad)
+
+    with tf.device('/cpu:0'):
+        # Keep the tensor of split sizes on CPU.
+        x = op.inputs[0]
+        d0 = x.get_shape().as_list()[0]
+        d = tf.convert_to_tensor([d0], dtype=tf.int32)
+
+        s = size()
+        d = tf.reshape(allgather(d), [s])
+
+    splits = tf.split(grad, num_or_size_splits=d, axis=0)
+    return splits[rank()]

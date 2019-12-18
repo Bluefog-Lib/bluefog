@@ -12,7 +12,7 @@ from bluefog.tensorflow.mpi_ops import init, shutdown
 from bluefog.tensorflow.mpi_ops import size, local_size, rank, local_rank
 from bluefog.tensorflow.mpi_ops import load_topology, set_topology
 from bluefog.tensorflow.mpi_ops import mpi_threads_supported
-from bluefog.tensorflow.mpi_ops import allreduce, broadcast
+from bluefog.tensorflow.mpi_ops import allreduce, broadcast, allgather
 
 full_path = get_extension_full_path(__file__, 'mpi_lib')
 
@@ -63,5 +63,8 @@ print("Previous: ", tensor)
 summed = allreduce(tensor, average=False)
 print("Allreduce: ", summed)
 
-result = broadcast(tf.ones(shape=[3]) * (rank+1), root_rank=0)
+result = broadcast(tf.constant([[1, 2, 3], [4, 5, 6]]) * (rank+1), root_rank=0)
 print("Broadcast: ", result)
+
+result = allgather(tf.constant([[1, 2, 3], [4, 5, 6]]) * (rank+1))
+print("Allgather: ", result)

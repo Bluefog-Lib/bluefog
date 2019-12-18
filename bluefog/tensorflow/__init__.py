@@ -13,4 +13,4 @@ from bluefog.tensorflow.mpi_ops import init, shutdown
 from bluefog.tensorflow.mpi_ops import size, local_size, rank, local_rank
 from bluefog.tensorflow.mpi_ops import load_topology, set_topology
 from bluefog.tensorflow.mpi_ops import mpi_threads_supported
-from bluefog.tensorflow.mpi_ops import allreduce, broadcast
+from bluefog.tensorflow.mpi_ops import allreduce, broadcast, allgather

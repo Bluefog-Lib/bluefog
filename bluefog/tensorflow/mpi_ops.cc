@@ -46,7 +46,7 @@ class BluefogAllreduceOp : public AsyncOpKernel {
     auto bf_context = std::make_shared<TFOpContext>(context);
     auto bf_tensor = std::make_shared<TFTensor>(tensor);
     auto bf_output = std::make_shared<TFTensor>(*output);
-    auto enqueue_result = common::EnqueueTensorAllreduce(
+    auto enqueue_result = EnqueueTensorAllreduce(
         bf_tensor, bf_output, node_name, device,
         [context, done](const common::Status& status) {
           context->SetStatus(ConvertStatus(status));
@@ -130,7 +130,7 @@ class BluefogBroadcastOp : public AsyncOpKernel {
 REGISTER_KERNEL_BUILDER(
     Name("BluefogBroadcast").Device(::tensorflow::DEVICE_CPU),
     BluefogBroadcastOp);
-#if HOROVOD_GPU_BROADCAST
+#if HAVE_CUDA
 REGISTER_KERNEL_BUILDER(
     Name("BluefogBroadcast").Device(::tensorflow::DEVICE_GPU),
     BluefogBroadcastOp);
@@ -156,6 +156,64 @@ Arguments
 Output
     output:    A tensor with the same shape as `tensor` and same value as
                `tensor` on root rank.
+)doc");
+
+class BluefogAllgatherOp : public AsyncOpKernel {
+public:
+  explicit BluefogAllgatherOp(OpKernelConstruction* context)
+      : AsyncOpKernel(context) {}
+
+  void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
+    OP_REQUIRES_OK_ASYNC(context, ConvertStatus(common::CheckInitialized()),
+                         done);
+
+    auto node_name = name();
+    auto device = GetDeviceID(context);
+    auto tensor = context->input(0);
+    // We cannot pre-allocate output for allgather, since shape of result is 
+    // only known after all ranks make a request.
+    auto bf_context = std::make_shared<TFOpContext>(context);
+    auto bf_tensor = std::make_shared<TFTensor>(tensor);
+    auto enqueue_result = EnqueueTensorAllgather(
+        bf_tensor, bf_context, node_name, device,
+        [context, done](const common::Status& status) {
+          context->SetStatus(ConvertStatus(status));
+          done();
+        });
+    OP_REQUIRES_OK_ASYNC(context, ConvertStatus(enqueue_result), done);
+  }
+};  // namespace tensorflow
+
+REGISTER_KERNEL_BUILDER(
+    Name("BluefogAllgather").Device(::tensorflow::DEVICE_CPU),
+    BluefogAllgatherOp);
+#if HAVE_CUDA
+REGISTER_KERNEL_BUILDER(
+    Name("BluefogAllgather").Device(::tensorflow::DEVICE_GPU),
+    BluefogAllgatherOp);
+#endif
+
+REGISTER_OP("BluefogAllgather")
+    .Attr("T: {int32, int64, float32, float64, bool}")
+    .Input("tensor: T")
+    .Output("output: T")
+    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
+      ::tensorflow::shape_inference::ShapeHandle output;
+      TF_RETURN_IF_ERROR(
+          c->ReplaceDim(c->input(0), 0, c->UnknownDim(), &output));
+      c->set_output(0, output);
+      return ::tensorflow::Status::OK();
+    })
+    .Doc(R"doc(
+Perform an MPI Allgather on a tensor. All other processes that do a gather on a
+tensor with the same name must have the same rank for that tensor, and have the
+same dimension on all but the first dimension.
+
+Arguments
+    tensor:     A tensor to gather.
+
+Output
+    gathered:    A tensor with the same shape as `tensor` except for the first dimension.
 )doc");
 
 }  // namespace tensorflow
