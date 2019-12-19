@@ -7,21 +7,21 @@ import torch
 from bluefog.common.util import get_extension_full_path
 import bluefog.common.topology_util as topology_util
 
-from bluefog.torch.mpi_ops_c import allreduce, allreduce_async
-from bluefog.torch.mpi_ops_c import allgather, allgather_async
-from bluefog.torch.mpi_ops_c import broadcast, broadcast_async
-from bluefog.torch.mpi_ops_c import broadcast_, broadcast_async_
-from bluefog.torch.mpi_ops_c import neighbor_allgather, neighbor_allgather_async
-from bluefog.torch.mpi_ops_c import neighbor_allreduce, neighbor_allreduce_async
-from bluefog.torch.mpi_ops_c import poll, synchronize
-from bluefog.torch.mpi_ops_c import init, shutdown
-from bluefog.torch.mpi_ops_c import size, local_size, rank, local_rank
-from bluefog.torch.mpi_ops_c import load_topology, set_topology
-from bluefog.torch.mpi_ops_c import mpi_threads_supported
-from bluefog.torch.mpi_ops_c import win_create, win_free, win_sync
-from bluefog.torch.mpi_ops_c import win_put, win_put_blocking
-from bluefog.torch.mpi_ops_c import win_get, win_get_blocking
-from bluefog.torch.mpi_ops_c import win_wait, win_poll
+from bluefog.torch.mpi_ops import allreduce, allreduce_async
+from bluefog.torch.mpi_ops import allgather, allgather_async
+from bluefog.torch.mpi_ops import broadcast, broadcast_async
+from bluefog.torch.mpi_ops import broadcast_, broadcast_async_
+from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_async
+from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_async
+from bluefog.torch.mpi_ops import poll, synchronize
+from bluefog.torch.mpi_ops import init, shutdown
+from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
+from bluefog.torch.mpi_ops import load_topology, set_topology
+from bluefog.torch.mpi_ops import mpi_threads_supported
+from bluefog.torch.mpi_ops import win_create, win_free, win_sync
+from bluefog.torch.mpi_ops import win_put, win_put_blocking
+from bluefog.torch.mpi_ops import win_get, win_get_blocking
+from bluefog.torch.mpi_ops import win_wait, win_poll
 
 full_path = get_extension_full_path(__file__, 'mpi_lib')
 

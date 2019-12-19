@@ -11,37 +11,21 @@ from bluefog.torch.optimizers import (
 
 check_extension('bluefog.torch', __file__, 'mpi_lib')
 
-if not os.getenv("BLUEFOG_PY_IMPL"):
-    from bluefog.torch.mpi_ops_c import allreduce, allreduce_async
-    from bluefog.torch.mpi_ops_c import allgather, allgather_async
-    from bluefog.torch.mpi_ops_c import broadcast, broadcast_async
-    from bluefog.torch.mpi_ops_c import broadcast_, broadcast_async_
-    from bluefog.torch.mpi_ops_c import neighbor_allgather, neighbor_allgather_async
-    from bluefog.torch.mpi_ops_c import neighbor_allreduce, neighbor_allreduce_async
-    from bluefog.torch.mpi_ops_c import poll, synchronize
-    from bluefog.torch.mpi_ops_c import init, shutdown
-    from bluefog.torch.mpi_ops_c import size, local_size, rank, local_rank
-    from bluefog.torch.mpi_ops_c import load_topology, set_topology
-    from bluefog.torch.mpi_ops_c import mpi_threads_supported
-    from bluefog.torch.mpi_ops_c import win_create, win_free, win_sync
-    from bluefog.torch.mpi_ops_c import win_put, win_put_blocking
-    from bluefog.torch.mpi_ops_c import win_get, win_get_blocking
-    from bluefog.torch.mpi_ops_c import win_wait, win_poll
-else:
-    from bluefog.torch.mpi_ops import allreduce, allreduce_async
-    from bluefog.torch.mpi_ops import allgather, allgather_async
-    from bluefog.torch.mpi_ops import broadcast, broadcast_async
-    from bluefog.torch.mpi_ops import broadcast_, broadcast_async_
-    from bluefog.torch.mpi_ops import poll, synchronize
-    from bluefog.torch.mpi_ops import init, shutdown
-    from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
-    from bluefog.torch.mpi_ops import load_topology, set_topology
-    from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_async
-    from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_async
-    from bluefog.torch.mpi_ops import win_get, win_put, win_accumulate
-    from bluefog.torch.mpi_ops import win_get_blocking, win_put_blocking
-    from bluefog.torch.mpi_ops import win_sync, win_fence
-    from bluefog.torch.mpi_ops import win_create, win_free
+from bluefog.torch.mpi_ops import allreduce, allreduce_async
+from bluefog.torch.mpi_ops import allgather, allgather_async
+from bluefog.torch.mpi_ops import broadcast, broadcast_async
+from bluefog.torch.mpi_ops import broadcast_, broadcast_async_
+from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_async
+from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_async
+from bluefog.torch.mpi_ops import poll, synchronize
+from bluefog.torch.mpi_ops import init, shutdown
+from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
+from bluefog.torch.mpi_ops import load_topology, set_topology
+from bluefog.torch.mpi_ops import mpi_threads_supported
+from bluefog.torch.mpi_ops import win_create, win_free, win_sync
+from bluefog.torch.mpi_ops import win_put, win_put_blocking
+from bluefog.torch.mpi_ops import win_get, win_get_blocking
+from bluefog.torch.mpi_ops import win_wait, win_poll
 
 def broadcast_parameters(params, root_rank):
     """

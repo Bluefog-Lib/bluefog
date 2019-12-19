@@ -1,16 +1,18 @@
 import atexit
+import ctypes
 import networkx
 
-from bluefog.common.operations import InitializeBlueFogOnce
-from bluefog.common.common import BlueFogError
+import bluefog.common.util as util
+import bluefog.common.topology_util as topology_util
 
 
 class BlueFogBasics(object):
     """Wrapper class for the basic BlueFog API."""
 
-    def __init__(self, *args):
-        del args
-        self.bf_global_state = None
+    def __init__(self, pkg_path, *args):
+        full_path = util.get_extension_full_path(pkg_path, *args)
+        self._topology = None
+        self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
     def init(self, topology: networkx.DiGraph = None, comm=None) -> None:
         """A function that initializes BlueFog.
@@ -22,16 +24,14 @@ class BlueFogBasics(object):
             communicator OR the MPI communicator to use. Given communicator will be duplicated.
             If None, BlueFog will use MPI_COMM_WORLD Communicator.
         """
-        del comm
-        self.bf_global_state = InitializeBlueFogOnce(self.bf_global_state, topology)
+        del comm  # not used yet.
+        self.MPI_LIB_CTYPES.bluefog_init()
+        self.set_topology(topology)
         atexit.register(self.shutdown)
 
     def shutdown(self) -> int:
         """A function that shuts BlueFog down."""
-        # TODO(ybc) Ensure the MPI will be init only once and run Finialize without error at exit().
-        # self.bf_global_state.context.shutdown()
-        self.bf_global_state.initialized = False
-        self.bf_global_state.shut_down = True
+        self.MPI_LIB_CTYPES.bluefog_shutdown()
 
     def size(self) -> int:
         """A function that returns the number of BlueFog processes.
@@ -39,9 +39,10 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar containing the number of BlueFog processes.
         """
-        if not self.bf_global_state.initialized:
+        size = self.MPI_LIB_CTYPES.bluefog_size()
+        if size == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
-        return self.bf_global_state.controller.size
+        return size
 
     def local_size(self) -> int:
         """A function that returns the number of BlueFog processes within the
@@ -50,9 +51,10 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar containing the number of local BlueFog processes.
         """
-        if not self.bf_global_state.initialized:
+        local_size = self.MPI_LIB_CTYPES.bluefog_local_size()
+        if local_size == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
-        return self.bf_global_state.controller.local_size
+        return local_size
 
     def rank(self) -> int:
         """A function that returns the BlueFog rank of the calling process.
@@ -60,9 +62,10 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar with the BlueFog rank of the calling process.
         """
-        if not self.bf_global_state.initialized:
+        rank = self.MPI_LIB_CTYPES.bluefog_rank()
+        if rank == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
-        return self.bf_global_state.controller.rank
+        return rank
 
     def local_rank(self) -> int:
         """A function that returns the local BlueFog rank of the calling process, within the
@@ -72,9 +75,10 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar with the local BlueFog rank of the calling process.
         """
-        if not self.bf_global_state.initialized:
+        local_rank = self.MPI_LIB_CTYPES.bluefog_local_rank()
+        if local_rank == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
-        return self.bf_global_state.controller.local_rank
+        return local_rank
 
     def mpi_threads_supported(self) -> bool:
         """A function that returns a flag indicating whether MPI multi-threading is supported.
@@ -85,39 +89,54 @@ class BlueFogBasics(object):
         Returns:
           A boolean value indicating whether MPI multi-threading is supported.
         """
-        if not self.bf_global_state.initialized:
-            raise ValueError(
-                "BlueFog has not been initialized; use bf.init().")
-        return self.bf_global_state.controller.mpi_threads_supported
+        mpi_threads_supported = self.MPI_LIB_CTYPES.bluefog_mpi_threads_supported()
+        if mpi_threads_supported == -1:
+            raise ValueError("BlueFog has not been initialized; use bf.init().")
+        return mpi_threads_supported
 
     def load_topology(self) -> networkx.DiGraph:
         """A funnction that return the virtual topology MPI used.
 
-        Raises:
-            BlueFogError: If Bluefog has not been initialized.
-
         Returns:
-            networkx.DiGraph: Topology
+            in_neighbour_ranks: A list of incoming neighbor ranks.
+            out_neighbor_ranks: A list of outgoing neighbor ranks.
+            topology: networkx.DiGraph.
         """
-        if not self.bf_global_state.initialized:
-            raise BlueFogError(
-                "BlueFog has not been initialized; use bf.init().")
-        return self.bf_global_state.topology
+        if self._topology is None:
+            return [], [], None
+        in_neighbour_ranks = list(self._topology.predecessors(self.rank()))
+        out_neighbor_ranks = list(self._topology.successors(self.rank()))
+        return in_neighbour_ranks, out_neighbor_ranks, self._topology
 
-    def set_topology(self, topology: networkx.DiGraph):
+    def set_topology(self, topology: networkx.DiGraph = None):
         """A funnction that set the virtual topology MPI used.
 
+        Args:
+          Topo: A networkx. DiGraph object to decide the topology. If not provided
+            a default power_two_ring structure is used.
+
         Raises:
-            BlueFogError: If Bluefog has not been initialized.
-
-        Returns:
-            networkx.DiGraph: Topology
+            RuntimeError: If topology can be set correctly.
         """
-        if not self.bf_global_state.initialized:
-            raise BlueFogError(
-                "BlueFog has not been initialized; use bf.init().")
-        if not isinstance(topology, networkx.DiGraph):
-            raise ValueError("Topology has to be a networkx.DiGraph object.")
+        if topology is None:
+            print("Topology is not specified. Default Power Two topology is used.")
+            topology = topology_util.PowerTwoRingGraph(size=self.size())
 
-        self.bf_global_state.context.SetDistGraphComm(topology)
-        self.bf_global_state.topology = topology
+        destinations = list(topology.successors(self.rank()))
+        sources = list(topology.predecessors(self.rank()))
+        indegree = len(sources)
+        outdegree = len(destinations)
+        sources_type = ctypes.c_int * indegree
+        destinations_type = ctypes.c_int * outdegree
+
+        self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
+            [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
+             ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+        )
+        ret = self.MPI_LIB_CTYPES.bluefog_set_topology(
+            indegree, sources_type(*sources),
+            outdegree, destinations_type(*destinations))
+        if ret != 1:
+            raise RuntimeError(
+                "Cannot set topology correctly. Has Bluefog been initialized? use bf.init()")
+        self._topology = topology

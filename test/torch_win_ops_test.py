@@ -71,7 +71,6 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully"
 
-    @unittest.skip("Not finished in C implementation yet.")
     def test_win_put_blocking(self):
         """Test that the window put operation."""
         size = bf.size()

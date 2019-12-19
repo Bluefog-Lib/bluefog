@@ -8,7 +8,7 @@ from tensorflow.python.framework import load_library
 from tensorflow.python.framework import ops
 from tensorflow.python.platform import resource_loader
 
-from bluefog.common.basics_c import BlueFogBasics
+from bluefog.common.basics import BlueFogBasics
 from bluefog.common.util import get_ext_suffix
 from bluefog.tensorflow.util import _executing_eagerly
 
