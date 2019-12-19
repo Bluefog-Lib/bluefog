@@ -2,7 +2,12 @@ language: python
 python:
     - "3.7"
 
-os: linux
+os: 
+    - linux
+    - osx
+
+env:
+    - MPI=mpich
 
 addons:
     apt:
@@ -11,7 +16,7 @@ addons:
       update: true
 
 before_install:
-    - ./scripts/install_mpi.sh mpich
+    - ./scripts/install_mpi.sh $MPI
     - pip install torch tensorflow
 
 install:
