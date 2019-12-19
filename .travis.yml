@@ -6,7 +6,6 @@ os: linux
 
 env:
     - MPI=mpich
-    - MPI=openmpi
 
 cache:
     apt: true
