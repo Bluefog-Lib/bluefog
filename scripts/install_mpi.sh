@@ -7,7 +7,16 @@ Linux)
       sudo apt-get install -y -q mpich libmpich-dev
       ;;
     openmpi) set -x;
-      sudo apt-get install -y -q openmpi-bin libopenmpi-dev
+      mkdir /tmp/openmpi && \
+      cd /tmp/openmpi && \
+      wget https://www.open-mpi.org/software/ompi/v4.0/downloads/openmpi-4.0.0.tar.gz && \
+      tar zxf openmpi-4.0.0.tar.gz && \
+      cd openmpi-4.0.0 && \
+      ./configure --enable-orterun-prefix-by-default && \
+      make -j $(nproc) all && \
+      make install && \
+      ldconfig && \
+      rm -rf /tmp/openmpi
       ;;
     *)
       echo "Unknown MPI implementation:" $1
@@ -21,7 +30,16 @@ Darwin)
       brew install mpich
       ;;
     openmpi) set -x;
-      brew install openmpi
+      mkdir /tmp/openmpi && \
+      cd /tmp/openmpi && \
+      wget https://www.open-mpi.org/software/ompi/v4.0/downloads/openmpi-4.0.0.tar.gz && \
+      tar zxf openmpi-4.0.0.tar.gz && \
+      cd openmpi-4.0.0 && \
+      ./configure --enable-orterun-prefix-by-default && \
+      make -j $(nproc) all && \
+      make install && \
+      ldconfig && \
+      rm -rf /tmp/openmpi
       ;;
     *)
       echo "Unknown MPI implementation:" $1
