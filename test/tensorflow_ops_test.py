@@ -104,7 +104,7 @@ class OpsTests(tf.test.TestCase):
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             with tf.device("/gpu:%d" % local_rank):
-                tensor = self.random_uniform(
+                tensor = random_uniform(
                     [17] * dim, -100, 100, dtype=dtype)
                 summed = bf.allreduce(tensor, average=False)
             multiplied = tensor * size
@@ -124,6 +124,76 @@ class OpsTests(tf.test.TestCase):
             diff = self.evaluate(max_difference)
             self.assertTrue(diff <= threshold,
                             "bf.allreduce on GPU produces incorrect results")
+
+    def test_bluefog_allreduce_grad_cpu(self):
+        """Test the correctness of the allreduce gradient on CPU."""
+        size = bf.size()
+
+        # As of TensorFlow v1.9, gradients are not supported on
+        # integer tensors
+        dtypes = [tf.float32, tf.float64]
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            with tf.device("/cpu:0"):
+                if _executing_eagerly():
+                    tensor = self.tfe.Variable(random_uniform(
+                        [5] * dim, -100, 100, dtype=dtype))
+                    with tf.GradientTape() as tape:
+                        summed = bf.allreduce(tensor, average=False)
+                else:
+                    tensor = random_uniform(
+                        [5] * dim, -100, 100, dtype=dtype)
+                    summed = bf.allreduce(tensor, average=False)
+
+                grad_ys = tf.ones([5] * dim)
+                if _executing_eagerly():
+                    grad_out = tape.gradient(summed, tensor, grad_ys)
+                else:
+                    grad = tf.gradients(summed, tensor, grad_ys)[0]
+                    grad_out = self.evaluate(grad)
+
+            expected = np.ones([5] * dim) * size
+            err = np.linalg.norm(expected - grad_out)
+            self.assertLess(err, 0.00000001,
+                            "gradient %s differs from expected %s, "
+                            "error: %s" % (grad_out, expected, str(err)))
+
+    def test_bluefog_allreduce_grad_gpu(self):
+        """Test the correctness of the allreduce gradient on GPU."""
+        # Only do this test if there are GPUs available.
+        if not tf.test.is_gpu_available(cuda_only=True):
+            return
+
+        local_rank = bf.local_rank()
+        size = bf.size()
+
+        # As of TensorFlow v1.9, gradients are not supported on
+        # integer tensors
+        dtypes = [tf.float32, tf.float64]
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            with tf.device("/gpu:%d" % local_rank):
+                if _executing_eagerly():
+                    tensor = self.tfe.Variable(
+                        random_uniform([5] * dim, -100, 100, dtype=dtype))
+                    with tf.GradientTape() as tape:
+                        summed = bf.allreduce(tensor, average=False)
+                else:
+                    tensor = random_uniform([5] * dim, -100, 100, dtype=dtype)
+                    summed = bf.allreduce(tensor, average=False)
+
+                grad_ys = tf.ones([5] * dim)
+                if _executing_eagerly():
+                    grad_out = tape.gradient(summed, tensor, grad_ys)
+                else:
+                    grad = tf.gradients(summed, tensor, grad_ys)[0]
+                    grad_out = self.evaluate(grad)
+
+            expected = np.ones([5] * dim) * size
+            err = np.linalg.norm(expected - grad_out)
+            self.assertLess(err, 0.00000001,
+                            "gradient %s differs from expected %s, "
+                            "error: %s" % (grad_out, expected, str(err)))
 
     def test_bluefog_broadcast(self):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
@@ -151,6 +221,49 @@ class OpsTests(tf.test.TestCase):
                 self.evaluate(tf.reduce_all(tf.equal(
                     tf.cast(root_tensor, tf.int32), tf.cast(broadcasted_tensor, tf.int32)))),
                 "bf.broadcast produces incorrect broadcasted tensor")
+
+    def test_bluefog_broadcast_grad_cpu(self):
+        """Test the correctness of the broadcast gradient on CPU."""
+        rank = bf.rank()
+        size = bf.size()
+
+        # This test does not apply if there is only one worker.
+        if size == 1:
+            return
+
+        # As of TensorFlow v1.9, gradients are not supported on
+        # integer tensors
+        dtypes = [tf.float32, tf.float64]
+        dims = [1, 2, 3]
+        root_ranks = list(range(size))
+        for dtype, dim, root_rank in itertools.product(dtypes, dims, root_ranks):
+            if _executing_eagerly():
+                tensor = self.tfe.Variable(tf.ones([5] * dim) * rank)
+            else:
+                tensor = tf.ones([5] * dim) * rank
+            if dtype == tf.bool:
+                tensor = tensor % 2
+            if _executing_eagerly():
+                with tf.GradientTape() as tape:
+                    tensor = tf.cast(tensor, dtype=dtype)
+                    broadcasted_tensor = bf.broadcast(tensor, root_rank)
+                with tf.device("/cpu:0"):
+                    grad_out = tape.gradient(broadcasted_tensor, tensor)
+            else:
+                tensor = tf.cast(tensor, dtype=dtype)
+                broadcasted_tensor = bf.broadcast(tensor, root_rank)
+
+                grad_ys = tf.ones([5] * dim)
+                with tf.device("/cpu:0"):
+                    grad = tf.gradients(broadcasted_tensor, tensor, grad_ys)[0]
+                grad_out = self.evaluate(grad)
+
+            c = size if rank == root_rank else 0
+            expected = np.ones([5] * dim) * c
+            err = np.linalg.norm(expected - grad_out)
+            self.assertLess(err, 0.00000001,
+                            "gradient %s differs from expected %s, "
+                            "error: %s" % (grad_out, expected, str(err)))
 
     def test_bluefog_allgather(self):
         """Test that the allgather correctly gathers 1D, 2D, 3D tensors."""

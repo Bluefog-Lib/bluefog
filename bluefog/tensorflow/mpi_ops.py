@@ -84,6 +84,7 @@ def _allreduce_grad(op, grad):
     """
     return _allreduce(grad)
 
+
 def allreduce(tensor, average=True, device=''):
     """Perform an allreduce on a tf.Tensor or tf.IndexedSlices.
 
@@ -109,7 +110,8 @@ def allreduce(tensor, average=True, device=''):
         with tf.device(device):
             bluefog_size = tf.cast(size(), dtype=tensor.dtype)
             summed_tensor = _allreduce(tensor)
-            new_tensor = (summed_tensor / bluefog_size) if average else summed_tensor
+            new_tensor = (summed_tensor /
+                          bluefog_size) if average else summed_tensor
         return new_tensor
 
 
@@ -146,6 +148,7 @@ def _broadcast_grad(op, grad):
     if rank() != root_rank:
         return grad_reduced * 0
     return grad_reduced
+
 
 def allgather(tensor, name=None):
     """An op which concatenates the input tensor with the same input tensor on
