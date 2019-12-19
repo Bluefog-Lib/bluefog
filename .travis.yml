@@ -6,13 +6,7 @@ os: linux
 
 env:
     - MPI=mpich
-
-jobs:
-    include:
-        - os: osx
-          osx_image: xcode10
-          language: generic
-          python: 3
+    - MPI=openmpi
 
 cache:
     apt: true
