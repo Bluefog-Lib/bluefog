@@ -26,12 +26,12 @@ void LogMessage::GenerateLogMessage(bool log_time) {
     char time_buffer[time_buffer_size];
     strftime(time_buffer, time_buffer_size, "%Y-%m-%d %H:%M:%S",
              localtime(&as_time_t));
-    os << "[" << time_buffer << "." << std::setw(6) << micros_remainder.count() 
-              << ": " << LOG_LEVELS[static_cast<int>(severity_)] << " " 
-              << fname_ << ":" << line_ << "] " << str() << std::endl;
+    os << time_buffer << "." << std::setw(6) << micros_remainder.count() << ": "
+       << LOG_LEVELS[static_cast<int>(severity_)] << " " << fname_ << ":"
+       << line_ << "] " << str() << std::endl;
   } else {
-    os << "[" << LOG_LEVELS[static_cast<int>(severity_)] << " " 
-              << fname_ << ":" << line_ << "] " << str() << std::endl;
+    os << LOG_LEVELS[static_cast<int>(severity_)] << " " << fname_ << ":"
+       << line_ << "] " << str() << std::endl;
   }
 }
 
