@@ -2,12 +2,20 @@ language: python
 python:
     - "3.7"
 
-os: 
-    - linux
-    - osx
+os: linux
 
 env:
     - MPI=mpich
+
+jobs:
+    include:
+        - os: osx
+          osx_image: xcode10
+          language: generic
+          python: 3
+
+cache:
+    apt: true
 
 addons:
     apt:
