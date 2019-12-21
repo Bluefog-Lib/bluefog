@@ -216,7 +216,6 @@ class _DistributedConsensusOptimizer(torch.optim.Optimizer):
 
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
-        self._grad_accs = []
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
@@ -322,7 +321,6 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
-        self._grad_accs = []
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
