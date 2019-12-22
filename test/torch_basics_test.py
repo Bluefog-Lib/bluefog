@@ -52,7 +52,7 @@ class BasicsTests(unittest.TestCase):
         else:
             expected_topology = PowerTwoRingGraph(size)
         bf.init()
-        _, _, topology = bf.load_topology()
+        topology = bf.load_topology()
         assert isinstance(topology, nx.DiGraph)
         np.testing.assert_array_equal(
             nx.to_numpy_array(expected_topology), nx.to_numpy_array(topology))

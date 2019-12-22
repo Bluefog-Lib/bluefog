@@ -1,3 +1,4 @@
+from typing import List
 import atexit
 import ctypes
 import networkx
@@ -91,22 +92,39 @@ class BlueFogBasics(object):
         """
         mpi_threads_supported = self.MPI_LIB_CTYPES.bluefog_mpi_threads_supported()
         if mpi_threads_supported == -1:
-            raise ValueError("BlueFog has not been initialized; use bf.init().")
+            raise ValueError(
+                "BlueFog has not been initialized; use bf.init().")
         return mpi_threads_supported
 
     def load_topology(self) -> networkx.DiGraph:
         """A funnction that return the virtual topology MPI used.
 
         Returns:
-            in_neighbour_ranks: A list of incoming neighbor ranks.
-            out_neighbor_ranks: A list of outgoing neighbor ranks.
             topology: networkx.DiGraph.
         """
+        return self._topology
+
+    def in_neighbour_ranks(self) -> List[int]:
+        """Return the ranks of all in-neighbors.
+
+        Returns:
+            List[int]: in_neighbour_ranks
+        """
         if self._topology is None:
-            return [], [], None
+            return []
         in_neighbour_ranks = list(self._topology.predecessors(self.rank()))
+        return in_neighbour_ranks
+
+    def out_neighbor_ranks(self) -> List[int]:
+        """Return the ranks of all out-neighbors.
+
+        Returns:
+            List[int]: out_neighbour_ranks
+        """
+        if self._topology is None:
+            return []
         out_neighbor_ranks = list(self._topology.successors(self.rank()))
-        return in_neighbour_ranks, out_neighbor_ranks, self._topology
+        return out_neighbor_ranks
 
     def set_topology(self, topology: networkx.DiGraph = None):
         """A funnction that set the virtual topology MPI used.

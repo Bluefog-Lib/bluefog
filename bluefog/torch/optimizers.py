@@ -4,6 +4,7 @@ import warnings
 import torch
 import bluefog.torch as bf
 
+# TODO(ybc) Use interface to refactor the code.
 #pylint: disable=unused-argument
 class _DistributedOptimizer(torch.optim.Optimizer):
     def __init__(self, params, named_parameters):

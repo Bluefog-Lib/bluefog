@@ -21,6 +21,7 @@ from bluefog.torch.mpi_ops import poll, synchronize
 from bluefog.torch.mpi_ops import init, shutdown
 from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
 from bluefog.torch.mpi_ops import load_topology, set_topology
+from bluefog.torch.mpi_ops import in_neighbour_ranks, out_neighbor_ranks
 from bluefog.torch.mpi_ops import mpi_threads_supported
 from bluefog.torch.mpi_ops import win_create, win_free, win_sync
 from bluefog.torch.mpi_ops import win_put, win_put_blocking

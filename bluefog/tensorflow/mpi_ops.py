@@ -41,6 +41,8 @@ local_rank = _basics.local_rank
 mpi_threads_supported = _basics.mpi_threads_supported
 load_topology = _basics.load_topology
 set_topology = _basics.set_topology
+in_neighbour_ranks = _basics.in_neighbour_ranks
+out_neighbor_ranks = _basics.out_neighbor_ranks
 
 # This function will create a default device map which includes all visible devices.
 # Please run this function in a subprocess
@@ -85,7 +87,8 @@ def _allreduce_grad(op, grad):
     return _allreduce(grad)
 
 
-def allreduce(tensor, average=True, device=''):
+def allreduce(tensor: tf.Tensor, average: bool = True,
+              name: str = None, device: str = '') -> tf.Tensor:
     """Perform an allreduce on a tf.Tensor or tf.IndexedSlices.
 
     This function performs a bandwidth-optimal ring allreduce on the input
@@ -98,6 +101,7 @@ def allreduce(tensor, average=True, device=''):
                 The shape of the input must be identical across all ranks.
         average: If True, computes the average over all ranks.
                  Otherwise, computes the sum over all ranks.
+        name: A name of the allreduce operation.
         device: Device to be used for dense tensors.
 
     Returns:
@@ -109,19 +113,24 @@ def allreduce(tensor, average=True, device=''):
     else:
         with tf.device(device):
             bluefog_size = tf.cast(size(), dtype=tensor.dtype)
-            summed_tensor = _allreduce(tensor)
+            summed_tensor = _allreduce(tensor, name)
             new_tensor = (summed_tensor /
                           bluefog_size) if average else summed_tensor
         return new_tensor
 
 
-def broadcast(tensor, root_rank, name=None):
+def broadcast(tensor: tf.Tensor, root_rank: int, name: str = None) -> tf.Tensor:
     """An op which broadcasts the input tensor on root rank to the same input tensor
     on all other Bluefog processes.
 
     The broadcast operation is keyed by the name of the op. The tensor type and
     shape must be the same on all Bluefog processes for a given name. The broadcast
     will not start until all processes are ready to send and receive the tensor.
+
+    Arguments:
+        tensor: A tensor to broadcast.
+        root_rank: The rank to broadcast the value from.
+        name: A name of the broadcast operation.
 
     Returns:
       A tensor of the same shape and type as `tensor`, with the value broadcasted
@@ -150,13 +159,17 @@ def _broadcast_grad(op, grad):
     return grad_reduced
 
 
-def allgather(tensor, name=None):
+def allgather(tensor: tf.Tensor, name: str = None) -> tf.Tensor:
     """An op which concatenates the input tensor with the same input tensor on
     all other Bluefog processes.
 
     The concatenation is done on the first dimension, so the input tensors on the
     different processes must have the same rank and shape, except for the first
     dimension, which is allowed to be different.
+
+    Arguments:
+        tensor: A tensor to allgather.
+        name: A name of the allgather operation.
 
     Returns:
       A tensor of the same type as `tensor`, concatenated on dimension zero

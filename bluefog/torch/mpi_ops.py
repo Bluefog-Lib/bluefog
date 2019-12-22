@@ -16,6 +16,8 @@ local_rank = _basics.local_rank
 mpi_threads_supported = _basics.mpi_threads_supported
 load_topology = _basics.load_topology
 set_topology = _basics.set_topology
+in_neighbour_ranks = _basics.in_neighbour_ranks
+out_neighbor_ranks = _basics.out_neighbor_ranks
 
 # Schema: handle -> input, output
 # We keep input in order to make sure it does not get garbage collected
@@ -479,7 +481,7 @@ def win_put(tensor: torch.Tensor, name: str,
         `win_wait()`.
     """
     function = _check_function(_win_put_function_factory, tensor)
-    dst_ranks = [] if dst_ranks is None else dst_ranks
+    dst_ranks = out_neighbor_ranks() if dst_ranks is None else dst_ranks
     handle = getattr(mpi_lib, function)(tensor, name, dst_ranks)
     _win_handle_map[handle] = name
     return handle
@@ -529,7 +531,7 @@ def win_get(tensor: torch.Tensor, name: str,
         `synchronize()`.
     """
     function = _check_function(_win_get_function_factory, tensor)
-    src_ranks = [] if src_ranks is None else src_ranks
+    src_ranks = in_neighbour_ranks() if src_ranks is None else src_ranks
     handle = getattr(mpi_lib, function)(
         tensor, name, src_ranks, average)
     _win_handle_map[handle] = name
