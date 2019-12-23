@@ -352,7 +352,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   MPI_Win mpi_win = *(it->second);
   
   int target_disp = 0; // offset in win buffer
-  for (int target_rank : neighbor_out_ranks_) {
+  for (int target_rank : entry.dst_ranks) {
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Put(sendbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);

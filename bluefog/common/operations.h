@@ -82,11 +82,15 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       StatusCallback callback);
 
 Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, const int device,
+                             const std::string& name, 
+                             const std::vector<int>& dst_ranks,
+                             const int device,
                              StatusCallback callback);
 
 Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, const int device,
+                             const std::string& name, 
+                             const std::vector<int>& src_ranks, 
+                             const int device,
                              StatusCallback callback);
 
 Status WindowCreate(std::shared_ptr<Tensor> tensor,

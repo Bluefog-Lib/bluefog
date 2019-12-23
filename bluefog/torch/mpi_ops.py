@@ -451,7 +451,7 @@ def win_sync(name: str) -> torch.Tensor:
         name (str): The unique name to associate the window object.
 
     Returns:
-        torch.Tensor: The sum of all neighbor's cooresponding tensor.
+        torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
     """
     tensor = _win_map[name]
     function = _check_function(_win_sync_function_factory, tensor)
@@ -482,6 +482,9 @@ def win_put(tensor: torch.Tensor, name: str,
     """
     function = _check_function(_win_put_function_factory, tensor)
     dst_ranks = out_neighbor_ranks() if dst_ranks is None else dst_ranks
+    if not set(dst_ranks).issubset(set(out_neighbor_ranks())):
+        raise ValueError(
+            "dst_ranks should only contain the ranks that belong to out-neighbors.")
     handle = getattr(mpi_lib, function)(tensor, name, dst_ranks)
     _win_handle_map[handle] = name
     return handle
@@ -532,6 +535,9 @@ def win_get(tensor: torch.Tensor, name: str,
     """
     function = _check_function(_win_get_function_factory, tensor)
     src_ranks = in_neighbour_ranks() if src_ranks is None else src_ranks
+    if not set(src_ranks).issubset(set(in_neighbour_ranks())):
+        raise ValueError(
+            "src_ranks should only contain the ranks that belong to in-neighbors.")
     handle = getattr(mpi_lib, function)(
         tensor, name, src_ranks, average)
     _win_handle_map[handle] = name
@@ -560,6 +566,7 @@ def win_get_blocking(tensor: torch.Tensor, name: str,
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
+
 
 def win_poll(handle: int) -> bool:
     return mpi_lib.bluefog_torch_win_poll(handle) != 0

@@ -6,6 +6,7 @@ import itertools
 import unittest
 import time
 import warnings
+warnings.simplefilter("ignore")
 
 import numpy as np
 import torch
@@ -29,7 +30,11 @@ class WinOpsTests(unittest.TestCase):
     def setUp(self):
         bf.init()
 
-    def cast_and_place(self, tensor, dtype):
+    def tearDown(self):
+        pass
+
+    @staticmethod
+    def cast_and_place(tensor, dtype):
         if dtype.is_cuda:
             # Not support to run on gpu yet.
             # return tensor.cuda(bf.local_rank()).type(dtype)
@@ -71,6 +76,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully"
 
+    @unittest.skip
     def test_win_put_blocking(self):
         """Test that the window put operation."""
         size = bf.size()
@@ -93,9 +99,44 @@ class WinOpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            window_name = "win_create_{}_{}".format(dim, dtype)
-            bf.win_create(torch.zeros_like(tensor), window_name)
-            bf.win_put_blocking(tensor, window_name)
+            window_name = "win_put_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            bf.win_put(tensor, window_name)
+            time.sleep(0.5)
+            sync_result = bf.win_sync(window_name)
+            assert (list(sync_result.shape) == [3] * dim), (
+                "bf.win_sync after win_put produces wrong shape tensor.")
+            assert (sync_result.data - avg_value).abs().max() < EPSILON, (
+                "bf.win_sync after win_put produces wrong tensor value " +
+                "[{}-{}]!={} at rank {}.".format(sync_result.min(),
+                                                 sync_result.max(), avg_value, rank))
+            bf.win_free(window_name)
+
+    def test_win_put_blocking_with_given_destination(self):
+        """Test that the window put operation."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test win_put since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor]
+        if torch.cuda.is_available():
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        num_outdegree = int(np.ceil(np.log2(size)))
+        # We use given destination to form a (right-)ring.
+        avg_value = (rank*num_outdegree + (rank-1) % size) / float(num_outdegree+1)
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_put_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            bf.win_put_blocking(tensor, window_name, [(rank+1) % size])
             time.sleep(0.5)
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -129,7 +170,7 @@ class WinOpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            window_name = "win_create_{}_{}".format(dim, dtype)
+            window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             time.sleep(0.2)  # wait for others' finishing create win?
             recv_tensor = torch.zeros_like(tensor)

@@ -25,7 +25,7 @@ class BlueFogBasics(object):
             communicator OR the MPI communicator to use. Given communicator will be duplicated.
             If None, BlueFog will use MPI_COMM_WORLD Communicator.
         """
-        del comm  # not used yet.
+        del comm  # TODO(ybc) Allow to duplicate other communicator.
         self.MPI_LIB_CTYPES.bluefog_init()
         self.set_topology(topology)
         atexit.register(self.shutdown)

@@ -187,6 +187,9 @@ struct TensorTableEntry {
   int root_rank = -1;
   // GPU to do reduction on, or CPU_DEVICE_ID in case of CPU.
   int device = CPU_DEVICE_ID;
+  // Source and destination of ranks used in get and put ops.
+  std::vector<int> dst_ranks = {};
+  std::vector<int> src_ranks = {};
   // A callback to call with the status.
   StatusCallback callback;
 };

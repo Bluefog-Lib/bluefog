@@ -128,9 +128,8 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
 
-  // TODO(ybc) Add dst_ranks into API
   auto enqueue_result = EnqueuTensorWindowPut(
-      bf_tensor, name, device, [handle](const Status& status) {
+      bf_tensor, name, dst_ranks, device, [handle](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
       });
 
@@ -145,10 +144,14 @@ int DoWinGet(::torch::Tensor tensor, const std::string& name,
   auto device = GetDeviceID(tensor);
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
+  int num_src = src_ranks.size();
 
-  // TODO(ybc) Add src_ranks into API
   auto enqueue_result = EnqueuTensorWindowGet(
-      bf_tensor, name, device, [handle](const Status& status) {
+      bf_tensor, name, src_ranks, device, 
+      [tensor, num_src, handle, average](const Status& status) mutable {
+        if (average && (num_src > 0)) {
+          tensor.div_(num_src);
+        }
         win_handle_manager.MarkDone(handle, status);
       });
 

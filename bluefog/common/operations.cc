@@ -327,7 +327,9 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 }
 
 Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, const int device,
+                             const std::string& name, 
+                             const std::vector<int>& dst_ranks,
+                             const int device,
                              StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
@@ -335,6 +337,7 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
+  e.dst_ranks = dst_ranks;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -347,7 +350,9 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
 }
 
 Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, const int device,
+                             const std::string& name, 
+                             const std::vector<int>& src_ranks,
+                             const int device,
                              StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
@@ -355,6 +360,7 @@ Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
+  e.src_ranks = src_ranks;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
