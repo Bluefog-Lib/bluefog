@@ -1,4 +1,6 @@
-MPIRUN = mpirun
+NUM_PROC = 3
+EXTRA_MPI_FLAG = 
+MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest
 
 test: test_torch test_tensorflow
@@ -9,23 +11,23 @@ clean: clean_build clean_so
 
 .PHONY: test_torch_basic
 test_torch_basic:
-	${PYTEST} ./test/torch_basics_test.py && ${MPIRUN} -np 4 ${PYTEST} ./test/torch_basics_test.py
+	${PYTEST} ./test/torch_basics_test.py && ${MPIRUN} ${PYTEST} ./test/torch_basics_test.py
 
 .PHONY: test_torch_ops
 test_torch_ops:
-	${MPIRUN} -np 4 ${PYTEST} ./test/torch_ops_test.py
+	${MPIRUN} ${PYTEST} ./test/torch_ops_test.py
 
 .PHONY: test_torch_win_ops
 test_torch_win_ops:
-	${MPIRUN} -np 4 ${PYTEST} ./test/torch_win_ops_test.py
+	${MPIRUN} ${PYTEST} ./test/torch_win_ops_test.py
 
 .PHONY: test_tensorflow_basic
 test_tensorflow_basic:
-	${PYTEST} ./test/tensorflow_basics_test.py && ${MPIRUN} -np 4 ${PYTEST} ./test/tensorflow_basics_test.py
+	${PYTEST} ./test/tensorflow_basics_test.py && ${MPIRUN} ${PYTEST} ./test/tensorflow_basics_test.py
 
 .PHONY: test_tensorflow_ops
 test_tensorflow_ops:
-	${MPIRUN} -np 4 ${PYTEST} ./test/tensorflow_ops_test.py
+	${MPIRUN} ${PYTEST} ./test/tensorflow_ops_test.py
 
 .PHONY: clean_build
 clean_build:

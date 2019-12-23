@@ -361,6 +361,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
   }
+  LOG(TRACE, rank_) << "Win_put for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
 
