@@ -57,6 +57,35 @@ class BasicsTests(tf.test.TestCase):
         assert isinstance(topology, nx.DiGraph)
         np.testing.assert_array_equal(
             nx.to_numpy_array(expected_topology), nx.to_numpy_array(topology))
+    
+    def test_in_out_neighbors_power2(self):
+        rank, size = mpi_env_rank_and_size()
+        bf.init()
+        bf.set_topology(PowerTwoRingGraph(size))
+        in_neighobrs = bf.in_neighbour_ranks()
+        out_neighbors = bf.out_neighbor_ranks()
+
+        degree = int(np.ceil(np.log2(size)))
+        expected_in_neighbors = sorted([(rank - 2**i) %
+                                        size for i in range(degree)])
+        expected_out_neighbors = sorted([(rank + 2**i) %
+                                         size for i in range(degree)])
+        assert sorted(in_neighobrs) == expected_in_neighbors
+        assert sorted(out_neighbors) == expected_out_neighbors
+
+    def test_in_out_neighbors_biring(self):
+        rank, size = mpi_env_rank_and_size()
+        bf.init()
+        bf.set_topology(BiRingGraph(size))
+        in_neighobrs = bf.in_neighbour_ranks()
+        out_neighbors = bf.out_neighbor_ranks()
+
+        expected_in_neighbors = list(set(
+            map(lambda x: x % size, [rank - 1, rank + 1])))
+        expected_out_neighbors = list(set(
+            map(lambda x: x % size, [rank - 1, rank + 1])))
+        assert sorted(in_neighobrs) == expected_in_neighbors
+        assert sorted(out_neighbors) == expected_out_neighbors
 
 
 if __name__ == "__main__":

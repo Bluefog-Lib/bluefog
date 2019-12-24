@@ -89,30 +89,25 @@ class WinOpsTests(unittest.TestCase):
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
-        num_outdegree = int(np.ceil(np.log2(size)))
-        neighbor_ranks = [(rank - 2**i) % size for i in range(num_outdegree)] # put
-        avg_value = (rank + np.sum(neighbor_ranks)) / float(num_outdegree+1)
+        outdegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(outdegree)] # put
+        avg_value = (rank + np.sum(neighbor_ranks)) / float(outdegree+1)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            print(rank, ": test of win_put_", dim, "started.")
             tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            print(rank, ": win_create of win_put_", dim, "finished.")
             bf.win_put_blocking(tensor, window_name)
-            print(rank, ": win_put_", dim, "is finished", flush=True)
             time.sleep(0.1)
             sync_result = bf.win_sync(window_name)
-            print(rank, ": sync of win_put_", dim, "is finished", flush=True)
             assert (list(sync_result.shape) == [3] * dim), (
                 "bf.win_sync after win_put produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_sync after win_put produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
-            print(rank, ": assert of win_put_", dim, "passed.")
 
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_put_{}_{}".format(dim, dtype)
@@ -133,9 +128,9 @@ class WinOpsTests(unittest.TestCase):
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
-        num_outdegree = int(np.ceil(np.log2(size)))
+        outdegree = int(np.ceil(np.log2(size)))
         # We use given destination to form a (right-)ring.
-        avg_value = (rank*num_outdegree + (rank-1) % size) / float(num_outdegree+1)
+        avg_value = (rank*outdegree + (rank-1) % size) / float(outdegree+1)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -158,7 +153,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully"
 
-    @unittest.skip("Not implemented in C yet.")
+    @unittest.skip("Not finished yet.")
     def test_win_get_blocking(self):
         """Test that the window get operation."""
         size = bf.size()
@@ -173,25 +168,25 @@ class WinOpsTests(unittest.TestCase):
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
-        num_indegree = int(np.ceil(np.log2(size)))
-        neighbor_ranks = [(rank + 2**i) % size for i in range(num_indegree)] # get
-        sum_value = np.sum(neighbor_ranks)
+        indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank + 2**i) % size for i in range(indegree)] # get
+        avg_value = (rank + np.sum(neighbor_ranks)) / float(indegree+1)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             time.sleep(0.2)  # wait for others' finishing create win?
-            recv_tensor = torch.zeros_like(tensor)
+            recv_tensor = tensor.clone()
             bf.win_get_blocking(recv_tensor, window_name, average=False)
-            assert (list(recv_tensor.shape) == [23] * dim), (
-                "bf.win_get produce wrong shape tensor.")
-            assert (recv_tensor.data - sum_value).abs().max() < EPSILON, (
-                "bf.win_get produce wrong tensor value " +
-                "[{}-{}]!={} at rank {}.".format(recv_tensor.min(),
-                                                 recv_tensor.max(), sum_value, rank))
+            # assert (list(tensor.shape) == [2] * dim), (
+            #     "bf.win_get produce wrong shape tensor.")
+            # assert (tensor.data - avg_value).abs().max() < EPSILON, (
+            #     "bf.win_get produce wrong tensor value " +
+            #     "[{}-{}]!={} at rank {}.".format(tensor.min(),
+            #                                      tensor.max(), avg_value, rank))
             bf.win_free(window_name)
 
 if __name__ == "__main__":
