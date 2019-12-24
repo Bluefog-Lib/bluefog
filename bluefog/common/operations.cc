@@ -95,8 +95,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       break;
     case MPIOpsType::WIN_GET:
       LOG(TRACE, bluefog_global.controller->GetRank())
-          << "Processing WIN_PUT on " << entry.tensor_name;
-      LOG(ERROR) << "WIN_GET have not been implemented yet.";
+          << "Processing WIN_GET on " << entry.tensor_name;
+      state.controller->WinGet(entry);
       break;
     default:
       throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
@@ -104,7 +104,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   } catch (std::length_error& e) {
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   } catch (std::exception& e) {
-    LOG(FATAL) << e.what();
+    LOG(ERROR) << e.what();
   }
   return !bluefog_global.shut_down;
 }
@@ -382,6 +382,7 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   Status status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors, name, device);
   if (!status.ok()) {
     LOG(ERROR) << "Cannot create the MPI_Win for " << name;
+    LOG(ERROR) << status.reason;
   }
   return status;
 }
@@ -393,6 +394,7 @@ Status WindowSync(const std::string& name) {
   Status status = bluefog_global.controller->WinSync(name);
   if (!status.ok()) {
     LOG(ERROR) << "Cannot sync the MPI_Win for " << name;
+    LOG(ERROR) << status.reason;
   }
   return status;
 }
@@ -404,6 +406,7 @@ Status WindowFree(const std::string& name) {
   Status status = bluefog_global.controller->WinFree(name);
   if (!status.ok()) {
     LOG(ERROR) << "Cannot free the MPI_Win for " << name;
+    LOG(ERROR) << status.reason;
   }
   return status;
 }

@@ -517,8 +517,8 @@ def _win_get_function_factory(tensor):
 
 def win_get(tensor: torch.Tensor, name: str,
             src_ranks: List[int] = None, average: bool = True) -> int:
-    """ Passively get the tensor(s) from neighbors' shared window memory.
-    The input tensor is also the in-place output.
+    """ Passively get the tensor(s) from neighbors' shared window memory into
+    local memory. The input tensor is also in-place output.
 
     Args:
         tensor: A tensor to get the result, should have same shape and type of
@@ -545,9 +545,9 @@ def win_get(tensor: torch.Tensor, name: str,
 
 
 def win_get_blocking(tensor: torch.Tensor, name: str,
-                     src_ranks: List[int] = None, average: bool = True) -> torch.Tensor:
-    """ Passively get the tensor(s) from neighbors' shared window memory.
-    The input tensor is also the in-place output.
+                     src_ranks: List[int] = None, average: bool = True) -> bool:
+    """ Passively get the tensor(s) from neighbors' shared window memory into
+    local memory. The input tensor is also in-place output.
 
     Args:
         tensor: A tensor to get the result, should have same shape and type of

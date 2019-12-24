@@ -106,7 +106,7 @@ class BlueFogBasics(object):
 
     def in_neighbour_ranks(self) -> List[int]:
         """Return the ranks of all in-neighbors.
-        Notice: Self-loop is allowed and self rank will be included as well.
+        Notice: Self-loop is not allowed and self rank will not be included.
 
         Returns:
             List[int]: in_neighbour_ranks
@@ -118,7 +118,7 @@ class BlueFogBasics(object):
 
     def out_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all out-neighbors.
-        Notice: Self-loop is allowed and self rank will be included as well.
+        Notice: Self-loop is not allowed and self rank will not be included.
 
         Returns:
             List[int]: out_neighbour_ranks
