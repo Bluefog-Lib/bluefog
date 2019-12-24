@@ -382,7 +382,7 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   Status status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors, name, device);
   if (!status.ok()) {
     LOG(ERROR) << "Cannot create the MPI_Win for " << name;
-    LOG(ERROR) << status.reason;
+    LOG(ERROR) << status.reason();
   }
   return status;
 }
@@ -394,7 +394,7 @@ Status WindowSync(const std::string& name) {
   Status status = bluefog_global.controller->WinSync(name);
   if (!status.ok()) {
     LOG(ERROR) << "Cannot sync the MPI_Win for " << name;
-    LOG(ERROR) << status.reason;
+    LOG(ERROR) << status.reason();
   }
   return status;
 }
@@ -406,7 +406,7 @@ Status WindowFree(const std::string& name) {
   Status status = bluefog_global.controller->WinFree(name);
   if (!status.ok()) {
     LOG(ERROR) << "Cannot free the MPI_Win for " << name;
-    LOG(ERROR) << status.reason;
+    LOG(ERROR) << status.reason();
   }
   return status;
 }
