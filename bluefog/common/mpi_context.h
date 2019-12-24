@@ -84,6 +84,9 @@ struct MPIContext {
   std::unordered_map<std::string, std::vector<std::shared_ptr<MPI_Win>>>
     win_map_with_order;
 
+  // The local memory address that associated with each MPI_WIN.
+  std::unordered_map<std::string, std::vector<void*>> win_local_memory_map;
+
   // Whether mpi context should be finalize.
   bool should_finalize = false;
 };

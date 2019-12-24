@@ -282,6 +282,7 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
                      mpi_win_ptr.get());
       mpi_ctx_.send_win_map[name] = mpi_win_ptr;
       mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
+      mpi_ctx_.win_local_memory_map[name].push_back(data_buf);
     } else if (std::find(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end(),
                          rank) != neighbor_in_ranks_.end()) {
       // Receiver
@@ -292,6 +293,7 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
                      mpi_win_ptr.get());
       mpi_win_vec.push_back(mpi_win_ptr);
       mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
+      mpi_ctx_.win_local_memory_map[name].push_back(data_buf);
     } else {
       // Just participate in a collective call.
       auto mpi_win_ptr = std::make_shared<MPI_Win>();
@@ -299,6 +301,7 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
                      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                      mpi_win_ptr.get());
       mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
+      mpi_ctx_.win_local_memory_map[name].push_back(nullptr);
     }
   }
 
@@ -353,6 +356,9 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   
   int target_disp = 0; // offset in win buffer
   for (int target_rank : entry.dst_ranks) {
+    // avoid putting the tensor for itself (NOT valid).
+    if (target_rank == rank_) continue;
+
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Put(sendbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
@@ -362,6 +368,37 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     MPI_Win_unlock(target_rank, mpi_win);
   }
   LOG(TRACE, rank_) << "Win_put for " << entry.tensor_name << " is done.";
+  entry.callback(Status::OK());
+}
+
+void MPIController::WinGet(TensorTableEntry& entry) {
+  int num_elements = entry.tensor->shape().num_elements();
+  MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
+  auto it = mpi_ctx_.win_map_with_order.find(entry.tensor_name);
+  if (it == mpi_ctx_.win_map_with_order.end()) {
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             std::string(" in registered win object name."));
+  }
+  auto win_mem_vec = mpi_ctx_.win_local_memory_map.at(entry.tensor_name);
+  std::vector<std::shared_ptr<MPI_Win>>& win_vec = it->second;
+
+  int target_disp = 0; // offset in win buffer
+  for (int target_rank : entry.src_ranks) {
+    // avoid getting the tensor for itself (NOT valid).
+    if (target_rank == rank_) continue;
+
+    auto mpi_win = *win_vec[target_rank];
+    void* recvbuf = win_mem_vec[target_rank];
+    MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
+    int ret_code = MPI_Get(recvbuf, num_elements, data_type, target_rank,
+                           target_disp, num_elements, data_type, mpi_win);
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error("MPI_Get failed, see MPI output for details.");
+    }
+    MPI_Win_unlock(target_rank, mpi_win);
+  }
+  
+  LOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
 

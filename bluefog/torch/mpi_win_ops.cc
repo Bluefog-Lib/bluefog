@@ -71,7 +71,7 @@ bool WinTorchStorageManager::GetStorageByname(
   return true;
 }
 
-bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor) {
+bool WinTorchStorageManager::SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor) {
   if (tensors_map_.find(name) == tensors_map_.end()) {
     return false;
   }
@@ -79,6 +79,14 @@ bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name, ::torch::T
   for (std::shared_ptr<TorchTensor> t : it->second) {
     local_tensor.add_(t->GetUnderlyingTensor());
   }
+  return true;
+}
+
+bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor) {
+  if(!SumWithNeighbor(name, local_tensor)) {
+    return false;
+  }
+  auto it = tensors_map_.find(name);
   local_tensor.div_(static_cast<int>(it->second.size()) + 1);
   return true;
 }
@@ -148,9 +156,12 @@ int DoWinGet(::torch::Tensor tensor, const std::string& name,
 
   auto enqueue_result = EnqueuTensorWindowGet(
       bf_tensor, name, src_ranks, device, 
-      [tensor, num_src, handle, average](const Status& status) mutable {
-        if (average && (num_src > 0)) {
-          tensor.div_(num_src);
+      [tensor, name, handle, average](const Status& status) mutable {
+        // TODO(ybc) Modify the average ops by given number of neighbors rank.
+        if (average) {
+          win_storage_manager.AvgWithNeighbor(name, tensor);
+        } else {
+          win_storage_manager.SumWithNeighbor(name, tensor);
         }
         win_handle_manager.MarkDone(handle, status);
       });

@@ -36,6 +36,7 @@ class MPIController {
   void NeighborAllgather(TensorTableEntry& entries);
   void NeighborAllreduce(TensorTableEntry& entries);
   void WinPut(TensorTableEntry& entries);
+  void WinGet(TensorTableEntry& entries);
 
   int SetTopology(int indegree, const int* sources, int outdegree,
                   const int* destinations);

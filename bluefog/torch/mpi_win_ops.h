@@ -26,6 +26,7 @@ class WinTorchStorageManager {
   bool GetStorageByname(const std::string& name,
                         std::vector<std::shared_ptr<common::Tensor>>& tensors);
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
+  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
   void ClearAll();
 
  private:
