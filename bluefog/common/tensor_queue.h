@@ -22,6 +22,8 @@ class TensorQueue {
 
   void PushMessageToQueue(TensorTableEntry& message);
 
+  inline int size() { return message_queue_.size(); }
+
  protected:
   // Queue of MPI requests waiting to be performed.
   std::queue<TensorTableEntry> message_queue_;

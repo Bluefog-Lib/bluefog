@@ -18,16 +18,22 @@ class MPIController {
   
   int GetTypeSize(DataType dtype);
 
-  std::vector<int>& GetRanks() { return ranks_; };
-  int GetRank() { return rank_; };
-  int GetLocalRank() { return local_rank_; };
-  int GetCrossRank() { return cross_rank_; };
-  int GetSize() { return size_; };
-  int GetLocalSize() { return local_size_; };
-  int GetCrossSize() { return cross_size_; };
-  int GetNeighborSize() { return neighbor_indgree_; };
-  const std::vector<int>& GetLocalCommRanks() { return local_comm_ranks_; };
-  bool IsMpiThreadsSupported() const { return mpi_threads_supported_; }
+  inline std::vector<int>& GetRanks() { return ranks_; };
+  inline int GetRank() { return rank_; };
+  inline int GetLocalRank() { return local_rank_; };
+  inline int GetCrossRank() { return cross_rank_; };
+  inline int GetSize() { return size_; };
+  inline int GetLocalSize() { return local_size_; };
+  inline int GetCrossSize() { return cross_size_; };
+  inline int GetNeighborSize() { return neighbor_indgree_; };
+  inline const std::vector<int>& GetLocalCommRanks() {
+    return local_comm_ranks_;
+  };
+
+  inline bool IsMpiThreadsSupported() const { return mpi_threads_supported_; }
+  inline bool IsWinObjetEmpty() const {
+    return mpi_ctx_.win_map_with_order.size() == 0;
+  }
 
   // TODO(ybc) Create Operation_manager class to control it.
   void Allreduce(TensorTableEntry& entries);

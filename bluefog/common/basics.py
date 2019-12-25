@@ -158,5 +158,12 @@ class BlueFogBasics(object):
             outdegree, destinations_type(*destinations))
         if ret != 1:
             raise RuntimeError(
-                "Cannot set topology correctly. Has Bluefog been initialized? use bf.init()")
+                "Cannot set topology correctly. Three common reasons caused this. \n"
+                "1. Has Bluefog been initialized? use bf.init(). \n"
+                "2. The win_create has been called. It is not allowed to change\n"
+                "   the topology after that. You can call win_free() to unregister\n"
+                "   all window object first, then set the topology. \n"
+                "3. Make sure all previous MPI ops are done. It is not allowed to \n"
+                "   change the topology while there is undone MPI ops."
+                )
         self._topology = topology

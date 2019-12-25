@@ -195,6 +195,12 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
   if (!bluefog_global.initialization_done) {
     return -1;
   }
+  if (!bluefog_global.controller->IsWinObjetEmpty()) {
+    return -1;
+  }
+  if (bluefog_global.tensor_queue.size() > 0) {
+    return -1;
+  }
   return bluefog_global.controller->SetTopology(indegree, sources, outdegree,
                                                 destinations);
 }
