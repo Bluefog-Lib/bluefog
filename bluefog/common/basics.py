@@ -117,26 +117,30 @@ class BlueFogBasics(object):
 
     def in_neighbour_ranks(self) -> List[int]:
         """Return the ranks of all in-neighbors.
-        Notice: Self-loop is not allowed and self rank will not be included.
+        Notice: No matter self-loop is presented or not, self rank will not be included.
 
         Returns:
             List[int]: in_neighbour_ranks
         """
         if self._topology is None:
             return []
-        in_neighbour_ranks = list(self._topology.predecessors(self.rank()))
+        _rank = self.rank()
+        in_neighbour_ranks = [r for r in self._topology.predecessors(self.rank())
+                              if r != _rank]
         return in_neighbour_ranks
 
     def out_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all out-neighbors.
-        Notice: Self-loop is not allowed and self rank will not be included.
+        Notice: No matter self-loop is presented or not, self rank will not be included.
 
         Returns:
             List[int]: out_neighbour_ranks
         """
         if self._topology is None:
             return []
-        out_neighbor_ranks = list(self._topology.successors(self.rank()))
+        _rank = self.rank()
+        out_neighbor_ranks = [r for r in self._topology.predecessors(self.rank())
+                              if r != _rank]
         return out_neighbor_ranks
 
     def set_topology(self, topology: networkx.DiGraph = None) -> bool:
@@ -158,7 +162,7 @@ class BlueFogBasics(object):
         assert isinstance(topology, networkx.DiGraph)
         if topology_util.IsTopologyEquivalent(topology, self._topology):
             if self.local_rank() == 0:
-                logger.info(
+                logger.debug(
                     "Topology to set is the same as old one. Skip the setting.")
             return True
 

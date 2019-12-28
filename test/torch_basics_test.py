@@ -83,6 +83,11 @@ class BasicsTests(unittest.TestCase):
             map(lambda x: x % size, [rank - 1, rank + 1])))
         expected_out_neighbors = list(set(
             map(lambda x: x % size, [rank - 1, rank + 1])))
+
+        if size <= 1:
+            expected_in_neighbors = []
+            expected_out_neighbors = []
+
         assert sorted(in_neighobrs) == expected_in_neighbors
         assert sorted(out_neighbors) == expected_out_neighbors
 
