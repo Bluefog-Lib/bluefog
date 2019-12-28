@@ -55,6 +55,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   for (auto& cb : callbacks) {
     cb(SHUT_DOWN_ERROR);
   }
+  WindowFree("");  // Free all window objects.
   mpi_context.Finalize(mpi_ctx_manager);
 }
 

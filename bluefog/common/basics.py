@@ -1,10 +1,21 @@
 from typing import List
 import atexit
 import ctypes
+import logging
 import networkx
 
 import bluefog.common.util as util
 import bluefog.common.topology_util as topology_util
+
+
+logger = logging.getLogger('bluefog')
+logger.setLevel(logging.INFO)
+
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)-15s %(levelname)s  %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 
 class BlueFogBasics(object):
@@ -128,19 +139,28 @@ class BlueFogBasics(object):
         out_neighbor_ranks = list(self._topology.successors(self.rank()))
         return out_neighbor_ranks
 
-    def set_topology(self, topology: networkx.DiGraph = None):
+    def set_topology(self, topology: networkx.DiGraph = None) -> bool:
         """A funnction that set the virtual topology MPI used.
 
         Args:
           Topo: A networkx. DiGraph object to decide the topology. If not provided
             a default power_two_ring structure is used.
 
-        Raises:
-            RuntimeError: If topology can be set correctly.
+        Returns:
+            bool: Whether topology is set correctly or not.
         """
         if topology is None:
-            print("Topology is not specified. Default Power Two topology is used.")
             topology = topology_util.PowerTwoRingGraph(size=self.size())
+            if self.local_rank() == 0:
+                logger.info(
+                    "Topology is not specified. Default Power Two topology is used.")
+
+        assert isinstance(topology, networkx.DiGraph)
+        if topology_util.IsTopologyEquivalent(topology, self._topology):
+            if self.local_rank() == 0:
+                logger.info(
+                    "Topology to set is the same as old one. Skip the setting.")
+            return True
 
         destinations = list(topology.successors(self.rank()))
         sources = list(topology.predecessors(self.rank()))
@@ -157,13 +177,16 @@ class BlueFogBasics(object):
             indegree, sources_type(*sources),
             outdegree, destinations_type(*destinations))
         if ret != 1:
-            raise RuntimeError(
-                "Cannot set topology correctly. Three common reasons caused this. \n"
-                "1. Has Bluefog been initialized? use bf.init(). \n"
-                "2. The win_create has been called. It is not allowed to change\n"
-                "   the topology after that. You can call win_free() to unregister\n"
-                "   all window object first, then set the topology. \n"
-                "3. Make sure all previous MPI ops are done. It is not allowed to \n"
-                "   change the topology while there is undone MPI ops."
+            if self.local_rank() == 0:
+                logger.error(
+                    "Cannot set topology correctly. Three common reasons caused this. \n"
+                    "1. Has Bluefog been initialized? use bf.init(). \n"
+                    "2. The win_create has been called. It is not allowed to change\n"
+                    "   the topology after that. You can call win_free() to unregister\n"
+                    "   all window object first, then set the topology. \n"
+                    "3. Make sure all previous MPI ops are done. It is not allowed to \n"
+                    "   change the topology while there is undone MPI ops."
                 )
+            return False
         self._topology = topology
+        return True

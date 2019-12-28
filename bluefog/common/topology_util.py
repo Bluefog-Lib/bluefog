@@ -2,6 +2,13 @@ import numpy as np
 import networkx as nx
 
 
+def IsTopologyEquivalent(topo1: nx.DiGraph, topo2: nx.DiGraph) -> bool:
+    if topo1 is None or topo2 is None:
+        return False
+    # TODO(ybc) Implement this.
+    return False
+    
+
 def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     """Each point only connected to a point such that the index difference is power of 2."""
     x = [1 if i & (i - 1) == 0 else 0 for i in range(size)]
