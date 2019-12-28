@@ -193,12 +193,15 @@ int bluefog_mpi_threads_supported() {
 int bluefog_set_topology(int indegree, const int* sources, int outdegree,
                          const int* destinations) {
   if (!bluefog_global.initialization_done) {
+    LOG(ERROR) << "Cannot set the topology because bluefog has not been initialized.";
     return -1;
   }
   if (!bluefog_global.controller->IsWinObjetEmpty()) {
+    LOG(ERROR) << "Cannot set the topology because there are window object uncleared.";
     return -1;
   }
   if (bluefog_global.tensor_queue.size() > 0) {
+    LOG(ERROR) << "Cannot set the topology because there are unfinished MPI ops.";
     return -1;
   }
   return bluefog_global.controller->SetTopology(indegree, sources, outdegree,
@@ -409,7 +412,12 @@ Status WindowFree(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinFree(name);
+  Status status;
+  if (name.empty()) {
+    status = bluefog_global.controller->WinFreeAll();
+  } else {
+    status = bluefog_global.controller->WinFree(name);
+  }
   if (!status.ok()) {
     LOG(ERROR) << "Cannot free the MPI_Win for " << name;
     LOG(ERROR) << status.reason();

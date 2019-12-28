@@ -426,7 +426,7 @@ def win_create(tensor: torch.Tensor, name: str) -> bool:
     return False
 
 
-def win_free(name: str) -> bool:
+def win_free(name: str = None) -> bool:
     """ Free the MPI windows associated with name.
 
     Args:
@@ -436,7 +436,11 @@ def win_free(name: str) -> bool:
     Returns:
         bool: Indicate the free succeed or not.
     """
-    _win_map.pop(name)
+    if name is None:
+        _win_map.clear()
+        name = ''
+    else:
+        _win_map.pop(name)
     return getattr(mpi_lib, 'bluefog_torch_win_free')(name)
 
 

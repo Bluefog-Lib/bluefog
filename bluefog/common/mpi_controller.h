@@ -53,6 +53,7 @@ class MPIController {
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                    const std::string& name, int device);
   Status WinFree(const std::string& name);
+  Status WinFreeAll();
   Status WinSync(const std::string& name);
 
  protected:

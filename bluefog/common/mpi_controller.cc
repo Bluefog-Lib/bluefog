@@ -316,9 +316,11 @@ Status MPIController::WinFree(const std::string& name) {
   auto it = mpi_ctx_.win_map_with_order.find(name);
   auto send_it = mpi_ctx_.send_win_map.find(name);
   auto neighbor_it = mpi_ctx_.neighbor_win_map.find(name);
+  auto memory_it = mpi_ctx_.win_local_memory_map.find(name);
   if (it == mpi_ctx_.win_map_with_order.end() ||
       send_it == mpi_ctx_.send_win_map.end() ||
-      neighbor_it == mpi_ctx_.neighbor_win_map.end()) {
+      neighbor_it == mpi_ctx_.neighbor_win_map.end() ||
+      memory_it == mpi_ctx_.win_local_memory_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
 
@@ -328,7 +330,23 @@ Status MPIController::WinFree(const std::string& name) {
     MPI_Win_free(win_ptr.get());
   }
   mpi_ctx_.win_map_with_order.erase(it);
+  mpi_ctx_.win_local_memory_map.erase(memory_it);
 
+  return Status::OK();
+}
+
+Status MPIController::WinFreeAll() {
+  for (auto kv : mpi_ctx_.win_map_with_order) {
+    for (auto win_ptr : kv.second) {
+      MPI_Win_free(win_ptr.get());
+    }
+  }
+  mpi_ctx_.send_win_map.clear();
+  mpi_ctx_.neighbor_win_map.clear();
+  mpi_ctx_.win_map_with_order.clear();
+  mpi_ctx_.win_local_memory_map.clear();
+
+  LOG(DEBUG) << "All MPI Win has been freed.";
   return Status::OK();
 }
 

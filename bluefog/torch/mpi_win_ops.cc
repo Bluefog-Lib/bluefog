@@ -120,9 +120,14 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name) {
 int DoWinFree(const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
-  if (!win_storage_manager.UnregisterWinName(name)) {
-    LOG(ERROR) << "Cannot unregister win " << name;
-    return 0;
+  if (name.empty()) {
+    win_storage_manager.ClearAll();
+  } else {
+    auto res = win_storage_manager.UnregisterWinName(name);
+    if (!res) {
+      LOG(ERROR) << "Cannot unregister win " << name;
+      return 0;
+    }
   }
   Status status = common::WindowFree(name);
   return status.ok() ? 1 : 0;
@@ -157,7 +162,6 @@ int DoWinGet(::torch::Tensor tensor, const std::string& name,
   auto enqueue_result = EnqueuTensorWindowGet(
       bf_tensor, name, src_ranks, device, 
       [tensor, name, handle, average](const Status& status) mutable {
-        // TODO(ybc) Modify the average ops by given number of neighbors rank.
         if (average) {
           win_storage_manager.AvgWithNeighbor(name, tensor);
         } else {
