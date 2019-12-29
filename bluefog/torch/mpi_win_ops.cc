@@ -15,7 +15,9 @@ namespace bluefog {
 namespace torch {
 
 using ::bluefog::common::bluefog_neighbor_size;
+using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::Status;
+using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
 static HandleManager win_handle_manager;
@@ -38,11 +40,18 @@ bool WinTorchStorageManager::RegisterWinName(const std::string& name,
   if (tensors_map_.find(name) != tensors_map_.end()) {
     return false;
   }
+  int indegree;
+  int* sources_ptr; 
+  int outdegree;
+  int* destinations_ptr;
+  bluefog_load_topology(&indegree, sources_ptr, &outdegree,
+                        destinations_ptr);
   // We need to allocate neighbor_indegree tensor space for it.
-  std::vector<std::shared_ptr<TorchTensor>> neighbor_tensors;
-  for (int i = 0; i < bluefog_neighbor_size(); i++) {
+  NeighborTable neighbor_tensors;
+  for (int i = 0; i < indegree; i++) {
     auto t = std::make_shared<TorchTensor>(tensor->MakeCopy(device));
-    neighbor_tensors.push_back(t);
+    int source_rank = sources_ptr[i];
+    neighbor_tensors[source_rank] = t;
   }
   tensors_map_[name] = neighbor_tensors;
   return true;
@@ -65,8 +74,8 @@ bool WinTorchStorageManager::GetStorageByname(
     return false;
   }
   auto it = tensors_map_.find(name);
-  for (std::shared_ptr<TorchTensor> t : it->second) {
-    tensors.emplace_back(t);
+  for (auto& kv : it->second) {
+    tensors.emplace_back(kv.second);
   }
   return true;
 }
@@ -76,7 +85,8 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name, ::torch::T
     return false;
   }
   auto it = tensors_map_.find(name);
-  for (std::shared_ptr<TorchTensor> t : it->second) {
+  for (auto& kv : it->second) {
+    std::shared_ptr<TorchTensor>& t = kv.second;
     local_tensor.add_(t->GetUnderlyingTensor());
   }
   return true;

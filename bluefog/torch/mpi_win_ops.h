@@ -33,7 +33,9 @@ class WinTorchStorageManager {
   // A local storage for neighbor's remote memory access.
   // All tensors are associated with an unique name and duplicated for the
   // number of in-degree neighbors.
-  std::unordered_map<std::string, std::vector<std::shared_ptr<TorchTensor>>>
+  // { Tensor Name ->  {rank : tensor } }
+  std::unordered_map<std::string,
+                     std::unordered_map<int, std::shared_ptr<TorchTensor>>>
       tensors_map_;
 
   mutable std::mutex mutex_;
