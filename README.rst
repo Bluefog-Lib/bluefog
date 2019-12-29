@@ -33,18 +33,18 @@ We list the most relevant and important considerations here.
   3. Pipeline Parallelism
 
   The above three techniques are not exclusive to each other. For example,
-  tensorflow supports hybrid parallelism that users can combine all three
-  techniques at the same time. The Bluefog project focused on Data Parallelism.
-  One reason is of course that our algorithm derived based on the assumption
-  dataset is distributed. More importantly, among these three techniques, data
-  parallelism is the most popular one thanks to its excellent scalability and
-  flexibility on almost any model.
+  tensorflow allow users can utilize all three techniques at the same time.
+  The Bluefog project focused on Data Parallelism.
+  One reason, of course, is the base algorithm derived based on the assumption
+  that the dataset is distributed over different nodes. But, more importantly, 
+  among these three techniques, data parallelism is the most popular approaches
+  thanks to its excellent scalability and flexibility on almost any model.
 
 * From the aspect of parameter consistency:
 
   In the distributed learning system, parameter consistency means the similarity
-  between the parameter stored in the local machine. From the strong consistency
-  to weak consistency, we can list in five-level by typical algorithms:
+  between the parameter stored in the local machine. We list five typical 
+  algorithms from strongest consistency to weakest consistency.
 
   1. Synchronous SGD
   2. Stale-Synchronous SGD
@@ -58,24 +58,26 @@ We list the most relevant and important considerations here.
 
 * From the aspect of communication architecture:
 
-  1. Parameter Server(PS)
+  1. Parameter Server(PS) ---- (Distributed but still centralized)
 
-    - Sharded PS
+    - Sharded PS 
     - Hierarchical PS
 
-  2. Peer-to-Peer
+  2. Peer-to-Peer ----- (Distributed but also decentralized)
 
     - Ring-AllReduce
     - Neighbor-Collective
 
-  Apparently, Bluefog project belongs to the peer-to-peer model.
+  Apparently, Bluefog project belongs to the peer-to-peer model. Multiple nodes/machines
+  will distributedly and no centralized node will gather all the informations.
 
 
 * From the aspect of communication cost:
 
-  1. Temporal compression (Fine vs Coarse-Grained Fusion)
-  2. Spatial compression (Sparsity)
+  1. Temporal compression (Fine- vs Coarse-Grained Fusion)
+  2. Spatial compression (Sparse/Sliced tensors)
   3. Btye compression (Quantization)
+  4. Neighbor compression (Selecting less neighbors)
 
   We don't have any implementation to support it yet. We do plan to support it in
   the future.
