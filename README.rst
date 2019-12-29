@@ -40,22 +40,6 @@ We list the most relevant and important considerations here.
   among these three techniques, data parallelism is the most popular approaches
   thanks to its excellent scalability and flexibility on almost any model.
 
-* From the aspect of parameter consistency:
-
-  In the distributed learning system, parameter consistency means the similarity
-  between the parameter stored in the local machine. We list five typical 
-  algorithms from strongest consistency to weakest consistency.
-
-  1. Synchronous SGD
-  2. Stale-Synchronous SGD
-  3. Asynchronous SGD
-  4. Model Averaging
-  5. Ensemble Learning
-
-  Bluefog project focused on the asynchronous training through the
-  diffusion/consensus algorithm. Diffusion/consensus algorithm is one kind of
-  model averaging algorithms. Therefore, Bluefog project belongs to level 3-4.
-
 * From the aspect of communication architecture:
 
   1. Parameter Server(PS) ---- (Distributed but still centralized)
@@ -71,8 +55,43 @@ We list the most relevant and important considerations here.
   Apparently, Bluefog project belongs to the peer-to-peer model. Multiple nodes/machines
   will distributedly and no centralized node will gather all the informations.
 
+* From the aspect of parameter consistency:
 
-* From the aspect of communication cost:
+  In the distributed learning system, parameter consistency means the similarity
+  between the parameter stored in the local machine. We list five typical 
+  algorithms from strongest consistency to weakest consistency.
+
+  1. Model Replication
+  2. Delayed Updating (like asynchronous algorithm.)
+  3. Model Averaging
+  4. Ensemble Learning
+
+  Bluefog project focused on the asynchronous training through the
+  diffusion/consensus algorithm, which is one kind of
+  model averaging algorithms. The parameter learned in different nodes 
+  through the Bluefog algorithm are slightly different. But unlike 
+  ensemble learning, all nodes are highly similar.
+
+* From the aspect of updating synchronization:
+
+  1. Synchronous updating
+  2. Stale-Synchronous updating
+  3. Asynchronous updating
+  
+  Typically, the more "asynchronous" updating, the faster on the training. However, 
+  we will loss the parameter consistency.
+
+* From the aspect of information fusion:
+
+  1. Averaging over the gradients
+  2. Averaging over the parameter/iterates
+  3. Averaging over the dual variable
+  
+  Most strong consistency algorithm is averaging over the gradients. However, Bluefog project
+  is averaging over the parameter directly. One advantage of averaging over the parameter is
+  the resilient on the noise or error. Also, noticing these three methods are not exclusive. 
+
+* From the aspect of reducing communication cost:
 
   1. Temporal compression (Fine- vs Coarse-Grained Fusion)
   2. Spatial compression (Sparse/Sliced tensors)
@@ -81,3 +100,4 @@ We list the most relevant and important considerations here.
 
   We don't have any implementation to support it yet. We do plan to support it in
   the future.
+
