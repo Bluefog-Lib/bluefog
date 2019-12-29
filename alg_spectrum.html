@@ -1,0 +1,295 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>The Spectrum of Distributed Machine Learning Algorithm &mdash; Bluefog 0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="BlueFog Development Guide" href="devel_guide.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> Bluefog
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">API:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Development:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Spectrum of Machine Learning Algorithm</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Bluefog</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>The Spectrum of Distributed Machine Learning Algorithm</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/alg_spectrum.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="the-spectrum-of-distributed-machine-learning-algorithm">
+<h1>The Spectrum of Distributed Machine Learning Algorithm<a class="headerlink" href="#the-spectrum-of-distributed-machine-learning-algorithm" title="Permalink to this headline">¶</a></h1>
+<p>Current machine learning problem typically is associated with
+the large scale of dataset and highly complexity of the model.
+This provides us lots of ascpects and options to design the algorithm
+so that the multi-core CPU/GPU in the distributed computation system
+can be fully exploited. We list the most relevant and important
+considerations here.</p>
+<ul>
+<li><p>From the aspect of data and modeling concurrency:</p>
+<ol class="arabic simple">
+<li><p>Data Parallelism</p></li>
+<li><p>Model Parallelism</p></li>
+<li><p>Pipeline Parallelism</p></li>
+</ol>
+<p>The above three techniques are not exclusive to each other. For example,
+tensorflow allow users can utilize all three techniques at the same time.
+The Bluefog project focused on Data Parallelism.
+One reason, of course, is the base algorithm derived based on the assumption
+that the dataset is distributed over different nodes. But, more importantly,
+among these three techniques, data parallelism is the most popular approaches
+thanks to its excellent scalability and flexibility on almost any model.</p>
+</li>
+<li><p>From the aspect of communication architecture:</p>
+<ol class="arabic simple">
+<li><p>Parameter Server(PS) —- (Distributed but still centralized)</p></li>
+</ol>
+<blockquote>
+<div><ul class="simple">
+<li><p>Sharded PS</p></li>
+<li><p>Hierarchical PS</p></li>
+</ul>
+</div></blockquote>
+<ol class="arabic simple" start="2">
+<li><p>Peer-to-Peer —– (Distributed but also decentralized)</p></li>
+</ol>
+<blockquote>
+<div><ul class="simple">
+<li><p>Ring-AllReduce</p></li>
+<li><p>Neighbor-Collective</p></li>
+</ul>
+</div></blockquote>
+<p>Apparently, Bluefog project belongs to the peer-to-peer model. Multiple nodes/machines
+will distributedly and no centralized node will gather all the informations.</p>
+</li>
+<li><p>From the aspect of parameter consistency:</p>
+<p>In the distributed learning system, parameter consistency means the similarity
+between the parameter stored in the local machine. We list five typical
+algorithms from strongest consistency to weakest consistency.</p>
+<ol class="arabic simple">
+<li><p>Model Replication</p></li>
+<li><p>Delayed Updating (like asynchronous algorithm.)</p></li>
+<li><p>Model Averaging</p></li>
+<li><p>Ensemble Learning</p></li>
+</ol>
+<p>Bluefog project focused on the asynchronous training through the
+diffusion/consensus algorithm, which is one kind of
+model averaging algorithms. The parameter learned in different nodes
+through the Bluefog algorithm are slightly different. But unlike
+ensemble learning, all nodes are highly similar.</p>
+</li>
+<li><p>From the aspect of updating synchronization:</p>
+<ol class="arabic simple">
+<li><p>Synchronous updating</p></li>
+<li><p>Stale-Synchronous updating</p></li>
+<li><p>Asynchronous updating</p></li>
+</ol>
+<p>Typically, the more “asynchronous” updating, the faster on the training. However,
+we will loss the parameter consistency.</p>
+</li>
+<li><p>From the aspect of information fusion:</p>
+<ol class="arabic simple">
+<li><p>Averaging over the gradients</p></li>
+<li><p>Averaging over the parameter/iterates</p></li>
+<li><p>Averaging over the dual variable</p></li>
+</ol>
+<p>Most strong consistency algorithm is averaging over the gradients. However, Bluefog project
+is averaging over the parameter directly. One advantage of averaging over the parameter is
+the resilient on the noise or error. Also, noticing these three methods are not exclusive.</p>
+</li>
+<li><p>From the aspect of reducing communication cost:</p>
+<ol class="arabic simple">
+<li><p>Temporal compression (Fine- vs Coarse-Grained Fusion)</p></li>
+<li><p>Spatial compression (Sparse/Sliced tensors)</p></li>
+<li><p>Btye compression (Quantization)</p></li>
+<li><p>Neighbor compression (Selecting less neighbors)</p></li>
+</ol>
+<p>We don’t have any implementation to support it yet. We do plan to support it in
+the future.</p>
+</li>
+</ul>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="devel_guide.html" class="btn btn-neutral float-left" title="BlueFog Development Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Bicheng Ying
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
