@@ -27,4 +27,5 @@ fault-tolerant, friendly to heterogeneuous environment, and easy to use.
 
    Codebase Structure <code_structure>
    Development Guide <devel_guide>
+   Spectrum of Machine Learning Algorithm<alg_spectrum>
 

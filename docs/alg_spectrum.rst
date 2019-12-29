@@ -1,25 +1,6 @@
-Bluefog
-=======
-
-.. image:: https://travis-ci.com/ybc1991/bluefog.svg?token=me5bQ3zp2qcSz5D3yVNC&branch=master
-    :target: https://travis-ci.com/ybc1991/bluefog
-
-.. image:: https://img.shields.io/badge/License-Apache%202.0-blue.svg
-    :target: https://img.shields.io/badge/License-Apache%202.0-blue.svg
-    :alt: License
-
-Overview
---------
-Bluefog is a distributed training framework for Tensorflow and PyTorch
-based on diffusion/consensus-type algorithm. The goal of Bluefog is to make
-distributed machine learning fast and fault-tolerant in the heterogeneous
-environment and users are easy to set up and run experiments without worrying
-too many low-level details.
-
-REPOSITORY IS STILL A WORK IN PROGRESS.
-
 The Spectrum of Distributed Machine Learning Algorithm
-------------------------------------------------------
+======================================================
+
 Current machine learning problem typically is associated with
 the large scale of dataset and highly complexity of the model.
 This provides us lots of ascpects and options to design the algorithm 
@@ -39,22 +20,23 @@ considerations here.
   One reason, of course, is the base algorithm derived based on the assumption
   that the dataset is distributed over different nodes. But, more importantly, 
   among these three techniques, data parallelism is the most popular approaches
-  thanks to its excellent scalability and flexibility on almost any model.
+  thanks to its excellent scalability and flexibility on almost any model. 
 
 * From the aspect of communication architecture:
 
   1. Parameter Server(PS) ---- (Distributed but still centralized)
 
-    - Sharded PS 
-    - Hierarchical PS
+    + Sharded PS
+    + Hierarchical PS
 
   2. Peer-to-Peer ----- (Distributed but also decentralized)
 
-    - Ring-AllReduce
-    - Neighbor-Collective
+    + Ring-AllReduce
+    + Neighbor-Collective
 
   Apparently, Bluefog project belongs to the peer-to-peer model. Multiple nodes/machines
   will distributedly and no centralized node will gather all the informations.
+
 
 * From the aspect of parameter consistency:
 
@@ -73,6 +55,7 @@ considerations here.
   through the Bluefog algorithm are slightly different. But unlike 
   ensemble learning, all nodes are highly similar.
 
+
 * From the aspect of updating synchronization:
 
   1. Synchronous updating
@@ -81,6 +64,7 @@ considerations here.
   
   Typically, the more "asynchronous" updating, the faster on the training. However, 
   we will loss the parameter consistency.
+
 
 * From the aspect of information fusion:
 
@@ -91,6 +75,7 @@ considerations here.
   Most strong consistency algorithm is averaging over the gradients. However, Bluefog project
   is averaging over the parameter directly. One advantage of averaging over the parameter is
   the resilient on the noise or error. Also, noticing these three methods are not exclusive. 
+
 
 * From the aspect of reducing communication cost:
 
