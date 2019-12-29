@@ -91,9 +91,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#check-your-development-environment">0. Check your development environment.</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#install-the-package-locally">1. Install the package locally</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#build-customer-c-extension">2. Build customer C extension</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#run-test">3. Run Test</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#code-style-and-lint">4. Code Style And Lint</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#faq-for-mac-users">5. FAQ for Mac users:</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#run-unit-test">3. Run Unit Test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#continuous-integration-and-end-to-end-test">4. Continuous integration and End-to-End test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#code-style-and-lint">5. Code Style And Lint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#faq-for-mac-users">6. FAQ for Mac users:</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
@@ -205,32 +206,40 @@ should be able to generate a file like <code class="docutils literal notranslate
 under <code class="docutils literal notranslate"><span class="pre">/bluefog/torch</span></code> folder. (You may have different “middle” name
 based on your system and enviroment).</p>
 </div>
-<div class="section" id="run-test">
-<h2>3. Run Test<a class="headerlink" href="#run-test" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="run-unit-test">
+<h2>3. Run Unit Test<a class="headerlink" href="#run-unit-test" title="Permalink to this headline">¶</a></h2>
 <p>To check the setup and build is correct or not, run</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">make</span> <span class="n">test</span>
 </pre></div>
 </div>
-<p>to see if all tests can pass or not. So far the test is based on python
-implementation, in order to test your c extension is built correctly,
-please run</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BLUEFOG_LOG_LEVEL</span><span class="o">=</span>debug mpirun -n <span class="m">2</span> python bluefog/torch/c_hello_world.py
+<p>to see if all tests can pass or not. The all test command is defined in the
+Makefile under root folder. To see more details, you can manually run the
+following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BLUEFOG_LOG_LEVEL</span><span class="o">=</span>debug mpirun -n <span class="m">2</span> python test/torch_ops_test.py
 </pre></div>
 </div>
-<p>as well. Currently, we are in the phase of transferring from python
-implementation into C++ implementation. We still keep both
-implementations. By default, we use C++ implementation. If you want to
-use python implementation, just set the environment variable:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">BLUEFOG_PY_IMPL</span><span class="o">=</span><span class="mi">1</span>
+</div>
+<div class="section" id="continuous-integration-and-end-to-end-test">
+<h2>4. Continuous integration and End-to-End test<a class="headerlink" href="#continuous-integration-and-end-to-end-test" title="Permalink to this headline">¶</a></h2>
+<p>We use <a class="reference external" href="https://travis-ci.com/ybc1991/bluefog">travis</a> as our continuous integration test. Right now, it has
+merely a few functionality. (Unit test running on LINUX + MPICH + python 3.7).
+We plan to test more on multiple os platforms (os + linux), python
+versions (3.5+),  MPI venders (MPICH and OpenMPI), CPU + GPU, docker
+images, etc.</p>
+<p>Bluefog is a library oriented project. So there is no real end-to-end for it.
+But we can run several examples, which will utilize most functionalities
+provided by Bluefog. As long as that examples runs correctly, it can be
+considered as passing the end-to-end test. For example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mpirun -n <span class="m">4</span> python examples/pytorch_mnist.py --epoch<span class="o">=</span><span class="m">5</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="code-style-and-lint">
-<h2>4. Code Style And Lint<a class="headerlink" href="#code-style-and-lint" title="Permalink to this headline">¶</a></h2>
+<h2>5. Code Style And Lint<a class="headerlink" href="#code-style-and-lint" title="Permalink to this headline">¶</a></h2>
 <p>It is important to keep the code style and lint consistent throughout
 the whole project.</p>
 <p>For python, we use normal pylint, which is specified in the
-<code class="docutils literal notranslate"><span class="pre">.pylintrc</span></code> file. Python docstring style is <a class="reference external" href="http://google.github.io/styleguide/pyguide.html#383-functions-and-methods">google style</a>. It is
+<code class="docutils literal notranslate"><span class="pre">.pylintrc</span></code> file. Python docstring style is <a class="reference external" href="http://google.github.io/styleguide/pyguide.html">google style</a>. It is
 recommended to have an editor to run <code class="docutils literal notranslate"><span class="pre">pylint</span></code> easily (But do not turn
 on format-on-save.) Otherwise, remember to run <code class="docutils literal notranslate"><span class="pre">pylint</span> <span class="pre">{FILENANE}</span></code> on
 your changes.</p>
@@ -239,7 +248,7 @@ Right now, we have a simple <code class="docutils literal notranslate"><span cla
 <code class="docutils literal notranslate"><span class="pre">clang-format</span></code> plugin.</p>
 </div>
 <div class="section" id="faq-for-mac-users">
-<h2>5. FAQ for Mac users:<a class="headerlink" href="#faq-for-mac-users" title="Permalink to this headline">¶</a></h2>
+<h2>6. FAQ for Mac users:<a class="headerlink" href="#faq-for-mac-users" title="Permalink to this headline">¶</a></h2>
 <ol class="arabic simple">
 <li><p>If my default python version is 2, how to set the default python
 version to 3?</p></li>

@@ -52,8 +52,8 @@ should be able to generate a file like ``mpi_lib.cpython-37m-darwin.so``
 under ``/bluefog/torch`` folder. (You may have different "middle" name
 based on your system and enviroment).
 
-3. Run Test
------------
+3. Run Unit Test
+----------------
 
 To check the setup and build is correct or not, run
 
@@ -61,24 +61,33 @@ To check the setup and build is correct or not, run
 
    make test
 
-to see if all tests can pass or not. So far the test is based on python
-implementation, in order to test your c extension is built correctly,
-please run
+to see if all tests can pass or not. The all test command is defined in the
+Makefile under root folder. To see more details, you can manually run the 
+following command:
 
 .. code:: bash
 
-   BLUEFOG_LOG_LEVEL=debug mpirun -n 2 python bluefog/torch/c_hello_world.py
+   BLUEFOG_LOG_LEVEL=debug mpirun -n 2 python test/torch_ops_test.py
 
-as well. Currently, we are in the phase of transferring from python
-implementation into C++ implementation. We still keep both
-implementations. By default, we use C++ implementation. If you want to
-use python implementation, just set the environment variable:
+4. Continuous integration and End-to-End test
+---------------------------------------------
+We use `travis`_ as our continuous integration test. Right now, it has
+merely a few functionality. (Unit test running on LINUX + MPICH + python 3.7).
+We plan to test more on multiple os platforms (os + linux), python
+versions (3.5+),  MPI venders (MPICH and OpenMPI), CPU + GPU, docker
+images, etc.
 
-::
+Bluefog is a library oriented project. So there is no real end-to-end for it.
+But we can run several examples, which will utilize most functionalities
+provided by Bluefog. As long as that examples runs correctly, it can be
+considered as passing the end-to-end test. For example:
 
-   export BLUEFOG_PY_IMPL=1
+.. code:: bash
 
-4. Code Style And Lint
+   mpirun -n 4 python examples/pytorch_mnist.py --epoch=5
+
+
+5. Code Style And Lint
 ----------------------
 
 It is important to keep the code style and lint consistent throughout
@@ -94,7 +103,8 @@ For C++, we use ``clang-tidy``? I am not very familiar with C++ format.
 Right now, we have a simple ``.clang-format`` file. I just use vscode
 ``clang-format`` plugin.
 
-5. FAQ for Mac users:
+
+6. FAQ for Mac users:
 ---------------------
 
 1. If my default python version is 2, how to set the default python
@@ -134,4 +144,5 @@ issue is resolved.
 .. _Download: https://www.open-mpi.org/software/ompi/v4.0/
 .. _Instruction: https://www.open-mpi.org/faq/?category=building#easy-build
 .. _“editable”: https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs
-.. _google style: http://google.github.io/styleguide/pyguide.html#383-functions-and-methods
+.. _google style: http://google.github.io/styleguide/pyguide.html
+.. _travis: https://travis-ci.com/ybc1991/bluefog
