@@ -172,6 +172,7 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
     }
   }
   win_map_with_order.clear();
+  win_local_memory_map.clear();
 
   if (should_finalize) {
     ctx_manager.EnvFinalize();
