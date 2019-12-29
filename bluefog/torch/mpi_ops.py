@@ -479,6 +479,7 @@ def win_put(tensor: torch.Tensor, name: str,
         name: The unique name to associate the window object.
         dst_ranks: The source ranks to put the value for. If not provided, it will
             put into all neighbors' shared memory defined by virtual topology.
+            dst_ranks should only contain the ranks that belong to out-neighbors.
 
     Returns:
         A handle to the allgather operation that can be used with `win_poll()` or
@@ -505,6 +506,7 @@ def win_put_blocking(tensor: torch.Tensor, name: str,
         name: The unique name to associate the window object.
         dst_ranks: The source ranks to get the value from. If not provided, it will
             put into all neighbors' shared memory defined by virtual topology.
+            dst_ranks should only contain the ranks that belong to out-neighbors.
 
     Returns:
         A bool value to indicate the put succeeded or not.
@@ -530,6 +532,7 @@ def win_get(tensor: torch.Tensor, name: str,
         name: The unique name to associate the window object.
         src_ranks: The source ranks to get the value from. If not provided, it will
             get all neighbors' values defined by virtual topology.
+            src_ranks should only contain the ranks that belong to in-neighbors.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
 
@@ -559,6 +562,7 @@ def win_get_blocking(tensor: torch.Tensor, name: str,
         name: The unique name to associate the window object.
         src_ranks: The source ranks to get the value from. If not provided, it will
             get all neighbors' values defined by virtual topology.
+            src_ranks should only contain the ranks that belong to in-neighbors.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
 

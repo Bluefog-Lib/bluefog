@@ -31,7 +31,7 @@ class WinOpsTests(unittest.TestCase):
         bf.init()
 
     def tearDown(self):
-        pass
+        bf.win_free()
 
     @staticmethod
     def cast_and_place(tensor, dtype):
@@ -58,7 +58,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_create_{}_{}".format(dim, dtype)
             is_created = bf.win_create(tensor, window_name)
-            assert is_created, "bf.win_create do not create window object successfully"
+            assert is_created, "bf.win_create do not create window object successfully."
 
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
@@ -73,7 +73,23 @@ class WinOpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_create_{}_{}".format(dim, dtype)
             is_freed = bf.win_free(window_name)
-            assert is_freed, "bf.win_free do not free window object successfully"
+            assert is_freed, "bf.win_free do not free window object successfully."
+
+    def test_win_free_all(self):
+        dtypes = [torch.FloatTensor]
+        if torch.cuda.is_available():
+            dtypes += [torch.cuda.FloatTensor]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_create_{}_{}".format(dim, dtype)
+            is_created = bf.win_create(tensor, window_name)
+            assert is_created, "bf.win_create do not create window object successfully."
+
+        is_freed = bf.win_free()
+        assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_put_blocking(self):
         """Test that the window put operation."""
@@ -90,7 +106,7 @@ class WinOpsTests(unittest.TestCase):
 
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
-        neighbor_ranks = [(rank - 2**i) % size for i in range(outdegree)] # put
+        neighbor_ranks = [(rank - 2**i) % size for i in range(outdegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(outdegree+1)
 
         dims = [1, 2, 3]
@@ -109,6 +125,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
+        time.sleep(0.1)
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_put_{}_{}".format(dim, dtype)
             is_freed = bf.win_free(window_name)
@@ -139,7 +156,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_put_blocking(tensor, window_name, [(rank+1) % size])
-            time.sleep(0.5)
+            time.sleep(0.1)
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
                 "bf.win_sync after win_put produces wrong shape tensor.")
@@ -148,12 +165,12 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
+        time.sleep(0.1)
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully"
 
-    @unittest.skip("Not finished yet.")
     def test_win_get_blocking(self):
         """Test that the window get operation."""
         size = bf.size()
@@ -169,25 +186,29 @@ class WinOpsTests(unittest.TestCase):
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
-        neighbor_ranks = [(rank + 2**i) % size for i in range(indegree)] # get
+        neighbor_ranks = [(rank - 2**i) % size for i in range(indegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(indegree+1)
 
-        dims = [1, 2, 3]
+        dims = [1]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            time.sleep(0.2)  # wait for others' finishing create win?
+            time.sleep(0.1)  # wait for others' finishing create win?
             recv_tensor = tensor.clone()
-            bf.win_get_blocking(recv_tensor, window_name, average=False)
-            # assert (list(tensor.shape) == [2] * dim), (
-            #     "bf.win_get produce wrong shape tensor.")
-            # assert (tensor.data - avg_value).abs().max() < EPSILON, (
-            #     "bf.win_get produce wrong tensor value " +
-            #     "[{}-{}]!={} at rank {}.".format(tensor.min(),
-            #                                      tensor.max(), avg_value, rank))
-            bf.win_free(window_name)
+            bf.win_get_blocking(recv_tensor, window_name, average=True)
+            time.sleep(0.1)
+
+            assert (list(tensor.shape) == [3] * dim), (
+                "bf.win_get produce wrong shape tensor.")
+            # assert (recv_tensor.data - avg_value).abs().max() < EPSILON, \
+            print("bf.win_get produce wrong tensor value " +
+                 "[{}-{}]!={} at rank {}.".format(
+                     recv_tensor.min(), recv_tensor.max(), avg_value, rank))
+
+        time.sleep(0.2)
+        assert bf.win_free()
 
 if __name__ == "__main__":
     unittest.main()

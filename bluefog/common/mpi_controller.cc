@@ -191,11 +191,11 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   return 1;
 }
 
-int MPIController::LoadTopology(int* indegree, int* sources, int* outdegree,
-                                int* destinations) {
+int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
+                                int*& destinations) {
   *indegree = neighbor_in_ranks_.size();
-  *outdegree = neighbor_out_ranks_.size();
   sources = &neighbor_in_ranks_[0];
+  *outdegree = neighbor_out_ranks_.size();
   destinations = &neighbor_out_ranks_[0];
   return 1;
 }

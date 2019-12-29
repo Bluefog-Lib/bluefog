@@ -20,13 +20,36 @@ class WinTorchStorageManager {
   WinTorchStorageManager() = default;
   WinTorchStorageManager(const WinTorchStorageManager&) = delete;
 
+  // RegisterWinName will do two things.
+  // 1. Allocate new tensors space with the number of in-neighbor copies.
+  // 2. Those new tensors will be managed by shared_ptr and pushed into
+  // tensors_map_, which use name as the key.
   bool RegisterWinName(const std::string& name, int device,
                        std::shared_ptr<TorchTensor> tensor);
+  
+  // Pop the coresponding tnesors out of tensors_map_ and allocated memory
+  // of torch tensor should be destroyed here.
   bool UnregisterWinName(const std::string& name);
+  
+  // Make the reference tensors point to the neighbor tensor location.
   bool GetStorageByname(const std::string& name,
                         std::vector<std::shared_ptr<common::Tensor>>& tensors);
-  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
+  
+  // Sum the local tensor with the neighbor tensors. If source ranks are not
+  // provided it will sum up all the neighbor tensors.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
+  bool SumWithNeighbor(
+      const std::string& name, ::torch::Tensor local_tensor,
+      const std::vector<int>& source_ranks);
+
+  // Same as SumWithNeighbor except we will divided by the number of in_neighbor
+  // or the size of provided source_ranks.
+  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
+  bool AvgWithNeighbor(
+      const std::string& name, ::torch::Tensor local_tensor,
+      const std::vector<int>& source_ranks);
+  
+  // Clear all storage/reference to neighbor TorchTensor.
   void ClearAll();
 
  private:
@@ -39,6 +62,8 @@ class WinTorchStorageManager {
       tensors_map_;
 
   mutable std::mutex mutex_;
+  int in_neighbor_degree_;
+  int out_neighbor_degree_;
 };
 
 #define WIN_CREATE_H(torch_Tensor, THTensor)                     \

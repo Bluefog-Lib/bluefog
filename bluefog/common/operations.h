@@ -50,8 +50,8 @@ int bluefog_set_topology(int indegree, const int* sources,
 
 // C interface to load the virtual topology for MPI graph communicator.
 // Returns -1 if Bluefog is not initialized or failed.
-int bluefog_load_topology(int* indegree, int* sources, 
-                          int* outdegree, int* destinations);
+int bluefog_load_topology(int* indegree, int*& sources, 
+                          int* outdegree, int*& destinations);
 
 }
 

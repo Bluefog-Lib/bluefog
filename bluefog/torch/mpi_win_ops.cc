@@ -40,17 +40,15 @@ bool WinTorchStorageManager::RegisterWinName(const std::string& name,
   if (tensors_map_.find(name) != tensors_map_.end()) {
     return false;
   }
-  int indegree;
-  int* sources_ptr; 
-  int outdegree;
-  int* destinations_ptr;
-  bluefog_load_topology(&indegree, sources_ptr, &outdegree,
-                        destinations_ptr);
+  int* sources_ptr = nullptr;
+  int* destinations_ptr = nullptr;
+  bluefog_load_topology(&in_neighbor_degree_, sources_ptr,
+                        &out_neighbor_degree_, destinations_ptr);
   // We need to allocate neighbor_indegree tensor space for it.
   NeighborTable neighbor_tensors;
-  for (int i = 0; i < indegree; i++) {
+  for (int i = 0; i < in_neighbor_degree_; i++) {
     auto t = std::make_shared<TorchTensor>(tensor->MakeCopy(device));
-    int source_rank = sources_ptr[i];
+    int source_rank = *(sources_ptr + i);
     neighbor_tensors[source_rank] = t;
   }
   tensors_map_[name] = neighbor_tensors;
@@ -80,7 +78,8 @@ bool WinTorchStorageManager::GetStorageByname(
   return true;
 }
 
-bool WinTorchStorageManager::SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor) {
+bool WinTorchStorageManager::SumWithNeighbor(
+  const std::string& name, ::torch::Tensor local_tensor) {
   if (tensors_map_.find(name) == tensors_map_.end()) {
     return false;
   }
@@ -92,12 +91,38 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name, ::torch::T
   return true;
 }
 
-bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor) {
-  if(!SumWithNeighbor(name, local_tensor)) {
+bool WinTorchStorageManager::SumWithNeighbor(
+    const std::string& name, ::torch::Tensor local_tensor,
+    const std::vector<int>& source_ranks) {
+  if (tensors_map_.find(name) == tensors_map_.end()) {
     return false;
   }
-  auto it = tensors_map_.find(name);
-  local_tensor.div_(static_cast<int>(it->second.size()) + 1);
+  std::unordered_map<int, std::shared_ptr<TorchTensor>> neighbor_map =
+      tensors_map_.at(name);
+  for (int rank : source_ranks) {
+    local_tensor.add_(neighbor_map.at(rank)->GetUnderlyingTensor());
+  }
+  return true;
+}
+
+bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
+                                             ::torch::Tensor local_tensor) {
+  if (!SumWithNeighbor(name, local_tensor)) {
+    return false;
+  }
+  // +1 here because in neighbor degree doesn't include self rank.
+  local_tensor.div_(in_neighbor_degree_ + 1);
+  return true;
+}
+
+bool WinTorchStorageManager::AvgWithNeighbor(
+    const std::string& name, ::torch::Tensor local_tensor,
+    const std::vector<int>& source_ranks) {
+  if (!SumWithNeighbor(name, local_tensor, source_ranks)) {
+    return false;
+  }
+  // +1 here because source_ranks doesn't include self rank.
+  local_tensor.div_(static_cast<int>(source_ranks.size()) + 1);
   return true;
 }
 
@@ -167,15 +192,13 @@ int DoWinGet(::torch::Tensor tensor, const std::string& name,
   auto device = GetDeviceID(tensor);
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
-  int num_src = src_ranks.size();
 
   auto enqueue_result = EnqueuTensorWindowGet(
-      bf_tensor, name, src_ranks, device, 
-      [tensor, name, handle, average](const Status& status) mutable {
+      bf_tensor, name, src_ranks, device,
+      [tensor, name, src_ranks, handle, average](const Status& status) mutable {
+        win_storage_manager.SumWithNeighbor(name, tensor, src_ranks);
         if (average) {
-          win_storage_manager.AvgWithNeighbor(name, tensor);
-        } else {
-          win_storage_manager.SumWithNeighbor(name, tensor);
+          tensor.div_(static_cast<int>(src_ranks.size() + 1));
         }
         win_handle_manager.MarkDone(handle, status);
       });

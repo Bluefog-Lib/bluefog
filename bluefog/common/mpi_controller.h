@@ -46,8 +46,8 @@ class MPIController {
 
   int SetTopology(int indegree, const int* sources, int outdegree,
                   const int* destinations);
-  int LoadTopology(int* indegree, int* sources, int* outdegree,
-                   int* destinations);
+  int LoadTopology(int* indegree, int*& sources, int* outdegree,
+                   int*& destinations);
 
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,

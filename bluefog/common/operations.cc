@@ -208,8 +208,8 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
                                                 destinations);
 }
 
-int bluefog_load_topology(int* indegree, int* sources, int* outdegree,
-                         int* destinations) {
+int bluefog_load_topology(int* indegree, int*& sources, int* outdegree,
+                          int*& destinations) {
   if (!bluefog_global.initialization_done) {
     return -1;
   }
