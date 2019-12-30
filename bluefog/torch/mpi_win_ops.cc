@@ -56,10 +56,10 @@ bool WinTorchStorageManager::RegisterWinName(const std::string& name,
 }
 
 bool WinTorchStorageManager::UnregisterWinName(const std::string& name) {
-  if (tensors_map_.find(name) == tensors_map_.end()) {
+  auto it = tensors_map_.find(name);
+  if (it == tensors_map_.end()) {
     return false;
   }
-  auto it = tensors_map_.find(name);
   tensors_map_.erase(it);
   return true;
 }
@@ -67,23 +67,33 @@ bool WinTorchStorageManager::UnregisterWinName(const std::string& name) {
 void WinTorchStorageManager::ClearAll() { tensors_map_.clear(); }
 
 bool WinTorchStorageManager::GetStorageByname(
-    const std::string& name, std::vector<std::shared_ptr<common::Tensor>>& tensors) {
-  if (tensors_map_.find(name) == tensors_map_.end()) {
+    const std::string& name,
+    std::vector<std::shared_ptr<common::Tensor>>& tensors) {
+  auto it = tensors_map_.find(name);
+  if (it == tensors_map_.end()) {
     return false;
   }
-  auto it = tensors_map_.find(name);
-  for (auto& kv : it->second) {
-    tensors.emplace_back(kv.second);
+  std::unordered_map<int, std::shared_ptr<TorchTensor>> neighbor_map =
+      it->second;
+  int* sources_ptr = nullptr;
+  int* destinations_ptr = nullptr;
+  bluefog_load_topology(&in_neighbor_degree_, sources_ptr,
+                        &out_neighbor_degree_, destinations_ptr);
+
+  // We have to insert it in order.
+  for (int i = 0; i < in_neighbor_degree_; i++) {
+    int source_rank = *(sources_ptr + i);
+    tensors.emplace_back(neighbor_map[source_rank]);
   }
   return true;
 }
 
-bool WinTorchStorageManager::SumWithNeighbor(
-  const std::string& name, ::torch::Tensor local_tensor) {
-  if (tensors_map_.find(name) == tensors_map_.end()) {
+bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
+                                             ::torch::Tensor local_tensor) {
+  auto it = tensors_map_.find(name);
+  if (it == tensors_map_.end()) {
     return false;
   }
-  auto it = tensors_map_.find(name);
   for (auto& kv : it->second) {
     std::shared_ptr<TorchTensor>& t = kv.second;
     local_tensor.add_(t->GetUnderlyingTensor());

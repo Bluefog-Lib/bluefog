@@ -181,12 +181,14 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   for (int i = 0; i < indegree; i++) {
     neighbor_in_ranks_.push_back(sources[i]);
   }
+  std::sort(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end());
 
   neighbor_out_ranks_.clear();
   neighbor_out_ranks_.reserve(outdegree);
   for (int i = 0; i < outdegree; i++) {
     neighbor_out_ranks_.push_back(destinations[i]);
   }
+  std::sort(neighbor_out_ranks_.begin(), neighbor_out_ranks_.end());
 
   return 1;
 }

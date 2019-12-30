@@ -132,12 +132,13 @@ class WinOpsTests(unittest.TestCase):
             assert is_freed, "bf.win_free do not free window object successfully"
 
     def test_win_put_blocking_with_given_destination(self):
-        """Test that the window put operation."""
+        """Test that the window put operation with given destination."""
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
             warnings.warn(
-                "Skip test win_put since the world size should be larger than 1!"
+                "Skip test win_put with given destination " +
+                "since the world size should be larger than 1!"
             )
             return
         dtypes = [torch.FloatTensor]
@@ -159,9 +160,9 @@ class WinOpsTests(unittest.TestCase):
             time.sleep(0.1)
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
-                "bf.win_sync after win_put produces wrong shape tensor.")
+                "bf.win_sync after win_put given destination produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_put produces wrong tensor value " +
+                "bf.win_sync after win_put given destination produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
@@ -189,7 +190,7 @@ class WinOpsTests(unittest.TestCase):
         neighbor_ranks = [(rank - 2**i) % size for i in range(indegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(indegree+1)
 
-        dims = [1]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
@@ -202,13 +203,49 @@ class WinOpsTests(unittest.TestCase):
 
             assert (list(tensor.shape) == [3] * dim), (
                 "bf.win_get produce wrong shape tensor.")
-            # assert (recv_tensor.data - avg_value).abs().max() < EPSILON, \
-            print("bf.win_get produce wrong tensor value " +
+            print((recv_tensor.data - avg_value).abs().max() < EPSILON, \
+                ("bf.win_get produce wrong tensor value " +
                  "[{}-{}]!={} at rank {}.".format(
-                     recv_tensor.min(), recv_tensor.max(), avg_value, rank))
+                     recv_tensor.min(), recv_tensor.max(), avg_value, rank)))
+        time.sleep(0.5)
 
-        time.sleep(0.2)
-        assert bf.win_free()
+
+    def test_win_get_blocking_with_given_sources(self):
+        """Test that the window get operation with given sources."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test win_get_given_sources " +
+                "since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor]
+        if torch.cuda.is_available():
+            dtypes += [torch.cuda.FloatTensor]
+
+        # We use given destination to form a (right-)ring.
+        avg_value = (rank + (rank-1) % size) / float(2)
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_get_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            time.sleep(0.2)  # wait for others' finishing create win?
+            recv_tensor = tensor.clone()
+            bf.win_get_blocking(recv_tensor, window_name, src_ranks=[(rank-1) % size],
+                                average=True)
+            time.sleep(0.2)
+            assert (list(recv_tensor.shape) == [3] * dim), (
+                "bf.win_get with given sources produces wrong shape tensor.")
+            print((recv_tensor.data - avg_value).abs().max() < EPSILON, (
+                "bf.win_get with given sources produces wrong tensor value " +
+                "[{}-{}]!={} at rank {}.".format(recv_tensor.min(),
+                                                 recv_tensor.max(), avg_value, rank))
+                  , flush=True)
+        time.sleep(0.5)
 
 if __name__ == "__main__":
     unittest.main()
