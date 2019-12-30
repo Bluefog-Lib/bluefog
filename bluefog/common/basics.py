@@ -159,7 +159,8 @@ class BlueFogBasics(object):
                 logger.info(
                     "Topology is not specified. Default Power Two topology is used.")
 
-        assert isinstance(topology, networkx.DiGraph)
+        if not isinstance(topology, networkx.DiGraph):
+            raise TypeError("topology must be a networkx.DiGraph obejct.")
         if topology_util.IsTopologyEquivalent(topology, self._topology):
             if self.local_rank() == 0:
                 logger.debug(
