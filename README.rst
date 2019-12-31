@@ -8,6 +8,9 @@ Bluefog
     :target: https://img.shields.io/badge/License-Apache%202.0-blue.svg
     :alt: License
 
+.. image:: https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat
+    :target: https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat
+    
 Overview
 --------
 Bluefog is a distributed training framework for Tensorflow and PyTorch
