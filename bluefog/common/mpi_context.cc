@@ -18,6 +18,14 @@ void MPIContextManager::EnvFinalize() {
   }
 }
 
+void WindowManager::FreeAllWins() {
+  win_memories_.clear();
+  for (auto& win_p : wins_) {
+    MPI_Win_free(win_p.get());
+  }
+  wins_.clear();
+}
+
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {
   return GetMPIDataType(tensor->dtype());
 }
@@ -164,15 +172,7 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
     MPI_Comm_free(&graph_comm);
   }
 
-  send_win_map.clear();
-  neighbor_win_map.clear();
-  for(auto& kv: win_map_with_order) {
-    for(auto& win_p: kv.second){
-      MPI_Win_free(win_p.get());
-    }
-  }
-  win_map_with_order.clear();
-  win_local_memory_map.clear();
+  UnregisterAllWindowName();
 
   if (should_finalize) {
     ctx_manager.EnvFinalize();
@@ -195,13 +195,31 @@ int MPIContext::BuildGraphComm(const int indegree, const int* sources,
   return 1;
 }
 
-bool MPIContext::AddNeighborWinMap(
-    const std::string& name,
-    std::vector<std::shared_ptr<MPI_Win>> mpi_win_vec) {
-  if (neighbor_win_map.find(name) != neighbor_win_map.end()) {
+bool MPIContext::RegisterWindowName(
+    const std::string& name, WindowManager& win_manager) {
+  if (named_win_map.find(name) != named_win_map.end()) {
     return false;
   }
-  neighbor_win_map[name] = mpi_win_vec;
+  // TODO(ybc) Consider use move constructor instead of copy?
+  named_win_map[name] = win_manager;
+  return true;
+}
+
+bool MPIContext::UnregisterWindowName(const std::string& name) {
+  auto it = named_win_map.find(name) ;
+  if (it == named_win_map.end()) {
+    return false;
+  }
+  it->second.FreeAllWins();
+  named_win_map.erase(it);
+  return true;
+}
+
+bool MPIContext::UnregisterAllWindowName() {
+  for(auto& kv: named_win_map) {
+    kv.second.FreeAllWins();
+  }
+  named_win_map.clear();
   return true;
 }
 

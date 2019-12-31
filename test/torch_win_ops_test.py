@@ -172,6 +172,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully"
 
+    @unittest.skip
     def test_win_get_blocking(self):
         """Test that the window get operation."""
         size = bf.size()
@@ -209,7 +210,7 @@ class WinOpsTests(unittest.TestCase):
                      recv_tensor.min(), recv_tensor.max(), avg_value, rank)))
         time.sleep(0.5)
 
-
+    @unittest.skip
     def test_win_get_blocking_with_given_sources(self):
         """Test that the window get operation with given sources."""
         size = bf.size()

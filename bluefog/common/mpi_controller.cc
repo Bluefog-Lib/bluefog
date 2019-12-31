@@ -1,6 +1,7 @@
+#include "mpi_controller.h"
+
 #include <algorithm>
 #include <cassert>
-#include "mpi_controller.h"
 
 namespace bluefog {
 namespace common {
@@ -82,7 +83,8 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
     total_entry_dimension_size += gather_count[rc];
     recvcounts[rc] = single_slice_shape.num_elements() * gather_count[rc];
   }
-  LOG(TRACE, rank_) << "total_entry_dimension_size: " << total_entry_dimension_size;
+  LOG(TRACE, rank_) << "total_entry_dimension_size: "
+                    << total_entry_dimension_size;
 
   // Allgather output will have shape of:
   // (sum of first dimension of every tensor) x (tensor slice shape).
@@ -95,7 +97,8 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
   return status;
 }
 
-void MPIController::SetDisplacements(const int* recvcounts, int*& displcmnts, Communicator comm_type) {
+void MPIController::SetDisplacements(const int* recvcounts, int*& displcmnts,
+                                     Communicator comm_type) {
   int cnt_size = 0;
   if (comm_type == Communicator::GLOBAL) {
     cnt_size = size_;
@@ -139,9 +142,9 @@ void MPIController::Allreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   void* buffer_data = (void*)entry.output->data();
   int num_elements = entry.tensor->shape().num_elements();
-  int ret_code = MPI_Allreduce(sendbuf, buffer_data, num_elements,
-                               mpi_ctx_.GetMPIDataType(entry.tensor), MPI_SUM,
-                               mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  int ret_code = MPI_Allreduce(
+      sendbuf, buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
+      MPI_SUM, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (ret_code != MPI_SUCCESS) {
     throw std::runtime_error(
         "MPI_AllReduce failed, see MPI output for details.");
@@ -154,10 +157,10 @@ void MPIController::Broadcast(TensorTableEntry& entry) {
   // On root rank, MPI_Bcast sends data, on other ranks it receives data.
   void* data_ptr;
   if (rank_ == root_rank) {
-    data_ptr = (void*) entry.tensor->data();
+    data_ptr = (void*)entry.tensor->data();
   } else {
-    data_ptr = (void*) entry.output->data();
-  } 
+    data_ptr = (void*)entry.output->data();
+  }
   int num_elements = entry.tensor->shape().num_elements();
   int ret_code =
       MPI_Bcast(data_ptr, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
@@ -265,49 +268,44 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
-Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
-                                std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                                const std::string& name, const int device) {
-  std::vector<std::shared_ptr<MPI_Win>> mpi_win_vec;
-  int element_size = mpi_ctx_.GetMPITypeSize(tensor->dtype());
-  int win_size = (tensor->shape().num_elements()) * element_size;
+Status MPIController::WinCreate(
+    std::shared_ptr<Tensor> tensor,
+    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+    const std::string& name, const int device) {
   int neighbor_tensor_index = 0;
 
+  WindowManager win_manager;
+  void* data_buf;
+  std::shared_ptr<MPI_Win> mpi_win_ptr;
+  int element_size;
+  int win_size;
+
   for (int rank = 0; rank < size_; rank++) {
+    auto mpi_win_ptr = std::make_shared<MPI_Win>();
     if (rank == rank_) {
       // Sender
-      void* data_buf = (void*)tensor->data();
-
-      auto mpi_win_ptr = std::make_shared<MPI_Win>();
-      MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
-                     mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
-                     mpi_win_ptr.get());
-      mpi_ctx_.send_win_map[name] = mpi_win_ptr;
-      mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
-      mpi_ctx_.win_local_memory_map[name].push_back(data_buf);
+      data_buf = (void*)tensor->data();
+      element_size = mpi_ctx_.GetMPITypeSize(tensor->dtype());
+      win_size = (tensor->shape().num_elements()) * element_size;
     } else if (std::find(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end(),
                          rank) != neighbor_in_ranks_.end()) {
       // Receiver
-      void* data_buf = (void*)neighbor_tensors[neighbor_tensor_index++]->data();
-      auto mpi_win_ptr = std::make_shared<MPI_Win>();
-      MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
-                     mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
-                     mpi_win_ptr.get());
-      mpi_win_vec.push_back(mpi_win_ptr);
-      mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
-      mpi_ctx_.win_local_memory_map[name].push_back(data_buf);
+      data_buf = (void*)neighbor_tensors[neighbor_tensor_index++]->data();
+      element_size = mpi_ctx_.GetMPITypeSize(tensor->dtype());
+      win_size = (tensor->shape().num_elements()) * element_size;
     } else {
       // Just participate in a collective call.
-      auto mpi_win_ptr = std::make_shared<MPI_Win>();
-      MPI_Win_create(MPI_BOTTOM, 0, 1, MPI_INFO_NULL,
-                     mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
-                     mpi_win_ptr.get());
-      mpi_ctx_.win_map_with_order[name].push_back(mpi_win_ptr);
-      mpi_ctx_.win_local_memory_map[name].push_back(nullptr);
+      data_buf = nullptr;
+      element_size = 1;
+      win_size = 0;
     }
+    MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
+                   mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
+                   mpi_win_ptr.get());
+    win_manager.PushBackWinAndMemory(mpi_win_ptr, data_buf);
   }
 
-  if (!mpi_ctx_.AddNeighborWinMap(name, mpi_win_vec)) {
+  if (!mpi_ctx_.RegisterWindowName(name, win_manager)) {
     return Status::InvalidArgument(std::string("Win_create failed with ") +
                                    name);
   }
@@ -315,50 +313,28 @@ Status MPIController::WinCreate(std::shared_ptr<Tensor> tensor,
 }
 
 Status MPIController::WinFree(const std::string& name) {
-  auto it = mpi_ctx_.win_map_with_order.find(name);
-  auto send_it = mpi_ctx_.send_win_map.find(name);
-  auto neighbor_it = mpi_ctx_.neighbor_win_map.find(name);
-  auto memory_it = mpi_ctx_.win_local_memory_map.find(name);
-  if (it == mpi_ctx_.win_map_with_order.end() ||
-      send_it == mpi_ctx_.send_win_map.end() ||
-      neighbor_it == mpi_ctx_.neighbor_win_map.end() ||
-      memory_it == mpi_ctx_.win_local_memory_map.end()) {
+  if (!mpi_ctx_.UnregisterWindowName(name)) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
-
-  mpi_ctx_.send_win_map.erase(send_it);
-  mpi_ctx_.neighbor_win_map.erase(neighbor_it);
-  for (auto win_ptr : it->second) {
-    MPI_Win_free(win_ptr.get());
-  }
-  mpi_ctx_.win_map_with_order.erase(it);
-  mpi_ctx_.win_local_memory_map.erase(memory_it);
-
   return Status::OK();
 }
 
 Status MPIController::WinFreeAll() {
-  for (auto kv : mpi_ctx_.win_map_with_order) {
-    for (auto win_ptr : kv.second) {
-      MPI_Win_free(win_ptr.get());
-    }
+  if (!mpi_ctx_.UnregisterAllWindowName()) {
+    return Status::InvalidArgument(std::string("Win_free_all failed."));
   }
-  mpi_ctx_.send_win_map.clear();
-  mpi_ctx_.neighbor_win_map.clear();
-  mpi_ctx_.win_map_with_order.clear();
-  mpi_ctx_.win_local_memory_map.clear();
-
   LOG(DEBUG) << "All MPI Win has been freed.";
   return Status::OK();
 }
 
 Status MPIController::WinSync(const std::string& name) {
-  auto neighbor_it = mpi_ctx_.neighbor_win_map.find(name);
-  if (neighbor_it == mpi_ctx_.neighbor_win_map.end()) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
-  for (auto neighbor_win : neighbor_it->second) {
-    MPI_Win_sync(*neighbor_win);
+  for (auto rank : neighbor_in_ranks_) {
+    WindowManager& win_mananger = it->second;
+    MPI_Win_sync(*win_mananger.GetWinByRank(rank));
   }
 
   return Status::OK();
@@ -368,13 +344,14 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
-  auto it = mpi_ctx_.send_win_map.find(entry.tensor_name);
-  if (it == mpi_ctx_.send_win_map.end()) {
+  auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
+  if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
   }
-  MPI_Win mpi_win = *(it->second);
-  
-  int target_disp = 0; // offset in win buffer
+  WindowManager& win_mananger = it->second;
+  MPI_Win mpi_win = *(win_mananger.GetWinByRank(rank_));
+
+  int target_disp = 0;  // offset in win buffer
   for (int target_rank : entry.dst_ranks) {
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
@@ -394,21 +371,21 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 void MPIController::WinGet(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
-  auto it = mpi_ctx_.win_map_with_order.find(entry.tensor_name);
-  if (it == mpi_ctx_.win_map_with_order.end()) {
+  auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
+  if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
                              std::string(" in registered win object name."));
   }
-  auto win_mem_vec = mpi_ctx_.win_local_memory_map.at(entry.tensor_name);
-  std::vector<std::shared_ptr<MPI_Win>>& win_vec = it->second;
+  WindowManager& win_mananger = it->second;
 
-  int target_disp = 0; // offset in win buffer
+  int target_disp = 0;  // offset in win buffer
   for (int target_rank : entry.src_ranks) {
     // avoid getting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
 
-    auto mpi_win = *win_vec[target_rank];
-    void* recvbuf = win_mem_vec[target_rank];
+    MPI_Win mpi_win = *(win_mananger.GetWinByRank(target_rank));
+    void* recvbuf = win_mananger.GetWinMemoryByRank(target_rank);
+
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Get(recvbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
@@ -417,7 +394,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
   }
-  
+
   LOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }

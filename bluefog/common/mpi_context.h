@@ -3,18 +3,18 @@
 
 #include <iostream>
 #include <memory>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
-#include "mpi.h"
 #include "common.h"
+#include "mpi.h"
 
 namespace bluefog {
 namespace common {
 
 // Base class for managing MPI environment.
 class MPIContextManager {
-public:
+ public:
   // Initialize MPI environment with required multi-threads support level.
   virtual void EnvInitialize(int mpi_threads_required);
 
@@ -22,11 +22,34 @@ public:
   virtual void EnvFinalize();
 };
 
-struct MPIContext {
+class WindowManager {
+ public:
+  WindowManager() = default;
 
-  void Enable() {
-    enabled_ = true;
-  };
+  inline std::shared_ptr<MPI_Win> GetWinByRank(int rank) { return wins_[rank]; }
+
+  inline void* GetWinMemoryByRank(int rank) { return win_memories_[rank]; }
+
+  inline void PushBackWinAndMemory(std::shared_ptr<MPI_Win> win, void* memory) {
+    wins_.push_back(win);
+    win_memories_.push_back(memory);
+  }
+
+  // Manually free the win memory.
+  void FreeAllWins();
+
+ private:
+  // Store all the pointers to the MPI WIN .
+  // It should always keep the order from 0 to WORLD_SIZE-1.
+  std::vector<std::shared_ptr<MPI_Win>> wins_;
+
+  // Store all the underlying memories attached to the MPI WIN.
+  // It should always keep the order from 0 to WORLD_SIZE-1.
+  std::vector<void*> win_memories_;
+};
+
+struct MPIContext {
+  void Enable() { enabled_ = true; };
 
   bool IsEnabled() { return enabled_; }
   bool IsTopoSetup() { return topo_setup_; }
@@ -50,13 +73,14 @@ struct MPIContext {
   int BuildGraphComm(int indegree, const int* sources, int outdegree,
                      const int* destinations);
 
-  bool AddNeighborWinMap(const std::string& name,
-                             std::vector<std::shared_ptr<MPI_Win>> mpi_win_vec);
+  bool RegisterWindowName(const std::string& name, WindowManager& win_manager);
+  bool UnregisterWindowName(const std::string& name);
+  bool UnregisterAllWindowName();
 
   // Flag indicating whether mpi is enabled.
   bool enabled_ = false;
   // Flag indicating whether mpi virtual topology is setup.
-  // TODO(ybc) We need a topo finialized flag. After it turns ture, no more 
+  // TODO(ybc) We need a topo finialized flag. After it turns ture, no more
   // modification of topology.
   bool topo_setup_ = false;
 
@@ -73,25 +97,14 @@ struct MPIContext {
   // Graph-based communicator for neighbor collective operations.
   MPI_Comm graph_comm;
 
-  // MPI Window used for one-sided communication
-  std::unordered_map<std::string, std::shared_ptr<MPI_Win>> send_win_map;
-
-  // MPI_Win for receiving the data from neighbors
-  std::unordered_map<std::string, std::vector<std::shared_ptr<MPI_Win>>>
-      neighbor_win_map;
-  
-  // MPI_Win with order. Because Win_free is collective ops.
-  std::unordered_map<std::string, std::vector<std::shared_ptr<MPI_Win>>>
-    win_map_with_order;
-
-  // The local memory address that associated with each MPI_WIN.
-  std::unordered_map<std::string, std::vector<void*>> win_local_memory_map;
+  // MPI Windows used for one-sided communication.
+  std::unordered_map<std::string, WindowManager> named_win_map;
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;
 };
 
-} // namespace common
-} // namespace bluefog
+}  // namespace common
+}  // namespace bluefog
 
-#endif // BLUEFOG_COMMON_MPI_CONTEXT_H
+#endif  // BLUEFOG_COMMON_MPI_CONTEXT_H

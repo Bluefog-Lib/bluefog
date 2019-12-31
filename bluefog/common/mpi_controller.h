@@ -32,7 +32,7 @@ class MPIController {
 
   inline bool IsMpiThreadsSupported() const { return mpi_threads_supported_; }
   inline bool IsWinObjetEmpty() const {
-    return mpi_ctx_.win_map_with_order.size() == 0;
+    return mpi_ctx_.named_win_map.size() == 0;
   }
 
   // TODO(ybc) Create Operation_manager class to control it.
