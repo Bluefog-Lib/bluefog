@@ -21,9 +21,37 @@ too many low-level details.
 
 REPOSITORY IS STILL A WORK IN PROGRESS.
 
+Philosophy
+----------
+There are already lots of well-designed and production-level distributed
+machine learning algorithms, libraries, frameworks, or tools.
+What is the main different between Bluefog project and others?  
+Why can Bluefog outperform others? 
+Which scenario is more suitable for Bluefog?
+
+
+Before answering above questions, *Demystifying 
+Parallel and Distributed Deep Learning* [1]_ paper has a great conclusion:
+
+::
+
+ The world of deep learning is brimming with concurrency. Even if an aspect
+ is sequential, its consistency requirements can be reduced, due to the
+ robustness of nonlinear optimization, to increase concurrency while 
+ still attaining reasonable accuracy, if no better.
+ 
+The main philosophy is we can sacrifice the consistency or sequential requirement
+to gain faster trainning speed, more robust system, and more friendly to the
+heterogeneous enviroment.
+
+[Add more technique details here.]
+
+To comparison with the other algorithms/libraries, we need to demystifying several
+importance perspectives viewing a distributed machine learning library first.
+
 The Spectrum of Distributed Machine Learning Algorithm
 ------------------------------------------------------
-Current machine learning problem typically is associated with
+Current machine learning problem is always associated with
 the large scale of dataset and highly complexity of the model.
 This provides us lots of ascpects and options to design the algorithm 
 so that the multi-core CPU/GPU in the distributed computation system
@@ -104,4 +132,6 @@ considerations here.
 
   We don't have any implementation to support it yet. We do plan to support it in
   the future.
+  
+.. [1] Demystifying Parallel and Distributed Deep Learning: An In-Depth Concurrency Analysis (https://arxiv.org/abs/1802.09941)
 
