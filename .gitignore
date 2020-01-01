@@ -133,3 +133,4 @@ data/
 .DS_Store
 examples/checkpoint/*
 examples/logs/*
+examples/.profile/*
