@@ -134,6 +134,7 @@ WIN_GET_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 extern "C" int bluefog_torch_win_free(char* name);
 extern "C" int bluefog_torch_win_poll(int handle);
 extern "C" void bluefog_torch_win_wait(int handle);
+extern "C" int bluefog_torch_win_fence(char* name);
 
 }  // namespace torch
 }  // namespace bluefog

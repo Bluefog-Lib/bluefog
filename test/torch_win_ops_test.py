@@ -61,6 +61,7 @@ class WinOpsTests(unittest.TestCase):
             assert is_created, "bf.win_create do not create window object successfully."
 
             sync_result = bf.win_sync(window_name)
+            assert bf.win_fence(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync produce wrong shape tensor.")
             assert (sync_result.data.min() == rank), (
@@ -91,7 +92,6 @@ class WinOpsTests(unittest.TestCase):
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
 
-    # @unittest.skip
     def test_win_put_blocking(self):
         """Test that the window put operation."""
         size = bf.size()
@@ -107,7 +107,8 @@ class WinOpsTests(unittest.TestCase):
 
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
-        neighbor_ranks = [(rank - 2**i) % size for i in range(outdegree)]  # in-neighbor
+        neighbor_ranks = [(rank - 2**i) %
+                          size for i in range(outdegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(outdegree+1)
 
         dims = [1, 2, 3]
@@ -116,7 +117,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-        
+
             bf.win_put_blocking(tensor, window_name)
             time.sleep(0.1)
             sync_result = bf.win_sync(window_name)
@@ -174,7 +175,6 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully"
 
-    @unittest.skip
     def test_win_get_blocking(self):
         """Test that the window get operation."""
         size = bf.size()
@@ -190,7 +190,8 @@ class WinOpsTests(unittest.TestCase):
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
-        neighbor_ranks = [(rank - 2**i) % size for i in range(indegree)]  # in-neighbor
+        neighbor_ranks = [(rank - 2**i) %
+                          size for i in range(indegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(indegree+1)
 
         dims = [1, 2, 3]
@@ -199,17 +200,18 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            time.sleep(0.1)  # wait for others' finishing create win?
             recv_tensor = tensor.clone()
+            time.sleep(0.1)  # wait for others' finishing create win?
+
             bf.win_get_blocking(recv_tensor, window_name, average=True)
             time.sleep(0.1)
 
             assert (list(tensor.shape) == [3] * dim), (
                 "bf.win_get produce wrong shape tensor.")
-            print((recv_tensor.data - avg_value).abs().max() < EPSILON, \
-                ("bf.win_get produce wrong tensor value " +
-                 "[{}-{}]!={} at rank {}.".format(
-                     recv_tensor.min(), recv_tensor.max(), avg_value, rank)))
+            print((recv_tensor.data - avg_value).abs().max() < EPSILON,
+                  ("bf.win_get produce wrong tensor value " +
+                   "[{}-{}]!={} at rank {}.".format(
+                       recv_tensor.min(), recv_tensor.max(), avg_value, rank)))
         time.sleep(0.5)
 
     def test_win_get_blocking_with_given_sources(self):
@@ -235,8 +237,9 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            time.sleep(0.2)  # wait for others' finishing create win?
             recv_tensor = tensor.clone()
+            time.sleep(0.2)
+
             bf.win_get_blocking(recv_tensor, window_name, src_ranks=[(rank-1) % size],
                                 average=True)
             time.sleep(0.2)
@@ -245,9 +248,9 @@ class WinOpsTests(unittest.TestCase):
             print((recv_tensor.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_get with given sources produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(recv_tensor.min(),
-                                                 recv_tensor.max(), avg_value, rank))
-                  , flush=True)
+                                                 recv_tensor.max(), avg_value, rank)), flush=True)
         time.sleep(0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

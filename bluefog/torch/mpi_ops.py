@@ -464,6 +464,11 @@ def win_sync(name: str) -> torch.Tensor:
     return tensor
 
 
+def win_fence(name: str) -> bool:
+    """ A collective call to synchronization on MPI window with associated name."""
+    return mpi_lib.bluefog_torch_win_fence(name)
+
+
 def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 

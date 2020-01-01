@@ -101,6 +101,7 @@ Status WindowSync(const std::string& name);
 
 Status WindowFree(const std::string& name);
 
+Status WindowFence(const std::string& name);
 
 }  // namespace common
 }  // namespace bluefog

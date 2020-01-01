@@ -425,5 +425,19 @@ Status WindowFree(const std::string& name) {
   return status;
 }
 
+Status WindowFence(const std::string& name) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinFence(name);
+
+  if (!status.ok()) {
+    LOG(ERROR) << "Cannot free the MPI_Win for " << name;
+    LOG(ERROR) << status.reason();
+  }
+  return status;
+
+}
+
 }  // namespace common
 }  // namespace bluefog

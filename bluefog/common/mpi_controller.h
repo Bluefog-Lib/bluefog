@@ -55,6 +55,7 @@ class MPIController {
   Status WinFree(const std::string& name);
   Status WinFreeAll();
   Status WinSync(const std::string& name);
+  Status WinFence(const std::string& name);
 
  protected:
   // Outside dependencies

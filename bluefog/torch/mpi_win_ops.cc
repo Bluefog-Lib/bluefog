@@ -218,17 +218,24 @@ int DoWinGet(::torch::Tensor tensor, const std::string& name,
   return handle;
 }
 
-int WinPollHandle(int handle) {
+int DoWinPollHandle(int handle) {
   return win_handle_manager.PollHandle(handle) ? 1 : 0;
 }
 
-void WinWait(int handle) {
+void DoWinWait(int handle) {
   while (!win_handle_manager.PollHandle(handle)) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   auto status = win_handle_manager.ReleaseHandle(handle);
   ThrowIfError(*status);
 }
+
+int DoWinFence(const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::WindowFence(name);
+  return status.ok() ? 1 : 0;
+}
+
 
 void AddWinOpsIntoPybind(py::module& m) {
   // one-sided communication
@@ -277,8 +284,9 @@ void AddWinOpsIntoPybind(py::module& m) {
 #endif
 
   m.def("bluefog_torch_win_free", &DoWinFree);
-  m.def("bluefog_torch_win_poll", &WinPollHandle);
-  m.def("bluefog_torch_win_wait", &WinWait);
+  m.def("bluefog_torch_win_fence", &DoWinFence);
+  m.def("bluefog_torch_win_poll", &DoWinPollHandle);
+  m.def("bluefog_torch_win_wait", &DoWinWait);
 }
 
 }  // namespace torch

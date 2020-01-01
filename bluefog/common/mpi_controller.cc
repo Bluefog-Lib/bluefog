@@ -332,9 +332,24 @@ Status MPIController::WinSync(const std::string& name) {
   if (it == mpi_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
+
+  WindowManager& win_mananger = it->second;
   for (auto rank : neighbor_in_ranks_) {
-    WindowManager& win_mananger = it->second;
     MPI_Win_sync(*win_mananger.GetWinByRank(rank));
+  }
+
+  return Status::OK();
+}
+
+Status MPIController::WinFence(const std::string& name) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+  }
+
+  WindowManager& win_mananger = it->second;
+  for (int rank = 0; rank < size_; rank++) {
+    MPI_Win_fence(0, *win_mananger.GetWinByRank(rank));
   }
 
   return Status::OK();
