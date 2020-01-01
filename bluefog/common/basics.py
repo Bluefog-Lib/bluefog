@@ -139,7 +139,7 @@ class BlueFogBasics(object):
         if self._topology is None:
             return []
         _rank = self.rank()
-        out_neighbor_ranks = [r for r in self._topology.predecessors(self.rank())
+        out_neighbor_ranks = [r for r in self._topology.successors(self.rank())
                               if r != _rank]
         return out_neighbor_ranks
 
