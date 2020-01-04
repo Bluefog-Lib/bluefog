@@ -31,7 +31,7 @@ class WinOpsTests(unittest.TestCase):
         bf.init()
 
     def tearDown(self):
-        bf.win_free()
+        pass
 
     @staticmethod
     def cast_and_place(tensor, dtype):
@@ -128,11 +128,11 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank)))
 
-        time.sleep(0.1)
+        time.sleep(0.5)
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_put_{}_{}".format(dim, dtype)
             is_freed = bf.win_free(window_name)
-            assert is_freed, "bf.win_free do not free window object successfully"
+            assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_put_blocking_with_given_destination(self):
         """Test that the window put operation with given destination."""
@@ -169,11 +169,11 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
-        time.sleep(0.1)
+        time.sleep(0.5)
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             is_freed = bf.win_free(window_name)
-            assert is_freed, "bf.win_free do not free window object successfully"
+            assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_get_blocking(self):
         """Test that the window get operation."""
@@ -212,7 +212,14 @@ class WinOpsTests(unittest.TestCase):
                   ("bf.win_get produce wrong tensor value " +
                    "[{}-{}]!={} at rank {}.".format(
                        recv_tensor.min(), recv_tensor.max(), avg_value, rank)))
+
+        # It is required to wait for other processes finish the ops before
+        # free the window object.
         time.sleep(0.5)
+        for dtype, dim in itertools.product(dtypes, dims):
+            window_name = "win_get_{}_{}".format(dim, dtype)
+            is_freed = bf.win_free(window_name)
+            assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_get_blocking_with_given_sources(self):
         """Test that the window get operation with given sources."""
@@ -235,7 +242,7 @@ class WinOpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            window_name = "win_get_{}_{}".format(dim, dtype)
+            window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             recv_tensor = tensor.clone()
             time.sleep(0.2)
@@ -249,7 +256,14 @@ class WinOpsTests(unittest.TestCase):
                 "bf.win_get with given sources produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(recv_tensor.min(),
                                                  recv_tensor.max(), avg_value, rank)), flush=True)
+
+        # It is required to wait for other processes finish the ops before
+        # free the window object.
         time.sleep(0.5)
+        for dtype, dim in itertools.product(dtypes, dims):
+            window_name = "win_get_given_{}_{}".format(dim, dtype)
+            is_freed = bf.win_free(window_name)
+            assert is_freed, "bf.win_free do not free window object successfully."
 
 
 if __name__ == "__main__":
