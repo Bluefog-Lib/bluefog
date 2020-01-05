@@ -439,5 +439,19 @@ Status WindowFence(const std::string& name) {
 
 }
 
+Status Barrier() {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->Barrier();
+
+  if (!status.ok()) {
+    LOG(ERROR) << "Barrier function failed, see MPI output for details.";
+    LOG(ERROR) << status.reason();
+  }
+
+  return status;
+}
+
 }  // namespace common
 }  // namespace bluefog

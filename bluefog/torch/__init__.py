@@ -17,7 +17,7 @@ from bluefog.torch.mpi_ops import broadcast, broadcast_async
 from bluefog.torch.mpi_ops import broadcast_, broadcast_async_
 from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_async
 from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_async
-from bluefog.torch.mpi_ops import poll, synchronize
+from bluefog.torch.mpi_ops import poll, synchronize, barrier
 from bluefog.torch.mpi_ops import init, shutdown
 from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
 from bluefog.torch.mpi_ops import load_topology, set_topology

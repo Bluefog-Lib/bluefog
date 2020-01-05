@@ -177,6 +177,14 @@ void WaitAndClear(int handle) {
   ThrowIfError(*status);
 }
 
+void Barrier() {
+  ThrowIfError(common::CheckInitialized());
+
+  auto status = common::Barrier();
+  ThrowIfError(status);
+}
+
+// Forward declare function to add all functions in mpi_win_ops into mpi_lib module.
 void AddWinOpsIntoPybind(py::module &);
 
 PYBIND11_MODULE(mpi_lib, m) {
@@ -259,6 +267,7 @@ PYBIND11_MODULE(mpi_lib, m) {
   // basics
   m.def("bluefog_torch_poll", &PollHandle);
   m.def("bluefog_torch_wait_and_clear", &WaitAndClear);
+  m.def("bluefog_torch_barrier", &Barrier);
 
   // one-sided communication
   AddWinOpsIntoPybind(m);

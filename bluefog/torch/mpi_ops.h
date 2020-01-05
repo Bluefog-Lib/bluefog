@@ -93,6 +93,7 @@ NEIGHBOR_ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 
 extern "C" int bluefog_torch_poll(int handle);
 extern "C" void bluefog_torch_wait_and_clear(int handle);
+extern "C" void bluefog_torch_barrier();
 
 }  // namespace torch
 }  // namespace bluefog
