@@ -465,7 +465,11 @@ def win_sync(name: str) -> torch.Tensor:
 
 
 def win_fence(name: str) -> bool:
-    """ A collective call to synchronization on MPI window with associated name."""
+    """ A collective call to synchronization on MPI window with associated name.
+    
+    Warning: The API win_get and win_put provied here is already wrapped by
+    MPI_Win_lock and MPI_Win_unlock. So you should not explicitly call win_fence there.
+    """
     return mpi_lib.bluefog_torch_win_fence(name)
 
 
