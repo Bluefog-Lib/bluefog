@@ -44,7 +44,7 @@ class OpsTests(unittest.TestCase):
                 "Skip test broadcast since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -74,7 +74,7 @@ class OpsTests(unittest.TestCase):
                 "Skip test broadcast_inplace since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -99,7 +99,7 @@ class OpsTests(unittest.TestCase):
                 broadcasted_tensor == root_tensor
             ).min() == 1, "hvd.broadcast produces incorrect broadcasted tensor"
 
-    def test_allreduce(self):
+    def test_allreduce_avg(self):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
@@ -107,7 +107,7 @@ class OpsTests(unittest.TestCase):
                 "Skip test allreduce since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -122,6 +122,29 @@ class OpsTests(unittest.TestCase):
             max_difference = output.data.sub(tensor).max()
             assert max_difference <= 1e-4
 
+    def test_allreduce_sum(self):
+        """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
+        size = bf.size()
+        if size <= 1:
+            warnings.warn(
+                "Skip test allreduce since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.DoubleTensor,]
+        if torch.cuda.is_available():
+            dtypes += [torch.cuda.FloatTensor]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            torch.manual_seed(123456)
+            tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
+            tensor = self.cast_and_place(tensor, dtype)
+
+            output = bf.allreduce(tensor, average=False,
+                                  name="test_allreduce_tensor")
+            max_difference = output.data.sub(tensor.mul(size)).max()
+            assert max_difference <= 1e-4
+
     def test_allgather(self):
         """Test that the allgather correctly gathers 1D, 2D, 3D tensors."""
         size = bf.size()
@@ -131,7 +154,7 @@ class OpsTests(unittest.TestCase):
                 "Skip test allgather since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -163,7 +186,7 @@ class OpsTests(unittest.TestCase):
                 "Skip test allgather since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -192,16 +215,16 @@ class OpsTests(unittest.TestCase):
                 assert rank_tensor.data.min() == i
                 assert rank_tensor.data.max() == i
 
-    def test_neighbor_allreduce(self):
-        """Test that the neighbor all reduce 1D, 2D, 3D tensors correctly."""
+    def test_neighbor_allreduce_avg(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
             warnings.warn(
-                "Skip test neighbor allreduce since the world size should be larger than 1!"
+                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -223,6 +246,28 @@ class OpsTests(unittest.TestCase):
                  sum_value).abs().max() < EPSILON
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
+    def test_neighbor_allreduce_sum(self):
+        """Test that the neighbor all reduce (sum) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test neighbor allreduce(sum) since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.LongTensor]
+        if torch.cuda.is_available():
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
             reduced_tensor = bf.neighbor_allreduce(tensor, average=False)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
@@ -243,7 +288,7 @@ class OpsTests(unittest.TestCase):
                 "Skip test neighbor allgather since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 

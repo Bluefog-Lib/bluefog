@@ -46,6 +46,10 @@ def _allreduce_function_factory(tensor):
 
 def _allreduce_async(tensor, output, average, name):
     function = _check_function(_allreduce_function_factory, tensor)
+    if average:
+        assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor)), \
+            "If average is set in allreduce, only float or double tensor is allowed."
+
     handle = getattr(mpi_lib, function)(tensor, output, average,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
@@ -322,6 +326,9 @@ def _neighbor_allreduce_function_factory(tensor):
 
 def _neighbor_allreduce_async(tensor, output, average, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
+    if average:
+        assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor)), \
+            "If average is set in allreduce, only float or double tensor is allowed."
     handle = getattr(mpi_lib, function)(tensor, output, average,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
