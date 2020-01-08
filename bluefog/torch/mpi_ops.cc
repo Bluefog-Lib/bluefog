@@ -201,6 +201,9 @@ PYBIND11_MODULE(mpi_lib, m) {
 #endif
 
   // broadcast
+  m.def("bluefog_torch_broadcast_async_torch_ByteTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_async_torch_CharTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_async_torch_ShortTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_async_torch_IntTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_async_torch_LongTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_async_torch_FloatTensor", &DoBroadcast);
@@ -213,6 +216,9 @@ PYBIND11_MODULE(mpi_lib, m) {
 #endif
 
   // allgather
+  m.def("bluefog_torch_allgather_async_torch_ByteTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_async_torch_CharTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_async_torch_ShortTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_async_torch_IntTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_async_torch_LongTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_async_torch_FloatTensor", &DoAllgather);
@@ -225,6 +231,12 @@ PYBIND11_MODULE(mpi_lib, m) {
 #endif
 
   // neighbor_allgather
+  m.def("bluefog_torch_neighbor_allgather_async_torch_ByteTensor",
+        &DoNeighborAllgather);
+  m.def("bluefog_torch_neighbor_allgather_async_torch_CharTensor",
+        &DoNeighborAllgather);
+  m.def("bluefog_torch_neighbor_allgather_async_torch_ShortTensor",
+        &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_async_torch_IntTensor",
         &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_async_torch_LongTensor",

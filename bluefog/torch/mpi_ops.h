@@ -31,6 +31,9 @@ ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
   extern "C" int bluefog_torch_broadcast_async_##torch_Tensor(                 \
       THTensor* tensor, THTensor* output, int root_rank, char* name);
 
+BROADCAST_H(torch_ByteTensor, THByteTensor)
+BROADCAST_H(torch_CharTensor, THCharTensor)
+BROADCAST_H(torch_ShortTensor, THShortTensor)
 BROADCAST_H(torch_IntTensor, THIntTensor)
 BROADCAST_H(torch_LongTensor, THLongTensor)
 BROADCAST_H(torch_FloatTensor, THFloatTensor)
@@ -47,6 +50,9 @@ BROADCAST_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
   extern "C" int bluefog_torch_allgather_async_##torch_Tensor(                 \
       THTensor* tensor, THTensor* output, char* name);
 
+ALLGATHER_H(torch_ByteTensor, THByteTensor)
+ALLGATHER_H(torch_CharTensor, THCharTensor)
+ALLGATHER_H(torch_ShortTensor, THShortTensor)
 ALLGATHER_H(torch_IntTensor, THIntTensor)
 ALLGATHER_H(torch_LongTensor, THLongTensor)
 ALLGATHER_H(torch_FloatTensor, THFloatTensor)
@@ -63,6 +69,9 @@ ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
   extern "C" int bluefog_torch_neighbor_allgather_async_##torch_Tensor(        \
       THTensor* tensor, THTensor* output, char* name);
 
+NEIGHBOR_ALLGATHER_H(torch_ByteTensor, THByteTensor)
+NEIGHBOR_ALLGATHER_H(torch_CharTensor, THCharTensor)
+NEIGHBOR_ALLGATHER_H(torch_ShortTensor, THShortTensor)
 NEIGHBOR_ALLGATHER_H(torch_IntTensor, THIntTensor)
 NEIGHBOR_ALLGATHER_H(torch_LongTensor, THLongTensor)
 NEIGHBOR_ALLGATHER_H(torch_FloatTensor, THFloatTensor)

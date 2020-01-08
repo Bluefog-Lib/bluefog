@@ -44,7 +44,8 @@ class OpsTests(unittest.TestCase):
                 "Skip test broadcast since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -74,7 +75,8 @@ class OpsTests(unittest.TestCase):
                 "Skip test broadcast_inplace since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -154,7 +156,8 @@ class OpsTests(unittest.TestCase):
                 "Skip test allgather since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -186,7 +189,8 @@ class OpsTests(unittest.TestCase):
                 "Skip test allgather since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -288,7 +292,8 @@ class OpsTests(unittest.TestCase):
                 "Skip test neighbor allgather since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
