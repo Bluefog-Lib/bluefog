@@ -1,6 +1,14 @@
+#if HAVE_CUDA
+#include <THC/THC.h>
+#endif
+
 #include "adapter.h"
 #include "cuda_util.h"
 #include "../common/logging.h"
+
+#if HAVE_CUDA
+extern THCState* state;
+#endif
 
 namespace bluefog {
 namespace torch {
@@ -141,6 +149,66 @@ Status TorchOpContext::AllocateZeros(int64_t num_elements, DataType dtype,
 
 Framework TorchOpContext::framework() const {
   return Framework::PYTORCH;
+}
+
+#if HAVE_CUDA
+struct ReadyEventRegistry {
+  std::unordered_map<int, std::queue<cudaEvent_t>> cuda_events;
+  std::mutex mutex;
+};
+
+static ReadyEventRegistry ready_event_registry;
+
+TorchReadyEvent::TorchReadyEvent(int device) : device_(device) {
+  assert(device_ != CPU_DEVICE_ID);
+
+  with_device device_context(device_);
+  {
+    std::lock_guard<std::mutex> guard(ready_event_registry.mutex);
+    auto& queue = ready_event_registry.cuda_events[device_];
+    if (!queue.empty()) {
+      cuda_event_ = queue.front();
+      queue.pop();
+    } else {
+      THCudaCheck(cudaEventCreateWithFlags(
+          &cuda_event_, cudaEventBlockingSync | cudaEventDisableTiming));
+    }
+  }
+  auto stream = THCState_getCurrentStreamOnDevice(state, device_);
+  THCudaCheck(cudaEventRecord(cuda_event_, stream));
+}
+
+TorchReadyEvent::~TorchReadyEvent() {
+  {
+    std::lock_guard<std::mutex> guard(ready_event_registry.mutex);
+    auto& queue = ready_event_registry.cuda_events[device_];
+    queue.push(cuda_event_);
+  }
+}
+
+bool TorchReadyEvent::Ready() const {
+  auto status = cudaEventQuery(cuda_event_);
+  if (status == cudaErrorNotReady) {
+    return false;
+  }
+  THCudaCheck(status);
+  return true;
+}
+#endif
+
+// On GPU this event will signal that GPU computations are done and data is
+// ready.
+std::shared_ptr<common::ReadyEvent> RecordReadyEvent(int device) {
+  if (device == CPU_DEVICE_ID) {
+    return std::shared_ptr<common::ReadyEvent>();
+  } else {
+#if HAVE_CUDA
+    return std::make_shared<TorchReadyEvent>(device);
+#else
+    throw std::logic_error("Internal error. Requested ReadyEvent "
+                           "with GPU device but not compiled with CUDA.");
+#endif
+  }
 }
 
 void ThrowIfError(Status status) {

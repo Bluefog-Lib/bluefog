@@ -4,6 +4,10 @@
 #include <torch/extension.h>
 #include <torch/torch.h>
 
+#if HAVE_CUDA
+#include "cuda_runtime.h"
+#endif
+
 #include "../common/common.h"
 
 namespace bluefog {
@@ -55,6 +59,21 @@ class TorchOpContext : public common::OpContext {
   int device_ = CPU_DEVICE_ID;
   ::torch::Tensor output_;
 };
+
+#if HAVE_CUDA
+class TorchReadyEvent : public common::ReadyEvent {
+public:
+  TorchReadyEvent(int device);
+  ~TorchReadyEvent();
+  virtual bool Ready() const override;
+
+private:
+  int device_ = CPU_DEVICE_ID;
+  cudaEvent_t cuda_event_ = nullptr;
+};
+#endif
+
+std::shared_ptr<common::ReadyEvent> RecordReadyEvent(int device);
 
 void ThrowIfError(common::Status status);
 

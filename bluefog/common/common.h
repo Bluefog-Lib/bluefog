@@ -145,7 +145,15 @@ class Tensor {
   virtual ~Tensor() = default;
 };
 
+// ReadyEvent is used to inform the CPU when GPU is used.
+class ReadyEvent {
+public:
+  virtual bool Ready() const = 0;
+  virtual ~ReadyEvent() = default;
+};
+
 class OpContext;
+
 class PersistentBuffer {
  public:
   virtual const void* AccessData(std::shared_ptr<OpContext> context) const = 0;
