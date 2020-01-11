@@ -197,7 +197,7 @@ class _DistributedConsensusOptimizer(torch.optim.Optimizer):
 
         dups = _DistributedOptimizer.find_duplicates(
             [k for k, _ in named_parameters])
-        if dups > 0:
+        if dups:
             raise ValueError(
                 "Parameter names in named_parameters must be unique. "
                 "Found duplicates: %s" % ", ".join(dups)
