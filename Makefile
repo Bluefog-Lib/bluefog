@@ -3,7 +3,7 @@ EXTRA_MPI_FLAG =
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest
 
-test: test_torch test_tensorflow
+test: test_torch
 test_torch: test_torch_basic test_torch_ops
 test_tensorflow: test_tensorflow_basic test_tensorflow_ops
 

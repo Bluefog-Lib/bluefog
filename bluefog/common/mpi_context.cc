@@ -188,10 +188,15 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
 int MPIContext::BuildGraphComm(const int indegree, const int* sources,
                                const int outdegree, const int* destinations) {
+  // TODO(ybc) Understand better of how weight works here.
+  std::vector<int> source_weights(indegree, 1);
+  std::vector<int> dest_weights (outdegree, 1);
+
   int ret_code = MPI_Dist_graph_create_adjacent(
-      mpi_comm, indegree, sources, MPI_UNWEIGHTED, outdegree, destinations,
-      MPI_UNWEIGHTED, MPI_INFO_NULL,
+      mpi_comm, indegree, sources, &source_weights[0], outdegree, destinations,
+      &dest_weights[0], MPI_INFO_NULL,
       /*reorder=*/0, &graph_comm);
+
   if (ret_code != MPI_SUCCESS) {
     throw std::runtime_error(
         "Build distributed graph communicator failed, see MPI output for "

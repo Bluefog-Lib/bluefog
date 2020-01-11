@@ -45,7 +45,7 @@ class WinOpsTests(unittest.TestCase):
         """Test that the window create and free objects correctly."""
         size = bf.size()
         rank = bf.rank()
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -77,7 +77,7 @@ class WinOpsTests(unittest.TestCase):
             assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_free_all(self):
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -101,8 +101,8 @@ class WinOpsTests(unittest.TestCase):
                 "Skip test win_put since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
-        if torch.cuda.is_available():
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if False and torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -144,7 +144,7 @@ class WinOpsTests(unittest.TestCase):
                 "since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -184,7 +184,7 @@ class WinOpsTests(unittest.TestCase):
                 "Skip test win_get since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
@@ -230,7 +230,7 @@ class WinOpsTests(unittest.TestCase):
                 "since the world size should be larger than 1!"
             )
             return
-        dtypes = [torch.FloatTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
