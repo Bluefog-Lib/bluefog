@@ -31,9 +31,7 @@ class OpsTests(unittest.TestCase):
 
     def cast_and_place(self, tensor, dtype):
         if dtype.is_cuda:
-            # Not support to run on gpu yet.
-            # return tensor.cuda(bf.local_rank()).type(dtype)
-            return tensor.type(dtype)
+            return tensor.cuda(bf.local_rank()).type(dtype)
         return tensor.type(dtype)
 
     def test_boardcast(self):

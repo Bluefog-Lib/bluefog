@@ -36,9 +36,7 @@ class WinOpsTests(unittest.TestCase):
     @staticmethod
     def cast_and_place(tensor, dtype):
         if dtype.is_cuda:
-            # Not support to run on gpu yet.
-            # return tensor.cuda(bf.local_rank()).type(dtype)
-            return tensor.type(dtype)
+            return tensor.cuda(bf.local_rank()).type(dtype)
         return tensor.type(dtype)
 
     def test_win_create_and_sync_and_free(self):
@@ -102,7 +100,7 @@ class WinOpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if False and torch.cuda.is_available():
+        if torch.cuda.is_available():
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
