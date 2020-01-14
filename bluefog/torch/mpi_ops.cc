@@ -5,6 +5,7 @@
 #include <torch/torch.h>
 
 #include "adapter.h"
+#include "cuda_util.h"
 #include "handle_manager.h"
 #include "../common/operations.h"
 
@@ -70,8 +71,7 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
   std::shared_ptr<common::Tensor> bf_output = nullptr;
   if (bluefog_rank() == root_rank) {
     if (tensor.data_ptr() != output.data_ptr()) {
-      // TODO(ybc) Check the cuda device case here. 
-      // we need to ensure it is copied in the same device.
+      with_device device_context(device);
       output.copy_(tensor);
     }
   } else {
