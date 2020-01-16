@@ -94,10 +94,10 @@ class OpsTests(unittest.TestCase):
 
             assert (
                 tensor == broadcasted_tensor
-            ).min() == 1, "hvd.broadcast does not modify source tensor"
+            ).min() == 1, "bf.broadcast_ does not modify source tensor"
             assert (
                 broadcasted_tensor == root_tensor
-            ).min() == 1, "hvd.broadcast produces incorrect broadcasted tensor"
+            ).min() == 1, "bf.broadcast_ produces incorrect broadcasted tensor"
 
     def test_allreduce_avg(self):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
