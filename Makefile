@@ -1,7 +1,11 @@
 NUM_PROC = 4
-EXTRA_MPI_FLAG = 
+EXTRA_MPI_FLAG = --allow-run-as-root
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest
+
+.PHONY: build
+build:
+	python setup.py build_ext -i
 
 test: test_torch
 test_torch: test_torch_basic test_torch_ops

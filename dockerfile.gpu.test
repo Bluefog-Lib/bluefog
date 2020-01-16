@@ -1,3 +1,6 @@
+# This file is used for the testing under docker environment.
+# The bluefog folder is binded in the docker storage system so that
+# a local modification can be reflected in the docker container as well.
 FROM nvidia/cuda:10.0-devel-ubuntu18.04
 
 # TensorFlow version is tightly coupled to CUDA and cuDNN so it should be selected carefully
@@ -58,9 +61,9 @@ RUN pip install mxnet-cu100==${MXNET_VERSION}
 # Install Open MPI
 RUN mkdir /tmp/openmpi && \
     cd /tmp/openmpi && \
-    wget https://www.open-mpi.org/software/ompi/v4.0/downloads/openmpi-4.0.0.tar.gz && \
-    tar zxf openmpi-4.0.0.tar.gz && \
-    cd openmpi-4.0.0 && \
+    wget https://www.open-mpi.org/software/ompi/v4.0/downloads/openmpi-4.0.2.tar.gz && \
+    tar zxf openmpi-4.0.2.tar.gz && \
+    cd openmpi-4.0.2 && \
     ./configure --enable-orterun-prefix-by-default --with-cuda && \
     make -j $(nproc) all && \
     make install && \
@@ -81,41 +84,3 @@ RUN apt-get install -y --no-install-recommends openssh-client openssh-server && 
 RUN cat /etc/ssh/ssh_config | grep -v StrictHostKeyChecking > /etc/ssh/ssh_config.new && \
     echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config.new && \
     mv /etc/ssh/ssh_config.new /etc/ssh/ssh_config
-
-# Download examples
-RUN apt-get install -y --no-install-recommends subversion && \
-    svn checkout https://github.com/horovod/horovod/trunk/examples && \
-    rm -rf /examples/.svn
-
-# Bluefog starts below.
-
-# Temporary fix until Horovod pushes out a new release.
-# See https://github.com/uber/horovod/pull/700
-# RUN sed -i '/^NCCL_SOCKET_IFNAME.*/d' /etc/nccl.conf
-
-# RUN mkdir /tensorflow
-# WORKDIR "/tensorflow"
-# RUN git clone -b cnn_tf_v1.12_compatible https://github.com/tensorflow/benchmarks
-# WORKDIR "/tensorflow/benchmarks"
-
-# CMD mpirun \
-#   python scripts/tf_cnn_benchmarks/tf_cnn_benchmarks.py \
-#     --model resnet101 \
-#     --batch_size 64 \
-#     --variable_update horovod
-
-# FROM python:3-onbuild
-# WORKDIR /usr/src/app
-
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install cupy-cuda100
-
-COPY . bluefog-project/
-RUN mkdir bluefog-project/examples/checkpoint
-
-WORKDIR "bluefog-project"
-
-RUN pip install -e . --verbose && \
-    python setup.py build_ext -i
-
