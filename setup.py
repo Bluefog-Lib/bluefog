@@ -446,4 +446,10 @@ setup(
     cmdclass={"build_ext": custom_build_ext},
     install_requires=reqs,
     extras_require=EXTRAS,
+    entry_points={
+        'console_scripts': [
+            'bfrun = bluefog.run.run:main',
+            'bftest = bluefog.run.test:main',
+        ],
+    },
 )
