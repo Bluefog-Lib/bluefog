@@ -1,5 +1,5 @@
 NUM_PROC = 4
-EXTRA_MPI_FLAG = --allow-run-as-root
+EXTRA_MPI_FLAG =
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest
 
