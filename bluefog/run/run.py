@@ -76,7 +76,7 @@ def main():
         hosts_arg = args.host
     else:
         hosts_arg = ""
-        
+
     if args.ssh_port:
         ssh_port_arg = "-mca plm_rsh_args \"-p {ssh_port}\"".format(
             ssh_port=args.ssh_port)
@@ -87,8 +87,7 @@ def main():
         raise Exception(
             'bfrun convenience script currently only supports Open MPI.\n\n'
             'Choose one of:\n'
-            '1. Install Open MPI 4.0.0+ and re-install Horovod '
-            '(use --no-cache-dir pip option).\n'
+            '1. Install Open MPI 4.0.0+ and re-install Bluefog.\n'
             '2. Run distributed '
             'training script using the standard way provided by your'
             ' MPI distribution (usually mpirun, srun, or jsrun).')

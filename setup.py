@@ -449,7 +449,6 @@ setup(
     entry_points={
         'console_scripts': [
             'bfrun = bluefog.run.run:main',
-            'bftest = bluefog.run.test:main',
         ],
     },
 )
