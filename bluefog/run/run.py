@@ -99,7 +99,7 @@ def main():
         'mpirun --allow-run-as-root --tag-output '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
-        '-mca pml ob1 -mca btl ^openib '
+        '-mca pml ob1 -mca btl,mtl ^openib '
         '{ssh_port_arg} '
         '{env} {command}'  # expect a lot of environment variables
         .format(num_proc=args.np,
