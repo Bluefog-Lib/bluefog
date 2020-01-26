@@ -36,17 +36,17 @@ class LogMessageFatal : public LogMessage {
 };
 
 #define _BFG_LOG_TRACE \
-  LogMessage(__FILE__, __LINE__, LogLevel::TRACE)
+  bluefog::common::LogMessage(__FILE__, __LINE__, bluefog::common::LogLevel::TRACE)
 #define _BFG_LOG_DEBUG \
-  LogMessage(__FILE__, __LINE__, LogLevel::DEBUG)
+  bluefog::common::LogMessage(__FILE__, __LINE__, bluefog::common::LogLevel::DEBUG)
 #define _BFG_LOG_INFO \
-  LogMessage(__FILE__, __LINE__, LogLevel::INFO)
+  bluefog::common::LogMessage(__FILE__, __LINE__, bluefog::common::LogLevel::INFO)
 #define _BFG_LOG_WARNING \
-  LogMessage(__FILE__, __LINE__, LogLevel::WARNING)
+  bluefog::common::LogMessage(__FILE__, __LINE__, bluefog::common::LogLevel::WARNING)
 #define _BFG_LOG_ERROR \
-  LogMessage(__FILE__, __LINE__, LogLevel::ERROR)
+  bluefog::common::LogMessage(__FILE__, __LINE__, bluefog::common::LogLevel::ERROR)
 #define _BFG_LOG_FATAL \
-  LogMessageFatal(__FILE__, __LINE__)
+  bluefog::common::LogMessageFatal(__FILE__, __LINE__)
 
 #define _LOG(severity) _BFG_LOG_##severity
 
