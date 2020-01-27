@@ -68,7 +68,7 @@ parser.add_argument("--no-bluefog", action="store_true",
                     default=False, help="disables bluefog library")
 
 args = parser.parse_args()
-args.cuda = not args.no_cuda and torch.cuda.is_available()
+args.cuda = not args.no_cuda and TEST_ON_GPU
 args.bluefog = not args.no_bluefog
 
 allreduce_batch_size = args.batch_size * args.batches_per_allreduce

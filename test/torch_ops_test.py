@@ -15,7 +15,7 @@ import bluefog.torch as bf
 
 
 EPSILON = 1e-5
-
+TEST_ON_GPU = torch.cuda.is_available()
 
 class OpsTests(unittest.TestCase):
     """
@@ -44,7 +44,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -75,7 +75,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -108,7 +108,7 @@ class OpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -131,7 +131,7 @@ class OpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.DoubleTensor,]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -156,7 +156,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -189,7 +189,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -227,7 +227,7 @@ class OpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -258,7 +258,7 @@ class OpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.LongTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -292,7 +292,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.

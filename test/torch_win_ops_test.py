@@ -16,7 +16,7 @@ import bluefog.torch as bf
 
 
 EPSILON = 1e-5
-
+TEST_ON_GPU = torch.cuda.is_available()
 
 class WinOpsTests(unittest.TestCase):
     """
@@ -44,7 +44,7 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -76,7 +76,7 @@ class WinOpsTests(unittest.TestCase):
 
     def test_win_free_all(self):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         dims = [1, 2, 3]
@@ -100,7 +100,7 @@ class WinOpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -143,7 +143,7 @@ class WinOpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -183,7 +183,7 @@ class WinOpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # By default, we use power two ring topology.
@@ -229,7 +229,7 @@ class WinOpsTests(unittest.TestCase):
             )
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if torch.cuda.is_available():
+        if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
         # We use given destination to form a (right-)ring.
