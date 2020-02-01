@@ -36,7 +36,9 @@ class WinOpsTests(unittest.TestCase):
     @staticmethod
     def cast_and_place(tensor, dtype):
         if dtype.is_cuda:
-            return tensor.cuda(bf.local_rank()).type(dtype)
+            device_id = bf.local_rank()
+            device_id = 0
+            return tensor.cuda(device_id).type(dtype)
         return tensor.type(dtype)
 
     def test_win_create_and_sync_and_free(self):

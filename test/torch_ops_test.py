@@ -31,14 +31,16 @@ class OpsTests(unittest.TestCase):
 
     def cast_and_place(self, tensor, dtype):
         if dtype.is_cuda:
-            return tensor.cuda(bf.local_rank()).type(dtype)
+            device_id = bf.local_rank()
+            device_id = 0
+            return tensor.cuda(device_id).type(dtype)
         return tensor.type(dtype)
 
     def test_boardcast(self):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
-            warnings.warn(
+            warnings.warn(  
                 "Skip test broadcast since the world size should be larger than 1!"
             )
             return
