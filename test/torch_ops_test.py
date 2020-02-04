@@ -31,8 +31,7 @@ class OpsTests(unittest.TestCase):
 
     def cast_and_place(self, tensor, dtype):
         if dtype.is_cuda:
-            device_id = bf.local_rank()
-            device_id = 0
+            device_id = bf.local_rank() % torch.cuda.device_count()
             return tensor.cuda(device_id).type(dtype)
         return tensor.type(dtype)
 
@@ -160,19 +159,22 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             gathered = bf.allgather(tensor)
 
-            assert list(gathered.shape) == [23 * size] + [23] * (dim - 1)
+            assert list(gathered.shape) == [2 * size] + [2] * (dim - 1)
 
             for i in range(size):
-                rank_tensor = gathered[i * 23: (i + 1) * 23]
+                rank_tensor = gathered[i * 2: (i + 1) * 2]
                 assert (
-                    list(rank_tensor.shape) == [23] * dim
+                    list(rank_tensor.shape) == [2] * dim
                 ), "bf.allgather produces incorrect gathered shape"
                 assert (
                     rank_tensor.data.min() == i
@@ -193,6 +195,9 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -231,6 +236,9 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
@@ -262,6 +270,9 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.LongTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
@@ -296,6 +307,9 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
