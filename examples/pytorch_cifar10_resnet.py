@@ -66,6 +66,8 @@ parser.add_argument(
 parser.add_argument("--seed", type=int, default=42, help="random seed")
 parser.add_argument("--no-bluefog", action="store_true",
                     default=False, help="disables bluefog library")
+parser.add_argument("--no-rma", action="store_true",
+                    default=False, help="Do no use remote memory access(no window ops).")
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -176,15 +178,18 @@ optimizer = optim.SGD(
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.bluefog:
-    # This distributed optimizer uses neighbor communication.
-    optimizer = bf.DistributedConsensusOptimizer(
-        optimizer, named_parameters=model.named_parameters()
-    )
-
-    # This distributed optimizer uses one-sided communication
-    # optimizer = bf.DistributedBluefogOptimizer(
-    #     optimizer, named_parameters=model.named_parameters()
-    # )
+    if args.no_rma:
+        print("Use neighbor collective")
+        # This distributed optimizer uses neighbor communication.
+        optimizer = bf.DistributedConsensusOptimizer(
+            optimizer, named_parameters=model.named_parameters()
+        )
+    else:
+        # This distributed optimizer uses one-sided communication
+        print("Use win_put ops.")
+        optimizer = bf.DistributedBluefogOptimizer(
+            optimizer, named_parameters=model.named_parameters()
+        )
 else:
     optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()

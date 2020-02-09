@@ -49,6 +49,11 @@ parser.add_argument(
 parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
 )
+parser.add_argument("--no-bluefog", action="store_true",
+                    default=False, help="disables bluefog library. Use horovod instead.")
+parser.add_argument("--no-rma", action="store_true",
+                    default=False, help="Do no use remote memory access(no window ops).")
+
 parser.add_argument(
     "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
 )
@@ -59,8 +64,6 @@ parser.add_argument(
     metavar="N",
     help="how many batches to wait before logging training status",
 )
-parser.add_argument("--no-bluefog", action="store_true",
-                    default=False, help="disables bluefog library")
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -159,13 +162,19 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.bluefog:
-    # This distributed optimizer uses neighbor communication.
-    # optimizer = bf.DistributedConsensusOptimizer(
+    # optimizer = bf.DistributedOptimizer(
     #     optimizer, named_parameters=model.named_parameters()
     # )
-    optimizer = bf.DistributedBluefogOptimizer(
-        optimizer, named_parameters=model.named_parameters()
-    )
+    if args.no_rma:
+        print("Use neighbor collective")
+        optimizer = bf.DistributedConsensusOptimizer(
+            optimizer, named_parameters=model.named_parameters()
+        )
+    else:
+        print("Use win_put ops.")
+        optimizer = bf.DistributedBluefogOptimizer(
+            optimizer, named_parameters=model.named_parameters()
+        )
 else:
     optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
