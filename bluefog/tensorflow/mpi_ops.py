@@ -41,7 +41,7 @@ local_rank = _basics.local_rank
 mpi_threads_supported = _basics.mpi_threads_supported
 load_topology = _basics.load_topology
 set_topology = _basics.set_topology
-in_neighbour_ranks = _basics.in_neighbour_ranks
+in_neighbor_ranks = _basics.in_neighbor_ranks
 out_neighbor_ranks = _basics.out_neighbor_ranks
 
 # This function will create a default device map which includes all visible devices.

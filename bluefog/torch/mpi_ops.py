@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 import torch
 
 from bluefog.torch import mpi_lib  # C library
@@ -16,7 +16,7 @@ local_rank = _basics.local_rank
 mpi_threads_supported = _basics.mpi_threads_supported
 load_topology = _basics.load_topology
 set_topology = _basics.set_topology
-in_neighbour_ranks = _basics.in_neighbour_ranks
+in_neighbor_ranks = _basics.in_neighbor_ranks
 out_neighbor_ranks = _basics.out_neighbor_ranks
 
 # Schema: handle -> input, output
@@ -461,16 +461,32 @@ def _win_sync_function_factory(tensor):
     return 'bluefog_torch_win_sync_' + tensor.type().replace('.', '_')
 
 
-def win_sync(name: str) -> torch.Tensor:
+def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
 
     Args:
-        name (str): The unique name to associate the window object.
+        name: The unique name to associate the window object.
+        weights: If weights is presented, the return tensor will return the weighted average
+            defined by this weights. The data structure of weights should be {rank : weight}
+           and rank has to belonge the neighbors.
 
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
+
+    Note: Weights here will be useful if you need a dynamic weighted average, i.e. the weights
+    change with the iterations. If static weight need, then setting the weights through the
+    win_create is a better choice. TODO(ybc) add weights setting in win_create.
     """
     tensor = _win_map[name]
+    if weights is not None:
+        if not isinstance(weights, dict):
+            raise ValueError("Argument weights has to be a dictionary map from the (in-)neighbor "
+                             "rank to the weights.")
+        if not set(weights.keys()).issubset(set(in_neighbor_ranks())):
+            raise ValueError(
+                "dst_ranks should only contain the ranks that belong to out-neighbors.")
+        raise NotImplementedError("win_sync with weights hasn't been supported yet.")
+
     function = _check_function(_win_sync_function_factory, tensor)
     if not getattr(mpi_lib, function)(tensor, name):
         raise RuntimeError("Cannot apply win_sync on " + name)
@@ -563,8 +579,8 @@ def win_get(tensor: torch.Tensor, name: str,
         `synchronize()`.
     """
     function = _check_function(_win_get_function_factory, tensor)
-    src_ranks = in_neighbour_ranks() if src_ranks is None else src_ranks
-    if not set(src_ranks).issubset(set(in_neighbour_ranks())):
+    src_ranks = in_neighbor_ranks() if src_ranks is None else src_ranks
+    if not set(src_ranks).issubset(set(in_neighbor_ranks())):
         raise ValueError(
             "src_ranks should only contain the ranks that belong to in-neighbors.")
     handle = getattr(mpi_lib, function)(

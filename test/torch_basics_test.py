@@ -61,7 +61,7 @@ class BasicsTests(unittest.TestCase):
         rank, size = mpi_env_rank_and_size()
         bf.init()
         bf.set_topology(PowerTwoRingGraph(size))
-        in_neighobrs = bf.in_neighbour_ranks()
+        in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
         degree = int(np.ceil(np.log2(size)))
@@ -76,7 +76,7 @@ class BasicsTests(unittest.TestCase):
         rank, size = mpi_env_rank_and_size()
         bf.init()
         bf.set_topology(BiRingGraph(size))
-        in_neighobrs = bf.in_neighbour_ranks()
+        in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
         expected_in_neighbors = list(set(

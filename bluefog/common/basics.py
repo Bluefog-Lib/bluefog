@@ -115,26 +115,26 @@ class BlueFogBasics(object):
         """
         return self._topology
 
-    def in_neighbour_ranks(self) -> List[int]:
+    def in_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all in-neighbors.
         Notice: No matter self-loop is presented or not, self rank will not be included.
 
         Returns:
-            List[int]: in_neighbour_ranks
+            List[int]: in_neighbor_ranks
         """
         if self._topology is None:
             return []
         _rank = self.rank()
-        in_neighbour_ranks = [r for r in self._topology.predecessors(self.rank())
+        in_neighbor_ranks = [r for r in self._topology.predecessors(self.rank())
                               if r != _rank]
-        return in_neighbour_ranks
+        return in_neighbor_ranks
 
     def out_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all out-neighbors.
         Notice: No matter self-loop is presented or not, self rank will not be included.
 
         Returns:
-            List[int]: out_neighbour_ranks
+            List[int]: out_neighbor_ranks
         """
         if self._topology is None:
             return []
