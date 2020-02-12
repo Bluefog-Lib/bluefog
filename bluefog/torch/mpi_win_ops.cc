@@ -136,6 +136,31 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   return true;
 }
 
+bool WinTorchStorageManager::AvgWithNeighbor(
+    const std::string& name, ::torch::Tensor local_tensor,
+    const std::unordered_map<int, float>& weights) {
+  auto it = tensors_map_.find(name);
+  if (it == tensors_map_.end()) {
+    return false;
+  }
+  
+  auto neighbor_map = it->second;
+  float self_weight = 0.0;
+  if(weights.find(common::bluefog_rank()) != weights.end()) {
+    self_weight = static_cast<float>(weights.at(common::bluefog_rank()));
+  }
+  local_tensor.mul_(self_weight);
+
+  for(auto& kv: weights) {
+    int rank = kv.first;
+    if(rank == common::bluefog_rank()) continue;
+    float weight = kv.second;
+    auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
+    local_tensor.add_(neighbor_tesnor.mul_(weight));
+  }
+  return true;
+}
+
 int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
@@ -156,8 +181,20 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name) {
 
   Status status = common::WindowSync(name);
 
-  // Average with neighbors happens in-place.
+  // Averaging with neighbors' tensors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, tensor)) return 0;
+
+  return 1;
+}
+
+int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
+                      const std::unordered_map<int, float>& weights) {
+  ThrowIfError(common::CheckInitialized());
+
+  Status status = common::WindowSync(name);
+
+  // Weighted averaging with neighbors' tensors happens in-place.
+  if (!win_storage_manager.AvgWithNeighbor(name, tensor, weights)) return 0;
 
   return 1;
 }
@@ -259,6 +296,17 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_sync_torch_cuda_LongTensor", &DoWinSync);
   m.def("bluefog_torch_win_sync_torch_cuda_FloatTensor", &DoWinSync);
   m.def("bluefog_torch_win_sync_torch_cuda_DoubleTensor", &DoWinSync);
+#endif
+
+  m.def("bluefog_torch_win_sync_with_weights_torch_IntTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_LongTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_FloatTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_DoubleTensor", &DoWinSyncWeighted);
+#if HAVE_CUDA
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_IntTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_LongTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_FloatTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_DoubleTensor", &DoWinSyncWeighted);
 #endif
 
   m.def("bluefog_torch_win_put_torch_IntTensor", &DoWinPut);

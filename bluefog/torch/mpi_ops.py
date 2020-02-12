@@ -31,8 +31,8 @@ _win_map = {}
 _win_handle_map = {}
 
 
-def _check_function(function_factory, tensor):
-    function = function_factory(tensor)
+def _check_function(function_factory, tensor, *args):
+    function = function_factory(tensor, *args)
     if not hasattr(mpi_lib, function):
         raise ValueError('Tensor type %s is not supported.' % tensor.type())
     if not tensor.is_contiguous():
@@ -422,6 +422,7 @@ def _win_create_function_factory(tensor):
 def win_create(tensor: torch.Tensor, name: str) -> bool:
     """ Create MPI window for remote memoery access. The window is dedicated to
     the provided tensor only, which is identified by unqiue name. It is blocking operations.
+    The initial value of MPI windows for neighbor is the same as input tensor.
 
     Args:
         tensor (torch.Tensor): Provide the size, data type, and/or memory for window.
@@ -457,8 +458,10 @@ def win_free(name: str = None) -> bool:
     return getattr(mpi_lib, 'bluefog_torch_win_free')(name)
 
 
-def _win_sync_function_factory(tensor):
-    return 'bluefog_torch_win_sync_' + tensor.type().replace('.', '_')
+def _win_sync_function_factory(tensor, weights):
+    return ('bluefog_torch_win_sync_'
+            + ('with_weights_' if weights else '')
+            + tensor.type().replace('.', '_'))
 
 
 def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
@@ -468,7 +471,7 @@ def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
         name: The unique name to associate the window object.
         weights: If weights is presented, the return tensor will return the weighted average
             defined by this weights. The data structure of weights should be {rank : weight}
-           and rank has to belonge the neighbors.
+            and rank has to belonge the (in-)neighbors and self.
 
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
@@ -478,16 +481,20 @@ def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
     win_create is a better choice. TODO(ybc) add weights setting in win_create.
     """
     tensor = _win_map[name]
+    function = _check_function(_win_sync_function_factory, tensor, weights)
     if weights is not None:
+        # Pre-condition check for weights dictionary.
         if not isinstance(weights, dict):
             raise ValueError("Argument weights has to be a dictionary map from the (in-)neighbor "
                              "rank to the weights.")
-        if not set(weights.keys()).issubset(set(in_neighbor_ranks())):
-            raise ValueError(
-                "dst_ranks should only contain the ranks that belong to out-neighbors.")
-        raise NotImplementedError("win_sync with weights hasn't been supported yet.")
+        if not set(weights.keys()).issubset(set(in_neighbor_ranks() + [rank()])):
+            raise ValueError("The key of weights should only contain the ranks that belong to "
+                             " in-neighbors and self ranks.")
 
-    function = _check_function(_win_sync_function_factory, tensor)
+        if not getattr(mpi_lib, function)(tensor, name, weights):
+            raise RuntimeError("Cannot apply win_sync on " + name)
+        return tensor
+
     if not getattr(mpi_lib, function)(tensor, name):
         raise RuntimeError("Cannot apply win_sync on " + name)
     return tensor

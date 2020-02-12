@@ -92,6 +92,39 @@ class WinOpsTests(unittest.TestCase):
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
 
+    def test_win_sync_with_weights(self):
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test win_put since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_create_{}_{}".format(dim, dtype)
+            is_created = bf.win_create(tensor, window_name)
+            assert is_created, "bf.win_create do not create window object successfully."
+
+            # Test simple average rule.
+            sync_result = bf.win_sync(window_name,
+                                      weights={x: 1.0/(len(bf.in_neighbor_ranks())+1)
+                                               for x in bf.in_neighbor_ranks() + [bf.rank()]}
+                                      )
+            assert bf.win_fence(window_name)
+            assert (list(sync_result.shape) == [23] * dim), (
+                "bf.win_sync (weighted) produce wrong shape tensor.")
+            assert (sync_result.data - rank).abs().max() < EPSILON, (
+                "bf.win_sync after win_put produces wrong tensor value " +
+                "[{}-{}]!={} at rank {}.".format(sync_result.min(),
+                                                 sync_result.max(), rank, rank))
+
     def test_win_put_blocking(self):
         """Test that the window put operation."""
         size = bf.size()
