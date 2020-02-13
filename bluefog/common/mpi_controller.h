@@ -43,6 +43,7 @@ class MPIController {
   void NeighborAllreduce(TensorTableEntry& entries);
   void WinPut(TensorTableEntry& entries);
   void WinGet(TensorTableEntry& entries);
+  void Barrier(TensorTableEntry& entry);
 
   int SetTopology(int indegree, const int* sources, int outdegree,
                   const int* destinations);
@@ -56,7 +57,6 @@ class MPIController {
   Status WinFreeAll();
   Status WinSync(const std::string& name);
   Status WinFence(const std::string& name);
-  Status Barrier();
 
  protected:
   // Outside dependencies

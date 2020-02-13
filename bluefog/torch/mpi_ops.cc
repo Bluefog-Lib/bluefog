@@ -179,9 +179,14 @@ void WaitAndClear(int handle) {
 
 void Barrier() {
   ThrowIfError(common::CheckInitialized());
+  auto handle = handle_manager.AllocateHandle();
 
-  auto status = common::Barrier();
+  auto status = common::Barrier([handle](const Status& status) {
+    handle_manager.MarkDone(handle, status);
+  });
   ThrowIfError(status);
+  // Wait until the barrier is done.
+  WaitAndClear(handle);
 }
 
 // Forward declare function to add all functions in mpi_win_ops into mpi_lib module.

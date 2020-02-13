@@ -414,12 +414,12 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
-Status MPIController::Barrier() {
+void MPIController::Barrier(TensorTableEntry& entry) {
   int ret_code = MPI_Barrier(mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (ret_code != MPI_SUCCESS) {
       throw std::runtime_error("MPI_Barrier failed, see MPI output for details.");
   }
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
 }  // namespace common

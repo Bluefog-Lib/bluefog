@@ -103,7 +103,7 @@ Status WindowFree(const std::string& name);
 
 Status WindowFence(const std::string& name);
 
-Status Barrier();
+Status Barrier(StatusCallback callback);
 
 }  // namespace common
 }  // namespace bluefog

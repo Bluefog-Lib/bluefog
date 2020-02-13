@@ -98,6 +98,11 @@ bool RunLoopOnce(BluefogGlobalState& state) {
           << "Processing WIN_GET on " << entry.tensor_name;
       state.controller->WinGet(entry);
       break;
+    case MPIOpsType::BARRIER:
+      LOG(TRACE, bluefog_global.controller->GetRank())
+          << "Processing Barrier now ";
+      state.controller->Barrier(entry);
+      break;
     default:
       throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
     }
@@ -439,17 +444,15 @@ Status WindowFence(const std::string& name) {
 
 }
 
-Status Barrier() {
+Status Barrier(StatusCallback callback) {
+  TensorTableEntry e;
+  e.callback = callback;
+  e.mpi_ops_type = MPIOpsType::BARRIER;
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->Barrier();
-
-  if (!status.ok()) {
-    LOG(ERROR) << "Barrier function failed, see MPI output for details.";
-    LOG(ERROR) << status.reason();
-  }
-
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
   return status;
 }
 

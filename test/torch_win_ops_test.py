@@ -152,7 +152,7 @@ class WinOpsTests(unittest.TestCase):
             bf.win_create(tensor, window_name)
 
             bf.win_put_blocking(tensor, window_name)
-            bf.allreduce(torch.FloatTensor([1]))  # Use allreduce as a barrier.
+            bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
                 "bf.win_sync after win_put produces wrong shape tensor.")
@@ -193,7 +193,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_put_blocking(tensor, window_name, [(rank+1) % size])
-            bf.allreduce(torch.FloatTensor([1]))  # Use allreduce as a barrier.
+            bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
                 "bf.win_sync after win_put given destination produces wrong shape tensor.")
@@ -234,9 +234,10 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             recv_tensor = tensor.clone()
-            bf.allreduce(torch.FloatTensor([1]))  # Use allreduce as a barrier.
+            bf.barrier()
+
             bf.win_get_blocking(recv_tensor, window_name, average=True)
-            bf.allreduce(torch.FloatTensor([1]))  # Use allreduce as a barrier.
+            bf.barrier()
 
             assert (list(tensor.shape) == [3] * dim), (
                 "bf.win_get produce wrong shape tensor.")
@@ -277,11 +278,12 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             recv_tensor = tensor.clone()
-            bf.allreduce(torch.FloatTensor([1]))  # Use allreduce as a barrier.
+            bf.barrier()
 
             bf.win_get_blocking(recv_tensor, window_name, src_ranks=[(rank-1) % size],
                                 average=True)
-            bf.allreduce(torch.FloatTensor([1]))  # Use allreduce as a barrier.
+            bf.barrier()
+
             assert (list(recv_tensor.shape) == [3] * dim), (
                 "bf.win_get with given sources produces wrong shape tensor.")
             assert (recv_tensor.data - avg_value).abs().max() < EPSILON, (

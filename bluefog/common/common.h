@@ -58,6 +58,7 @@ enum class MPIOpsType {
   WIN_PUT = 6,
   WIN_GET = 7,
   WIN_ACCUMULATE = 8,
+  BARRIER=9,
 };
 
 inline std::string CommunicatorName(Communicator comm) {
