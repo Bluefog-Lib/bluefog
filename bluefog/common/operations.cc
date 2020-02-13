@@ -240,9 +240,6 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
@@ -265,9 +262,6 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
@@ -288,9 +282,6 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
@@ -310,9 +301,6 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
@@ -334,9 +322,6 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
@@ -357,9 +342,6 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
@@ -380,9 +362,6 @@ Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  if (status.ok()) {
-    LOG(TRACE, bluefog_global.controller->GetRank()) << "Enqueued " << name;
-  }
   return status;
 }
 
