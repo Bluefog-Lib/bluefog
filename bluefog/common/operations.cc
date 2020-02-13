@@ -88,6 +88,15 @@ bool RunLoopOnce(BluefogGlobalState& state) {
           << "Processing " << entry.tensor_name;
       state.controller->NeighborAllreduce(entry);
       break;
+    case MPIOpsType::BARRIER:
+      LOG(TRACE, bluefog_global.controller->GetRank())
+          << "Processing Barrier now ";
+      state.controller->Barrier(entry);
+      break;
+    // TODO(ybc) All above Ops are collective ops. If the order
+    // is disarranged, the whole process will hang. This is possible in
+    // tensorflow. For example, if two ops are not control dependent to each other,
+    // the order of allreduce request by them are undeterminisitc.
     case MPIOpsType::WIN_PUT:
       LOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing WIN_PUT on " << entry.tensor_name;
@@ -97,11 +106,6 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       LOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing WIN_GET on " << entry.tensor_name;
       state.controller->WinGet(entry);
-      break;
-    case MPIOpsType::BARRIER:
-      LOG(TRACE, bluefog_global.controller->GetRank())
-          << "Processing Barrier now ";
-      state.controller->Barrier(entry);
       break;
     default:
       throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
