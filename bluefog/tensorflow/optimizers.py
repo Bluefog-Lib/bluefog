@@ -28,7 +28,7 @@ def _make_broadcast_group_fn():
     if _executing_eagerly():
         # Eager mode will parallelize independent control flow
         def broadcast_group(variables, root_rank):
-            for var in variables:
+            for var in sorted(variables, key=__name__):
                 var.assign(broadcast(var, root_rank))
 
         if hasattr(tf, 'function'):
