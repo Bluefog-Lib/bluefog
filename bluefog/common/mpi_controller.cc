@@ -192,7 +192,22 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
     neighbor_out_ranks_.push_back(destinations[i]);
   }
   std::sort(neighbor_out_ranks_.begin(), neighbor_out_ranks_.end());
+  return 1;
+}
 
+int MPIController::SetTopologyWeights(int indegree, const int* sources,
+                                      const float* weights) {
+  // We assume when this function is called, the base topology has already
+  // been set. The order of corresponding ranks of weights is always
+  //  [self-rank, ...sources]
+  if (!mpi_ctx_.IsTopoSetup()) {
+    return -1;
+  }
+  neighbor_weights_[rank_] = weights[0];
+  for (int i =0; i<indegree; i++) {
+    neighbor_weights_[sources[i]] = weights[i+1];
+  } 
+  is_weighted_ = true;
   return 1;
 }
 

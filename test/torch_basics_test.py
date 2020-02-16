@@ -45,10 +45,11 @@ class BasicsTests(unittest.TestCase):
         _, size = mpi_env_rank_and_size()
         if size == 4:
             expected_topology = nx.DiGraph(np.array(
-                [[0, 1, 1, 0], [0, 0, 1, 1], [1, 0, 0, 1], [1, 1, 0, 0]]
+                [[1/3., 1/3., 1/3., 0.], [0., 1/3., 1/3., 1/3.],
+                 [1/3., 0., 1/3., 1/3.], [1/3., 1/3., 0., 1/3.]]
             ))
         elif size == 1:
-            expected_topology = nx.DiGraph(np.array([[0]]))
+            expected_topology = nx.DiGraph(np.array([[1.0]]))
         else:
             expected_topology = PowerTwoRingGraph(size)
         bf.init()

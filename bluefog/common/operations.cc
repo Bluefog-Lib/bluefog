@@ -217,6 +217,16 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
                                                 destinations);
 }
 
+int bluefog_set_topology_with_weights(int indegree, const int* sources,
+                                      int outdegree, const int* destinations,
+                                      const float* source_weights){
+  int ret = bluefog_set_topology(indegree, sources, outdegree, destinations);
+  if (ret != 1) {
+    return ret;
+  }
+  return bluefog_global.controller->SetTopologyWeights(indegree, sources, source_weights);
+}
+
 int bluefog_load_topology(int* indegree, int*& sources, int* outdegree,
                           int*& destinations) {
   if (!bluefog_global.initialization_done) {

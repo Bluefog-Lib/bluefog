@@ -48,6 +48,13 @@ int bluefog_neighbor_size();
 int bluefog_set_topology(int indegree, const int* sources, 
                          int outdegree, const int* destinations);
 
+// C interface to set the virtual topology for MPI graph communicator with
+// weights. Also, the corresponding graph communicator is created. Returns -1 if
+// Bluefog is not initialized or failed.
+int bluefog_set_topology_with_weights(int indegree, const int* sources,
+                                      int outdegree, const int* destinations,
+                                      const float* source_weights);
+
 // C interface to load the virtual topology for MPI graph communicator.
 // Returns -1 if Bluefog is not initialized or failed.
 int bluefog_load_topology(int* indegree, int*& sources, 

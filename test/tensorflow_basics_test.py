@@ -46,10 +46,11 @@ class BasicsTests(tf.test.TestCase):
         _, size = mpi_env_rank_and_size()
         if size == 4:
             expected_topology = nx.DiGraph(np.array(
-                [[0, 1, 1, 0], [0, 0, 1, 1], [1, 0, 0, 1], [1, 1, 0, 0]]
+                [[1/3., 1/3., 1/3., 0.], [0., 1/3., 1/3., 1/3.],
+                 [1/3., 0., 1/3., 1/3.], [1/3., 1/3., 0., 1/3.]]
             ))
         elif size == 1:
-            expected_topology = nx.DiGraph(np.array([[0]]))
+            expected_topology = nx.DiGraph(np.array([[1.0]]))
         else:
             expected_topology = PowerTwoRingGraph(size)
         bf.init()
@@ -57,7 +58,7 @@ class BasicsTests(tf.test.TestCase):
         assert isinstance(topology, nx.DiGraph)
         np.testing.assert_array_equal(
             nx.to_numpy_array(expected_topology), nx.to_numpy_array(topology))
-    
+
     def test_in_out_neighbors_power2(self):
         rank, size = mpi_env_rank_and_size()
         bf.init()
@@ -84,7 +85,7 @@ class BasicsTests(tf.test.TestCase):
             map(lambda x: x % size, [rank - 1, rank + 1])))
         expected_out_neighbors = list(set(
             map(lambda x: x % size, [rank - 1, rank + 1])))
-        
+
         if size <= 1:
             expected_in_neighbors = []
             expected_out_neighbors = []

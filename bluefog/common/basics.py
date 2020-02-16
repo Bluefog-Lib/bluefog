@@ -130,7 +130,7 @@ class BlueFogBasics(object):
             return []
         _rank = self.rank()
         in_neighbor_ranks = [r for r in self._topology.predecessors(self.rank())
-                              if r != _rank]
+                             if r != _rank]
         return in_neighbor_ranks
 
     def out_neighbor_ranks(self) -> List[int]:
@@ -160,9 +160,13 @@ class BlueFogBasics(object):
 
         Returns:
             bool: Whether topology is set correctly or not.
+
+        Example:
+            >>> import bluefog.torch as bf
+            >>> from bluefog.common import topology_util
+            >>> bf.init()
+            >>> bf.set_topology(topology_util.BiRingGraph(bf.size()))
         """
-        if is_weighted:
-            raise NotImplementedError("Weighted topology has not been implemented yet!")
         if topology is None:
             topology = topology_util.PowerTwoRingGraph(size=self.size())
             if self.local_rank() == 0:
@@ -177,20 +181,37 @@ class BlueFogBasics(object):
                     "Topology to set is the same as old one. Skip the setting.")
             return True
 
-        destinations = list(topology.successors(self.rank()))
-        sources = list(topology.predecessors(self.rank()))
+        # We remove the self-rank for any cases because MPI graph_comm do not include it.
+        destinations = [r for r in topology.successors(self.rank())
+                        if r != self.rank()]
+        sources = [r for r in topology.predecessors(self.rank())
+                   if r != self.rank()]
         indegree = len(sources)
         outdegree = len(destinations)
         sources_type = ctypes.c_int * indegree
         destinations_type = ctypes.c_int * outdegree
 
-        self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
-            [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
-             ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
-        )
-        ret = self.MPI_LIB_CTYPES.bluefog_set_topology(
-            indegree, sources_type(*sources),
-            outdegree, destinations_type(*destinations))
+        if not is_weighted:
+            self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
+                [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
+                 ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+            )
+            ret = self.MPI_LIB_CTYPES.bluefog_set_topology(
+                indegree, sources_type(*sources),
+                outdegree, destinations_type(*destinations))
+        else:
+            source_weights = topology_util.GetWeights(topology, self.rank())
+            source_weights_type = ctypes.c_int * \
+                (indegree+1)  # +1 becuase of self-weights
+            self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
+                [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
+                 ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+            )
+            ret = self.MPI_LIB_CTYPES.bluefog_set_topology_with_weights(
+                indegree, sources_type(*sources),
+                outdegree, destinations_type(*destinations),
+                source_weights_type(*source_weights)
+            )
         if ret != 1:
             if self.local_rank() == 0:
                 logger.error(
