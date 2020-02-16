@@ -36,22 +36,32 @@ class WinTorchStorageManager {
   bool GetStorageByname(const std::string& name,
                         std::vector<std::shared_ptr<common::Tensor>>& tensors);
   
-  // Sum the local tensor with the neighbor tensors. If source ranks are not
-  // provided it will sum up all the neighbor tensors.
+  // Sum the local tensor with all neighbor tensors.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
-  bool SumWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      const std::vector<int>& source_ranks);
-
-  // Same as SumWithNeighbor except we will divided by the number of in_neighbor
-  // or the size of provided source_ranks.
+  
+  // Average the local tensor with neighbor tensors
+  // If the weights is set in the mpi_context class, then weighted average will
+  // be executed.
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
-  bool AvgWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      const std::vector<int>& source_ranks);
+
+  // Weighted Average the local tensor with neighbor tensors according to weights map.
+  // Weights map { rank: weights }. Rank has to be neighbor ranks or self rank.
+  // The sum weights are not necessary to be 1.
+  // No matter the weights in the mpi_context class is set or not, weights provided in
+  // the argument will override it.
   bool AvgWithNeighbor(
       const std::string& name, ::torch::Tensor local_tensor,
       const std::unordered_map<int, float>& weights);
+
+  
+  // This is just utility functions and never used the weights defined in the
+  // the mpi_context.
+  bool SumWithNeighbor(
+      const std::string& name, ::torch::Tensor local_tensor,
+      const std::vector<int>& source_ranks);
+  bool AvgWithNeighbor(
+      const std::string& name, ::torch::Tensor local_tensor,
+      const std::vector<int>& source_ranks);
   
   // Clear all storage/reference to neighbor TorchTensor.
   void ClearAll();

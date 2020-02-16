@@ -192,6 +192,7 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
     neighbor_out_ranks_.push_back(destinations[i]);
   }
   std::sort(neighbor_out_ranks_.begin(), neighbor_out_ranks_.end());
+  mpi_ctx_.DisableTopoWeights();
   return 1;
 }
 
@@ -207,7 +208,7 @@ int MPIController::SetTopologyWeights(int indegree, const int* sources,
   for (int i =0; i<indegree; i++) {
     neighbor_weights_[sources[i]] = weights[i+1];
   } 
-  is_weighted_ = true;
+  mpi_ctx_.EnableTopoWeights();
   return 1;
 }
 
@@ -217,6 +218,14 @@ int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
   sources = &neighbor_in_ranks_[0];
   *outdegree = neighbor_out_ranks_.size();
   destinations = &neighbor_out_ranks_[0];
+  return 1;
+}
+
+int MPIController::LoadTopologyWeights(std::unordered_map<int, float>*& neighbor_weights) {
+  if (!mpi_ctx_.IsWeighted()) {
+    return -1;
+  }
+  neighbor_weights = &neighbor_weights_;
   return 1;
 }
 

@@ -13,6 +13,7 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
+from bluefog.common import topology_util
 
 
 EPSILON = 1e-5
@@ -92,7 +93,7 @@ class WinOpsTests(unittest.TestCase):
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
 
-    def test_win_sync_with_weights(self):
+    def test_win_sync_with_given_weights(self):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -121,6 +122,44 @@ class WinOpsTests(unittest.TestCase):
             assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync (weighted) produce wrong shape tensor.")
             assert (sync_result.data - rank).abs().max() < EPSILON, (
+                "bf.win_sync after win_put produces wrong tensor value " +
+                "[{}-{}]!={} at rank {}.".format(sync_result.min(),
+                                                 sync_result.max(), rank, rank))
+
+    def test_win_sync_with_default_weights(self):
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test win_put since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        bf.set_topology(topology_util.StartGraph(size), is_weighted=True)
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_create_{}_{}".format(dim, dtype)
+            is_created = bf.win_create(tensor, window_name)
+            assert is_created, "bf.win_create do not create window object successfully."
+
+            # Note the buffers store the copy of original value so they will not change.
+            tensor.mul_(2)
+            if rank == 0:
+                expected_result = rank * 2 / size + rank * (size-1)/size
+            else:
+                expected_result = rank / size + rank * 2 * (1-1/size)
+
+            sync_result = bf.win_sync(window_name)
+            assert bf.win_fence(window_name)
+            assert (list(sync_result.shape) == [23] * dim), (
+                "bf.win_sync (weighted) produce wrong shape tensor.")
+            assert (sync_result.data - expected_result).abs().max() < EPSILON, (
                 "bf.win_sync after win_put produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), rank, rank))

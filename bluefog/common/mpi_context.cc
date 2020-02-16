@@ -150,6 +150,7 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
 
   // The real graph communicator creatation is late.
   graph_comm = MPI_COMM_NULL;
+  DisableTopoWeights();
 }
 
 void MPIContext::Finalize(MPIContextManager& ctx_manager) {
@@ -170,6 +171,7 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
   if (graph_comm != MPI_COMM_NULL) {
     MPI_Comm_free(&graph_comm);
+    DisableTopoWeights();
   }
 
   // TODO(ybc) Figure it out better way to manager the memory.

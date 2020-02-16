@@ -155,8 +155,8 @@ class BlueFogBasics(object):
           Topo: A networkx. DiGraph object to decide the topology. If not provided
             a default power_two_ring structure is used.
           is_weighted: If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
-            execute the weighted average instead, where the weight is the value used in
-            topology matrix (including self).
+            execute the weighted average instead, where the weights are the value used in
+            topology matrix (including self weights).
 
         Returns:
             bool: Whether topology is set correctly or not.
@@ -201,11 +201,12 @@ class BlueFogBasics(object):
                 outdegree, destinations_type(*destinations))
         else:
             source_weights = topology_util.GetWeights(topology, self.rank())
-            source_weights_type = ctypes.c_int * \
+            source_weights_type = ctypes.c_float * \
                 (indegree+1)  # +1 becuase of self-weights
             self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
                 [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
-                 ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+                 ctypes.c_int, ctypes.POINTER(ctypes.c_int),
+                 ctypes.POINTER(ctypes.c_float)]
             )
             ret = self.MPI_LIB_CTYPES.bluefog_set_topology_with_weights(
                 indegree, sources_type(*sources),
@@ -224,5 +225,6 @@ class BlueFogBasics(object):
                     "   change the topology while there is undone MPI ops."
                 )
             return False
+        logger.info("Topology set with {}".format(topology))
         self._topology = topology
         return True

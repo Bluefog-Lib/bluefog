@@ -53,6 +53,9 @@ struct MPIContext {
 
   bool IsEnabled() { return enabled_; }
   bool IsTopoSetup() { return topo_setup_; }
+  bool IsWeighted() { return is_weighted_; }
+  void EnableTopoWeights() { is_weighted_ = true; }
+  void DisableTopoWeights() { is_weighted_ = false; }
 
   // Take an argument of context manager pointer that will take care of
   // initialization of MPI environment.
@@ -83,6 +86,7 @@ struct MPIContext {
   // TODO(ybc) We need a topo finialized flag. After it turns ture, no more
   // modification of topology.
   bool topo_setup_ = false;
+  bool is_weighted_ = false;
 
   // Private MPI communicator for Bluefog to ensure no collisions with other
   // threads using MPI.

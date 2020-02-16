@@ -14,8 +14,9 @@
 namespace bluefog {
 namespace torch {
 
-using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::bluefog_load_topology;
+using ::bluefog::common::bluefog_load_topology_weights;
+using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::Status;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
@@ -101,39 +102,21 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
   return true;
 }
 
-bool WinTorchStorageManager::SumWithNeighbor(
-    const std::string& name, ::torch::Tensor local_tensor,
-    const std::vector<int>& source_ranks) {
-  if (tensors_map_.find(name) == tensors_map_.end()) {
-    return false;
-  }
-  std::unordered_map<int, std::shared_ptr<TorchTensor>> neighbor_map =
-      tensors_map_.at(name);
-  for (int rank : source_ranks) {
-    local_tensor.add_(neighbor_map.at(rank)->GetUnderlyingTensor());
-  }
-  return true;
-}
-
 bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
                                              ::torch::Tensor local_tensor) {
-  if (!SumWithNeighbor(name, local_tensor)) {
-    return false;
+  std::unordered_map<int, float>* weights;
+  int is_weighted = bluefog_load_topology_weights(weights);
+  if (is_weighted == 1) {
+    return AvgWithNeighbor(name, local_tensor, *weights);
+  } else {
+    // By default we use the (uniform) average.
+    if (!SumWithNeighbor(name, local_tensor)) {
+      return false;
+    }
+    // +1 here because in neighbor degree doesn't include self rank.
+    local_tensor.div_(in_neighbor_degree_ + 1);
+    return true;
   }
-  // +1 here because in neighbor degree doesn't include self rank.
-  local_tensor.div_(in_neighbor_degree_ + 1);
-  return true;
-}
-
-bool WinTorchStorageManager::AvgWithNeighbor(
-    const std::string& name, ::torch::Tensor local_tensor,
-    const std::vector<int>& source_ranks) {
-  if (!SumWithNeighbor(name, local_tensor, source_ranks)) {
-    return false;
-  }
-  // +1 here because source_ranks doesn't include self rank.
-  local_tensor.div_(static_cast<int>(source_ranks.size()) + 1);
-  return true;
 }
 
 bool WinTorchStorageManager::AvgWithNeighbor(
@@ -158,6 +141,31 @@ bool WinTorchStorageManager::AvgWithNeighbor(
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul_(weight));
   }
+  return true;
+}
+
+bool WinTorchStorageManager::SumWithNeighbor(
+    const std::string& name, ::torch::Tensor local_tensor,
+    const std::vector<int>& source_ranks) {
+  if (tensors_map_.find(name) == tensors_map_.end()) {
+    return false;
+  }
+  std::unordered_map<int, std::shared_ptr<TorchTensor>> neighbor_map =
+      tensors_map_.at(name);
+  for (int rank : source_ranks) {
+    local_tensor.add_(neighbor_map.at(rank)->GetUnderlyingTensor());
+  }
+  return true;
+}
+
+bool WinTorchStorageManager::AvgWithNeighbor(
+    const std::string& name, ::torch::Tensor local_tensor,
+    const std::vector<int>& source_ranks) {
+  if (!SumWithNeighbor(name, local_tensor, source_ranks)) {
+    return false;
+  }
+  // +1 here because source_ranks doesn't include self rank.
+  local_tensor.div_(static_cast<int>(source_ranks.size()) + 1);
   return true;
 }
 

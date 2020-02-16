@@ -60,6 +60,10 @@ int bluefog_set_topology_with_weights(int indegree, const int* sources,
 int bluefog_load_topology(int* indegree, int*& sources, 
                           int* outdegree, int*& destinations);
 
+// Load the weights for neighbors. 
+// TODO(ybc) Make it as C compatible interface.
+int bluefog_load_topology_weights(std::unordered_map<int, float>*& neighbor_weights);
+
 }
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
