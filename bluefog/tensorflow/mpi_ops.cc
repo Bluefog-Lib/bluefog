@@ -42,7 +42,7 @@ class BluefogAllreduceOp : public AsyncOpKernel {
     ::tensorflow::Tensor* output;
     OP_REQUIRES_OK_ASYNC(
         context, context->allocate_output(0, tensor.shape(), &output), done);
-    // ReadyEvent makes sure input tensor is ready, and output is allocated.
+
     auto bf_context = std::make_shared<TFOpContext>(context);
     auto bf_tensor = std::make_shared<TFTensor>(tensor);
     auto bf_output = std::make_shared<TFTensor>(*output);
@@ -182,7 +182,7 @@ public:
         });
     OP_REQUIRES_OK_ASYNC(context, ConvertStatus(enqueue_result), done);
   }
-};  // namespace tensorflow
+};
 
 REGISTER_KERNEL_BUILDER(
     Name("BluefogAllgather").Device(::tensorflow::DEVICE_CPU),
