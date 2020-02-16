@@ -26,19 +26,23 @@ class BlueFogBasics(object):
         self._topology = None
         self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
-    def init(self, topology: networkx.DiGraph = None, comm=None) -> None:
+    def init(self, topology: networkx.DiGraph = None,
+             is_weighted: bool = False, comm=None):
         """A function that initializes BlueFog.
 
         Args:
-          Topo: A networkx. DiGraph object to decide the topology. If not provided
+          topology: A networkx. DiGraph object to decide the topology. If not provided
             a default power_two_ring structure is used.
+          is_weighted: If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
+            execute the weighted average instead, where the weight is the value used in
+            topology matrix (including self).
           comm: List specifying ranks for the communicator, relative to the MPI_COMM_WORLD
             communicator OR the MPI communicator to use. Given communicator will be duplicated.
             If None, BlueFog will use MPI_COMM_WORLD Communicator.
         """
         del comm  # TODO(ybc) Allow to duplicate other communicator.
         self.MPI_LIB_CTYPES.bluefog_init()
-        self.set_topology(topology)
+        self.set_topology(topology, is_weighted)
         atexit.register(self.shutdown)
 
     def shutdown(self) -> int:
@@ -143,16 +147,22 @@ class BlueFogBasics(object):
                               if r != _rank]
         return out_neighbor_ranks
 
-    def set_topology(self, topology: networkx.DiGraph = None) -> bool:
+    def set_topology(self, topology: networkx.DiGraph = None,
+                     is_weighted: bool = False) -> bool:
         """A funnction that set the virtual topology MPI used.
 
         Args:
           Topo: A networkx. DiGraph object to decide the topology. If not provided
             a default power_two_ring structure is used.
+          is_weighted: If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
+            execute the weighted average instead, where the weight is the value used in
+            topology matrix (including self).
 
         Returns:
             bool: Whether topology is set correctly or not.
         """
+        if is_weighted:
+            raise NotImplementedError("Weighted topology has not been implemented yet!")
         if topology is None:
             topology = topology_util.PowerTwoRingGraph(size=self.size())
             if self.local_rank() == 0:
