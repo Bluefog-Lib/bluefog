@@ -163,6 +163,7 @@ class WinOpsTests(unittest.TestCase):
                 "bf.win_sync after win_put produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), rank, rank))
+        assert bf.win_free()
 
     def test_win_put_blocking(self):
         """Test that the window put operation."""
