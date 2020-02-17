@@ -19,6 +19,7 @@ fault-tolerant, friendly to heterogeneuous environment, and easy to use.
    :maxdepth: 2
    :caption: API:
 
+   Bluefog Common API <common_api>
    Bluefog Torch API <torch_api>
 
 .. toctree::
