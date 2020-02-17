@@ -342,7 +342,9 @@ def neighbor_allreduce(tensor: torch.Tensor, average: bool = True,
     """
     A function that performs averaging or summation of the input tensor
     over the negihbors in the Bluefog processes, where neighbors always include the itself.
-    The input tensor is not modified.
+    The input tensor is not modified. If the topology setup is weighted, i.e. is_weighted in
+    initialization or SetTopology is True, the average step will execute the weighted average
+    instead of (uniformly) average.
 
     The reduction operation is keyed by the name. If name is not provided, an incremented
     auto-generated name is used. The tensor type and shape must be the same on all
