@@ -176,9 +176,13 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   mpi_ctx_.BuildGraphComm(indegree, sources, outdegree, destinations);
 
   // Get neighbor in/out size and ranks.
+  int unused_neighbor_is_weighted_ = -1;
   MPI_Dist_graph_neighbors_count(mpi_ctx_.graph_comm, &neighbor_indgree_,
-                                 &neighbor_outdgree_, &neighbor_is_weighted_);
+                                 &neighbor_outdgree_,
+                                 &unused_neighbor_is_weighted_);
 
+  // Clear the previous neighbor_in_ranks_ is necessary because we might
+  // change the topology.
   neighbor_in_ranks_.clear();
   neighbor_in_ranks_.reserve(indegree);
   for (int i = 0; i < indegree; i++) {
@@ -221,7 +225,7 @@ int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
   return 1;
 }
 
-int MPIController::LoadTopologyWeights(std::unordered_map<int, float>*& neighbor_weights) {
+int MPIController::LoadTopologyWeights(const std::unordered_map<int, float>*& neighbor_weights) {
   if (!mpi_ctx_.IsWeighted()) {
     return -1;
   }

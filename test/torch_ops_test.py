@@ -12,6 +12,7 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
+from bluefog.common import topology_util
 
 
 EPSILON = 1e-5
@@ -293,6 +294,41 @@ class OpsTests(unittest.TestCase):
             assert (
                 reduced_tensor.data.max() == sum_value
             ), "bf.neighbor_allreduce (sum) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_weighted_avg(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test neighbor allreduce(weighted avg) since size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
+
+        bf.set_topology(topology_util.StartGraph(size), is_weighted=True)
+
+        if rank == 0:
+            expect_result = (size-1) / 2
+        else:
+            expect_result = 0 * (1/size) + rank * (1-1/size)
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data - expect_result).abs().max() < EPSILON
+            ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced tensor"
+
 
     def test_neighbor_allgather(self):
         """Test that the neighbor all gather 1D, 2D, 3D tensors correctly."""

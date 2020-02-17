@@ -35,9 +35,9 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
 
 }  // namespace
 
-bool WinTorchStorageManager::RegisterWinName(const std::string& name,
-                                        const int device,
-                                        std::shared_ptr<TorchTensor> tensor) {
+bool WinTorchStorageManager::RegisterWinName(
+    const std::string& name, const int device,
+    std::shared_ptr<TorchTensor> tensor) {
   if (tensors_map_.find(name) != tensors_map_.end()) {
     return false;
   }
@@ -104,7 +104,7 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
 
 bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
                                              ::torch::Tensor local_tensor) {
-  std::unordered_map<int, float>* weights;
+  const std::unordered_map<int, float>* weights;
   int is_weighted = bluefog_load_topology_weights(weights);
   if (is_weighted == 1) {
     return AvgWithNeighbor(name, local_tensor, *weights);

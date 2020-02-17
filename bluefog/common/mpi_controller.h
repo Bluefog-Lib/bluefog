@@ -50,7 +50,7 @@ class MPIController {
   int SetTopologyWeights(int indegree, const int* sources, const float* weights);
   int LoadTopology(int* indegree, int*& sources, int* outdegree,
                    int*& destinations);
-  int LoadTopologyWeights(std::unordered_map<int, float>*& neighbor_weights_);
+  int LoadTopologyWeights(const std::unordered_map<int, float>*& neighbor_weights_);
 
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
@@ -83,7 +83,6 @@ class MPIController {
 
   int neighbor_indgree_ = -1;
   int neighbor_outdgree_ = -1;
-  int neighbor_is_weighted_ = -1;
 
   std::vector<int> neighbor_in_ranks_;
   std::vector<int> neighbor_out_ranks_;

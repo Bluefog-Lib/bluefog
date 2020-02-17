@@ -56,13 +56,14 @@ int bluefog_set_topology_with_weights(int indegree, const int* sources,
                                       const float* source_weights);
 
 // C interface to load the virtual topology for MPI graph communicator.
+// Self-rank is never included no matter self-loop is presented in setup or not.
 // Returns -1 if Bluefog is not initialized or failed.
 int bluefog_load_topology(int* indegree, int*& sources, 
                           int* outdegree, int*& destinations);
 
 // Load the weights for neighbors. 
 // TODO(ybc) Make it as C compatible interface.
-int bluefog_load_topology_weights(std::unordered_map<int, float>*& neighbor_weights);
+int bluefog_load_topology_weights(const std::unordered_map<int, float>*& neighbor_weights);
 
 }
 

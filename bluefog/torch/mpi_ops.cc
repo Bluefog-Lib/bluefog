@@ -12,6 +12,8 @@
 namespace bluefog {
 namespace torch {
 
+using ::bluefog::common::bluefog_load_topology;
+using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::bluefog_rank;
 using ::bluefog::common::bluefog_size;
@@ -149,17 +151,58 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           shape_vector.push_back(tensor.size(idx));
         }
 
-        auto output_reduced = output.slice(0, 0, first_dim);
-        for (int i=1; i < bluefog_neighbor_size(); i++) {
-          output_reduced.add_(output.slice(0, i*first_dim, (i+1)*first_dim));
+        // 1) For a distributed graph topology, created with MPI_Dist_graph_create, 
+        // the sequence of neighbors in the send and receive buffers at each process 
+        // is defined as the sequence returned by MPI_Dist_graph_neighbors for 
+        // destinations and sources, respectively.
+        // 2) MPI_Dist_graph_neighbors: If the communicator was created with 
+        // MPI_Dist_graph_create_adjacent then the order of the values in sources and 
+        // destinations is identical to the input that was used by the process 
+        // with the same rank in comm_old in the creation call.
+        int indgree = 0;
+        int outdegree = 0;
+        int* sources_ptr = nullptr;
+        int* destinations_ptr = nullptr;
+        bluefog_load_topology(&indgree, sources_ptr,
+                              &outdegree, destinations_ptr);
+
+        const std::unordered_map<int, float>* weights_map_ptr;
+        int is_weighted = bluefog_load_topology_weights(weights_map_ptr);
+        // No matter the topology is weighted or not, if we do not need average
+        // for the neighbor allreduce result, the weights will not be used.
+        if (average && (is_weighted == 1)) {
+          auto output_reduced = output.slice(0, 0, first_dim);
+          for (int i = 0; i < indgree; i++) {
+            float weight = 0.0;
+            auto it = weights_map_ptr->find(*(sources_ptr + i));
+            if (it != weights_map_ptr->end()) {
+              weight = it->second;
+            }
+
+            if (i == 0) {
+              output_reduced.mul_(weight);
+            } else {
+              output_reduced.add_(
+                  output.slice(0, i * first_dim, (i + 1) * first_dim).mul_(weight));
+            }
+          }
+          output.resize_(shape_vector);
+          float self_weight = weights_map_ptr->at(bluefog_rank());
+          output.add_(tensor.mul_(self_weight));
+        } else {
+          auto output_reduced = output.slice(0, 0, first_dim);
+          for (int i = 1; i < bluefog_neighbor_size(); i++) {
+            output_reduced.add_(
+                output.slice(0, i * first_dim, (i + 1) * first_dim));
+          }
+          output.resize_(shape_vector);
+          // Include self data as well.
+          output.add_(tensor);
+          if (average) {
+            output.div_(bluefog_neighbor_size() + 1);
+          }
         }
-        output.resize_(shape_vector);
-        // Include self data as well.
-        output.add_(tensor);
-        // Will execute in the `device` context.
-        if (average) {
-          output.div_(bluefog_neighbor_size() + 1);
-        }
+
         handle_manager.MarkDone(handle, status);
       });
   ThrowIfError(enqueue_result);

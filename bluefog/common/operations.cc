@@ -236,7 +236,7 @@ int bluefog_load_topology(int* indegree, int*& sources, int* outdegree,
                                                  destinations);
 }
 
-int bluefog_load_topology_weights(std::unordered_map<int, float>*& neighbor_weights_) {
+int bluefog_load_topology_weights(const std::unordered_map<int, float>*& neighbor_weights_) {
   if (!bluefog_global.initialization_done) {
     return -1;
   }
