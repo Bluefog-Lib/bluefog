@@ -225,6 +225,5 @@ class BlueFogBasics(object):
                     "   change the topology while there is undone MPI ops."
                 )
             return False
-        logger.info("Topology set with {}".format(topology))
         self._topology = topology
         return True
