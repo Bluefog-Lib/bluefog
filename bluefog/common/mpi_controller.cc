@@ -300,27 +300,45 @@ Status MPIController::WinCreate(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
     const std::string& name, const int device) {
-  int neighbor_tensor_index = 0;
-
   WindowManager win_manager;
-  void* data_buf;
-  std::shared_ptr<MPI_Win> mpi_win_ptr;
-  int element_size;
-  int win_size;
 
+  // A global win hold the self memory, used by win_accumulate and win_get.
+  auto global_mpi_win_ptr = std::make_shared<MPI_Win>();
+  void* data_buf = (void*)tensor->data();
+  int element_size = mpi_ctx_.GetMPITypeSize(tensor->dtype());
+  int win_size = (tensor->shape().num_elements()) * element_size;
+  MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
+                 mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
+                 global_mpi_win_ptr.get());
+  win_manager.SetGlobalWin(global_mpi_win_ptr);
+
+  // Build extra buffers for win_put.
+  // For example: size=4 power two ring topology
+  // r\s   0    1    2    3 
+  //  0    g    x         x
+  //  1    x    g    x
+  //  2         x    g    x
+  //  3    x         x    g
+  //  The following for-loop scans along columns
+  //  and the self-rank determines the rows.
+  //  If there is connection, the window is associated with the neighbor_tensors.
+  //  Otherwise, window is associated with null pointer.
+  std::shared_ptr<MPI_Win> mpi_win_ptr;
+  int neighbor_tensor_index = 0;
   for (int rank = 0; rank < size_; rank++) {
     auto mpi_win_ptr = std::make_shared<MPI_Win>();
     if (rank == rank_) {
-      // Sender
-      data_buf = (void*)tensor->data();
-      element_size = mpi_ctx_.GetMPITypeSize(tensor->dtype());
-      win_size = (tensor->shape().num_elements()) * element_size;
+      // Sender (no need to allocate the memory with it.)
+      data_buf = nullptr;
+      element_size = 1;
+      win_size = 0;
     } else if (std::find(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end(),
                          rank) != neighbor_in_ranks_.end()) {
       // Receiver
-      data_buf = (void*)neighbor_tensors[neighbor_tensor_index++]->data();
-      element_size = mpi_ctx_.GetMPITypeSize(tensor->dtype());
-      win_size = (tensor->shape().num_elements()) * element_size;
+      auto t = neighbor_tensors[neighbor_tensor_index++];
+      data_buf = (void*)t->data();
+      element_size = mpi_ctx_.GetMPITypeSize(t->dtype());
+      win_size = (t->shape().num_elements()) * element_size;
     } else {
       // Just participate in a collective call.
       data_buf = nullptr;
@@ -422,15 +440,14 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   WindowManager& win_mananger = it->second;
 
   int target_disp = 0;  // offset in win buffer
+  MPI_Win mpi_win = *(win_mananger.GetGlobalWin());
   for (int target_rank : entry.src_ranks) {
     // avoid getting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
-
-    MPI_Win mpi_win = *(win_mananger.GetWinByRank(target_rank));
     void* recvbuf = win_mananger.GetWinMemoryByRank(target_rank);
 
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
-    int ret_code = MPI_Get(recvbuf, num_elements, data_type, target_rank,
+    int ret_code = MPI_Get(recvbuf, num_elements , data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
     if (ret_code != MPI_SUCCESS) {
       throw std::runtime_error("MPI_Get failed, see MPI output for details.");

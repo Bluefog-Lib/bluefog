@@ -27,6 +27,7 @@ class WindowManager {
   WindowManager() = default;
 
   inline std::shared_ptr<MPI_Win> GetWinByRank(int rank) { return wins_[rank]; }
+  inline std::shared_ptr<MPI_Win> GetGlobalWin() { return global_win_; }
 
   inline void* GetWinMemoryByRank(int rank) { return win_memories_[rank]; }
 
@@ -35,17 +36,26 @@ class WindowManager {
     win_memories_.push_back(memory);
   }
 
+  inline void SetGlobalWin(std::shared_ptr<MPI_Win> win) {
+    global_win_ = win;
+  }
+
   // Manually free the win memory.
   void FreeAllWins();
 
  private:
   // Store all the pointers to the MPI WIN .
   // It should always keep the order from 0 to WORLD_SIZE-1.
+  // Used with win_put.
   std::vector<std::shared_ptr<MPI_Win>> wins_;
 
   // Store all the underlying memories attached to the MPI WIN.
   // It should always keep the order from 0 to WORLD_SIZE-1.
   std::vector<void*> win_memories_;
+
+  // A window associated with the self (all connected).
+  // Used with win_accumulate and win_get.
+  std::shared_ptr<MPI_Win> global_win_;
 };
 
 struct MPIContext {

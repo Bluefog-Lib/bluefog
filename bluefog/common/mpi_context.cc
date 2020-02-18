@@ -23,6 +23,7 @@ void WindowManager::FreeAllWins() {
   for (auto& win_p : wins_) {
     MPI_Win_free(win_p.get());
   }
+  MPI_Win_free(global_win_.get());
   wins_.clear();
 }
 
