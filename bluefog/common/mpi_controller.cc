@@ -402,7 +402,6 @@ Status MPIController::WinFence(const std::string& name) {
 }
 
 void MPIController::WinPut(TensorTableEntry& entry) {
-  const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
@@ -413,10 +412,12 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   MPI_Win mpi_win = *(win_mananger.GetWinByRank(rank_));
 
   int target_disp = 0;  // offset in win buffer
-  for (int target_rank : entry.dst_ranks) {
+  for (auto kv : entry.dst_weights) {
+    int target_rank = kv.first;
+    float weight = kv.second;
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
-
+    void* sendbuf = (void*) entry.tensor->data_weight(weight);
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Put(sendbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
@@ -441,7 +442,9 @@ void MPIController::WinGet(TensorTableEntry& entry) {
 
   int target_disp = 0;  // offset in win buffer
   MPI_Win mpi_win = *(win_mananger.GetGlobalWin());
-  for (int target_rank : entry.src_ranks) {
+  for (auto kv : entry.src_weights) {
+    int target_rank = kv.first;
+    float unused_weight = kv.second;  // The real weight average is happened at call-back.
     // avoid getting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
     void* recvbuf = win_mananger.GetWinMemoryByRank(target_rank);
@@ -457,6 +460,10 @@ void MPIController::WinGet(TensorTableEntry& entry) {
 
   LOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
+}
+
+void MPIController::WinAccumulate(TensorTableEntry& entry) {
+  // TODO
 }
 
 void MPIController::Barrier(TensorTableEntry& entry) {

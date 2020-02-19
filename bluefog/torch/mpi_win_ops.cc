@@ -224,7 +224,7 @@ int DoWinFree(const std::string& name) {
 }
 
 int DoWinPut(::torch::Tensor tensor, const std::string& name,
-             const std::vector<int>& dst_ranks) {
+             const std::unordered_map<int, float>& dst_weights) {
   ThrowIfError(common::CheckInitialized());
 
   auto device = GetDeviceID(tensor);
@@ -232,7 +232,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto handle = win_handle_manager.AllocateHandle();
 
   auto enqueue_result = EnqueuTensorWindowPut(
-      bf_tensor, name, dst_ranks, device, [handle](const Status& status) {
+      bf_tensor, name, dst_weights, device, [handle](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
       });
 
@@ -241,7 +241,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinGet(::torch::Tensor tensor, const std::string& name,
-             const std::vector<int>& src_ranks, bool average) {
+             const std::unordered_map<int, float>& src_weights) {
   ThrowIfError(common::CheckInitialized());
 
   auto device = GetDeviceID(tensor);
@@ -249,12 +249,9 @@ int DoWinGet(::torch::Tensor tensor, const std::string& name,
   auto handle = win_handle_manager.AllocateHandle();
 
   auto enqueue_result = EnqueuTensorWindowGet(
-      bf_tensor, name, src_ranks, device,
-      [tensor, name, src_ranks, handle, average](const Status& status) mutable {
-        win_storage_manager.SumWithNeighbor(name, tensor, src_ranks);
-        if (average) {
-          tensor.div_(static_cast<int>(src_ranks.size() + 1));
-        }
+      bf_tensor, name, src_weights, device,
+      [tensor, name, src_weights, handle](const Status& status) mutable {
+        win_storage_manager.AvgWithNeighbor(name, tensor, src_weights);
         win_handle_manager.MarkDone(handle, status);
       });
 

@@ -53,6 +53,13 @@ const common::TensorShape TorchTensor::shape() const {
 }
 
 const void* TorchTensor::data() const { return tensor_.data_ptr(); }
+const void* TorchTensor::data_weight(float weight) const {
+  if (weight == 1.0) {
+    return tensor_.data_ptr();
+  } else {
+    return tensor_.mul(weight).data_ptr();
+  }
+}
 
 int64_t TorchTensor::size() const {
   return tensor_.element_size() * tensor_.numel();

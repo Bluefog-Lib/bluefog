@@ -107,6 +107,11 @@ bool RunLoopOnce(BluefogGlobalState& state) {
           << "Processing WIN_GET on " << entry.tensor_name;
       state.controller->WinGet(entry);
       break;
+    case MPIOpsType::WIN_ACCUMULATE:
+      LOG(TRACE, bluefog_global.controller->GetRank())
+          << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
+      state.controller->WinAccumulate(entry);
+      break;
     default:
       throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
     }
@@ -347,17 +352,16 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 }
 
 Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, 
-                             const std::vector<int>& dst_ranks,
-                             const int device,
-                             StatusCallback callback) {
+                             const std::string& name,
+                             const std::unordered_map<int, float>& dst_weights,
+                             const int device, StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
-  e.dst_ranks = dst_ranks;
+  e.dst_weights = dst_weights;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -367,17 +371,16 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
 }
 
 Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, 
-                             const std::vector<int>& src_ranks,
-                             const int device,
-                             StatusCallback callback) {
+                             const std::string& name,
+                             const std::unordered_map<int, float>& src_weights,
+                             const int device, StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
-  e.src_ranks = src_ranks;
+  e.src_weights = src_weights;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;

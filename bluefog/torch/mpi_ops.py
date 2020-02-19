@@ -426,7 +426,7 @@ def _win_create_function_factory(tensor):
 def win_create(tensor: torch.Tensor, name: str) -> bool:
     """ Create MPI window for remote memoery access. The window is dedicated to
     the provided tensor only, which is identified by unqiue name. It is blocking operations.
-    The initial value of MPI windows for neighbor is the same as input tensor.
+    The initial values of MPI windows for neighbors are the same as input tensor.
 
     Args:
         tensor (torch.Tensor): Provide the size, data type, and/or memory for window.
@@ -434,6 +434,10 @@ def win_create(tensor: torch.Tensor, name: str) -> bool:
 
     Returns:
         bool: Indicate the creation succeed or not.
+
+    Note: The window with same name across different bluefog processes should associate
+    the tensor with same shape. Otherwise, the rest win_ops like win_sync, win_put will
+    encounter unrecoverable memory segmentation fault.
     """
     # TODO(ybc): How to make sure that different ranks
     # create window wtih same name and size?
@@ -493,7 +497,7 @@ def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
                              "rank to the weights.")
         if not set(weights.keys()).issubset(set(in_neighbor_ranks() + [rank()])):
             raise ValueError("The key of weights should only contain the ranks that belong to "
-                             " in-neighbors and self ranks.")
+                             " in-neighbors and self rank.")
 
         if not getattr(mpi_lib, function)(tensor, name, weights):
             raise RuntimeError("Cannot apply win_sync on " + name)
@@ -518,7 +522,7 @@ def _win_put_function_factory(tensor):
 
 
 def win_put(tensor: torch.Tensor, name: str,
-            dst_ranks: List[int] = None) -> int:
+            dst_weights: Dict[int, float] = None) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
     win_put operation is really finished.
@@ -526,26 +530,30 @@ def win_put(tensor: torch.Tensor, name: str,
     Args:
         tesnor: The tensor that shares to neighbor.
         name: The unique name to associate the window object.
-        dst_ranks: The source ranks to put the value for. If not provided, it will
-            put into all neighbors' shared memory defined by virtual topology.
-            dst_ranks should only contain the ranks that belong to out-neighbors.
+        dst_weights: A dictionary that maps the destination ranks to the weight.
+            Namely, {rank: weight} means put tensor * weight to the rank neighbor.
+            If not provided, dst_weights will be set as all neighbor ranks defined by
+            virtual topology with weight 1.
+            Note dst_weights should only contain the ranks that belong to out-neighbors.
 
     Returns:
         A handle to the allgather operation that can be used with `win_poll()` or
         `win_wait()`.
     """
     function = _check_function(_win_put_function_factory, tensor)
-    dst_ranks = out_neighbor_ranks() if dst_ranks is None else dst_ranks
-    if not set(dst_ranks).issubset(set(out_neighbor_ranks())):
+    dst_weights = ({rank: 1.0 for rank in out_neighbor_ranks()}
+                   if dst_weights is None else dst_weights)
+    if not set(dst_weights.keys()).issubset(set(out_neighbor_ranks())):
         raise ValueError(
-            "dst_ranks should only contain the ranks that belong to out-neighbors.")
-    handle = getattr(mpi_lib, function)(tensor, name, dst_ranks)
+            "The key of dst_weights should only containranks that "
+            " belong to out-neighbors (self-rank is not allowed).")
+    handle = getattr(mpi_lib, function)(tensor, name, dst_weights)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_put_blocking(tensor: torch.Tensor, name: str,
-                     dst_ranks: List[int] = None) -> bool:
+                     dst_weights: Dict[int, float] = None) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
     is finished.
@@ -553,14 +561,16 @@ def win_put_blocking(tensor: torch.Tensor, name: str,
     Args:
         tensor: The tensor that shares to neighbor.
         name: The unique name to associate the window object.
-        dst_ranks: The source ranks to get the value from. If not provided, it will
-            put into all neighbors' shared memory defined by virtual topology.
-            dst_ranks should only contain the ranks that belong to out-neighbors.
+        dst_weights: A dictionary that maps the destination ranks to the weight.
+            Namely, {rank: weight} means put tensor * weight to the rank neighbor.
+            If not provided, dst_weights will be set as all neighbor ranks defined by
+            virtual topology with weight 1.
+            Note dst_weights should only contain the ranks that belong to out-neighbors.
 
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put(tensor, name, dst_ranks)
+    handle = win_put(tensor, name, dst_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
@@ -571,58 +581,72 @@ def _win_get_function_factory(tensor):
 
 
 def win_get(tensor: torch.Tensor, name: str,
-            src_ranks: List[int] = None, average: bool = True) -> int:
+            src_weights: Dict[int, float] = None) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
-    local memory. The input tensor is also in-place output.
+    local memory. The GET tensor will be merged with input tensor according to
+    the src_weights. The default behavior is input tensor will become the average
+    tensor with their neighbors. Note the input tensor is also in-place output.
 
     Args:
         tensor: A tensor to get the result, should have same shape and type of
             the window object associated with name.
         name: The unique name to associate the window object.
-        src_ranks: The source ranks to get the value from. If not provided, it will
-            get all neighbors' values defined by virtual topology.
-            src_ranks should only contain the ranks that belong to in-neighbors.
-        average: A flag indicating whether to compute average or summation,
-                 defaults to average.
+        src_weights: A dictionary that maps the source ranks to the weight.
+            Namely, {rank: weight} means get tensor * weight to the rank neighbor.
+            If not provided, src_weights will be set as all neighbor ranks defined by
+            virtual topology with weight 1.0 / (neighbor_size+1).
+            Note src_weights should only contain the ranks that either
+            belong to int-neighbors or self.
 
     Returns:
         A handle to the allgather operation that can be used with `poll()` or
         `synchronize()`.
     """
     function = _check_function(_win_get_function_factory, tensor)
-    src_ranks = in_neighbor_ranks() if src_ranks is None else src_ranks
-    if not set(src_ranks).issubset(set(in_neighbor_ranks())):
+    neighbor_size = len(in_neighbor_ranks())
+    src_weights = ({rank: 1.0 / (neighbor_size+1)
+                    for rank in in_neighbor_ranks() + [rank()]}
+                   if src_weights is None else src_weights)
+    if not set(src_weights.keys()).issubset(set(in_neighbor_ranks() + [rank()])):
         raise ValueError(
-            "src_ranks should only contain the ranks that belong to in-neighbors.")
-    handle = getattr(mpi_lib, function)(
-        tensor, name, src_ranks, average)
+            "The key of src_weights should only containranks that "
+            " belong to out-neighbors or self-rank.")
+    handle = getattr(mpi_lib, function)(tensor, name, src_weights)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_get_blocking(tensor: torch.Tensor, name: str,
-                     src_ranks: List[int] = None, average: bool = True) -> bool:
+                     src_weights: Dict[int, float] = None) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
-    local memory. The input tensor is also in-place output.
+    local memory.  The input tensor will be merged with neighbor tensor according to
+    the src_weights. The default behavior is input tensor will become the average
+    tensor with their neighbors. Note the input tensor is also in-place output.
 
     Args:
         tensor: A tensor to get the result, should have same shape and type of
             the window object associated with name.
         name: The unique name to associate the window object.
-        src_ranks: The source ranks to get the value from. If not provided, it will
-            get all neighbors' values defined by virtual topology.
-            src_ranks should only contain the ranks that belong to in-neighbors.
-        average: A flag indicating whether to compute average or summation,
-                 defaults to average.
+        src_weights: A dictionary that maps the source ranks to the weight.
+            Namely, {rank: weight} means get tensor * weight to the rank neighbor.
+            If not provided, src_weights will be set as all neighbor ranks defined by
+            virtual topology with weight 1.0 / (neighbor_size+1).
+            Note src_weights should only contain the ranks that either
+            belong to int-neighbors or self.
 
     Returns:
         A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
         processes (or all neighbor processes).
     """
-    handle = win_get(tensor, name, src_ranks, average)
+    handle = win_get(tensor, name, src_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
+
+
+def win_accumulate(tensor: torch.Tensor, name: str,
+                   dst_weights: Dict[int, float] = None) -> bool:
+    raise NotImplementedError
 
 
 def win_poll(handle: int) -> bool:

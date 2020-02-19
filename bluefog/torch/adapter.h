@@ -19,7 +19,9 @@ class TorchTensor : public common::Tensor {
   virtual const common::DataType dtype() const override;
   virtual const common::TensorShape shape() const override;
   virtual const void* data() const override;
+  virtual const void* data_weight(float weight) const override;
   virtual int64_t size() const override;
+  
 
   // TODO(ybc) Figure out a better encapsulated way to do it.
   ::torch::Tensor MakeCopy(int device);

@@ -142,6 +142,7 @@ class Tensor {
   virtual const DataType dtype() const = 0;
   virtual const TensorShape shape() const = 0;
   virtual const void* data() const = 0;
+  virtual const void* data_weight(float weight) const = 0;
   virtual int64_t size() const = 0;
   virtual ~Tensor() = default;
 };
@@ -196,9 +197,11 @@ struct TensorTableEntry {
   int root_rank = -1;
   // GPU to do reduction on, or CPU_DEVICE_ID in case of CPU.
   int device = CPU_DEVICE_ID;
-  // Source and destination of ranks used in get and put ops.
-  std::vector<int> dst_ranks = {};
-  std::vector<int> src_ranks = {};
+  // Source and destination of ranks used in win ops.
+  // It maps the src(dst) rank to the weight.
+  std::unordered_map<int, float> dst_weights = {};
+  std::unordered_map<int, float> src_weights = {};
+
   // A callback to call with the status.
   StatusCallback callback;
 };

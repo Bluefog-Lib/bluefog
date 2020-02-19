@@ -232,7 +232,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_put_blocking(tensor, window_name, [(rank+1) % size])
+            bf.win_put_blocking(tensor, window_name, {(rank+1) % size: 1.0})
             bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -276,7 +276,7 @@ class WinOpsTests(unittest.TestCase):
             recv_tensor = tensor.clone()
             bf.barrier()
 
-            bf.win_get_blocking(recv_tensor, window_name, average=True)
+            bf.win_get_blocking(recv_tensor, window_name)
             bf.barrier()
 
             assert (list(tensor.shape) == [3] * dim), (
@@ -320,8 +320,8 @@ class WinOpsTests(unittest.TestCase):
             recv_tensor = tensor.clone()
             bf.barrier()
 
-            bf.win_get_blocking(recv_tensor, window_name, src_ranks=[(rank-1) % size],
-                                average=True)
+            bf.win_get_blocking(recv_tensor, window_name, src_weights={(rank-1) % size: 0.5,
+                                                                       rank: 0.5})
             bf.barrier()
 
             assert (list(recv_tensor.shape) == [3] * dim), (
