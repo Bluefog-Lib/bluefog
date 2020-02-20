@@ -26,6 +26,7 @@ fault-tolerant, friendly to heterogeneuous environment, and easy to use.
    :maxdepth: 2
    :caption: Development:
 
+   Bluefog WinOps Explanation <bluefog_winops>
    Codebase Structure <code_structure>
    Development Guide <devel_guide>
    Spectrum of Machine Learning Algorithm<alg_spectrum>
