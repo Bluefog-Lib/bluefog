@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; Bluefog 0.1 documentation</title>
+  <title>Bluefog WinOps Explanation &mdash; Bluefog 0.1 documentation</title>
   
 
   
@@ -25,7 +25,6 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
-        <script src="_static/searchtools.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -35,7 +34,9 @@
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="#" /> 
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="The Structure of Codebase" href="code_structure.html" />
+    <link rel="prev" title="Torch Module (API Reference)" href="torch_api.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -62,7 +63,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -85,8 +86,8 @@
 <li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Development:</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="bluefog_winops.html">Bluefog WinOps Explanation</a></li>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog WinOps Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
 <li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
@@ -135,12 +136,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Bluefog WinOps Explanation</li>
     
     
       <li class="wy-breadcrumbs-aside">
         
             
+            <a href="_sources/bluefog_winops.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -152,24 +155,29 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="bluefog-winops-explanation">
+<h1>Bluefog WinOps Explanation<a class="headerlink" href="#bluefog-winops-explanation" title="Permalink to this headline">¶</a></h1>
+<p>Bluefog win_ops is build based on the MPI API.
+But our usage and definition is slightly different from the
+MPI one because our win_ops is highly associated with the virtual topology.</p>
+<p>Hope following figure is self-explanatory.</p>
+<img alt="BluefogWinOpsExplanation" src="_images/WinOps.png" />
+</div>
 
-  
-  <div id="search-results">
-  
-  </div>
 
            </div>
            
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="code_structure.html" class="btn btn-neutral float-right" title="The Structure of Codebase" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="torch_api.html" class="btn btn-neutral float-left" title="Torch Module (API Reference)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -202,14 +210,7 @@
   
   
     
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>
