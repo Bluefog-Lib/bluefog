@@ -33,9 +33,15 @@ class WinTorchStorageManager {
   bool UnregisterWinName(const std::string& name);
   
   // Make the reference tensors point to the neighbor tensor location.
+  // The vector contains the neighbor tensors only with same order as
+  // bluefog_load_topology return the in_neighbor order.
   bool GetStorageByname(const std::string& name,
                         std::vector<std::shared_ptr<common::Tensor>>& tensors);
-  
+
+  // Make the reference tensor point to the neighbor tensor.
+  bool GetStorageByNameRank(const std::string& name, const int rank,
+                            std::shared_ptr<TorchTensor>& tensor);
+
   // Sum the local tensor with all neighbor tensors.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
   
@@ -74,6 +80,8 @@ class WinTorchStorageManager {
   std::unordered_map<std::string,
                      std::unordered_map<int, std::shared_ptr<TorchTensor>>>
       tensors_map_;
+  
+  std::unordered_map<std::string, std::shared_ptr<TorchTensor>> self_tensor_map_;
 
   mutable std::mutex mutex_;
   int in_neighbor_degree_;
@@ -139,22 +147,8 @@ WIN_PUT_H(torch_cuda_FloatTensor, THCudaTensor)
 WIN_PUT_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
-#define WIN_GET_H(torch_Tensor, THTensor)                              \
-  extern "C" int bluefog_torch_win_GET_##torch_Tensor(                 \
-      THTensor* tensor, char* name,                                    \
-      const std::unordered_map<int, float>& src_weights);
-
-WIN_GET_H(torch_IntTensor, THIntTensor)
-WIN_GET_H(torch_LongTensor, THLongTensor)
-WIN_GET_H(torch_FloatTensor, THFloatTensor)
-WIN_GET_H(torch_DoubleTensor, THDoubleTensor)
-
-#if HAVE_CUDA
-WIN_GET_H(torch_cuda_IntTensor, THCudaIntTensor)
-WIN_GET_H(torch_cuda_LongTensor, THCudaLongTensor)
-WIN_GET_H(torch_cuda_FloatTensor, THCudaTensor)
-WIN_GET_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
-#endif
+extern "C" int bluefog_torch_win_GET(
+    char* name, const std::unordered_map<int, float>& src_weights);
 
 extern "C" int bluefog_torch_win_free(char* name);
 extern "C" int bluefog_torch_win_poll(int handle);

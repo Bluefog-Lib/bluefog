@@ -327,6 +327,7 @@ Status MPIController::WinCreate(
   int neighbor_tensor_index = 0;
   for (int rank = 0; rank < size_; rank++) {
     auto mpi_win_ptr = std::make_shared<MPI_Win>();
+    std::shared_ptr<Tensor> t = nullptr;
     if (rank == rank_) {
       // Sender (no need to allocate the memory with it.)
       data_buf = nullptr;
@@ -335,7 +336,7 @@ Status MPIController::WinCreate(
     } else if (std::find(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end(),
                          rank) != neighbor_in_ranks_.end()) {
       // Receiver
-      auto t = neighbor_tensors[neighbor_tensor_index++];
+      t = neighbor_tensors[neighbor_tensor_index++];
       data_buf = (void*)t->data();
       element_size = mpi_ctx_.GetMPITypeSize(t->dtype());
       win_size = (t->shape().num_elements()) * element_size;
@@ -348,7 +349,7 @@ Status MPIController::WinCreate(
     MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
                    mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                    mpi_win_ptr.get());
-    win_manager.PushBackWinAndMemory(mpi_win_ptr, data_buf);
+    win_manager.PushBackWinAndTensor(mpi_win_ptr, t);
   }
 
   if (!mpi_ctx_.RegisterWindowName(name, win_manager)) {
@@ -417,7 +418,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     float weight = kv.second;
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
-    void* sendbuf = (void*) entry.tensor->data_weight(weight);
+    auto tensor = entry.tensor->data_weight(weight);
+    void* sendbuf = (void*) tensor->data();
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Put(sendbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
@@ -431,8 +433,6 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 }
 
 void MPIController::WinGet(TensorTableEntry& entry) {
-  int num_elements = entry.tensor->shape().num_elements();
-  MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
@@ -444,10 +444,17 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   MPI_Win mpi_win = *(win_mananger.GetGlobalWin());
   for (auto kv : entry.src_weights) {
     int target_rank = kv.first;
-    float unused_weight = kv.second;  // The real weight average is happened at call-back.
-    // avoid getting the tensor for itself (NOT valid).
+    float weight = kv.second;
+    // avoid getting the tensor for itself.
     if (target_rank == rank_) continue;
-    void* recvbuf = win_mananger.GetWinMemoryByRank(target_rank);
+
+    auto tensor = win_mananger.GetAssociateTensorByRank(target_rank);
+    void* recvbuf = (void *) tensor->data();
+    int num_elements = tensor->shape().num_elements();
+    MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(tensor);
+
+    LOG(DEBUG, rank_) << "Win_get for " << entry.tensor_name << " is to get "
+                      << num_elements << " from " << target_rank;
 
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Get(recvbuf, num_elements , data_type, target_rank,
@@ -456,6 +463,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
       throw std::runtime_error("MPI_Get failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
+    tensor->data_weight(weight);
   }
 
   LOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";

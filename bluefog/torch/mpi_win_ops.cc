@@ -18,6 +18,7 @@ using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::Status;
+using ::bluefog::common::EnqueuTensorWindowGet;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
@@ -53,6 +54,7 @@ bool WinTorchStorageManager::RegisterWinName(
     neighbor_tensors[source_rank] = t;
   }
   tensors_map_[name] = neighbor_tensors;
+  self_tensor_map_[name] = tensor;
   return true;
 }
 
@@ -62,10 +64,14 @@ bool WinTorchStorageManager::UnregisterWinName(const std::string& name) {
     return false;
   }
   tensors_map_.erase(it);
+  self_tensor_map_.erase(self_tensor_map_.find(name));
   return true;
 }
 
-void WinTorchStorageManager::ClearAll() { tensors_map_.clear(); }
+void WinTorchStorageManager::ClearAll() { 
+  tensors_map_.clear();
+  self_tensor_map_.clear();
+}
 
 bool WinTorchStorageManager::GetStorageByname(
     const std::string& name,
@@ -86,6 +92,26 @@ bool WinTorchStorageManager::GetStorageByname(
     int source_rank = *(sources_ptr + i);
     tensors.emplace_back(neighbor_map[source_rank]);
   }
+  return true;
+}
+
+bool WinTorchStorageManager::GetStorageByNameRank(
+    const std::string& name, const int rank,
+    std::shared_ptr<TorchTensor>& tensor) {
+  auto it = tensors_map_.find(name);
+  if (it == tensors_map_.end()) {
+    LOG(ERROR) << "Cannot find " << name << " in neighbor tensor map";
+    return false;
+  }
+  std::unordered_map<int, std::shared_ptr<TorchTensor>> neighbor_map =
+      it->second;
+  auto it2 = neighbor_map.find(rank);
+  if (it2 == neighbor_map.end()) {
+    LOG(ERROR) << "Cannot find rank " << rank << " in " << name
+               << "neighbor tensor map";
+    return false;
+  }
+  tensor = it2->second;
   return true;
 }
 
@@ -240,18 +266,25 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   return handle;
 }
 
-int DoWinGet(::torch::Tensor tensor, const std::string& name,
+int DoWinGet(const std::string& name,
              const std::unordered_map<int, float>& src_weights) {
   ThrowIfError(common::CheckInitialized());
 
-  auto device = GetDeviceID(tensor);
-  auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
-
   auto enqueue_result = EnqueuTensorWindowGet(
-      bf_tensor, name, src_weights, device,
-      [tensor, name, src_weights, handle](const Status& status) mutable {
-        win_storage_manager.AvgWithNeighbor(name, tensor, src_weights);
+      name, src_weights,
+      [handle, name, src_weights](const Status& status) mutable {
+        std::shared_ptr<TorchTensor> bf_neighbor_tensor;
+        for (auto& kv : src_weights) {
+          int rank = kv.first;
+          float weight = kv.second;
+          if (!win_storage_manager.GetStorageByNameRank(name, rank,
+                                                        bf_neighbor_tensor)) {
+            LOG(FATAL) << "Cannot get neighbor tensor with " << name
+                       << " at rank " << rank;
+          }
+          bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
+        }
         win_handle_manager.MarkDone(handle, status);
       });
 
@@ -325,16 +358,7 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_put_torch_cuda_DoubleTensor", &DoWinPut);
 #endif
 
-  m.def("bluefog_torch_win_get_torch_IntTensor", &DoWinGet);
-  m.def("bluefog_torch_win_get_torch_LongTensor", &DoWinGet);
-  m.def("bluefog_torch_win_get_torch_FloatTensor", &DoWinGet);
-  m.def("bluefog_torch_win_get_torch_DoubleTensor", &DoWinGet);
-#if HAVE_CUDA
-  m.def("bluefog_torch_win_get_torch_cuda_IntTensor", &DoWinGet);
-  m.def("bluefog_torch_win_get_torch_cuda_LongTensor", &DoWinGet);
-  m.def("bluefog_torch_win_get_torch_cuda_FloatTensor", &DoWinGet);
-  m.def("bluefog_torch_win_get_torch_cuda_DoubleTensor", &DoWinGet);
-#endif
+  m.def("bluefog_torch_win_get", &DoWinGet);
 
   m.def("bluefog_torch_win_free", &DoWinFree);
   m.def("bluefog_torch_win_fence", &DoWinFence);

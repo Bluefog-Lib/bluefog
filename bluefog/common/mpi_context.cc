@@ -19,12 +19,11 @@ void MPIContextManager::EnvFinalize() {
 }
 
 void WindowManager::FreeAllWins() {
-  win_memories_.clear();
-  for (auto& win_p : wins_) {
-    MPI_Win_free(win_p.get());
+  for (auto& win_tensor : wins_tensor_vec_) {
+    MPI_Win_free(win_tensor.first.get());
   }
   MPI_Win_free(global_win_.get());
-  wins_.clear();
+  wins_tensor_vec_.clear();
 }
 
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {

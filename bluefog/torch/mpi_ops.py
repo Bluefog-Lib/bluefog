@@ -576,52 +576,43 @@ def win_put_blocking(tensor: torch.Tensor, name: str,
     return True
 
 
-def _win_get_function_factory(tensor):
-    return 'bluefog_torch_win_get_' + tensor.type().replace('.', '_')
-
-
-def win_get(tensor: torch.Tensor, name: str,
-            src_weights: Dict[int, float] = None) -> int:
+def win_get(name: str, src_weights: Dict[int, float] = None) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
-    local memory. The GET tensor will be merged with input tensor according to
-    the src_weights. The default behavior is input tensor will become the average
-    tensor with their neighbors. Note the input tensor is also in-place output.
+    local shared memory, which cannot be accessed in python directly.
+    The win_sync function is responsible for fetching that memeory.
+    This is a non-blocking function, which will return without waiting the
+    win_get operation is really finished.
 
     Args:
-        tensor: A tensor to get the result, should have same shape and type of
-            the window object associated with name.
         name: The unique name to associate the window object.
         src_weights: A dictionary that maps the source ranks to the weight.
-            Namely, {rank: weight} means get tensor * weight to the rank neighbor.
+            Namely, {rank: weight} means get tensor from rank neighbor multipling the weight.
             If not provided, src_weights will be set as all neighbor ranks defined by
-            virtual topology with weight 1.0 / (neighbor_size+1).
-            Note src_weights should only contain the ranks that either
-            belong to int-neighbors or self.
+            virtual topology with weight 1.0.
+            Note src_weights should only contain the in-neighbors only.
 
     Returns:
         A handle to the allgather operation that can be used with `poll()` or
         `synchronize()`.
     """
-    function = _check_function(_win_get_function_factory, tensor)
-    neighbor_size = len(in_neighbor_ranks())
-    src_weights = ({rank: 1.0 / (neighbor_size+1)
-                    for rank in in_neighbor_ranks() + [rank()]}
+    function = "bluefog_torch_win_get"
+    src_weights = ({rank: 1.0 for rank in in_neighbor_ranks()}
                    if src_weights is None else src_weights)
-    if not set(src_weights.keys()).issubset(set(in_neighbor_ranks() + [rank()])):
+    if not set(src_weights.keys()).issubset(set(in_neighbor_ranks())):
         raise ValueError(
             "The key of src_weights should only containranks that "
-            " belong to out-neighbors or self-rank.")
-    handle = getattr(mpi_lib, function)(tensor, name, src_weights)
+            " belong to in-neighbors.")
+    handle = getattr(mpi_lib, function)(name, src_weights)
     _win_handle_map[handle] = name
     return handle
 
 
-def win_get_blocking(tensor: torch.Tensor, name: str,
-                     src_weights: Dict[int, float] = None) -> bool:
+def win_get_blocking(name: str, src_weights: Dict[int, float] = None) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
-    local memory.  The input tensor will be merged with neighbor tensor according to
-    the src_weights. The default behavior is input tensor will become the average
-    tensor with their neighbors. Note the input tensor is also in-place output.
+    local shared memory, which cannot be accessed in python directly.
+    The win_sync function is responsible for fetching that memeory.
+    This is a blocking function, which will return until win_get operation
+    is finished.
 
     Args:
         tensor: A tensor to get the result, should have same shape and type of
@@ -638,7 +629,7 @@ def win_get_blocking(tensor: torch.Tensor, name: str,
         A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
         processes (or all neighbor processes).
     """
-    handle = win_get(tensor, name, src_weights)
+    handle = win_get(name, src_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True

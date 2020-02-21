@@ -112,12 +112,8 @@ const void* TFTensor::data() const {
   return (const void*)tensor_.tensor_data().data();
 }
 
-const void* TFTensor::data_weight(float weight) const {
-  if (weight == 1.0) {
-    return (const void*)tensor_.tensor_data().data();
-  } else {
-    throw std::runtime_error("Tensorflow with weight is not implemented yet.");
-  }
+std::shared_ptr<common::Tensor> TFTensor::data_weight(float weight) {
+  throw std::runtime_error("Tensorflow with weight is not implemented yet.");
 };
 
 int64_t TFTensor::size() const { return (int64_t)tensor_.tensor_data().size(); }

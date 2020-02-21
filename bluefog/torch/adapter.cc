@@ -53,11 +53,14 @@ const common::TensorShape TorchTensor::shape() const {
 }
 
 const void* TorchTensor::data() const { return tensor_.data_ptr(); }
-const void* TorchTensor::data_weight(float weight) const {
+
+std::shared_ptr<common::Tensor> TorchTensor::data_weight(float weight) {
   if (weight == 1.0) {
-    return tensor_.data_ptr();
+    return std::make_shared<TorchTensor>(tensor_);
   } else {
-    return tensor_.mul(weight).data_ptr();
+    // Note we call mul instead of mul_
+    auto t = tensor_.mul(weight);
+    return std::make_shared<TorchTensor>(t);
   }
 }
 

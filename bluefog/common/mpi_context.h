@@ -26,14 +26,21 @@ class WindowManager {
  public:
   WindowManager() = default;
 
-  inline std::shared_ptr<MPI_Win> GetWinByRank(int rank) { return wins_[rank]; }
+  inline std::shared_ptr<MPI_Win> GetWinByRank(int rank) { 
+    return wins_tensor_vec_[rank].first; 
+  }
+  inline std::shared_ptr<Tensor> GetAssociateTensorByRank(int rank) { 
+    return wins_tensor_vec_[rank].second; 
+  }
   inline std::shared_ptr<MPI_Win> GetGlobalWin() { return global_win_; }
 
-  inline void* GetWinMemoryByRank(int rank) { return win_memories_[rank]; }
+  inline const void* GetWinMemoryByRank(int rank) { 
+    return wins_tensor_vec_[rank].second->data(); 
+  }
 
-  inline void PushBackWinAndMemory(std::shared_ptr<MPI_Win> win, void* memory) {
-    wins_.push_back(win);
-    win_memories_.push_back(memory);
+  inline void PushBackWinAndTensor(std::shared_ptr<MPI_Win> win,
+                                   std::shared_ptr<Tensor> tensor) {
+    wins_tensor_vec_.push_back(std::make_pair(win, tensor));
   }
 
   inline void SetGlobalWin(std::shared_ptr<MPI_Win> win) {
@@ -44,14 +51,11 @@ class WindowManager {
   void FreeAllWins();
 
  private:
-  // Store all the pointers to the MPI WIN .
+  // Store all the pointers to the MPI WIN and underlying tensor.
   // It should always keep the order from 0 to WORLD_SIZE-1.
   // Used with win_put.
-  std::vector<std::shared_ptr<MPI_Win>> wins_;
-
-  // Store all the underlying memories attached to the MPI WIN.
-  // It should always keep the order from 0 to WORLD_SIZE-1.
-  std::vector<void*> win_memories_;
+  std::vector<std::pair<std::shared_ptr<MPI_Win>, std::shared_ptr<Tensor>>>
+      wins_tensor_vec_;
 
   // A window associated with the self (all connected).
   // Used with win_accumulate and win_get.

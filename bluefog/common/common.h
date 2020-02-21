@@ -142,7 +142,7 @@ class Tensor {
   virtual const DataType dtype() const = 0;
   virtual const TensorShape shape() const = 0;
   virtual const void* data() const = 0;
-  virtual const void* data_weight(float weight) const = 0;
+  virtual std::shared_ptr<common::Tensor> data_weight(float weight) = 0;
   virtual int64_t size() const = 0;
   virtual ~Tensor() = default;
 };

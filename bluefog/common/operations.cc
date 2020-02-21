@@ -370,14 +370,11 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status EnqueuTensorWindowGet(std::shared_ptr<Tensor> tensor,
-                             const std::string& name,
+Status EnqueuTensorWindowGet(const std::string& name,
                              const std::unordered_map<int, float>& src_weights,
-                             const int device, StatusCallback callback) {
+                             StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
-  e.tensor = tensor;
-  e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
   e.src_weights = src_weights;
