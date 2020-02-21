@@ -12,7 +12,7 @@ class MPIController {
  public:
   MPIController(TensorQueue& tensor_queue, MPIContext& mpi_ctx)
       : tensor_queue_(tensor_queue), mpi_ctx_(mpi_ctx) {
-    LOG(DEBUG) << "MPI Controller Initialized.";
+    BFLOG(DEBUG) << "MPI Controller Initialized.";
   }
   void Initialize();
   

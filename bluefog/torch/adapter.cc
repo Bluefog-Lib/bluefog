@@ -142,7 +142,7 @@ Status TorchOpContext::AllocateOutput(common::TensorShape shape,
   // TODO(ybc) CUDA device setup is not correct yet.
   with_device device_context(device_);
   output_.resize_(shape_vector);
-  LOG(TRACE) << "Output tensor after allocated " << output_.scalar_type() << " " << output_.size(0)
+  BFLOG(TRACE) << "Output tensor after allocated " << output_.scalar_type() << " " << output_.size(0)
              << " " << output_.device();
   *tensor = std::make_shared<TorchTensor>(output_);
   return Status::OK();

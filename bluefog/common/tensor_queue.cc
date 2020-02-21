@@ -19,7 +19,7 @@ void TensorQueue::FinalizeTensorQueue(
   std::lock_guard<std::mutex> guard(mutex_);
   while (!message_queue_.empty()) {
     TensorTableEntry message = message_queue_.front();
-    LOG(TRACE) << "Message " << message.tensor_name << " is still in the queue after shut down.";
+    BFLOG(TRACE) << "Message " << message.tensor_name << " is still in the queue after shut down.";
     message_queue_.pop();
     callbacks_buffer.emplace_back(message.callback);
   }

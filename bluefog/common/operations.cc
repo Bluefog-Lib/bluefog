@@ -38,13 +38,13 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 
   // Signal that initialization is completed.
   state.initialization_done = true;
-  LOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
+  BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
 
   // Iterate until shutdown.
   while (RunLoopOnce(state))
     ;
 
-  LOG(DEBUG, bluefog_global.controller->GetRank()) << "Shutting down background thread";
+  BFLOG(DEBUG, bluefog_global.controller->GetRank()) << "Shutting down background thread";
 
   // Signal that shutdown has been requested.
   state.shut_down = true;
@@ -64,32 +64,32 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     switch (entry.mpi_ops_type)
     {
     case MPIOpsType::ALLREDUCE:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing " << entry.tensor_name;
       state.controller->Allreduce(entry);
       break;
     case MPIOpsType::BROADCAST:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing " << entry.tensor_name;
       state.controller->Broadcast(entry);
       break;
     case MPIOpsType::ALLGATHER:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing " << entry.tensor_name;
       state.controller->Allgather(entry);
       break;
     case MPIOpsType::NEIGHBOR_ALLGATHER:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing " << entry.tensor_name;
       state.controller->NeighborAllgather(entry);
       break;
     case MPIOpsType::NEIGHBOR_ALLREDUCE:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing " << entry.tensor_name;
       state.controller->NeighborAllreduce(entry);
       break;
     case MPIOpsType::BARRIER:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing Barrier now ";
       state.controller->Barrier(entry);
       break;
@@ -98,17 +98,17 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     // tensorflow. For example, if two ops are not control dependent to each other,
     // the order of allreduce request by them are undeterminisitc.
     case MPIOpsType::WIN_PUT:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing WIN_PUT on " << entry.tensor_name;
       state.controller->WinPut(entry);
       break;
     case MPIOpsType::WIN_GET:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing WIN_GET on " << entry.tensor_name;
       state.controller->WinGet(entry);
       break;
     case MPIOpsType::WIN_ACCUMULATE:
-      LOG(TRACE, bluefog_global.controller->GetRank())
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
       state.controller->WinAccumulate(entry);
       break;
@@ -118,7 +118,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   } catch (std::length_error& e) {
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   } catch (std::exception& e) {
-    LOG(ERROR) << e.what();
+    BFLOG(ERROR) << e.what();
   }
   return !bluefog_global.shut_down;
 }
@@ -138,7 +138,7 @@ void InitializeBluefogOnce() {
   while (!bluefog_global.initialization_done) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  LOG(DEBUG) << "Background thread init done";
+  BFLOG(DEBUG) << "Background thread init done";
 }
 
 Status CheckInitialized() {
@@ -207,15 +207,15 @@ int bluefog_mpi_threads_supported() {
 int bluefog_set_topology(int indegree, const int* sources, int outdegree,
                          const int* destinations) {
   if (!bluefog_global.initialization_done) {
-    LOG(ERROR) << "Cannot set the topology because bluefog has not been initialized.";
+    BFLOG(ERROR) << "Cannot set the topology because bluefog has not been initialized.";
     return -1;
   }
   if (!bluefog_global.controller->IsWinObjetEmpty()) {
-    LOG(ERROR) << "Cannot set the topology because there are window object uncleared.";
+    BFLOG(ERROR) << "Cannot set the topology because there are window object uncleared.";
     return -1;
   }
   if (bluefog_global.tensor_queue.size() > 0) {
-    LOG(ERROR) << "Cannot set the topology because there are unfinished MPI ops.";
+    BFLOG(ERROR) << "Cannot set the topology because there are unfinished MPI ops.";
     return -1;
   }
   return bluefog_global.controller->SetTopology(indegree, sources, outdegree,
@@ -395,8 +395,8 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   }
   Status status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors, name, device);
   if (!status.ok()) {
-    LOG(ERROR) << "Cannot create the MPI_Win for " << name;
-    LOG(ERROR) << status.reason();
+    BFLOG(ERROR) << "Cannot create the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
   }
   return status;
 }
@@ -407,8 +407,8 @@ Status WindowSync(const std::string& name) {
   }
   Status status = bluefog_global.controller->WinSync(name);
   if (!status.ok()) {
-    LOG(ERROR) << "Cannot sync the MPI_Win for " << name;
-    LOG(ERROR) << status.reason();
+    BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
   }
   return status;
 }
@@ -424,8 +424,8 @@ Status WindowFree(const std::string& name) {
     status = bluefog_global.controller->WinFree(name);
   }
   if (!status.ok()) {
-    LOG(ERROR) << "Cannot free the MPI_Win for " << name;
-    LOG(ERROR) << status.reason();
+    BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
   }
   return status;
 }
@@ -437,8 +437,8 @@ Status WindowFence(const std::string& name) {
   Status status = bluefog_global.controller->WinFence(name);
 
   if (!status.ok()) {
-    LOG(ERROR) << "Cannot free the MPI_Win for " << name;
-    LOG(ERROR) << status.reason();
+    BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
   }
   return status;
 

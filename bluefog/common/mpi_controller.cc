@@ -29,7 +29,7 @@ void MPIController::Initialize() {
   MPI_Comm_rank(mpi_ctx_.cross_comm, &cross_rank_);
   MPI_Comm_size(mpi_ctx_.cross_comm, &cross_size_);
 
-  LOG(DEBUG) << "MPI controller initialized.";
+  BFLOG(DEBUG) << "MPI controller initialized.";
 }
 
 int MPIController::GetTypeSize(DataType dtype) {
@@ -83,7 +83,7 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
     total_entry_dimension_size += gather_count[rc];
     recvcounts[rc] = single_slice_shape.num_elements() * gather_count[rc];
   }
-  LOG(TRACE, rank_) << "total_entry_dimension_size: "
+  BFLOG(TRACE, rank_) << "total_entry_dimension_size: "
                     << total_entry_dimension_size;
 
   // Allgather output will have shape of:
@@ -370,7 +370,7 @@ Status MPIController::WinFreeAll() {
   if (!mpi_ctx_.UnregisterAllWindowName()) {
     return Status::InvalidArgument(std::string("Win_free_all failed."));
   }
-  LOG(DEBUG) << "All MPI Win has been freed.";
+  BFLOG(DEBUG) << "All MPI Win has been freed.";
   return Status::OK();
 }
 
@@ -428,7 +428,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
   }
-  LOG(TRACE, rank_) << "Win_put for " << entry.tensor_name << " is done.";
+  BFLOG(TRACE, rank_) << "Win_put for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
 
@@ -453,7 +453,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     int num_elements = tensor->shape().num_elements();
     MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(tensor);
 
-    LOG(DEBUG, rank_) << "Win_get for " << entry.tensor_name << " is to get "
+    BFLOG(DEBUG, rank_) << "Win_get for " << entry.tensor_name << " is to get "
                       << num_elements << " from " << target_rank;
 
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
@@ -466,7 +466,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     tensor->data_weight(weight);
   }
 
-  LOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
+  BFLOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
 

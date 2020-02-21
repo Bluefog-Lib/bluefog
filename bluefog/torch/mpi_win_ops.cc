@@ -7,6 +7,7 @@
 #include <memory>
 #include <thread>
 
+#include "../common/logging.h"
 #include "../common/operations.h"
 #include "adapter.h"
 #include "handle_manager.h"
@@ -100,14 +101,14 @@ bool WinTorchStorageManager::GetStorageByNameRank(
     std::shared_ptr<TorchTensor>& tensor) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
-    LOG(ERROR) << "Cannot find " << name << " in neighbor tensor map";
+    BFLOG(ERROR) << "Cannot find " << name << " in neighbor tensor map";
     return false;
   }
   std::unordered_map<int, std::shared_ptr<TorchTensor>> neighbor_map =
       it->second;
   auto it2 = neighbor_map.find(rank);
   if (it2 == neighbor_map.end()) {
-    LOG(ERROR) << "Cannot find rank " << rank << " in " << name
+    BFLOG(ERROR) << "Cannot find rank " << rank << " in " << name
                << "neighbor tensor map";
     return false;
   }
@@ -241,7 +242,7 @@ int DoWinFree(const std::string& name) {
   } else {
     auto res = win_storage_manager.UnregisterWinName(name);
     if (!res) {
-      LOG(ERROR) << "Cannot unregister win " << name;
+      BFLOG(ERROR) << "Cannot unregister win " << name;
       return 0;
     }
   }
@@ -280,7 +281,7 @@ int DoWinGet(const std::string& name,
           float weight = kv.second;
           if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                         bf_neighbor_tensor)) {
-            LOG(FATAL) << "Cannot get neighbor tensor with " << name
+            BFLOG(FATAL) << "Cannot get neighbor tensor with " << name
                        << " at rank " << rank;
           }
           bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);

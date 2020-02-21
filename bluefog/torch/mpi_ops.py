@@ -425,7 +425,8 @@ def _win_create_function_factory(tensor):
 
 def win_create(tensor: torch.Tensor, name: str) -> bool:
     """ Create MPI window for remote memoery access. The window is dedicated to
-    the provided tensor only, which is identified by unqiue name. It is blocking operations.
+    the provided tensor only, which is identified by unqiue name.
+    It is a blocking operation, which required all bluefog process involved.
     The initial values of MPI windows for neighbors are the same as input tensor.
 
     Args:
@@ -474,6 +475,8 @@ def _win_sync_function_factory(tensor, weights):
 
 def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
+    Note the returned tensor is the same tensor used in win_create and in-place modification
+    is happened.
 
     Args:
         name: The unique name to associate the window object.
@@ -486,7 +489,7 @@ def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
 
     Note: Weights here will be useful if you need a dynamic weighted average, i.e. the weights
     change with the iterations. If static weight need, then setting the weights through the
-    win_create is a better choice. TODO(ybc) add weights setting in win_create.
+    win_create is a better choice.
     """
     tensor = _win_map[name]
     function = _check_function(_win_sync_function_factory, tensor, weights)

@@ -103,7 +103,7 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     int provided;
     MPI_Query_thread(&provided);
     if (provided < MPI_THREAD_MULTIPLE) {
-        LOG(WARNING)
+        BFLOG(WARNING)
             << "MPI has already been initialized without "
                "multi-threading support (MPI_THREAD_MULTIPLE). This will "
                "likely cause a segmentation fault.";
@@ -121,7 +121,7 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     MPI_Group_incl(world_group, ranks.size(), ranks.data(), &work_group);
     MPI_Comm_create_group(MPI_COMM_WORLD, work_group, 0, &(mpi_comm));
     if (mpi_comm == MPI_COMM_NULL) {
-        LOG(WARNING) << "Unable to create bluefog communicator, using "
+        BFLOG(WARNING) << "Unable to create bluefog communicator, using "
                         "MPI_COMM_WORLD instead.";
       mpi_comm = MPI_COMM_WORLD;
     }
@@ -130,10 +130,10 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   } else if (!mpi_comm) {
     // No ranks were given and no communicator provided to bluefog_init() so use
     // MPI_COMM_WORLD
-    LOG(DEBUG) << "Using MPI_COMM_WORLD as a communicator.";
+    BFLOG(DEBUG) << "Using MPI_COMM_WORLD as a communicator.";
     MPI_Comm_dup(MPI_COMM_WORLD, &mpi_comm);
   } else {
-    LOG(DEBUG) << "Using the existing mpi_comm.";
+    BFLOG(DEBUG) << "Using the existing mpi_comm.";
   }
 
   // Create local comm, Determine local rank by querying the local communicator.
