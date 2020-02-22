@@ -473,7 +473,28 @@ def _win_sync_function_factory(tensor, weights):
             + tensor.type().replace('.', '_'))
 
 
-def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
+def win_sync_then_collect(name: str) -> torch.Tensor:
+    """ A utility function to sync the neighbor buffers then accumulate all
+    neighbor buffers' tensors into self tensor and clear the buffer.
+    It is equivalent to
+        >>> win_sync(name, weights={neighbor + self : 1.0}, update_weights={neighbor: 0.0})
+    where "neighbor + self" means all (in-)neighbor's rank plus self rank.
+
+    Args:
+        name: The unique name to associate the window object.
+
+    Returns:
+        torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
+    """
+    weights = {rank(): 1.0}
+    update_weights = {}
+    for r in in_neighbor_ranks():
+        weights[r] = 1.0
+        update_weights[r] = 0.0
+    return win_sync(name, weights, update_weights)
+
+def win_sync(name: str, weights: Dict[int, float] = None,
+             update_weights: Dict[int, float] = None) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened.
@@ -483,16 +504,22 @@ def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
         weights: If weights is presented, the return tensor will return the weighted average
             defined by this weights. The data structure of weights should be {rank : weight}
             and rank has to belonge the (in-)neighbors and self.
+        update_weights: If update_weights is presented, the buffer used to store the neighbor
+            tensor will update its tensor. The new buffer tensor will be tensor * weight.
+            The update_weights is always happened after the weights computation.
+            The data structure of weights should be {rank : weight}
+            and rank has to belonge the (in-)neighbors.
 
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
 
     Note: Weights here will be useful if you need a dynamic weighted average, i.e. the weights
     change with the iterations. If static weight need, then setting the weights through the
-    win_create is a better choice.
+    bf.set_topology(.., is_weighted=True) is a better choice.
     """
     tensor = _win_map[name]
     function = _check_function(_win_sync_function_factory, tensor, weights)
+    update_weights = {} if update_weights is None else update_weights
     if weights is not None:
         # Pre-condition check for weights dictionary.
         if not isinstance(weights, dict):
@@ -502,11 +529,11 @@ def win_sync(name: str, weights: Dict[int, float] = None) -> torch.Tensor:
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
 
-        if not getattr(mpi_lib, function)(tensor, name, weights):
+        if not getattr(mpi_lib, function)(tensor, name, weights, update_weights):
             raise RuntimeError("Cannot apply win_sync on " + name)
         return tensor
 
-    if not getattr(mpi_lib, function)(tensor, name):
+    if not getattr(mpi_lib, function)(tensor, name, update_weights):
         raise RuntimeError("Cannot apply win_sync on " + name)
     return tensor
 

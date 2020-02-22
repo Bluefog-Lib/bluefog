@@ -106,7 +106,8 @@ WIN_CREATE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 
 #define WIN_SYNC_H(torch_Tensor, THTensor)                     \
   extern "C" int bluefog_torch_win_sync_##torch_Tensor(        \
-      THTensor* tensor, char* name);
+      THTensor* tensor, char* name,                            \
+      const std::unordered_map<int, float>& update_weights);
 
 WIN_SYNC_H(torch_IntTensor, THIntTensor)
 WIN_SYNC_H(torch_LongTensor, THLongTensor)
@@ -116,7 +117,8 @@ WIN_SYNC_H(torch_DoubleTensor, THDoubleTensor)
 #define WIN_SYNC_WITH_WEIGHTS_H(torch_Tensor, THTensor)                     \
   extern "C" int bluefog_torch_win_sync_with_weights_##torch_Tensor(        \
       THTensor* tensor, char* name,                                         \
-      const std::unordered_map<int, float>& weights);
+      const std::unordered_map<int, float>& weights,                        \
+      const std::unordered_map<int, float>& update_weights);
 
 WIN_SYNC_WITH_WEIGHTS_H(torch_IntTensor, THIntTensor)
 WIN_SYNC_WITH_WEIGHTS_H(torch_LongTensor, THLongTensor)

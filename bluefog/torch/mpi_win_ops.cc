@@ -211,25 +211,50 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
   return status.ok() ? 1 : 0;
 }
 
-int DoWinSync(::torch::Tensor tensor, const std::string& name) {
+namespace {
+
+int InplaceUpdateNeighborTensor(const std::string& name,
+  const std::unordered_map<int, float>& update_weights) {
+  std::shared_ptr<TorchTensor> bf_neighbor_tensor;
+  for (auto& kv : update_weights) {
+    int rank = kv.first;
+    float weight = kv.second;
+    if (!win_storage_manager.GetStorageByNameRank(name, rank,
+                                                  bf_neighbor_tensor)) {
+      BFLOG(FATAL) << "Cannot get neighbor tensor with " << name
+                  << " at rank " << rank;
+      return 0;
+    }
+    bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
+  }
+  return 1;
+}
+
+} // namespace
+
+int DoWinSync(::torch::Tensor tensor, const std::string& name,
+              const std::unordered_map<int, float>& update_weights) {
   ThrowIfError(common::CheckInitialized());
 
   Status status = common::WindowSync(name);
 
   // Averaging with neighbors' tensors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, tensor)) return 0;
+  if (!InplaceUpdateNeighborTensor(name, update_weights)) return 0;
 
   return 1;
 }
 
 int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
-                      const std::unordered_map<int, float>& weights) {
+                      const std::unordered_map<int, float>& weights,
+                      const std::unordered_map<int, float>& update_weights) {
   ThrowIfError(common::CheckInitialized());
 
   Status status = common::WindowSync(name);
 
   // Weighted averaging with neighbors' tensors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, tensor, weights)) return 0;
+  if (!InplaceUpdateNeighborTensor(name, update_weights)) return 0;
 
   return 1;
 }

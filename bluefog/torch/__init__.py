@@ -23,7 +23,8 @@ from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
 from bluefog.torch.mpi_ops import load_topology, set_topology
 from bluefog.torch.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
 from bluefog.torch.mpi_ops import mpi_threads_supported
-from bluefog.torch.mpi_ops import win_create, win_free, win_sync, win_fence
+from bluefog.torch.mpi_ops import win_create, win_free
+from bluefog.torch.mpi_ops import win_sync, win_sync_then_collect
 from bluefog.torch.mpi_ops import win_put, win_put_blocking
 from bluefog.torch.mpi_ops import win_get, win_get_blocking
 from bluefog.torch.mpi_ops import win_accumulate, win_accumulate_blocking
