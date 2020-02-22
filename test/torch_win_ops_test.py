@@ -224,7 +224,7 @@ class WinOpsTests(unittest.TestCase):
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
         # We use given destination to form a (right-)ring.
-        avg_value = (rank*outdegree + (rank-1) % size) / float(outdegree+1)
+        avg_value = (rank*outdegree + 1.23*((rank-1) % size)) / float(outdegree+1)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -232,7 +232,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_put_blocking(tensor, window_name, {(rank+1) % size: 1.0})
+            bf.win_put_blocking(tensor, window_name, {(rank+1) % size: 1.23})
             bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -298,7 +298,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
-        avg_value = rank + ((rank-1) % size) / 2.0
+        avg_value = rank + ((rank-1) % size) * 1.23 / 2.0
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -307,7 +307,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_accumulate_blocking(tensor, window_name,
-                                       dst_weights={(rank+1) % size: 1.0})
+                                       dst_weights={(rank+1) % size: 1.23})
 
             bf.barrier()
             sync_result = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
@@ -371,7 +371,7 @@ class WinOpsTests(unittest.TestCase):
             dtypes += [torch.cuda.FloatTensor]
 
         # We use given destination to form a (right-)ring.
-        avg_value = (rank + (rank-1) % size) / float(2)
+        avg_value = (rank + 1.23*((rank-1) % size)) / float(2)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -379,7 +379,8 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_get_blocking(window_name, src_weights={(rank-1) % size: 1.0})
+            bf.win_get_blocking(window_name, src_weights={
+                                (rank-1) % size: 1.23})
             bf.barrier()
             recv_tensor = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
                                                             rank: 0.5})

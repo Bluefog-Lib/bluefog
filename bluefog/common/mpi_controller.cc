@@ -474,7 +474,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   MPI_Win mpi_win = *(win_mananger.GetGlobalWin());
   for (auto kv : entry.src_weights) {
     int target_rank = kv.first;
-    float weight = kv.second;
+    float weight = kv.second;  // Unused. The real weight is happened at callback.
     // avoid getting the tensor for itself.
     if (target_rank == rank_) continue;
 
@@ -493,7 +493,6 @@ void MPIController::WinGet(TensorTableEntry& entry) {
       throw std::runtime_error("MPI_Get failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
-    tensor->data_weight(weight);
   }
 
   BFLOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
