@@ -248,6 +248,78 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully."
 
+    def test_win_accumulate_blocking(self):
+        """Test that the window accumulate operation."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test win_accumulate since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        outdegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) %
+                          size for i in range(outdegree)]  # in-neighbor
+        avg_value = rank + np.sum(neighbor_ranks) / float(outdegree+1)
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_accumulate_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            bf.win_accumulate_blocking(tensor, window_name)
+
+            bf.barrier()
+            sync_result = bf.win_sync(window_name)
+
+            assert (list(sync_result.shape) == [3] * dim), (
+                "bf.win_sync after win_accmulate produces wrong shape tensor.")
+            assert (sync_result.data - avg_value).abs().max() < EPSILON, (
+                "bf.win_sync after win_accmulate produces wrong tensor value " +
+                "[{}-{}]!={} at rank {}.".format(sync_result.min(),
+                                                 sync_result.max(), avg_value, rank))
+
+    def test_win_accumulate_blocking_with_given_destination(self):
+        """Test that the window accumulate operation with given destination."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test win_accumulate since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        avg_value = rank + ((rank-1) % size) / 2.0
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_accumulate_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            bf.win_accumulate_blocking(tensor, window_name,
+                                       dst_weights={(rank+1) % size: 1.0})
+
+            bf.barrier()
+            sync_result = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
+                                                            rank: 0.5})
+
+            assert (list(sync_result.shape) == [3] * dim), (
+                "bf.win_sync after win_accmulate given destination produces wrong shape tensor.")
+            assert (sync_result.data - avg_value).abs().max() < EPSILON, (
+                "bf.win_sync after win_accmulate given destination produces wrong tensor value " +
+                "[{}-{}]!={} at rank {}.".format(sync_result.min(),
+                                                 sync_result.max(), avg_value, rank))
+
     def test_win_get_blocking(self):
         """Test that the window get operation."""
         size = bf.size()

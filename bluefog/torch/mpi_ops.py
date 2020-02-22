@@ -540,7 +540,7 @@ def win_put(tensor: torch.Tensor, name: str,
             Note dst_weights should only contain the ranks that belong to out-neighbors.
 
     Returns:
-        A handle to the allgather operation that can be used with `win_poll()` or
+        A handle to the win_put operation that can be used with `win_poll()` or
         `win_wait()`.
     """
     function = _check_function(_win_put_function_factory, tensor)
@@ -595,7 +595,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None) -> int:
             Note src_weights should only contain the in-neighbors only.
 
     Returns:
-        A handle to the allgather operation that can be used with `poll()` or
+        A handle to the win_get operation that can be used with `poll()` or
         `synchronize()`.
     """
     function = "bluefog_torch_win_get"
@@ -638,9 +638,67 @@ def win_get_blocking(name: str, src_weights: Dict[int, float] = None) -> bool:
     return True
 
 
+def _win_accumulate_function_factory(tensor):
+    return 'bluefog_torch_win_accumulate_' + tensor.type().replace('.', '_')
+
+
 def win_accumulate(tensor: torch.Tensor, name: str,
                    dst_weights: Dict[int, float] = None) -> bool:
-    raise NotImplementedError
+    """ Passively accmulate the tensor into neighbor's shared window memory.
+    Only SUM ops is supported now.
+    This is a non-blocking function, which will return without waiting the
+    win_accumulate operation is really finished.
+
+    Args:
+        tesnor: The tensor that shares to neighbor.
+        name: The unique name to associate the window object.
+        dst_weights: A dictionary that maps the destination ranks to the weight.
+            Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
+            If not provided, dst_weights will be set as all neighbor ranks defined by
+            virtual topology with weight 1.
+            Note dst_weights should only contain the ranks that belong to out-neighbors.
+
+    Returns:
+        A handle to the win_accmulate operation that can be used with `win_poll()` or
+        `win_wait()`.
+    """
+    function = _check_function(_win_accumulate_function_factory, tensor)
+    dst_weights = ({rank: 1.0 for rank in out_neighbor_ranks()}
+                   if dst_weights is None else dst_weights)
+    if not set(dst_weights.keys()).issubset(set(out_neighbor_ranks())):
+        raise ValueError(
+            "The key of dst_weights should only containranks that "
+            " belong to out-neighbors (self-rank is not allowed).")
+    handle = getattr(mpi_lib, function)(tensor, name, dst_weights)
+    _win_handle_map[handle] = name
+    return handle
+
+
+def win_accumulate_blocking(tensor: torch.Tensor, name: str,
+                            dst_weights: Dict[int, float] = None) -> bool:
+    """ Passively accmulate the tensor into neighbor's shared window memory.
+    Only SUM ops is supported now.
+    This is a blocking function, which will return until win_accumulate operation
+    is finished.
+
+    Args:
+        tesnor: The tensor that shares to neighbor.
+        name: The unique name to associate the window object.
+        dst_weights: A dictionary that maps the destination ranks to the weight.
+            Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
+            If not provided, dst_weights will be set as all neighbor ranks defined by
+            virtual topology with weight 1.
+            Note dst_weights should only contain the ranks that belong to out-neighbors.
+
+    Returns:
+        A handle to the win_accmulate operation that can be used with `win_poll()` or
+        `win_wait()`.
+    """
+    handle = win_accumulate(tensor, name, dst_weights)
+    win_wait(handle)
+    # TODO(ybc) Error handling.
+    return True
+    
 
 
 def win_poll(handle: int) -> bool:

@@ -428,7 +428,37 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
   }
-  BFLOG(TRACE, rank_) << "Win_put for " << entry.tensor_name << " is done.";
+  BFLOG(TRACE, rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
+  entry.callback(Status::OK());
+}
+
+void MPIController::WinAccumulate(TensorTableEntry& entry) {
+  int num_elements = entry.tensor->shape().num_elements();
+  MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
+  auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
+  }
+  WindowManager& win_mananger = it->second;
+  MPI_Win mpi_win = *(win_mananger.GetWinByRank(rank_));
+
+  int target_disp = 0;  // offset in win buffer
+  for (auto kv : entry.dst_weights) {
+    int target_rank = kv.first;
+    float weight = kv.second;
+    // avoid putting the tensor for itself (NOT valid).
+    if (target_rank == rank_) continue;
+    auto tensor = entry.tensor->data_weight(weight);
+    void* sendbuf = (void*) tensor->data();
+    MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
+    int ret_code = MPI_Accumulate(sendbuf, num_elements, data_type, target_rank,
+                           target_disp, num_elements, data_type, MPI_SUM, mpi_win);
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error("MPI_Accumulate failed, see MPI output for details.");
+    }
+    MPI_Win_unlock(target_rank, mpi_win);
+  }
+  BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
 
@@ -453,8 +483,8 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     int num_elements = tensor->shape().num_elements();
     MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(tensor);
 
-    BFLOG(DEBUG, rank_) << "Win_get for " << entry.tensor_name << " is to get "
-                      << num_elements << " from " << target_rank;
+    BFLOG(DEBUG, rank_) << "MPI_Get for " << entry.tensor_name << " is to get "
+                        << num_elements << " from " << target_rank;
 
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Get(recvbuf, num_elements , data_type, target_rank,
@@ -468,10 +498,6 @@ void MPIController::WinGet(TensorTableEntry& entry) {
 
   BFLOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
-}
-
-void MPIController::WinAccumulate(TensorTableEntry& entry) {
-  // TODO
 }
 
 void MPIController::Barrier(TensorTableEntry& entry) {

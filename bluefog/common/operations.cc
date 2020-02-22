@@ -370,6 +370,25 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
+Status EnqueuTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
+                             const std::string& name,
+                             const std::unordered_map<int, float>& dst_weights,
+                             const int device, StatusCallback callback) {
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.tensor = tensor;
+  e.device = device;
+  e.callback = callback;
+  e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
+  e.dst_weights = dst_weights;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  return status;
+}
+
 Status EnqueuTensorWindowGet(const std::string& name,
                              const std::unordered_map<int, float>& src_weights,
                              StatusCallback callback) {

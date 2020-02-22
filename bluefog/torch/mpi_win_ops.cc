@@ -267,6 +267,23 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   return handle;
 }
 
+int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
+                    const std::unordered_map<int, float>& dst_weights) {
+  ThrowIfError(common::CheckInitialized());
+
+  auto device = GetDeviceID(tensor);
+  auto bf_tensor = std::make_shared<TorchTensor>(tensor);
+  auto handle = win_handle_manager.AllocateHandle();
+
+  auto enqueue_result = EnqueuTensorWindowAccumulate(
+      bf_tensor, name, dst_weights, device, [handle](const Status& status) {
+        win_handle_manager.MarkDone(handle, status);
+      });
+
+  ThrowIfError(enqueue_result);
+  return handle;
+}
+
 int DoWinGet(const std::string& name,
              const std::unordered_map<int, float>& src_weights) {
   ThrowIfError(common::CheckInitialized());
@@ -357,6 +374,17 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_put_torch_cuda_LongTensor", &DoWinPut);
   m.def("bluefog_torch_win_put_torch_cuda_FloatTensor", &DoWinPut);
   m.def("bluefog_torch_win_put_torch_cuda_DoubleTensor", &DoWinPut);
+#endif
+
+  m.def("bluefog_torch_win_accumulate_torch_IntTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_LongTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_FloatTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_DoubleTensor", &DoWinAccumulate);
+#if HAVE_CUDA
+  m.def("bluefog_torch_win_accumulate_torch_cuda_IntTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_LongTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_FloatTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_DoubleTensor", &DoWinAccumulate);
 #endif
 
   m.def("bluefog_torch_win_get", &DoWinGet);
