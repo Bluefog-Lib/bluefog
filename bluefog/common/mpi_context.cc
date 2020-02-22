@@ -174,14 +174,7 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
     DisableTopoWeights();
   }
 
-  // TODO(ybc) Figure it out better way to manager the memory.
-  // NOTICE: We cannot simple call UnregisterAllWindowName() here because:
-  //     The memory allocated to window is not owned by the window.
-  //     More likely, it is managered by torch or tensor library.
-  //     MPI_Win have no idea when those memory will be GC. Neither
-  //     those library realize that memeory cannot be freed yet because
-  //     MPI_Win still use that.
-  // UnregisterAllWindowName();
+  UnregisterAllWindowName();
 
   if (should_finalize) {
     ctx_manager.EnvFinalize();
