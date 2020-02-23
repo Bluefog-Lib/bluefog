@@ -31,18 +31,33 @@ for i in range(100):
 # Expected average should be (0+1+2+...+size-1)/(size) = (size-1)/2
 print("Rank {}: consensus with weights".format(bf.rank()), x)
 
-# Use win_put to simulate the push-sum algorithm.
-bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+# Use win_accumulate to simulate the push-sum algorithm (sync).
+bf.set_topology(topology_util.StartGraph(bf.size()))
+outdegree = len(bf.out_neighbor_ranks())
+indegree = len(bf.in_neighbor_ranks())
 
-p = torch.Tensor([[1/bf.size()]])
-x = torch.Tensor([[bf.rank()]])
-bf.win_create(x, name="x_buff")
+# Remember we do not create buffer with 0.
+p = torch.Tensor([[1.0/bf.size()/(indegree+1)]])
 bf.win_create(p, name="p_buff")
+p = bf.win_sync_then_collect(name="p_buff")
 
-bf.barrier()
-for i in range(200):
-    bf.win_put(x, name="x_buff")
+
+x = torch.Tensor([[bf.rank()/(indegree+1)]])
+bf.win_create(x, name="x_buff")
+x = bf.win_sync_then_collect(name="x_buff")
+
+
+for i in range(100):
     bf.barrier()
-    x = bf.win_sync(name="x_buff")
+    bf.win_accumulate_blocking(p, name="p_buff", dst_weights={
+        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
+    bf.win_accumulate_blocking(x, name="x_buff", dst_weights={
+        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
     bf.barrier()
-print("Rank {}: consensus with win ops".format(bf.rank()), x)
+    p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
+    x.mul_(1.0/(1+outdegree))
+    bf.barrier()
+    p = bf.win_sync_then_collect(name="p_buff")
+    x = bf.win_sync_then_collect(name="x_buff")
+
+print("Rank {}: consensus with win ops p: {}, x:{}, x/p{}".format(bf.rank(), p, x, x/p))
