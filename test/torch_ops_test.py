@@ -36,7 +36,7 @@ class OpsTests(unittest.TestCase):
             return tensor.cuda(device_id).type(dtype)
         return tensor.type(dtype)
 
-    def test_boardcast(self):
+    def test_broadcast(self):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
@@ -66,7 +66,7 @@ class OpsTests(unittest.TestCase):
                 max_difference = output.data.sub(tensor).max()
                 assert max_difference <= 1e-4
 
-    def test_boardcast_inplace(self):
+    def test_broadcast_inplace(self):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
         size = bf.size()
         rank = bf.rank()
