@@ -1,4 +1,9 @@
 language: python
+
+notifications:
+    email:
+        - hanbinhu2016@gmail.com
+
 python:
     - "3.7"
 
@@ -12,9 +17,9 @@ cache:
 
 addons:
     apt:
-      update: true
+        update: true
     homebrew:
-      update: true
+        update: true
 
 before_install:
     - ./scripts/install_mpi.sh $MPI
