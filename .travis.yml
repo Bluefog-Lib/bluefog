@@ -4,15 +4,18 @@ notifications:
     email:
         - hanbinhu2016@gmail.com
 
-python:
-    - "3.7"
-
-os:
-    - linux
-    - osx
-
-env:
-    - MPI=openmpi
+matrix:
+    include:
+        - os: linux
+          python: 3.7
+          env: MPI=openmpi
+        - os: linux
+          python: 3.7
+          env: MPI=mpich
+        - os: osx
+          env: MPI=openmpi
+        - os: osx
+          env: MPI=mpich
 
 cache:
     apt: true
