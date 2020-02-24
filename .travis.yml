@@ -7,7 +7,9 @@ notifications:
 python:
     - "3.7"
 
-os: linux
+os:
+    - linux
+    - osx
 
 env:
     - MPI=openmpi
