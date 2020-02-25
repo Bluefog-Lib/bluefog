@@ -13,11 +13,12 @@ size = _basics.size
 local_size = _basics.local_size
 rank = _basics.rank
 local_rank = _basics.local_rank
-mpi_threads_supported = _basics.mpi_threads_supported
 load_topology = _basics.load_topology
 set_topology = _basics.set_topology
 in_neighbor_ranks = _basics.in_neighbor_ranks
 out_neighbor_ranks = _basics.out_neighbor_ranks
+mpi_threads_supported = _basics.mpi_threads_supported
+unified_mpi_window_model_supported = _basics.unified_mpi_window_model_supported
 
 # Schema: handle -> input, output
 # We keep input in order to make sure it does not get garbage collected

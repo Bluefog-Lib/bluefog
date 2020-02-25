@@ -11,6 +11,13 @@ from bluefog.torch.optimizers import (
 
 check_extension('bluefog.torch', __file__, 'mpi_lib')
 
+from bluefog.torch.mpi_ops import init, shutdown
+from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
+from bluefog.torch.mpi_ops import load_topology, set_topology
+from bluefog.torch.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
+from bluefog.torch.mpi_ops import mpi_threads_supported
+from bluefog.torch.mpi_ops import unified_mpi_window_model_supported
+
 from bluefog.torch.mpi_ops import allreduce, allreduce_async
 from bluefog.torch.mpi_ops import allgather, allgather_async
 from bluefog.torch.mpi_ops import broadcast, broadcast_async
@@ -18,11 +25,7 @@ from bluefog.torch.mpi_ops import broadcast_, broadcast_async_
 from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_async
 from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_async
 from bluefog.torch.mpi_ops import poll, synchronize, barrier
-from bluefog.torch.mpi_ops import init, shutdown
-from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
-from bluefog.torch.mpi_ops import load_topology, set_topology
-from bluefog.torch.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
-from bluefog.torch.mpi_ops import mpi_threads_supported
+
 from bluefog.torch.mpi_ops import win_create, win_free
 from bluefog.torch.mpi_ops import win_sync, win_sync_then_collect
 from bluefog.torch.mpi_ops import win_put, win_put_blocking

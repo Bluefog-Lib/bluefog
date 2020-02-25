@@ -38,6 +38,11 @@ int bluefog_local_size();
 // supported. Returns -1 if Bluefog is not initialized.
 int bluefog_mpi_threads_supported();
 
+// C interface to return flag indicating whether MPI_WIN_MODEL is unified or not.
+// Returns 1 if model is unified; Returns 0 if model is seperated.
+// Returns -1 if Bluefog is not initialized.
+int bluefog_unified_mpi_window_model_supported();
+
 // C interface to return number of (in-) neighbor bluefog processes.
 // Returns -1 if bluefog is not initialized or topology is not set.
 int bluefog_neighbor_size();

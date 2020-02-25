@@ -15,6 +15,8 @@ from bluefog.tensorflow.mpi_ops import size, local_size, rank, local_rank
 from bluefog.tensorflow.mpi_ops import load_topology, set_topology
 from bluefog.tensorflow.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
 from bluefog.tensorflow.mpi_ops import mpi_threads_supported
+from bluefog.tensorflow.mpi_ops import unified_mpi_window_model_supported
+
 from bluefog.tensorflow.mpi_ops import allreduce, broadcast, allgather
 
 from bluefog.tensorflow.optimizers import broadcast_variables

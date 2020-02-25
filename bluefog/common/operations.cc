@@ -204,6 +204,13 @@ int bluefog_mpi_threads_supported() {
   return bluefog_global.controller->IsMpiThreadsSupported() ? 1 : 0;
 }
 
+int bluefog_unified_mpi_window_model_supported() {
+  if (!bluefog_global.initialization_done) {
+    return -1;
+  }
+  return bluefog_global.controller->IsMpiUnifiedModel() ? 1 : 0;
+}
+
 int bluefog_set_topology(int indegree, const int* sources, int outdegree,
                          const int* destinations) {
   if (!bluefog_global.initialization_done) {

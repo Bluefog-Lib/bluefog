@@ -96,6 +96,16 @@ class BlueFogBasics(object):
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return local_rank
 
+    def unified_mpi_window_model_supported(self) -> bool:
+        """Returns a boolean value to indicate the MPI_Win model is unified or not.
+        Unfornuately, it is a collective call. We have to create a fake win to get
+        this information.
+        """
+        is_unified = self.MPI_LIB_CTYPES.bluefog_unified_mpi_window_model_supported()
+        if is_unified == -1:
+            raise ValueError("BlueFog has not been initialized; use bf.init().")
+        return is_unified == 1
+
     def mpi_threads_supported(self) -> bool:
         """A function that returns a flag indicating whether MPI multi-threading is supported.
 

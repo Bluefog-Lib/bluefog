@@ -34,6 +34,7 @@ class MPIController {
   inline bool IsWinObjetEmpty() const {
     return mpi_ctx_.named_win_map.size() == 0;
   }
+  bool IsMpiUnifiedModel();
 
   // TODO(ybc) Create Operation_manager class to control it.
   void Allreduce(TensorTableEntry& entries);
@@ -67,7 +68,7 @@ class MPIController {
 
   MPIContext& mpi_ctx_;
 
-  // flag indicating whether MPI multi-threading is supported
+  // flag indicating whether MPI multi-threading is supported.
   bool mpi_threads_supported_ = false;
 
   Status AllocateOutput(TensorTableEntry& entries, int*& recvcounts, Communicator comm_type);

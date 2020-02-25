@@ -296,6 +296,25 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
+bool MPIController::IsMpiUnifiedModel(){
+  void* data_buf = nullptr;
+  int win_size = 1;
+  int element_size = 1;
+  MPI_Win fake_win;
+  MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
+                 mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &fake_win);
+  int flag = 0;
+  int* memory_model;
+  MPI_Win_get_attr(fake_win, MPI_WIN_MODEL, &memory_model, &flag);
+  MPI_Win_free(&fake_win);
+  if (flag == 0) {
+    BFLOG(WARNING) << "Failed to get MPI_WIN_MODEL attribution";
+    return false;
+  }
+  BFLOG(DEBUG) << "Unified MPI_WIN_MODEL support is " << (memory_model == MPI_WIN_UNIFIED);
+  return memory_model == MPI_WIN_UNIFIED;
+}
+
 Status MPIController::WinCreate(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
