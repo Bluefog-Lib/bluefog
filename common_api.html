@@ -325,6 +325,14 @@ not use this weight due to ambiguity.</p></li>
 </dl>
 </dd></dl>
 
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported">
+<code class="sig-name descname">unified_mpi_window_model_supported</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a boolean value to indicate the MPI_Win model is unified or not.
+Unfornuately, it is a collective call. We have to create a fake win to get
+this information.</p>
+</dd></dl>
+
 </dd></dl>
 
 <div class="section" id="module-bluefog.common.topology_util">
