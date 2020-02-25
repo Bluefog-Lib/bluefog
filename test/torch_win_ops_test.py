@@ -32,8 +32,7 @@ class WinOpsTests(unittest.TestCase):
         bf.init()
 
     def tearDown(self):
-        pass
-        # assert bf.win_free()
+        assert bf.win_free()
 
     @staticmethod
     def cast_and_place(tensor, dtype):
