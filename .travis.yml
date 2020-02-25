@@ -1,15 +1,9 @@
-language: python
-
-python: 3.7
-
-os: linux
-
-env:
-    matrix:
-        - MPI=openmpi
-
-matrix:
+jobs:
     include:
+        - os: linux
+          env: MPI=openmpi
+          language: python
+          python: 3.7
         - os: osx
           env: MPI=openmpi PY=3 NUM_PROC=2
           language: generic
@@ -48,7 +42,7 @@ before_deploy:
 
 deploy:
     provider: pages
-    skip_cleanup: true
+    cleanup: false
     github_token: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
     keep_history: true
     local_dir: docs/_build/html/
