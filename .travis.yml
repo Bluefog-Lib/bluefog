@@ -13,12 +13,12 @@ matrix:
     include:
         - os: osx
           osx_image: xcode10
-          env: MPI=openmpi PY=3
+          env: MPI=openmpi PY=3 NUM_PROC=2
           language: generic
           python: 3.7
         - os: osx
           osx_image: xcode10
-          env: MPI=mpich PY=3
+          env: MPI=mpich PY=3 NUM_PROC=2
           language: generic
           python: 3.7
 

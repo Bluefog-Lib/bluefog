@@ -1,4 +1,4 @@
-NUM_PROC = 4
+NUM_PROC ?= 4
 EXTRA_MPI_FLAG =
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest -s
