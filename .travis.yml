@@ -1,9 +1,5 @@
 language: python
 
-notifications:
-    email:
-        - hanbinhu2016@gmail.com
-
 matrix:
     include:
         - os: linux
@@ -51,3 +47,8 @@ deploy:
     local_dir: docs/_build/html/
     on:
         branch: master
+
+notifications:
+    email:
+        - bichengying@gmail.com
+        - hanbinhu2016@gmail.com
