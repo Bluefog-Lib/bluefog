@@ -13,6 +13,12 @@ matrix:
     include:
         - os: osx
           osx_image: xcode10
+          env: MPI=openmpi PY=3
+          language: generic
+          python: 3.7
+        - os: osx
+          osx_image: xcode10
+          env: MPI=mpich PY=3
           language: generic
           python: 3.7
 
@@ -27,15 +33,15 @@ addons:
 
 before_install:
     - ./scripts/install_mpi.sh $MPI
-    - pip install torch tensorflow
-    - python --version
-    - python -c "import torch; print(torch.__version__)"
-    - python -c "import tensorflow as tf; print(tf.__version__)"
+    - pip$PY install torch tensorflow
+    - python$PY --version
+    - python$PY -c "import torch; print(torch.__version__)"
+    - python$PY -c "import tensorflow as tf; print(tf.__version__)"
     - if [[ "$MPI" == "mpich" ]]; then mpichversion; fi
     - if [[ "$MPI" == "openmpi" ]]; then ompi_info; fi
 
 install:
-    - pip install .
+    - pip$PY install .
 
 script:
     - mv bluefog _bluefog  # Force to use installed package instead of local one
@@ -43,7 +49,7 @@ script:
 
 # Build and deploy the doc through the sphinx.
 before_deploy:
-    - pip install sphinx sphinx_rtd_theme
+    - pip$PY install sphinx sphinx_rtd_theme
     - cd docs && make html
     - touch _build/html/.nojekyll
 
