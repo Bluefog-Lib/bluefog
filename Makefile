@@ -2,6 +2,7 @@ NUM_PROC ?= 4
 EXTRA_MPI_FLAG =
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest -s
+MPICH_NOT_EXIST = $(shell which mpichversion)
 
 .PHONY: build
 build:
@@ -24,7 +25,9 @@ test_torch_ops:
 
 .PHONY: test_torch_win_ops
 test_torch_win_ops:
+ifeq (${MPICH_NOT_EXIST},)
 	${MPIRUN} ${PYTEST} ./test/torch_win_ops_test.py
+endif
 
 .PHONY: test_tensorflow_basic
 test_tensorflow_basic:
