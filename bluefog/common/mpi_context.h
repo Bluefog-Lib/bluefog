@@ -64,6 +64,8 @@ class WindowManager {
 
 struct MPIContext {
   void Enable() { enabled_ = true; };
+  void SetTopoSetup() { topo_setup_ = true; }
+  void ResetTopoSetup() { topo_setup_ = false; }
 
   bool IsEnabled() { return enabled_; }
   bool IsTopoSetup() { return topo_setup_; }
