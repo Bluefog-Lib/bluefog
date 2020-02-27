@@ -173,7 +173,11 @@ void MPIController::Broadcast(TensorTableEntry& entry) {
 
 int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
                                const int* destinations) {
-  mpi_ctx_.BuildGraphComm(indegree, sources, outdegree, destinations);
+  topo_setup_ = false;
+  int res_build_graph = mpi_ctx_.BuildGraphComm(indegree, sources, outdegree, destinations);
+  if(res_build_graph == -1)
+      return -1;
+  topo_setup_ = true;
 
   // Get neighbor in/out size and ranks.
   int unused_neighbor_is_weighted_ = -1;

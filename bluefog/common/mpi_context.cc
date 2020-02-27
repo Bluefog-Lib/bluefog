@@ -199,7 +199,6 @@ int MPIContext::BuildGraphComm(const int indegree, const int* sources,
         "details.");
     return -1;
   }
-  topo_setup_ = true;
   return 1;
 }
 
