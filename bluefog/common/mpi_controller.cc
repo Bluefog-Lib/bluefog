@@ -319,7 +319,13 @@ Status MPIController::WinCreate(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
     const std::string& name, const int device) {
-  WindowManager win_manager;
+  // 1. Regist a Name and create a window first.
+  if (!mpi_ctx_.RegisterWindowName(name)) {
+    return Status::InvalidArgument(std::string("Win_create failed with ") +
+                                   name);
+  }
+  // 2. Get the registered window manager. 
+  std::shared_ptr<WindowManager> win_manager = mpi_ctx_.GetWindowByName(name);
 
   // A global win hold the self memory, used by win_accumulate and win_get.
   auto global_mpi_win_ptr = std::make_shared<MPI_Win>();
@@ -329,7 +335,7 @@ Status MPIController::WinCreate(
   MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
                  mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                  global_mpi_win_ptr.get());
-  win_manager.SetGlobalWin(global_mpi_win_ptr);
+  win_manager->SetGlobalWin(global_mpi_win_ptr);
 
   // Build extra buffers for win_put.
   // For example: size=4 power two ring topology
@@ -368,13 +374,9 @@ Status MPIController::WinCreate(
     MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
                    mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                    mpi_win_ptr.get());
-    win_manager.PushBackWinAndTensor(mpi_win_ptr, t);
+    win_manager->PushBackWinAndTensor(mpi_win_ptr, t);
   }
 
-  if (!mpi_ctx_.RegisterWindowName(name, win_manager)) {
-    return Status::InvalidArgument(std::string("Win_create failed with ") +
-                                   name);
-  }
   return Status::OK();
 }
 
@@ -399,9 +401,9 @@ Status MPIController::WinSync(const std::string& name) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
 
-  WindowManager& win_mananger = it->second;
+  auto win_mananger = it->second;
   for (auto rank : neighbor_in_ranks_) {
-    MPI_Win_sync(*win_mananger.GetWinByRank(rank));
+    MPI_Win_sync(*(win_mananger->GetWinByRank(rank)));
   }
 
   return Status::OK();
@@ -413,9 +415,9 @@ Status MPIController::WinFence(const std::string& name) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
 
-  WindowManager& win_mananger = it->second;
+  std::shared_ptr<WindowManager> win_mananger = it->second;
   for (int rank = 0; rank < size_; rank++) {
-    MPI_Win_fence(0, *win_mananger.GetWinByRank(rank));
+    MPI_Win_fence(0, *(win_mananger->GetWinByRank(rank)));
   }
 
   return Status::OK();
@@ -428,8 +430,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
   }
-  WindowManager& win_mananger = it->second;
-  MPI_Win mpi_win = *(win_mananger.GetWinByRank(rank_));
+  std::shared_ptr<WindowManager> win_mananger = it->second;
+  MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
 
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
@@ -458,8 +460,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
   }
-  WindowManager& win_mananger = it->second;
-  MPI_Win mpi_win = *(win_mananger.GetWinByRank(rank_));
+  std::shared_ptr<WindowManager> win_mananger = it->second;
+  MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
 
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
@@ -487,17 +489,17 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
                              std::string(" in registered win object name."));
   }
-  WindowManager& win_mananger = it->second;
+  std::shared_ptr<WindowManager> win_mananger = it->second;
 
   int target_disp = 0;  // offset in win buffer
-  MPI_Win mpi_win = *(win_mananger.GetGlobalWin());
+  MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
   for (auto kv : entry.src_weights) {
     int target_rank = kv.first;
     float weight = kv.second;  // Unused. The real weight is happened at callback.
     // avoid getting the tensor for itself.
     if (target_rank == rank_) continue;
 
-    auto tensor = win_mananger.GetAssociateTensorByRank(target_rank);
+    auto tensor = win_mananger->GetAssociateTensorByRank(target_rank);
     void* recvbuf = (void *) tensor->data();
     int num_elements = tensor->shape().num_elements();
     MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(tensor);

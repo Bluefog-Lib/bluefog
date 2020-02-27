@@ -203,29 +203,36 @@ int MPIContext::BuildGraphComm(const int indegree, const int* sources,
   return 1;
 }
 
-bool MPIContext::RegisterWindowName(
-    const std::string& name, WindowManager& win_manager) {
+bool MPIContext::RegisterWindowName(const std::string& name) {
   if (named_win_map.find(name) != named_win_map.end()) {
     return false;
   }
-  // TODO(ybc) Consider use move constructor instead of copy?
-  named_win_map[name] = win_manager;
+  auto win_manager_ptr = std::make_shared<WindowManager>();
+  named_win_map[name] = win_manager_ptr;
   return true;
 }
 
+std::shared_ptr<WindowManager> MPIContext::GetWindowByName(
+    const std::string& name) {
+  if (named_win_map.find(name) == named_win_map.end()) {
+    return nullptr;
+  }
+  return named_win_map.at(name);
+}
+
 bool MPIContext::UnregisterWindowName(const std::string& name) {
-  auto it = named_win_map.find(name) ;
+  auto it = named_win_map.find(name);
   if (it == named_win_map.end()) {
     return false;
   }
-  it->second.FreeAllWins();
+  it->second->FreeAllWins();
   named_win_map.erase(it);
   return true;
 }
 
 bool MPIContext::UnregisterAllWindowName() {
-  for(auto& kv: named_win_map) {
-    kv.second.FreeAllWins();
+  for (auto& kv : named_win_map) {
+    kv.second->FreeAllWins();
   }
   named_win_map.clear();
   return true;

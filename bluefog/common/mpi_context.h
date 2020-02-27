@@ -90,7 +90,8 @@ struct MPIContext {
   int BuildGraphComm(int indegree, const int* sources, int outdegree,
                      const int* destinations);
 
-  bool RegisterWindowName(const std::string& name, WindowManager& win_manager);
+  bool RegisterWindowName(const std::string& name);
+  std::shared_ptr<WindowManager> GetWindowByName(const std::string& name);
   bool UnregisterWindowName(const std::string& name);
   bool UnregisterAllWindowName();
 
@@ -116,7 +117,7 @@ struct MPIContext {
   MPI_Comm graph_comm;
 
   // MPI Windows used for one-sided communication.
-  std::unordered_map<std::string, WindowManager> named_win_map;
+  std::unordered_map<std::string, std::shared_ptr<WindowManager>> named_win_map;
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;
