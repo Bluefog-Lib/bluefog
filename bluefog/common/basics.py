@@ -24,7 +24,7 @@ class BlueFogBasics(object):
     def __init__(self, pkg_path, *args):
         full_path = util.get_extension_full_path(pkg_path, *args)
         self._topology = None
-        self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
+        self._MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
     def init(self, topology: networkx.DiGraph = None,
              is_weighted: bool = False, comm=None):
@@ -41,13 +41,14 @@ class BlueFogBasics(object):
             If None, BlueFog will use MPI_COMM_WORLD Communicator.
         """
         del comm  # TODO(ybc) Allow to duplicate other communicator.
-        self.MPI_LIB_CTYPES.bluefog_init()
+        self._MPI_LIB_CTYPES.bluefog_init()
         self.set_topology(topology, is_weighted)
         atexit.register(self.shutdown)
 
     def shutdown(self) -> int:
         """A function that shuts BlueFog down."""
-        self.MPI_LIB_CTYPES.bluefog_shutdown()
+        self._MPI_LIB_CTYPES.bluefog_shutdown()
+        self.topology = None
 
     def size(self) -> int:
         """A function that returns the number of BlueFog processes.
@@ -55,7 +56,7 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar containing the number of BlueFog processes.
         """
-        size = self.MPI_LIB_CTYPES.bluefog_size()
+        size = self._MPI_LIB_CTYPES.bluefog_size()
         if size == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return size
@@ -67,7 +68,7 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar containing the number of local BlueFog processes.
         """
-        local_size = self.MPI_LIB_CTYPES.bluefog_local_size()
+        local_size = self._MPI_LIB_CTYPES.bluefog_local_size()
         if local_size == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return local_size
@@ -78,7 +79,7 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar with the BlueFog rank of the calling process.
         """
-        rank = self.MPI_LIB_CTYPES.bluefog_rank()
+        rank = self._MPI_LIB_CTYPES.bluefog_rank()
         if rank == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return rank
@@ -91,7 +92,7 @@ class BlueFogBasics(object):
         Returns:
           An integer scalar with the local BlueFog rank of the calling process.
         """
-        local_rank = self.MPI_LIB_CTYPES.bluefog_local_rank()
+        local_rank = self._MPI_LIB_CTYPES.bluefog_local_rank()
         if local_rank == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return local_rank
@@ -101,7 +102,7 @@ class BlueFogBasics(object):
         Unfornuately, it is a collective call. We have to create a fake win to get
         this information.
         """
-        is_unified = self.MPI_LIB_CTYPES.bluefog_unified_mpi_window_model_supported()
+        is_unified = self._MPI_LIB_CTYPES.bluefog_unified_mpi_window_model_supported()
         if is_unified == -1:
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return is_unified == 1
@@ -115,7 +116,7 @@ class BlueFogBasics(object):
         Returns:
           A boolean value indicating whether MPI multi-threading is supported.
         """
-        mpi_threads_supported = self.MPI_LIB_CTYPES.bluefog_mpi_threads_supported()
+        mpi_threads_supported = self._MPI_LIB_CTYPES.bluefog_mpi_threads_supported()
         if mpi_threads_supported == -1:
             raise ValueError(
                 "BlueFog has not been initialized; use bf.init().")
@@ -203,23 +204,23 @@ class BlueFogBasics(object):
         destinations_type = ctypes.c_int * outdegree
 
         if not is_weighted:
-            self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
+            self._MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
                 [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
                  ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
             )
-            ret = self.MPI_LIB_CTYPES.bluefog_set_topology(
+            ret = self._MPI_LIB_CTYPES.bluefog_set_topology(
                 indegree, sources_type(*sources),
                 outdegree, destinations_type(*destinations))
         else:
             source_weights = topology_util.GetWeights(topology, self.rank())
             source_weights_type = ctypes.c_float * \
                 (indegree+1)  # +1 becuase of self-weights
-            self.MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
+            self._MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
                 [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
                  ctypes.c_int, ctypes.POINTER(ctypes.c_int),
                  ctypes.POINTER(ctypes.c_float)]
             )
-            ret = self.MPI_LIB_CTYPES.bluefog_set_topology_with_weights(
+            ret = self._MPI_LIB_CTYPES.bluefog_set_topology_with_weights(
                 indegree, sources_type(*sources),
                 outdegree, destinations_type(*destinations),
                 source_weights_type(*source_weights)
