@@ -23,7 +23,7 @@ for i in range(100):
 print("Rank {}: Normal consensus result".format(bf.rank()), x)
 
 # Change to star topology with hasting rule, which should be unbiased as well.
-bf.set_topology(topology_util.StartGraph(bf.size()), is_weighted=True)
+bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
 x = torch.Tensor([[bf.rank()]])
 for i in range(100):
     x = bf.neighbor_allreduce(x)
@@ -32,7 +32,7 @@ for i in range(100):
 print("Rank {}: consensus with weights".format(bf.rank()), x)
 
 # Use win_accumulate to simulate the push-sum algorithm (sync).
-bf.set_topology(topology_util.StartGraph(bf.size()))
+bf.set_topology(topology_util.StarGraph(bf.size()))
 outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 

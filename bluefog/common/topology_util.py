@@ -32,7 +32,7 @@ def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     return G
 
 
-def StartGraph(size: int, center_rank: int = 0) -> nx.DiGraph:
+def StarGraph(size: int, center_rank: int = 0) -> nx.DiGraph:
     """Star structure of graph, i.e. all other ranks are connected to rank 0 (bidirection)."""
     assert size > 0
     topo = np.zeros((size, size))

@@ -136,7 +136,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
-        bf.set_topology(topology_util.StartGraph(size), is_weighted=True)
+        bf.set_topology(topology_util.StarGraph(size), is_weighted=True)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):

@@ -311,7 +311,7 @@ class OpsTests(unittest.TestCase):
             bf.allreduce(torch.FloatTensor([1]).cuda(
                 bf.local_rank() % torch.cuda.device_count()))
 
-        bf.set_topology(topology_util.StartGraph(size), is_weighted=True)
+        bf.set_topology(topology_util.StarGraph(size), is_weighted=True)
 
         if rank == 0:
             expect_result = (size-1) / 2
