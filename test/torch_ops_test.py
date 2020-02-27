@@ -16,7 +16,8 @@ from bluefog.common import topology_util
 
 
 EPSILON = 1e-5
-TEST_ON_GPU = torch.cuda.is_available()
+#TEST_ON_GPU = torch.cuda.is_available()
+TEST_ON_GPU = False
 
 class OpsTests(unittest.TestCase):
     """
@@ -258,6 +259,114 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data.mul_(num_indegree+1) -
                  sum_value).abs().max() < EPSILON
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_avg_biring_topo(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a bidirectional ring topology."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
+
+        bf.set_topology(topology_util.BiRingGraph(size))
+
+        num_indegree = 2
+        sum_value = rank+(rank+1)%size+(rank-1)%size
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data.mul_(num_indegree+1) -
+                 sum_value).abs().max() < EPSILON
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_avg_ring_topo(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a ring topology."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
+
+        for connect_direction in [False, True]:
+            bf.set_topology(topology_util.RingGraph(size, connect_direction))
+
+            num_indegree = 1
+            sum_value = rank+(rank+(1 if connect_direction else -1))%size
+
+            dims = [1, 2, 3]
+            for dtype, dim in itertools.product(dtypes, dims):
+                tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+                tensor = self.cast_and_place(tensor, dtype)
+                reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+                assert (
+                    list(reduced_tensor.shape) == [23] * dim
+                ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+                assert (
+                    (reduced_tensor.data.mul_(num_indegree+1) -
+                     sum_value).abs().max() < EPSILON
+                ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_avg_star_topo(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a star topology."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
+
+        for center_rank in range(size):
+            bf.set_topology(topology_util.StarGraph(size, center_rank))
+
+            if rank == center_rank:
+                num_indegree = size-1
+                sum_value = size*(size-1)/2
+            else:
+                num_indegree = 1
+                sum_value = rank+center_rank
+
+            dims = [1, 2, 3]
+            for dtype, dim in itertools.product(dtypes, dims):
+                tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+                tensor = self.cast_and_place(tensor, dtype)
+                reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+                assert (
+                    list(reduced_tensor.shape) == [23] * dim
+                ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+                assert (
+                    (reduced_tensor.data.mul_(num_indegree+1) -
+                     sum_value).abs().max() < EPSILON
+                ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_sum(self):
         """Test that the neighbor all reduce (sum) 1D, 2D, 3D tensors correctly."""
