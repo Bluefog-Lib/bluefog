@@ -276,10 +276,15 @@ class OpsTests(unittest.TestCase):
             bf.allreduce(torch.FloatTensor([1]).cuda(
                 bf.local_rank() % torch.cuda.device_count()))
 
-        bf.set_topology(topology_util.BiRingGraph(size))
+        is_set = bf.set_topology(topology_util.BiRingGraph(size))
+        assert is_set, "Topology set failed."
 
-        num_indegree = 2
-        sum_value = rank+(rank+1)%size+(rank-1)%size
+        if size > 2:
+            num_indegree = 2
+            sum_value = rank+(rank+1)%size+(rank-1)%size
+        else:
+            num_indegree = 1
+            sum_value = 1
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -311,7 +316,8 @@ class OpsTests(unittest.TestCase):
                 bf.local_rank() % torch.cuda.device_count()))
 
         for connect_direction in [False, True]:
-            bf.set_topology(topology_util.RingGraph(size, connect_direction))
+            is_set = bf.set_topology(topology_util.RingGraph(size, connect_direction))
+            assert is_set, "Topology set failed."
 
             num_indegree = 1
             sum_value = rank+(rank+(1 if connect_direction else -1))%size
@@ -346,7 +352,8 @@ class OpsTests(unittest.TestCase):
                 bf.local_rank() % torch.cuda.device_count()))
 
         for center_rank in range(size):
-            bf.set_topology(topology_util.StarGraph(size, center_rank))
+            is_set = bf.set_topology(topology_util.StarGraph(size, center_rank))
+            assert is_set, "Topology set failed."
 
             if rank == center_rank:
                 num_indegree = size-1
