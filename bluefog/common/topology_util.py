@@ -67,6 +67,8 @@ def BiRingGraph(size: int) -> nx.DiGraph:
     assert size > 0
     if size == 1:
         return nx.from_numpy_array(np.array([[1.0]]), create_using=nx.DiGraph)
+    elif size == 2:
+        return nx.from_numpy_array(np.array([[0.5,0.5],[0.5,0.5]]), create_using=nx.DiGraph)
     x = np.zeros(size)
     x[0] = 1/3.0
     x[-1] = 1/3.0
