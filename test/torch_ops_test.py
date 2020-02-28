@@ -9,6 +9,7 @@ import warnings
 
 import numpy as np
 import torch
+import networkx as nx
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
@@ -246,6 +247,43 @@ class OpsTests(unittest.TestCase):
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data.mul_(num_indegree+1) -
+                 sum_value).abs().max() < EPSILON
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_avg_meshgrid_topo(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a 2D meshgrid topology."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            warnings.warn(
+                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
+            )
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+            # Use allreduce as a barrier.
+            bf.allreduce(torch.FloatTensor([1]).cuda(
+                bf.local_rank() % torch.cuda.device_count()))
+
+        is_set = bf.set_topology(topology_util.MeshGrid2DGraph(size))
+        assert is_set, "Topology set failed."
+
+        topology = bf.load_topology()
+        neighbor_array_with_self = np.nonzero(nx.to_numpy_matrix(topology)[rank])[1]
+        num_indegree = len(neighbor_array_with_self)-1
+        sum_value = neighbor_array_with_self.sum()
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):

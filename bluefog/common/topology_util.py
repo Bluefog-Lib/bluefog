@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import networkx as nx
@@ -28,6 +28,29 @@ def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     topo = np.empty((size, size))
     for i in range(size):
         topo[i] = np.roll(x, i)
+    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    return G
+
+def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
+    """ 2D MeshGrid structure of a graph."""
+    assert size > 0
+    if shape is None:
+        i = int(np.sqrt(size))
+        while size%i != 0: i -= 1
+        shape = (i, size//i)
+    nrow, ncol = shape
+    assert size == nrow*ncol
+    topo = np.zeros((size, size))
+    for i in range(size):
+        topo[i][i] = 1.0
+        if (i+1) % ncol != 0:
+            topo[i][i+1] = 1.0
+            topo[i+1][i] = 1.0
+        if i+ncol < size:
+            topo[i][i+ncol] = 1.0
+            topo[i+ncol][i] = 1.0
+    for i in range(size):
+        topo[i] /= topo[i].sum()
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
