@@ -11,8 +11,7 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
-from bluefog.common.topology_util import PowerTwoRingGraph, BiRingGraph
-from bluefog.common.topology_util import RingGraph, StarGraph
+from bluefog.common.topology_util import PowerTwoRingGraph, BiRingGraph, RingGraph
 from bluefog.common.topology_util import IsTopologyEquivalent
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -53,7 +52,7 @@ class BasicsTests(unittest.TestCase):
             )
             return 
 
-        tensor = torch.FloatTensor(1).fill_(1)
+        tensor = torch.FloatTensor([1])
         window_name = "win_create_test"
         is_created = bf.win_create(tensor, window_name)
         assert is_created, "bf.win_create do not create window object successfully."
@@ -72,14 +71,14 @@ class BasicsTests(unittest.TestCase):
 
         topology = bf.load_topology()
         assert isinstance(topology, nx.DiGraph)
-        np.testing.assert_array_equal(
-            nx.to_numpy_array(PowerTwoRingGraph(size)), nx.to_numpy_array(topology))
+        assert IsTopologyEquivalent(topology, PowerTwoRingGraph(size))
 
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_set_and_load_topology(self):
-        _, size = mpi_env_rank_and_size()
+        bf.init()
+        size = bf.size()
         if size == 4:
             expected_topology = nx.DiGraph(np.array(
                 [[1/3., 1/3., 1/3., 0.], [0., 1/3., 1/3., 1/3.],
@@ -89,15 +88,14 @@ class BasicsTests(unittest.TestCase):
             expected_topology = nx.DiGraph(np.array([[1.0]]))
         else:
             expected_topology = PowerTwoRingGraph(size)
-        bf.init()
         topology = bf.load_topology()
         assert isinstance(topology, nx.DiGraph)
-        np.testing.assert_array_equal(
-            nx.to_numpy_array(expected_topology), nx.to_numpy_array(topology))
+        assert IsTopologyEquivalent(expected_topology, topology)
 
     def test_in_out_neighbors_power2(self):
-        rank, size = mpi_env_rank_and_size()
         bf.init()
+        rank = bf.rank()
+        size = bf.size()
         bf.set_topology(PowerTwoRingGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
@@ -111,8 +109,9 @@ class BasicsTests(unittest.TestCase):
         assert sorted(out_neighbors) == expected_out_neighbors
 
     def test_in_out_neighbors_biring(self):
-        rank, size = mpi_env_rank_and_size()
         bf.init()
+        rank = bf.rank()
+        size = bf.size()
         bf.set_topology(BiRingGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()

@@ -4,14 +4,12 @@ from __future__ import print_function
 
 import itertools
 import unittest
-import time
 import warnings
 
 import numpy as np
 import torch
 import networkx as nx
 
-from common import mpi_env_rank_and_size
 import bluefog.torch as bf
 from bluefog.common import topology_util
 
@@ -262,7 +260,10 @@ class OpsTests(unittest.TestCase):
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_meshgrid_topo(self):
-        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a 2D meshgrid topology."""
+        """
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors 
+        correctly in a 2D meshgrid topology.
+        """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -299,7 +300,10 @@ class OpsTests(unittest.TestCase):
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_biring_topo(self):
-        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a bidirectional ring topology."""
+        """
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly 
+        in a bidirectional ring topology.
+        """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -338,7 +342,10 @@ class OpsTests(unittest.TestCase):
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_ring_topo(self):
-        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a ring topology."""
+        """
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly 
+        in a ring topology.
+        """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -374,7 +381,10 @@ class OpsTests(unittest.TestCase):
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_star_topo(self):
-        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly in a star topology."""
+        """
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly 
+        in a star topology.
+        """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
