@@ -45,6 +45,7 @@ class BasicsTests(unittest.TestCase):
         assert true_size == size
 
     def test_set_topology_fail_with_win_create(self):
+        # TODO: Open-MPI bug for MAC: https://github.com/open-mpi/ompi/issues/2614
         _, size = mpi_env_rank_and_size()
         bf.init()
 
