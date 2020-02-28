@@ -46,18 +46,23 @@ x = torch.Tensor([[bf.rank()/(indegree+1)]])
 bf.win_create(x, name="x_buff")
 x = bf.win_sync_then_collect(name="x_buff")
 
-
 for i in range(100):
+    skip = np.random.rand(1) < 0.34
+    if skip:
+        pass
+    else:
+        bf.win_accumulate(p, name="p_buff", dst_weights={
+            rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
+        bf.win_accumulate(x, name="x_buff", dst_weights={
+            rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
     bf.barrier()
-    bf.win_accumulate_blocking(p, name="p_buff", dst_weights={
-        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-    bf.win_accumulate_blocking(x, name="x_buff", dst_weights={
-        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-    bf.barrier()
-    p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
-    x.mul_(1.0/(1+outdegree))
-    bf.barrier()
+    if skip:
+        pass
+    else:
+        p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
+        x.mul_(1.0/(1+outdegree))
     p = bf.win_sync_then_collect(name="p_buff")
     x = bf.win_sync_then_collect(name="x_buff")
+    bf.barrier()
 
-print("Rank {}: consensus with win ops p: {}, x:{}, x/p{}".format(bf.rank(), p, x, x/p))
+print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), p, x, x/p))
