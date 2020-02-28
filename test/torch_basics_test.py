@@ -7,10 +7,13 @@ import warnings
 import numpy as np
 import networkx as nx
 import pytest
+import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
 from bluefog.common.topology_util import PowerTwoRingGraph, BiRingGraph
+from bluefog.common.topology_util import RingGraph, StarGraph
+from bluefog.common.topology_util import IsTopologyEquivalent
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -40,6 +43,33 @@ class BasicsTests(unittest.TestCase):
         size = bf.size()
         # print("Size: ", true_size, size)
         assert true_size == size
+
+    def test_set_topology_fail_with_win_create(self):
+        _, size = mpi_env_rank_and_size()
+        bf.init()
+
+        tensor = torch.FloatTensor(1).fill_(1)
+        window_name = "win_create_test"
+        is_created = bf.win_create(tensor, window_name)
+        assert is_created, "bf.win_create do not create window object successfully."
+
+        if size == 1:
+            expected_topology = nx.from_numpy_array(np.array([[0.5]]), create_using=nx.DiGraph)
+        elif size == 2:
+            expected_topology = nx.from_numpy_array(np.array([[0, 0.2],[0.2, 0]]), create_using=nx.DiGraph)
+        else:
+            expected_topology = RingGraph(size)
+
+        is_set = bf.set_topology(expected_topology)
+        assert not is_set, "bf.set_topology do not fail due to win_create."
+
+        topology = bf.load_topology()
+        assert isinstance(topology, nx.DiGraph)
+        np.testing.assert_array_equal(
+            nx.to_numpy_array(PowerTwoRingGraph(size)), nx.to_numpy_array(topology))
+
+        is_freed = bf.win_free()
+        assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_set_and_load_topology(self):
         _, size = mpi_env_rank_and_size()
