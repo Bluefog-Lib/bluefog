@@ -2,8 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import unittest
+import inspect
 import warnings
+import unittest
+
 import numpy as np
 import networkx as nx
 import pytest
@@ -46,11 +48,10 @@ class BasicsTests(unittest.TestCase):
     def test_set_topology_fail_with_win_create(self):
         bf.init()
         size = bf.size()
-        if size == 1:
-            warnings.warn(
-                "Skip test set failure topology since win_create need size > 1."
-            )
-            return 
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
 
         tensor = torch.FloatTensor([1])
         window_name = "win_create_test"

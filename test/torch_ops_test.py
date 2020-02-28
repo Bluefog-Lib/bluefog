@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import inspect
 import itertools
 import unittest
 import warnings
@@ -40,9 +41,8 @@ class OpsTests(unittest.TestCase):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
-            warnings.warn(  
-                "Skip test broadcast since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
@@ -71,9 +71,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test broadcast_inplace since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
@@ -105,9 +104,8 @@ class OpsTests(unittest.TestCase):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
-            warnings.warn(
-                "Skip test allreduce since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -128,9 +126,8 @@ class OpsTests(unittest.TestCase):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
-            warnings.warn(
-                "Skip test allreduce since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.DoubleTensor,]
         if TEST_ON_GPU:
@@ -152,9 +149,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test allgather since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
@@ -188,9 +184,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test allgather since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
@@ -230,9 +225,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -267,9 +261,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -282,7 +275,8 @@ class OpsTests(unittest.TestCase):
         assert is_set, "Topology set failed."
 
         topology = bf.load_topology()
-        neighbor_array_with_self = np.nonzero(nx.to_numpy_matrix(topology)[rank])[1]
+        neighbor_array_with_self = np.nonzero(
+            nx.to_numpy_matrix(topology)[rank])[1]
         num_indegree = len(neighbor_array_with_self)-1
         sum_value = neighbor_array_with_self.sum()
 
@@ -301,15 +295,14 @@ class OpsTests(unittest.TestCase):
 
     def test_neighbor_allreduce_avg_biring_topo(self):
         """
-        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly 
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly
         in a bidirectional ring topology.
         """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -323,7 +316,7 @@ class OpsTests(unittest.TestCase):
 
         if size > 2:
             num_indegree = 2
-            sum_value = rank+(rank+1)%size+(rank-1)%size
+            sum_value = rank+(rank+1) % size+(rank-1) % size
         else:
             num_indegree = 1
             sum_value = 1
@@ -343,15 +336,14 @@ class OpsTests(unittest.TestCase):
 
     def test_neighbor_allreduce_avg_ring_topo(self):
         """
-        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly 
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly
         in a ring topology.
         """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -361,11 +353,12 @@ class OpsTests(unittest.TestCase):
                 bf.local_rank() % torch.cuda.device_count()))
 
         for connect_direction in [False, True]:
-            is_set = bf.set_topology(topology_util.RingGraph(size, connect_direction))
+            is_set = bf.set_topology(
+                topology_util.RingGraph(size, connect_direction))
             assert is_set, "Topology set failed."
 
             num_indegree = 1
-            sum_value = rank+(rank+(1 if connect_direction else -1))%size
+            sum_value = rank+(rank+(1 if connect_direction else -1)) % size
 
             dims = [1, 2, 3]
             for dtype, dim in itertools.product(dtypes, dims):
@@ -382,15 +375,14 @@ class OpsTests(unittest.TestCase):
 
     def test_neighbor_allreduce_avg_star_topo(self):
         """
-        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly 
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly
         in a star topology.
         """
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(avg) since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -400,7 +392,8 @@ class OpsTests(unittest.TestCase):
                 bf.local_rank() % torch.cuda.device_count()))
 
         for center_rank in range(size):
-            is_set = bf.set_topology(topology_util.StarGraph(size, center_rank))
+            is_set = bf.set_topology(
+                topology_util.StarGraph(size, center_rank))
             assert is_set, "Topology set failed."
 
             if rank == center_rank:
@@ -428,11 +421,11 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(sum) since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor,
+                  torch.IntTensor, torch.LongTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
             # Use allreduce as a barrier.
@@ -464,9 +457,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allreduce(weighted avg) since size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -499,9 +491,8 @@ class OpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test neighbor allgather since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]

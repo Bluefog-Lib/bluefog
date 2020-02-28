@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import inspect
 import itertools
 import unittest
 import time
@@ -46,6 +47,12 @@ class WinOpsTests(unittest.TestCase):
         """Test that the window create and free objects correctly."""
         size = bf.size()
         rank = bf.rank()
+        # OpenMPI implementation seems won't allow win_create on size 1.
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
@@ -77,9 +84,14 @@ class WinOpsTests(unittest.TestCase):
             assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_free_all(self):
+        size = bf.size()
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -96,9 +108,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_put since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -128,9 +139,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_put since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -166,9 +176,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_put since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -202,9 +211,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_put since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -244,10 +252,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_put with given destination " +
-                "since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -285,9 +291,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_accumulate since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -322,9 +327,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_accumulate since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -357,9 +361,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_get since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
@@ -393,10 +396,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
-            warnings.warn(
-                "Skip test win_get_given_sources " +
-                "since the world size should be larger than 1!"
-            )
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
