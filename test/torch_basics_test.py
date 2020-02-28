@@ -45,9 +45,13 @@ class BasicsTests(unittest.TestCase):
         assert true_size == size
 
     def test_set_topology_fail_with_win_create(self):
-        # TODO: Open-MPI bug for MAC: https://github.com/open-mpi/ompi/issues/2614
-        _, size = mpi_env_rank_and_size()
         bf.init()
+        size = bf.size()
+        if size == 1:
+            warnings.warn(
+                "Skip test set failure topology since win_create need size > 1."
+            )
+            return 
 
         tensor = torch.FloatTensor(1).fill_(1)
         window_name = "win_create_test"
@@ -55,9 +59,11 @@ class BasicsTests(unittest.TestCase):
         assert is_created, "bf.win_create do not create window object successfully."
 
         if size == 1:
-            expected_topology = nx.from_numpy_array(np.array([[0.5]]), create_using=nx.DiGraph)
+            expected_topology = nx.from_numpy_array(
+                np.array([[0.5]]), create_using=nx.DiGraph)
         elif size == 2:
-            expected_topology = nx.from_numpy_array(np.array([[0, 0.2],[0.2, 0]]), create_using=nx.DiGraph)
+            expected_topology = nx.from_numpy_array(
+                np.array([[0, 0.2], [0.2, 0]]), create_using=nx.DiGraph)
         else:
             expected_topology = RingGraph(size)
 
