@@ -49,8 +49,17 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
         if i+ncol < size:
             topo[i][i+ncol] = 1.0
             topo[i+ncol][i] = 1.0
+
+    # According to Hasting rule (Policy 1) in https://arxiv.org/pdf/1702.05122.pdf
+    # The neighbor definition in the paper is different from our implementation, 
+    # which includes the self node.
+    topo_neighbor_with_self = [np.nonzero(topo[i])[0] for i in range(size)]
     for i in range(size):
-        topo[i] /= topo[i].sum()
+        for j in topo_neighbor_with_self[i]:
+            if i != j:
+                topo[i][j] = 1.0/max(len(topo_neighbor_with_self[i]), 
+                                     len(topo_neighbor_with_self[j]))
+        topo[i][i] = 2.0-topo[i].sum()
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
