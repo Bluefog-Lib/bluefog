@@ -1,8 +1,9 @@
 from typing import List, Dict
+
 import torch
 
 from bluefog.torch import mpi_lib  # C library
-from bluefog.common.basics import BlueFogBasics
+from bluefog.common.basics import BlueFogBasics, logger
 
 _basics = BlueFogBasics(__file__, 'mpi_lib')
 
@@ -726,15 +727,15 @@ def win_accumulate_blocking(tensor: torch.Tensor, name: str,
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
-    
-
 
 def win_poll(handle: int) -> bool:
     return mpi_lib.bluefog_torch_win_poll(handle) != 0
 
 
 def win_wait(handle: int) -> bool:
-    if handle not in _handle_map:
+    if handle not in _win_handle_map:
+        logger.warning("Win wait is called but the handle " 
+                       "is not found in the _win_handle_map.")
         return None
     mpi_lib.bluefog_torch_win_wait(handle)
     _ = _win_handle_map.pop(handle)
