@@ -123,7 +123,7 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
     return false;
   }
   for (auto& kv : it->second) {
-    std::shared_ptr<TorchTensor>& t = kv.second;
+    std::shared_ptr<TorchTensor> t = kv.second;
     local_tensor.add_(t->GetUnderlyingTensor());
   }
   return true;
@@ -324,7 +324,7 @@ int DoWinGet(const std::string& name,
           if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                         bf_neighbor_tensor)) {
             BFLOG(FATAL) << "Cannot get neighbor tensor with " << name
-                       << " at rank " << rank;
+                         << " at rank " << rank;
           }
           bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
         }
