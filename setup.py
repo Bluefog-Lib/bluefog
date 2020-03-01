@@ -212,6 +212,7 @@ def get_common_options(build_ext):
     MACROS = []
     INCLUDES = [
         'third_party/boost/lockfree/include',
+        'third_party/boost/parameter/include',
     ]
     SOURCES = ["bluefog/common/common.cc",
                "bluefog/common/logging.cc",
