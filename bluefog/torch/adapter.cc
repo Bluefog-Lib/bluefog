@@ -70,15 +70,7 @@ int64_t TorchTensor::size() const {
 
 ::torch::Tensor TorchTensor::MakeCopy(int device) {
   with_device device_context(device);
-  ::torch::Tensor t;
-  if (device == CPU_DEVICE_ID) { 
-    t = ::torch::ones(tensor_.sizes(), ::torch::device(::torch::kCPU).dtype(tensor_.dtype()));
-  } else {
-    t = ::torch::ones(tensor_.sizes(),
-                      ::torch::device(::torch::kCUDA).dtype(tensor_.dtype()));
-  }
-  t.copy_(tensor_, /*nonblocking=*/false);
-  return t;
+  return tensor_.clone();
 }
 
 ::torch::Tensor TorchTensor::GetUnderlyingTensor() { return tensor_; }
