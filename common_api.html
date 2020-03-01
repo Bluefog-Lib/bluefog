@@ -363,7 +363,16 @@ the adjacenty matrix is the same only.</p>
 <dl class="function">
 <dt id="bluefog.common.topology_util.MeshGrid2DGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">MeshGrid2DGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">shape: Tuple[int</em>, <em class="sig-param">int] = None</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>2D MeshGrid structure of a graph.</p>
+<dd><p>2D MeshGrid structure of a graph.
+Assume shape = (nrow, ncol)
+- When shape is provided, a meshgrid of nrow*ncol will be generated.
+- When shape is not provided, nrow and ncol will be the two closest factors of size.</p>
+<blockquote>
+<div><p>For example: size = 24, nrow and ncol will be 4 and 6, respectively.
+We assume  nrow will be equal to or smaller than ncol.
+If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology
+into a linear one.</p>
+</div></blockquote>
 </dd></dl>
 
 <dl class="function">
