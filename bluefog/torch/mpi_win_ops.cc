@@ -18,8 +18,8 @@ namespace torch {
 using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
-using ::bluefog::common::Status;
 using ::bluefog::common::EnqueuTensorWindowGet;
+using ::bluefog::common::Status;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
@@ -69,7 +69,7 @@ bool WinTorchStorageManager::UnregisterWinName(const std::string& name) {
   return true;
 }
 
-void WinTorchStorageManager::ClearAll() { 
+void WinTorchStorageManager::ClearAll() {
   tensors_map_.clear();
   self_tensor_map_.clear();
 }
@@ -109,7 +109,7 @@ bool WinTorchStorageManager::GetStorageByNameRank(
   auto it2 = neighbor_map.find(rank);
   if (it2 == neighbor_map.end()) {
     BFLOG(ERROR) << "Cannot find rank " << rank << " in " << name
-               << "neighbor tensor map";
+                 << "neighbor tensor map";
     return false;
   }
   tensor = it2->second;
@@ -153,17 +153,17 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   if (it == tensors_map_.end()) {
     return false;
   }
-  
+
   auto neighbor_map = it->second;
   float self_weight = 0.0;
-  if(weights.find(common::bluefog_rank()) != weights.end()) {
+  if (weights.find(common::bluefog_rank()) != weights.end()) {
     self_weight = static_cast<float>(weights.at(common::bluefog_rank()));
   }
   local_tensor.mul_(self_weight);
 
-  for(auto& kv: weights) {
+  for (auto& kv : weights) {
     int rank = kv.first;
-    if(rank == common::bluefog_rank()) continue;
+    if (rank == common::bluefog_rank()) continue;
     float weight = kv.second;
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul_(weight));
@@ -213,16 +213,17 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 
 namespace {
 
-int InplaceUpdateNeighborTensor(const std::string& name,
-  const std::unordered_map<int, float>& update_weights) {
+int InplaceUpdateNeighborTensor(
+    const std::string& name,
+    const std::unordered_map<int, float>& update_weights) {
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
   for (auto& kv : update_weights) {
     int rank = kv.first;
     float weight = kv.second;
     if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                   bf_neighbor_tensor)) {
-      BFLOG(FATAL) << "Cannot get neighbor tensor with " << name
-                  << " at rank " << rank;
+      BFLOG(FATAL) << "Cannot get neighbor tensor with " << name << " at rank "
+                   << rank;
       return 0;
     }
     bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
@@ -230,7 +231,7 @@ int InplaceUpdateNeighborTensor(const std::string& name,
   return 1;
 }
 
-} // namespace
+}  // namespace
 
 int DoWinSync(::torch::Tensor tensor, const std::string& name,
               const std::unordered_map<int, float>& update_weights) {
@@ -324,7 +325,7 @@ int DoWinGet(const std::string& name,
           if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                         bf_neighbor_tensor)) {
             BFLOG(FATAL) << "Cannot get neighbor tensor with " << name
-                       << " at rank " << rank;
+                         << " at rank " << rank;
           }
           bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
         }
@@ -354,7 +355,6 @@ int DoWinFence(const std::string& name) {
   return status.ok() ? 1 : 0;
 }
 
-
 void AddWinOpsIntoPybind(py::module& m) {
   // one-sided communication
   m.def("bluefog_torch_win_create_torch_IntTensor", &DoWinCreate);
@@ -379,15 +379,23 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_sync_torch_cuda_DoubleTensor", &DoWinSync);
 #endif
 
-  m.def("bluefog_torch_win_sync_with_weights_torch_IntTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_LongTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_FloatTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_DoubleTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_IntTensor",
+        &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_LongTensor",
+        &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_FloatTensor",
+        &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_DoubleTensor",
+        &DoWinSyncWeighted);
 #if HAVE_CUDA
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_IntTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_LongTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_FloatTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_DoubleTensor", &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_IntTensor",
+        &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_LongTensor",
+        &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_FloatTensor",
+        &DoWinSyncWeighted);
+  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_DoubleTensor",
+        &DoWinSyncWeighted);
 #endif
 
   m.def("bluefog_torch_win_put_torch_IntTensor", &DoWinPut);
@@ -408,8 +416,10 @@ void AddWinOpsIntoPybind(py::module& m) {
 #if HAVE_CUDA
   m.def("bluefog_torch_win_accumulate_torch_cuda_IntTensor", &DoWinAccumulate);
   m.def("bluefog_torch_win_accumulate_torch_cuda_LongTensor", &DoWinAccumulate);
-  m.def("bluefog_torch_win_accumulate_torch_cuda_FloatTensor", &DoWinAccumulate);
-  m.def("bluefog_torch_win_accumulate_torch_cuda_DoubleTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_FloatTensor",
+        &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_DoubleTensor",
+        &DoWinAccumulate);
 #endif
 
   m.def("bluefog_torch_win_get", &DoWinGet);

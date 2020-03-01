@@ -134,3 +134,6 @@ data/
 examples/checkpoint/*
 examples/logs/*
 examples/.profile/*
+
+# timeline log file
+.log/*

@@ -8,6 +8,8 @@
 #include "tensor_queue.h"
 #include "mpi_controller.h"
 
+#include "timeline.h"
+
 namespace bluefog {
 namespace common {
 
@@ -30,6 +32,12 @@ struct BluefogGlobalState {
 
   // Whether collective context has been completed on the background thread.
   std::atomic_bool initialization_done{false};
+
+  // Timeline writer.
+  Timeline timeline;
+
+  // Flag indicating whether timeline enabled.
+  bool timeline_enabled = false;
 
   std::shared_ptr<MPIController> controller;
 

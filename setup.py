@@ -216,6 +216,7 @@ def get_common_options(build_ext):
                "bluefog/common/mpi_context.cc",
                "bluefog/common/mpi_controller.cc",
                "bluefog/common/operations.cc",
+               "bluefog/common/timeline.cc",
                "bluefog/common/tensor_queue.cc"]
     COMPILE_FLAGS = cpp_flags + shlex.split(mpi_flags)
     LINK_FLAGS = link_flags + shlex.split(mpi_flags)
