@@ -32,14 +32,24 @@ def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     return G
 
 def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
-    """ 2D MeshGrid structure of a graph."""
+    """ 
+    2D MeshGrid structure of a graph.
+    Assume shape = (nrow, ncol)
+    - When shape is provided, a meshgrid of nrow*ncol will be generated.
+    - When shape is not provided, nrow and ncol will be the two closest factors of size.
+      For example: size = 24, nrow and ncol will be 4 and 6, respectively.
+      We assume  nrow will be equal to or smaller than ncol.
+      If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology 
+      into a linear one.
+    """
+
     assert size > 0
     if shape is None:
         i = int(np.sqrt(size))
         while size%i != 0: i -= 1
         shape = (i, size//i)
     nrow, ncol = shape
-    assert size == nrow*ncol
+    assert size == nrow*ncol, "The shape doesn't match the size provided."
     topo = np.zeros((size, size))
     for i in range(size):
         topo[i][i] = 1.0
