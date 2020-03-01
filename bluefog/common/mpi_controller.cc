@@ -231,7 +231,7 @@ int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
 
 int MPIController::LoadTopologyWeights(const std::unordered_map<int, float>*& neighbor_weights) {
   if (!mpi_ctx_.IsWeighted()) {
-    return -1;
+    return 0;
   }
   neighbor_weights = &neighbor_weights_;
   return 1;
