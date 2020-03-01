@@ -123,7 +123,7 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
     return false;
   }
   for (auto& kv : it->second) {
-    std::shared_ptr<TorchTensor>& t = kv.second;
+    std::shared_ptr<TorchTensor> t = kv.second;
     local_tensor.add_(t->GetUnderlyingTensor());
   }
   return true;
@@ -141,7 +141,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
       return false;
     }
     // +1 here because in neighbor degree doesn't include self rank.
-    local_tensor.div_(in_neighbor_degree_ + 1);
+    local_tensor.div_(static_cast<float>(in_neighbor_degree_) + 1.0);
     return true;
   }
 }
@@ -166,7 +166,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(
     if (rank == common::bluefog_rank()) continue;
     float weight = kv.second;
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
-    local_tensor.add_(neighbor_tesnor.mul_(weight));
+    local_tensor.add_(neighbor_tesnor.mul(weight));
   }
   return true;
 }
@@ -192,7 +192,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(
     return false;
   }
   // +1 here because source_ranks doesn't include self rank.
-  local_tensor.div_(static_cast<int>(source_ranks.size()) + 1);
+  local_tensor.div_(static_cast<float>(source_ranks.size()) + 1.0);
   return true;
 }
 

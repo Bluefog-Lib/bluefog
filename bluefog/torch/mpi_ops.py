@@ -1,8 +1,9 @@
 from typing import List, Dict
+
 import torch
 
 from bluefog.torch import mpi_lib  # C library
-from bluefog.common.basics import BlueFogBasics
+from bluefog.common.basics import BlueFogBasics, logger
 
 _basics = BlueFogBasics(__file__, 'mpi_lib')
 
@@ -25,11 +26,12 @@ unified_mpi_window_model_supported = _basics.unified_mpi_window_model_supported
 # before the operation is finished.
 _handle_map = {}
 
-# Schema: name -> tensor
-_win_map = {}
-
-#Schema: handle -> name
+# Schema: handle -> name
 _win_handle_map = {}
+
+# Schema: name -> tensor
+# Added in WinCreate, removed in WinFree, and referred by sync.
+_win_map = {}
 
 
 def _check_function(function_factory, tensor, *args):
@@ -726,16 +728,18 @@ def win_accumulate_blocking(tensor: torch.Tensor, name: str,
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
-    
-
 
 def win_poll(handle: int) -> bool:
+    """Return whether the win ops identified by handle is done or not."""
     return mpi_lib.bluefog_torch_win_poll(handle) != 0
 
 
 def win_wait(handle: int) -> bool:
-    if handle not in _handle_map:
-        return None
+    """Wait until the async win ops identified by handle is done."""
+    if handle not in _win_handle_map:
+        logger.warning("Win wait is called but the handle "
+                       "is not found in the _win_handle_map.")
+        return False
     mpi_lib.bluefog_torch_win_wait(handle)
     _ = _win_handle_map.pop(handle)
     return True

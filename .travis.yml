@@ -4,8 +4,16 @@ jobs:
           env: MPI=openmpi
           language: python
           python: 3.7
+        - os: linux
+          env: MPI=mpich
+          language: python
+          python: 3.7
         - os: osx
           env: MPI=openmpi PY=3 NUM_PROC=2
+          language: generic
+          python: 3.7
+        - os: osx
+          env: MPI=mpich PY=3 NUM_PROC=2
           language: generic
           python: 3.7
 
