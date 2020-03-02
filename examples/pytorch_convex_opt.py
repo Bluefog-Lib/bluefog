@@ -32,7 +32,7 @@ for i in range(100):
 print("Rank {}: consensus with weights".format(bf.rank()), x)
 
 # Use win_accumulate to simulate the push-sum algorithm (sync).
-bf.set_topology(topology_util.StarGraph(bf.size()))
+bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
 outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
@@ -46,23 +46,25 @@ x = torch.Tensor([[bf.rank()/(indegree+1)]])
 bf.win_create(x, name="x_buff")
 x = bf.win_sync_then_collect(name="x_buff")
 
-for i in range(100):
-    skip = np.random.rand(1) < 0.34
+for i in range(200):
+    skip = np.random.rand(1) < 0.23
     if skip:
         pass
     else:
-        bf.win_accumulate(p, name="p_buff", dst_weights={
+        handle1 = bf.win_accumulate(p, name="p_buff", dst_weights={
             rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-        bf.win_accumulate(x, name="x_buff", dst_weights={
+        handle2 = bf.win_accumulate(x, name="x_buff", dst_weights={
             rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-    bf.barrier()
-    if skip:
-        pass
-    else:
+        bf.win_wait(handle1)
+        bf.win_wait(handle2)
         p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
         x.mul_(1.0/(1+outdegree))
+    bf.barrier()
     p = bf.win_sync_then_collect(name="p_buff")
     x = bf.win_sync_then_collect(name="x_buff")
     bf.barrier()
 
 print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), p, x, x/p))
+
+bf.win_free(name="x_buff")
+bf.win_free(name="p_buff")
