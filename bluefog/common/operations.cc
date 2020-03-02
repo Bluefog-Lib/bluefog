@@ -467,7 +467,6 @@ Status WindowFence(const std::string& name) {
     BFLOG(ERROR) << status.reason();
   }
   return status;
-
 }
 
 Status Barrier(StatusCallback callback) {
@@ -479,6 +478,32 @@ Status Barrier(StatusCallback callback) {
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  return status;
+}
+
+Status WindowLock(const std::string& name) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinLock(name);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot Lock the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowUnlock(const std::string& name) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinUnlock(name);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot Unlock the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
+  }
   return status;
 }
 

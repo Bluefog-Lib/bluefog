@@ -174,6 +174,9 @@ extern "C" int bluefog_torch_win_fence(char* name);
 extern "C" int bluefog_torch_win_poll(int handle);
 extern "C" void bluefog_torch_win_wait(int handle);
 
+extern "C" void bluefog_torch_win_lock(char* name);
+extern "C" void bluefog_torch_win_unlock(char* name);
+
 }  // namespace torch
 }  // namespace bluefog
 

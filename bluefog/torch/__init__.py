@@ -32,6 +32,7 @@ from bluefog.torch.mpi_ops import win_put, win_put_blocking
 from bluefog.torch.mpi_ops import win_get, win_get_blocking
 from bluefog.torch.mpi_ops import win_accumulate, win_accumulate_blocking
 from bluefog.torch.mpi_ops import win_wait, win_poll
+from bluefog.torch.mpi_ops import win_lock, win_unlock
 
 def broadcast_parameters(params, root_rank):
     """

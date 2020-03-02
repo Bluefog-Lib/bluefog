@@ -123,6 +123,10 @@ Status WindowFree(const std::string& name);
 
 Status WindowFence(const std::string& name);
 
+Status WindowLock(const std::string& name);
+
+Status WindowUnlock(const std::string& name);
+
 Status Barrier(StatusCallback callback);
 
 }  // namespace common

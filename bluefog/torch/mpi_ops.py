@@ -748,3 +748,11 @@ def win_wait(handle: int) -> bool:
     mpi_lib.bluefog_torch_win_wait(handle)
     _ = _win_handle_map.pop(handle)
     return True
+
+
+def win_lock(name: str):
+    mpi_lib.bluefog_torch_win_lock(name)
+
+
+def win_unlock(name: str):
+    mpi_lib.bluefog_torch_win_unlock(name)

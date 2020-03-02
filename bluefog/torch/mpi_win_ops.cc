@@ -354,6 +354,17 @@ int DoWinFence(const std::string& name) {
   return status.ok() ? 1 : 0;
 }
 
+void DoWinLock(const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::WindowLock(name);
+  ThrowIfError(status);
+}
+
+void DoWinUnlock(const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::WindowUnlock(name);
+  ThrowIfError(status);
+}
 
 void AddWinOpsIntoPybind(py::module& m) {
   // one-sided communication
@@ -418,6 +429,8 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_fence", &DoWinFence);
   m.def("bluefog_torch_win_poll", &DoWinPollHandle);
   m.def("bluefog_torch_win_wait", &DoWinWait);
+  m.def("bluefog_torch_win_lock", &DoWinLock);
+  m.def("bluefog_torch_win_unlock", &DoWinUnlock);
 }
 
 }  // namespace torch

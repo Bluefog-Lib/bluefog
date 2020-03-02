@@ -532,5 +532,37 @@ void MPIController::Barrier(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
+Status MPIController::WinLock(const std::string& name) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::InvalidArgument(
+        std::string("Cannot find ") + name +
+        std::string(" in registered win object name."));
+  }
+  std::shared_ptr<WindowManager> win_mananger = it->second;
+  MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
+
+  // It only lock self.
+  int target_rank = rank_;
+  MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
+  return Status::OK();
+}
+
+Status MPIController::WinUnlock(const std::string& name){
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::InvalidArgument(
+        std::string("Cannot find ") + name +
+        std::string(" in registered win object name."));
+  }
+  std::shared_ptr<WindowManager> win_mananger = it->second;
+  MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
+
+  // It only lock self.
+  int target_rank = rank_;
+  MPI_Win_unlock(target_rank, mpi_win);
+  return Status::OK();
+}
+
 }  // namespace common
 }  // namespace bluefog
