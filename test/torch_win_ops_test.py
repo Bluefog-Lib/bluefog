@@ -381,8 +381,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_get_blocking(window_name)
-            bf.barrier()
-            recv_tensor = bf.win_sync(window_name)
+            recv_tensor = bf.win_sync(window_name, clone=True)
 
             assert (list(tensor.shape) == [3] * dim), (
                 "bf.win_get produce wrong shape tensor.")
@@ -414,9 +413,9 @@ class WinOpsTests(unittest.TestCase):
             bf.win_create(tensor, window_name)
             bf.win_get_blocking(window_name, src_weights={
                                 (rank-1) % size: 1.23})
-            bf.barrier()
-            recv_tensor = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
-                                                            rank: 0.5})
+            recv_tensor = bf.win_sync(window_name, 
+                                      weights={(rank-1) % size: 0.5, rank: 0.5},
+                                      clone=True)
 
             assert (list(recv_tensor.shape) == [3] * dim), (
                 "bf.win_get with given sources produces wrong shape tensor.")

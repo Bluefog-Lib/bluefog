@@ -497,7 +497,8 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
     return win_sync(name, weights, update_weights)
 
 def win_sync(name: str, weights: Dict[int, float] = None,
-             update_weights: Dict[int, float] = None) -> torch.Tensor:
+             update_weights: Dict[int, float] = None,
+             clone=False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened.
@@ -512,6 +513,8 @@ def win_sync(name: str, weights: Dict[int, float] = None,
             The update_weights is always happened after the weights computation.
             The data structure of weights should be {rank : weight}
             and rank has to belonge the (in-)neighbors.
+        clone: If set up to be true, the win_sync result will return a new tensor instead of
+            in-place change.
 
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
@@ -521,6 +524,8 @@ def win_sync(name: str, weights: Dict[int, float] = None,
     bf.set_topology(.., is_weighted=True) is a better choice.
     """
     tensor = _win_map[name]
+    if clone:
+        tensor = tensor.clone()
     function = _check_function(_win_sync_function_factory, tensor, weights)
     update_weights = {} if update_weights is None else update_weights
     if weights is not None:
