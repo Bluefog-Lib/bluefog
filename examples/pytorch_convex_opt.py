@@ -47,24 +47,27 @@ bf.win_create(x, name="x_buff")
 x = bf.win_sync_then_collect(name="x_buff")
 
 for i in range(200):
-    skip = np.random.rand(1) < 0.23
-    if skip:
-        pass
-    else:
-        handle1 = bf.win_accumulate(p, name="p_buff", dst_weights={
-            rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-        handle2 = bf.win_accumulate(x, name="x_buff", dst_weights={
-            rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-        bf.win_wait(handle1)
-        bf.win_wait(handle2)
-        p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
-        x.mul_(1.0/(1+outdegree))
-    bf.barrier()
-    p = bf.win_sync_then_collect(name="p_buff")
-    x = bf.win_sync_then_collect(name="x_buff")
-    bf.barrier()
+    handle1 = bf.win_accumulate(p, name="p_buff", dst_weights={
+        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
+    handle2 = bf.win_accumulate(x, name="x_buff", dst_weights={
+        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
+    bf.win_wait(handle1)
+    bf.win_wait(handle2)
+    x.mul_(1.0/(1+outdegree))
+    p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
 
+    bf.barrier()
+    with bf.win_lock("p_buff"), bf.win_lock("x_buff"):
+        p = bf.win_sync_then_collect(name="p_buff")
+        x = bf.win_sync_then_collect(name="x_buff")
+
+
+bf.barrier()
 print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), p, x, x/p))
+
+sum_push_sum = bf.allreduce(x/p, average=False)
+if bf.rank() == 0:
+    print("Total Sum ", sum_push_sum)
 
 bf.win_free(name="x_buff")
 bf.win_free(name="p_buff")

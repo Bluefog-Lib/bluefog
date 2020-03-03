@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import List, Dict
 
 import torch
@@ -734,6 +735,7 @@ def win_accumulate_blocking(tensor: torch.Tensor, name: str,
     # TODO(ybc) Error handling.
     return True
 
+
 def win_poll(handle: int) -> bool:
     """Return whether the win ops identified by handle is done or not."""
     return mpi_lib.bluefog_torch_win_poll(handle) != 0
@@ -750,9 +752,37 @@ def win_wait(handle: int) -> bool:
     return True
 
 
+@contextmanager
 def win_lock(name: str):
+    """ win_lock context manager. Within the context, the modification of
+    SELF tesnor will be locked for other processes through one-sided communication.
+    Note The ops of win_get, win_accumulate, and win_put do not need win_lock context.
+
+    Args:
+        name: The name of existing MPI_win object. If not found, ValueError will raise.
+
+    Example:
+            >>> bf.win_create(tensor, name)
+            >>> with win_lock_ctx(name):
+                    tensor = bf.win_sync_then_collect(name)
+            >>> win_put(tensor, name)
+    """
+    _win_lock(name)
+    try:
+        yield
+    finally:
+        _win_unlock(name)
+
+
+def _win_lock(name: str):
+    if name not in _win_map:
+        raise ValueError(
+            "{} is not found in the registered window object.".format(name))
     mpi_lib.bluefog_torch_win_lock(name)
 
 
-def win_unlock(name: str):
+def _win_unlock(name: str):
+    if name not in _win_map:
+        raise ValueError(
+            "{} is not found in the registered window object.".format(name))
     mpi_lib.bluefog_torch_win_unlock(name)
