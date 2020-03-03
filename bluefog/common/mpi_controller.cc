@@ -477,7 +477,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     void* sendbuf = (void*) tensor->data();
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Accumulate(sendbuf, num_elements, data_type, target_rank,
-                           target_disp, num_elements, data_type, MPI_SUM, mpi_win);
+                                  target_disp, num_elements, data_type, MPI_SUM, mpi_win);
     if (ret_code != MPI_SUCCESS) {
       throw std::runtime_error("MPI_Accumulate failed, see MPI output for details.");
     }
@@ -542,9 +542,15 @@ Status MPIController::WinLock(const std::string& name) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
 
-  // It only lock self.
+  // It only locks the memory in local.
   int target_rank = rank_;
   MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
+
+  for(const int& rank: neighbor_in_ranks_) {
+    auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
+    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, *mpi_win_ptr);
+  }
+
   return Status::OK();
 }
 
@@ -558,9 +564,15 @@ Status MPIController::WinUnlock(const std::string& name){
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
 
-  // It only lock self.
+  // It only locks the memory in local.
   int target_rank = rank_;
   MPI_Win_unlock(target_rank, mpi_win);
+
+  for(const int& rank: neighbor_in_ranks_) {
+    auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
+    MPI_Win_unlock(target_rank, *mpi_win_ptr);
+  }
+
   return Status::OK();
 }
 
