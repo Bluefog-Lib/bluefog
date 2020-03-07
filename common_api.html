@@ -340,14 +340,20 @@ this information.</p>
 <dl class="function">
 <dt id="bluefog.common.topology_util.BiRingGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">BiRingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.BiRingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ring structure of graph (bidirection).</p>
+<dd><p>Generate ring structure of graph (bidirection).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="bluefog.common.topology_util.FullyConnectedGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">FullyConnectedGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.FullyConnectedGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate fully connected structure of graph.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="bluefog.common.topology_util.GetWeights">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param">topo: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">rank: int</em><span class="sig-paren">)</span> &#x2192; List[float]<a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return a List of (in-)weights of rank.
-Self weights is always put at the beginning. If there is no self-loop,
+<dd><p>Return a List of (in-)weights of rank.</p>
+<p>Self weights is always put at the beginning. If there is no self-loop,
 the first element will be zero. The rest will be the same order as
 predecessors returned.</p>
 </dd></dl>
@@ -355,16 +361,16 @@ predecessors returned.</p>
 <dl class="function">
 <dt id="bluefog.common.topology_util.IsTopologyEquivalent">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">IsTopologyEquivalent</code><span class="sig-paren">(</span><em class="sig-param">topo1: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">topo2: networkx.classes.digraph.DiGraph</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.topology_util.IsTopologyEquivalent" title="Permalink to this definition">¶</a></dt>
-<dd><p>Determine two topologies are equivalent or not.
-Notice we do not check two topologies are isomorphism. Instead checking
+<dd><p>Determine two topologies are equivalent or not.</p>
+<p>Notice we do not check two topologies are isomorphism. Instead checking
 the adjacenty matrix is the same only.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="bluefog.common.topology_util.MeshGrid2DGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">MeshGrid2DGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">shape: Tuple[int</em>, <em class="sig-param">int] = None</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>2D MeshGrid structure of a graph.
-Assume shape = (nrow, ncol)
+<dd><p>Generate 2D MeshGrid structure of graph.</p>
+<p>Assume shape = (nrow, ncol)
 - When shape is provided, a meshgrid of nrow*ncol will be generated.
 - When shape is not provided, nrow and ncol will be the two closest factors of size.</p>
 <blockquote>
@@ -378,19 +384,23 @@ into a linear one.</p>
 <dl class="function">
 <dt id="bluefog.common.topology_util.PowerTwoRingGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">PowerTwoRingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.PowerTwoRingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Each point only connected to a point such that the index difference is power of 2.</p>
+<dd><p>Generate graph topology such that each points only
+connected to a point such that the index difference is power of 2.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="bluefog.common.topology_util.RingGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">RingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">left_connect: bool = False</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.RingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ring structure of graph (uniliteral).</p>
+<dd><p>Generate ring structure of graph (uniliteral).</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="bluefog.common.topology_util.StarGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">StarGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">center_rank: int = 0</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.StarGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Star structure of graph, i.e. all other ranks are connected to rank 0 (bidirection).</p>
+<dd><p>Generate star structure of graph.</p>
+<p>All other ranks are connected to the center_rank. The connection is
+bidirection, i.e. if the weight from node i to node j is non-zero, so
+is the weight from node j to node i.</p>
 </dd></dl>
 
 </div>
