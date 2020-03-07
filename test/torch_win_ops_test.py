@@ -434,17 +434,20 @@ class WinOpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
         bf.set_topology(topology_util.FullyConnectedGraph(size))
-        bf.barrier()
         if rank == 0:
             with bf.win_mutex():
+                bf.barrier()
                 time.sleep(2.0)
         else:
-            time.sleep(0.1)
+            bf.barrier()
             t_start = time.time()
             with bf.win_mutex():
-                pass
+                time.sleep(0.001)
             t_end = time.time()
-            assert (t_end - t_start) > 2
+            assert (t_end - t_start) > 2, \
+                "The mutex acquire time should be longer than 2 second"
+            assert (t_end - t_start) < 3, \
+                "The mutex acquire time should be shorter than 3 second"
 
 
 if __name__ == "__main__":
