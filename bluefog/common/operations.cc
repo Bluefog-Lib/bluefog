@@ -507,5 +507,31 @@ Status WindowUnlock(const std::string& name) {
   return status;
 }
 
+Status WindowMutexAcquire() {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinMutexAcquire();
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot acquire window mutex";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowMutexRelease() {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinMutexRelease();
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot release window mutex"; 
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
 }  // namespace common
 }  // namespace bluefog

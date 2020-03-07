@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <thread>
 
 namespace bluefog {
 namespace common {
@@ -381,6 +382,10 @@ Status MPIController::WinCreate(
     win_manager->PushBackWinAndTensor(mpi_win_ptr, t);
   }
 
+  if (mpi_ctx_.win_mutex.empty()) {
+    WinMutexInit();
+  }
+
   return Status::OK();
 }
 
@@ -571,6 +576,101 @@ Status MPIController::WinUnlock(const std::string& name){
   for(const int& rank: neighbor_in_ranks_) {
     auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
     MPI_Win_unlock(target_rank, *mpi_win_ptr);
+  }
+
+  return Status::OK();
+}
+
+Status MPIController::WinMutexInit() {
+  int element_size = 0;
+  int win_size = 0;
+  void* data_buf;
+
+  for (int rank = 0; rank < size_; rank++) {
+    auto mpi_win_ptr = std::make_shared<MPI_Win>();
+    if (rank == rank_) {
+      data_buf = new int[1];  // memory leak here!
+      MPI_Type_size(MPI_INT, &element_size);
+      win_size = 1 * element_size;
+    } else {
+      data_buf = nullptr;
+      element_size = 1;
+      win_size = 0;
+    }
+    MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
+                   mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
+                   mpi_win_ptr.get());
+    mpi_ctx_.win_mutex.push_back(mpi_win_ptr);
+  }
+  BFLOG(TRACE) << "WinMutexInit called";
+  return Status::OK();
+}
+
+Status MPIController::WinMutexDestroy() {
+  BFLOG(TRACE) << "WinMutexDestroy called";
+  bool ret = mpi_ctx_.DestroyWinMutex();
+  return Status::OK();
+}
+
+Status MPIController::WinMutexAcquire() {
+  if (mpi_ctx_.win_mutex.empty()) {
+    return Status::PreconditionError(
+        "Cannot accquire Win Mutex because it may not be initialized or has "
+        "been destroyed.");
+  }
+
+  // TODO(ybc) Try better implementation than Spin Lock.
+  // Recall that we build N windows across all N processes.
+  // The spin value is stored in the rank i for i-th window.
+  // Other process will got to acquire it.
+  int one = 1;
+  int minus_one = -1;
+  int oldval = 0;
+  int target_disp = 0;
+
+  std::shared_ptr<MPI_Win> mutex_win;
+  // Note we don't need to lock the self_win because no other process will
+  // modify the memory associated with the self_win.
+  for (int in_rank : neighbor_in_ranks_) {
+    mutex_win = mpi_ctx_.win_mutex[in_rank];
+    BFLOG(DEBUG, rank_) << "Get Win Mutex for rank " << in_rank;
+    MPI_Win_lock(MPI_LOCK_SHARED, in_rank, 0, *mutex_win);
+    do {
+      MPI_Fetch_and_op(&one, &oldval, MPI_INT, in_rank, target_disp, MPI_SUM,
+                       *mutex_win);
+      MPI_Win_flush(in_rank, *mutex_win);
+      if (oldval == 0) break;
+      MPI_Accumulate(&minus_one, 1, MPI_INT, in_rank, target_disp, 1, MPI_INT,
+                     MPI_SUM, *mutex_win);
+      MPI_Win_flush(in_rank, *mutex_win);
+
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
+    } while (1);
+    MPI_Win_unlock(in_rank, *mutex_win);
+  }
+
+  return Status::OK();
+}
+
+Status MPIController::WinMutexRelease() {
+  int minus_one = -1;
+  int target_disp = 0;
+
+  if (mpi_ctx_.win_mutex.empty()) {
+    return Status::PreconditionError(
+        "Cannot release Win Mutex because it may not be initialized or has "
+        "been destroyed.");
+  }
+
+  std::shared_ptr<MPI_Win> mutex_win;
+  for (int in_rank : neighbor_in_ranks_) {
+    mutex_win = mpi_ctx_.win_mutex[in_rank];
+    MPI_Win_lock(MPI_LOCK_SHARED, in_rank, 0, *mutex_win);
+    // TODO(ybc) Notice the following accumulate may cause the value to be
+    // negative, i.e. more release ops is called than acquire.
+    MPI_Accumulate(&minus_one, 1, MPI_INT, in_rank, target_disp, 1, MPI_INT,
+                   MPI_SUM, *mutex_win);
+    MPI_Win_unlock(in_rank, *mutex_win);
   }
 
   return Status::OK();

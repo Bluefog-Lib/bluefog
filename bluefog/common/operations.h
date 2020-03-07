@@ -127,6 +127,10 @@ Status WindowLock(const std::string& name);
 
 Status WindowUnlock(const std::string& name);
 
+Status WindowMutexAcquire();
+
+Status WindowMutexRelease();
+
 Status Barrier(StatusCallback callback);
 
 }  // namespace common

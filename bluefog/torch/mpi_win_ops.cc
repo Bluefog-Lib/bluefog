@@ -366,6 +366,18 @@ void DoWinUnlock(const std::string& name) {
   ThrowIfError(status);
 }
 
+void DoWinMutexAcquire() {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::WindowMutexAcquire();
+  ThrowIfError(status);
+}
+
+void DoWinMutexRelease() {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::WindowMutexRelease();
+  ThrowIfError(status);
+}
+
 void AddWinOpsIntoPybind(py::module& m) {
   // one-sided communication
   m.def("bluefog_torch_win_create_torch_IntTensor", &DoWinCreate);
@@ -429,8 +441,12 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_fence", &DoWinFence);
   m.def("bluefog_torch_win_poll", &DoWinPollHandle);
   m.def("bluefog_torch_win_wait", &DoWinWait);
+
   m.def("bluefog_torch_win_lock", &DoWinLock);
   m.def("bluefog_torch_win_unlock", &DoWinUnlock);
+
+  m.def("bluefog_torch_win_mutex_acquire", &DoWinMutexAcquire);
+  m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
 }
 
 }  // namespace torch

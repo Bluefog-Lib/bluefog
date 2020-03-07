@@ -177,6 +177,9 @@ extern "C" void bluefog_torch_win_wait(int handle);
 extern "C" void bluefog_torch_win_lock(char* name);
 extern "C" void bluefog_torch_win_unlock(char* name);
 
+extern "C" void bluefog_torch_win_mutex_acquire();
+extern "C" void bluefog_torch_win_mutex_release();
+
 }  // namespace torch
 }  // namespace bluefog
 

@@ -96,6 +96,7 @@ struct MPIContext {
   std::shared_ptr<WindowManager> GetWindowByName(const std::string& name);
   bool UnregisterWindowName(const std::string& name);
   bool UnregisterAllWindowName();
+  bool DestroyWinMutex();
 
   // Flag indicating whether mpi is enabled.
   bool enabled_ = false;
@@ -120,6 +121,9 @@ struct MPIContext {
 
   // MPI Windows used for one-sided communication.
   std::unordered_map<std::string, std::shared_ptr<WindowManager>> named_win_map;
+
+  // MPI Window used for mutex.
+  std::vector<std::shared_ptr<MPI_Win>> win_mutex;
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;

@@ -64,6 +64,11 @@ class MPIController {
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
 
+  Status WinMutexInit();
+  Status WinMutexAcquire();
+  Status WinMutexRelease();
+  Status WinMutexDestroy();
+
  protected:
   // Outside dependencies
   TensorQueue& tensor_queue_;

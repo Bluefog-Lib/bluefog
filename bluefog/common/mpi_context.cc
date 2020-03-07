@@ -176,6 +176,8 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
   UnregisterAllWindowName();
 
+  DestroyWinMutex();
+
   if (should_finalize) {
     ctx_manager.EnvFinalize();
   }
@@ -234,6 +236,17 @@ bool MPIContext::UnregisterAllWindowName() {
     kv.second->FreeAllWins();
   }
   named_win_map.clear();
+  return true;
+}
+
+bool MPIContext::DestroyWinMutex() {
+  if (win_mutex.empty()) {
+    return false;
+  } 
+
+  for (auto mpi_win_ptr : win_mutex) {
+    MPI_Win_free(mpi_win_ptr.get());
+  }
   return true;
 }
 

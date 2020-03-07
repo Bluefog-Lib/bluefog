@@ -754,18 +754,12 @@ def win_wait(handle: int) -> bool:
 
 @contextmanager
 def win_lock(name: str):
-    """ win_lock context manager. Within the context, the modification of
-    SELF tesnor will be locked for other processes through one-sided communication.
+    """ win_lock context manager. Within the context, an RMA access epoch
+    for its neihbor is created.
     Note The ops of win_get, win_accumulate, and win_put do not need win_lock context.
 
     Args:
         name: The name of existing MPI_win object. If not found, ValueError will raise.
-
-    Example:
-            >>> bf.win_create(tensor, name)
-            >>> with win_lock_ctx(name):
-                    tensor = bf.win_sync_then_collect(name)
-            >>> win_put(tensor, name)
     """
     _win_lock(name)
     try:
@@ -786,3 +780,29 @@ def _win_unlock(name: str):
         raise ValueError(
             "{} is not found in the registered window object.".format(name))
     mpi_lib.bluefog_torch_win_unlock(name)
+
+
+@contextmanager
+def win_mutex():
+    """ A win object implemented mutex context manager. Within the context,
+    the windows associated with the in-neighbors are locked.
+
+        Example:
+            >>> bf.win_create(tensor, name)
+            >>> with win_mutex():
+                    tensor = bf.win_sync_then_collect(name)
+            >>> win_put(tensor, name)
+    """
+    _win_mutex_acquire()
+    try:
+        yield
+    finally:
+        _win_mutex_release()
+
+
+def _win_mutex_acquire():
+    mpi_lib.bluefog_torch_win_mutex_acquire()
+
+
+def _win_mutex_release():
+    mpi_lib.bluefog_torch_win_mutex_release()
