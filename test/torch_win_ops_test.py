@@ -428,15 +428,13 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(recv_tensor.min(),
                                                  recv_tensor.max(), avg_value, rank))
 
-    @unittest.skipIf(
-        (os.environ.get("MPI") == "openmpi" and sys.platform.startswith('linux')),
-        "Unknown reason this test will hang in travis.")
-    def test_win_mutex(self):
+    def test_win_mutex_full(self):
         size = bf.size()
         rank = bf.rank()
-        if size <= 1:
+        if size <= 2:
             fname = inspect.currentframe().f_code.co_name
-            warnings.warn("Skip {} due to size 1".format(fname))
+            warnings.warn(
+                "Skip {} because it only supports test over at least 3 nodes".format(fname))
             return
         bf.set_topology(topology_util.FullyConnectedGraph(size))
         if rank == 0:
@@ -453,6 +451,32 @@ class WinOpsTests(unittest.TestCase):
                 "The mutex acquire time should be longer than 2 second"
             assert (t_end - t_start) < 3, \
                 "The mutex acquire time should be shorter than 3 second"
+
+    def test_win_mutex_ring(self):
+        size = bf.size()
+        rank = bf.rank()
+        if size < 4:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn(
+                "Skip {} because it only supports test above 4 nodes".format(fname))
+            return
+
+        bf.set_topology(topology_util.BiRingGraph(size))
+        if rank == 0:
+            with bf.win_mutex():
+                bf.barrier()
+                time.sleep(2.0)
+        elif rank == 1:
+            bf.barrier()
+            t_start = time.time()
+            with bf.win_mutex():
+                time.sleep(0.001)
+            t_end = time.time()
+            # Rank 0 gets mutex for 1 and size - 1.
+            # while rank 1 gets mutex for 0 and 2.
+            assert (t_end - t_start) < 0.1
+        else:
+            bf.barrier()
 
 
 if __name__ == "__main__":

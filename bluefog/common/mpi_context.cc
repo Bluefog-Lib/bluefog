@@ -288,11 +288,11 @@ bool MPIContext::DestroyWinMutex() {
     return false;
   } 
 
-  self_mutex_mem.reset();
   for (auto mpi_win_ptr : win_mutex) {
     MPI_Win_free(mpi_win_ptr.get());
   }
   win_mutex.clear();
+  self_mutex_mem.reset();
   return true;
 }
 
