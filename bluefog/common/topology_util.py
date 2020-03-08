@@ -61,7 +61,8 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
     assert size > 0
     if shape is None:
         i = int(np.sqrt(size))
-        while size%i != 0: i -= 1
+        while size % i != 0:
+            i -= 1
         shape = (i, size//i)
     nrow, ncol = shape
     assert size == nrow*ncol, "The shape doesn't match the size provided."
@@ -76,13 +77,13 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
             topo[i+ncol][i] = 1.0
 
     # According to Hasting rule (Policy 1) in https://arxiv.org/pdf/1702.05122.pdf
-    # The neighbor definition in the paper is different from our implementation, 
+    # The neighbor definition in the paper is different from our implementation,
     # which includes the self node.
     topo_neighbor_with_self = [np.nonzero(topo[i])[0] for i in range(size)]
     for i in range(size):
         for j in topo_neighbor_with_self[i]:
             if i != j:
-                topo[i][j] = 1.0/max(len(topo_neighbor_with_self[i]), 
+                topo[i][j] = 1.0/max(len(topo_neighbor_with_self[i]),
                                      len(topo_neighbor_with_self[j]))
         topo[i][i] = 2.0-topo[i].sum()
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
@@ -90,9 +91,9 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
 
 
 def StarGraph(size: int, center_rank: int = 0) -> nx.DiGraph:
-    """Generate star structure of graph. 
-    
-    All other ranks are connected to the center_rank. The connection is 
+    """Generate star structure of graph.
+
+    All other ranks are connected to the center_rank. The connection is
     bidirection, i.e. if the weight from node i to node j is non-zero, so
     is the weight from node j to node i.
     """
@@ -130,7 +131,7 @@ def BiRingGraph(size: int) -> nx.DiGraph:
     if size == 1:
         return nx.from_numpy_array(np.array([[1.0]]), create_using=nx.DiGraph)
     if size == 2:
-        return nx.from_numpy_array(np.array([[0.5,0.5],[0.5,0.5]]), create_using=nx.DiGraph)
+        return nx.from_numpy_array(np.array([[0.5, 0.5], [0.5, 0.5]]), create_using=nx.DiGraph)
     x = np.zeros(size)
     x[0] = 1/3.0
     x[-1] = 1/3.0
@@ -140,6 +141,7 @@ def BiRingGraph(size: int) -> nx.DiGraph:
         topo[i] = np.roll(x, i)
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
+
 
 def GetWeights(topo: nx.DiGraph, rank: int) -> List[float]:
     """Return a List of (in-)weights of rank.

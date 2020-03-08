@@ -239,7 +239,45 @@ bool MPIContext::UnregisterAllWindowName() {
   return true;
 }
 
+bool MPIContext::InitializeWinMutex() {
+  BFLOG(TRACE) << "InitializeWinMutex is called";
+  if (!win_mutex.empty()) {
+    return false;
+  }
+
+  int self_rank = 0;
+  int global_size = 1;
+  MPI_Comm_rank(mpi_comm, &self_rank);
+  MPI_Comm_size(mpi_comm, &global_size);
+  if (global_size <= 1) {
+    // We don't need any mutex for this case.
+    return false;
+  }
+
+  int element_size = 0;
+  int win_size = 0;
+  void* data_buf;
+
+  for (int rank = 0; rank < global_size; rank++) {
+    auto mpi_win_ptr = std::make_shared<MPI_Win>();
+    if (rank == self_rank) {
+      data_buf = new int[1];  // memory leak here!!!
+      MPI_Type_size(MPI_INT, &element_size);
+      win_size = 1 * element_size;
+    } else {
+      data_buf = nullptr;
+      element_size = 1;
+      win_size = 0;
+    }
+    MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
+                   GetMPICommunicator(Communicator::GLOBAL),
+                   mpi_win_ptr.get());
+    win_mutex.push_back(mpi_win_ptr);
+  }
+}
+
 bool MPIContext::DestroyWinMutex() {
+  BFLOG(TRACE) << "DestroyWinMutex is called";
   if (win_mutex.empty()) {
     return false;
   } 
@@ -247,6 +285,7 @@ bool MPIContext::DestroyWinMutex() {
   for (auto mpi_win_ptr : win_mutex) {
     MPI_Win_free(mpi_win_ptr.get());
   }
+  win_mutex.clear();
   return true;
 }
 

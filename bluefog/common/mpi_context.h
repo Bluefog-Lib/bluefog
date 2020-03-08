@@ -96,6 +96,10 @@ struct MPIContext {
   std::shared_ptr<WindowManager> GetWindowByName(const std::string& name);
   bool UnregisterWindowName(const std::string& name);
   bool UnregisterAllWindowName();
+  
+  // The design of WinMutex is flawed. For example, if we call set topology within
+  // the mutex acquire time, I don't know what will happen.
+  bool InitializeWinMutex();
   bool DestroyWinMutex();
 
   // Flag indicating whether mpi is enabled.

@@ -178,6 +178,7 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   int res_build_graph = mpi_ctx_.BuildGraphComm(indegree, sources, outdegree, destinations);
   if(res_build_graph == -1)
       return -1;
+  mpi_ctx_.DestroyWinMutex();
   mpi_ctx_.SetTopoSetup();
 
   // Get neighbor in/out size and ranks.
@@ -201,7 +202,9 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
     neighbor_out_ranks_.push_back(destinations[i]);
   }
   std::sort(neighbor_out_ranks_.begin(), neighbor_out_ranks_.end());
-  mpi_ctx_.DisableTopoWeights();
+  mpi_ctx_.DisableTopoWeights(); // Topology weights are always set at SetTopologyWeights.
+
+  mpi_ctx_.InitializeWinMutex();
   return 1;
 }
 
@@ -380,10 +383,6 @@ Status MPIController::WinCreate(
                    mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
                    mpi_win_ptr.get());
     win_manager->PushBackWinAndTensor(mpi_win_ptr, t);
-  }
-
-  if (mpi_ctx_.win_mutex.empty()) {
-    WinMutexInit();
   }
 
   return Status::OK();
@@ -578,37 +577,6 @@ Status MPIController::WinUnlock(const std::string& name){
     MPI_Win_unlock(target_rank, *mpi_win_ptr);
   }
 
-  return Status::OK();
-}
-
-Status MPIController::WinMutexInit() {
-  int element_size = 0;
-  int win_size = 0;
-  void* data_buf;
-
-  for (int rank = 0; rank < size_; rank++) {
-    auto mpi_win_ptr = std::make_shared<MPI_Win>();
-    if (rank == rank_) {
-      data_buf = new int[1];  // memory leak here!
-      MPI_Type_size(MPI_INT, &element_size);
-      win_size = 1 * element_size;
-    } else {
-      data_buf = nullptr;
-      element_size = 1;
-      win_size = 0;
-    }
-    MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
-                   mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
-                   mpi_win_ptr.get());
-    mpi_ctx_.win_mutex.push_back(mpi_win_ptr);
-  }
-  BFLOG(TRACE) << "WinMutexInit called";
-  return Status::OK();
-}
-
-Status MPIController::WinMutexDestroy() {
-  BFLOG(TRACE) << "WinMutexDestroy called";
-  bool ret = mpi_ctx_.DestroyWinMutex();
   return Status::OK();
 }
 
