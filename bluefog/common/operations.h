@@ -113,6 +113,11 @@ Status EnqueuTensorWindowGet(const std::string& name,
                              const std::unordered_map<int, float>& src_ranks,
                              StatusCallback callback);
 
+Status Barrier(StatusCallback callback);
+
+// Note all following ops are not proccessed through the communication thread.
+// it is executed throug the main thread. It may cause some mismatch.
+
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, int device);
@@ -130,8 +135,6 @@ Status WindowUnlock(const std::string& name);
 Status WindowMutexAcquire();
 
 Status WindowMutexRelease();
-
-Status Barrier(StatusCallback callback);
 
 }  // namespace common
 }  // namespace bluefog

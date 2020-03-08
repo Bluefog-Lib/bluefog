@@ -304,7 +304,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
-bool MPIController::IsMpiUnifiedModel(){
+bool MPIController::IsMpiUnifiedModel() {
   void* data_buf = nullptr;
   int win_size = 1;
   int element_size = 1;
@@ -319,7 +319,8 @@ bool MPIController::IsMpiUnifiedModel(){
     BFLOG(WARNING) << "Failed to get MPI_WIN_MODEL attribution";
     return false;
   }
-  BFLOG(DEBUG) << "Unified MPI_WIN_MODEL support is " << (*memory_model == MPI_WIN_UNIFIED);
+  BFLOG(DEBUG) << "Unified MPI_WIN_MODEL support is "
+               << (*memory_model == MPI_WIN_UNIFIED);
   return *memory_model == MPI_WIN_UNIFIED;
 }
 

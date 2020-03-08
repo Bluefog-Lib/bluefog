@@ -1,3 +1,5 @@
+#include <memory>
+
 #include "mpi_context.h"
 #include "logging.h"
 
@@ -254,6 +256,9 @@ bool MPIContext::InitializeWinMutex() {
     return false;
   }
 
+  // We only need one value for self mutex.
+  self_mutex_mem = std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
+
   int element_size = 0;
   int win_size = 0;
   void* data_buf;
@@ -261,7 +266,7 @@ bool MPIContext::InitializeWinMutex() {
   for (int rank = 0; rank < global_size; rank++) {
     auto mpi_win_ptr = std::make_shared<MPI_Win>();
     if (rank == self_rank) {
-      data_buf = new int[1];  // memory leak here!!!
+      data_buf = self_mutex_mem.get();
       MPI_Type_size(MPI_INT, &element_size);
       win_size = 1 * element_size;
     } else {
@@ -274,6 +279,7 @@ bool MPIContext::InitializeWinMutex() {
                    mpi_win_ptr.get());
     win_mutex.push_back(mpi_win_ptr);
   }
+  return true;
 }
 
 bool MPIContext::DestroyWinMutex() {
@@ -282,6 +288,7 @@ bool MPIContext::DestroyWinMutex() {
     return false;
   } 
 
+  self_mutex_mem.reset();
   for (auto mpi_win_ptr : win_mutex) {
     MPI_Win_free(mpi_win_ptr.get());
   }

@@ -128,6 +128,7 @@ struct MPIContext {
 
   // MPI Window used for mutex.
   std::vector<std::shared_ptr<MPI_Win>> win_mutex;
+  std::unique_ptr<int> self_mutex_mem = nullptr;
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;
