@@ -472,6 +472,15 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
 
+  std::vector<int> ranks = {}; // used in mutex only.
+  if (entry.require_mutex) {
+    for (auto kv : entry.dst_weights) {
+      int target_rank = kv.first;
+      ranks.push_back(target_rank);
+    }
+    WinMutexAcquire(ranks);
+  }
+
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
@@ -484,10 +493,13 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     int ret_code = MPI_Accumulate(sendbuf, num_elements, data_type, target_rank,
                                   target_disp, num_elements, data_type, MPI_SUM, mpi_win);
     if (ret_code != MPI_SUCCESS) {
+      if (entry.require_mutex) WinMutexRelease(ranks);
       throw std::runtime_error("MPI_Accumulate failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
   }
+  if (entry.require_mutex) WinMutexRelease(ranks);
+
   BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
@@ -581,7 +593,8 @@ Status MPIController::WinUnlock(const std::string& name){
   return Status::OK();
 }
 
-Status MPIController::WinMutexAcquire() {
+// Todo(ybc) Use RAII pattern to manage the mutex instead of manual control.
+Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks) {
   if (mpi_ctx_.win_mutex.empty()) {
     return Status::PreconditionError(
         "Cannot accquire Win Mutex because it may not be initialized or has "
@@ -598,30 +611,29 @@ Status MPIController::WinMutexAcquire() {
   int target_disp = 0;
 
   std::shared_ptr<MPI_Win> mutex_win;
-  // Note we don't need to lock the self_win because no other process will
-  // modify the memory associated with the self_win.
-  for (int in_rank : neighbor_in_ranks_) {
-    mutex_win = mpi_ctx_.win_mutex[in_rank];
-    BFLOG(DEBUG, rank_) << "Get Win Mutex for rank " << in_rank;
-    MPI_Win_lock(MPI_LOCK_SHARED, in_rank, 0, *mutex_win);
+
+  for (int rank : acquire_ranks) {
+    mutex_win = mpi_ctx_.win_mutex[rank];
+    BFLOG(DEBUG, rank_) << "Get Win Mutex for rank " << rank;
+    MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     do {
-      MPI_Fetch_and_op(&one, &oldval, MPI_INT, in_rank, target_disp, MPI_SUM,
+      MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank, target_disp, MPI_SUM,
                        *mutex_win);
-      MPI_Win_flush(in_rank, *mutex_win);
+      MPI_Win_flush(rank, *mutex_win);
       if (oldval == 0) break;
-      MPI_Accumulate(&minus_one, 1, MPI_INT, in_rank, target_disp, 1, MPI_INT,
+      MPI_Accumulate(&minus_one, 1, MPI_INT, rank, target_disp, 1, MPI_INT,
                      MPI_SUM, *mutex_win);
-      MPI_Win_flush(in_rank, *mutex_win);
+      MPI_Win_flush(rank, *mutex_win);
 
       std::this_thread::sleep_for(std::chrono::microseconds(1));
     } while (1);
-    MPI_Win_unlock(in_rank, *mutex_win);
+    MPI_Win_unlock(rank, *mutex_win);
   }
 
   return Status::OK();
 }
 
-Status MPIController::WinMutexRelease() {
+Status MPIController::WinMutexRelease(const std::vector<int>& release_ranks) {
   int minus_one = -1;
   int target_disp = 0;
 
@@ -632,14 +644,14 @@ Status MPIController::WinMutexRelease() {
   }
 
   std::shared_ptr<MPI_Win> mutex_win;
-  for (int in_rank : neighbor_in_ranks_) {
-    mutex_win = mpi_ctx_.win_mutex[in_rank];
-    MPI_Win_lock(MPI_LOCK_SHARED, in_rank, 0, *mutex_win);
+  for (int rank : release_ranks) {
+    mutex_win = mpi_ctx_.win_mutex[rank];
+    MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     // TODO(ybc) Notice the following accumulate may cause the value to be
     // negative, i.e. more release ops is called than acquire.
-    MPI_Accumulate(&minus_one, 1, MPI_INT, in_rank, target_disp, 1, MPI_INT,
+    MPI_Accumulate(&minus_one, 1, MPI_INT, rank, target_disp, 1, MPI_INT,
                    MPI_SUM, *mutex_win);
-    MPI_Win_unlock(in_rank, *mutex_win);
+    MPI_Win_unlock(rank, *mutex_win);
   }
 
   return Status::OK();

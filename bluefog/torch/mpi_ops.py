@@ -523,6 +523,9 @@ def win_sync(name: str, weights: Dict[int, float] = None,
     Note: Weights here will be useful if you need a dynamic weighted average, i.e. the weights
     change with the iterations. If static weight need, then setting the weights through the
     bf.set_topology(.., is_weighted=True) is a better choice.
+
+    Note2:
+        If update_weights is not empty, mutex for self is acquired.
     """
     tensor = _win_map[name]
     if clone:
@@ -679,7 +682,8 @@ def _win_accumulate_function_factory(tensor):
 
 
 def win_accumulate(tensor: torch.Tensor, name: str,
-                   dst_weights: Dict[int, float] = None) -> bool:
+                   dst_weights: Dict[int, float] = None,
+                   require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a non-blocking function, which will return without waiting the
@@ -693,6 +697,8 @@ def win_accumulate(tensor: torch.Tensor, name: str,
             If not provided, dst_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.
             Note dst_weights should only contain the ranks that belong to out-neighbors.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A handle to the win_accmulate operation that can be used with `win_poll()` or
@@ -705,13 +711,14 @@ def win_accumulate(tensor: torch.Tensor, name: str,
         raise ValueError(
             "The key of dst_weights should only containranks that "
             " belong to out-neighbors (self-rank is not allowed).")
-    handle = getattr(mpi_lib, function)(tensor, name, dst_weights)
+    handle = getattr(mpi_lib, function)(tensor, name, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_accumulate_blocking(tensor: torch.Tensor, name: str,
-                            dst_weights: Dict[int, float] = None) -> bool:
+                            dst_weights: Dict[int, float] = None,
+                            require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a blocking function, which will return until win_accumulate operation
@@ -725,12 +732,14 @@ def win_accumulate_blocking(tensor: torch.Tensor, name: str,
             If not provided, dst_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.
             Note dst_weights should only contain the ranks that belong to out-neighbors.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A handle to the win_accmulate operation that can be used with `win_poll()` or
         `win_wait()`.
     """
-    handle = win_accumulate(tensor, name, dst_weights)
+    handle = win_accumulate(tensor, name, dst_weights, require_mutex)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
@@ -783,26 +792,31 @@ def _win_unlock(name: str):
 
 
 @contextmanager
-def win_mutex():
-    """ A win object implemented mutex context manager. Within the context,
-    the windows associated with the in-neighbors are locked.
+def win_mutex(ranks: List[int] = None):
+    """ A win object implemented mutex context manager. Note, there are N distributed
+    mutex over N corresponding processes.
 
-        Example:
-            >>> bf.win_create(tensor, name)
-            >>> with win_mutex():
-                    tensor = bf.win_sync_then_collect(name)
-            >>> win_put(tensor, name)
+    Args:
+        ranks: The mutex associated with the ranks will be acquired.
+            If not presented, out_neighbor ranks will be used.
+
+    Example:
+        >>> bf.win_create(tensor, name)
+        >>> with win_mutex():
+                tensor = bf.win_sync_then_collect(name)
+        >>> win_put(tensor, name)
     """
-    _win_mutex_acquire()
+    _ranks = out_neighbor_ranks() if ranks is None else ranks
+    _win_mutex_acquire(_ranks)
     try:
         yield
     finally:
-        _win_mutex_release()
+        _win_mutex_release(_ranks)
 
 
-def _win_mutex_acquire():
-    mpi_lib.bluefog_torch_win_mutex_acquire()
+def _win_mutex_acquire(ranks):
+    mpi_lib.bluefog_torch_win_mutex_acquire(ranks)
 
 
-def _win_mutex_release():
-    mpi_lib.bluefog_torch_win_mutex_release()
+def _win_mutex_release(ranks):
+    mpi_lib.bluefog_torch_win_mutex_release(ranks)

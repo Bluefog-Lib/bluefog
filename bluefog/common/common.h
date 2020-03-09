@@ -202,6 +202,9 @@ struct TensorTableEntry {
   std::unordered_map<int, float> dst_weights = {};
   std::unordered_map<int, float> src_weights = {};
 
+  // The ops requires the mutex.
+  bool require_mutex = false;
+
   // A callback to call with the status.
   StatusCallback callback;
 };

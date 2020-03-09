@@ -64,10 +64,16 @@ class MPIController {
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
 
-  Status WinMutexInit();
-  Status WinMutexAcquire();
-  Status WinMutexRelease();
-  Status WinMutexDestroy();
+  // Our mutex definition is different from the parallel computation concept.
+  // For a world size is N application, N mutex is created.
+  // Each process associates with one mutex.
+  // When WinMutexAcquire is called, we typically lock for all out-neighbors.
+  // For example: if 1 want to win_put value to neighbor 0, and 2 want to
+  // win_accumulate another value to neighbor 0 simultaneously, then only one rank 
+  // can acquire the mutex to 0, i.e. two ops will be serialized.
+  // It is most common used in win_sync (for self) and win_accumulate (for out-neighbor).
+  Status WinMutexAcquire(const std::vector<int>& acquire_ranks);
+  Status WinMutexRelease(const std::vector<int>& release_ranks);
 
  protected:
   // Outside dependencies

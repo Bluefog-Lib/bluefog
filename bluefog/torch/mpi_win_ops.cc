@@ -213,20 +213,26 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 
 namespace {
 
-int InplaceUpdateNeighborTensor(const std::string& name,
-  const std::unordered_map<int, float>& update_weights) {
+int InplaceUpdateNeighborTensor(
+    const std::string& name,
+    const std::unordered_map<int, float>& update_weights) {
+  // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
+  const std::vector<int> self_rank = {common::bluefog_rank()};
+  if (!update_weights.empty()) common::WindowMutexAcquire(self_rank);
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
   for (auto& kv : update_weights) {
     int rank = kv.first;
     float weight = kv.second;
     if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                   bf_neighbor_tensor)) {
-      BFLOG(FATAL) << "Cannot get neighbor tensor with " << name
-                  << " at rank " << rank;
+      if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
+      BFLOG(FATAL) << "Cannot get neighbor tensor with " << name << " at rank "
+                   << rank;
       return 0;
     }
     bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
   }
+  if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
   return 1;
 }
 
@@ -293,7 +299,8 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
-                    const std::unordered_map<int, float>& dst_weights) {
+                    const std::unordered_map<int, float>& dst_weights,
+                    const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
 
   auto device = GetDeviceID(tensor);
@@ -301,7 +308,8 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   auto handle = win_handle_manager.AllocateHandle();
 
   auto enqueue_result = EnqueuTensorWindowAccumulate(
-      bf_tensor, name, dst_weights, device, [handle](const Status& status) {
+      bf_tensor, name, dst_weights, device, require_mutex,
+      [handle](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
       });
 
@@ -366,15 +374,15 @@ void DoWinUnlock(const std::string& name) {
   ThrowIfError(status);
 }
 
-void DoWinMutexAcquire() {
+void DoWinMutexAcquire(const std::vector<int>& ranks) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::WindowMutexAcquire();
+  Status status = common::WindowMutexAcquire(ranks);
   ThrowIfError(status);
 }
 
-void DoWinMutexRelease() {
+void DoWinMutexRelease(const std::vector<int>& ranks) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::WindowMutexRelease();
+  Status status = common::WindowMutexRelease(ranks);
   ThrowIfError(status);
 }
 

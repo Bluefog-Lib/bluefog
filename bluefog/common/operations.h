@@ -107,7 +107,7 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
 Status EnqueuTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
     const std::unordered_map<int, float>& dst_ranks, const int device,
-    StatusCallback callback);
+    const bool require_mutex, StatusCallback callback);
 
 Status EnqueuTensorWindowGet(const std::string& name, 
                              const std::unordered_map<int, float>& src_ranks,
@@ -132,9 +132,9 @@ Status WindowLock(const std::string& name);
 
 Status WindowUnlock(const std::string& name);
 
-Status WindowMutexAcquire();
+Status WindowMutexAcquire(const std::vector<int>& acquire_ranks);
 
-Status WindowMutexRelease();
+Status WindowMutexRelease(const std::vector<int>& release_ranks);
 
 }  // namespace common
 }  // namespace bluefog

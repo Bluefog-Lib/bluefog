@@ -380,7 +380,9 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
 Status EnqueuTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
                              const std::string& name,
                              const std::unordered_map<int, float>& dst_weights,
-                             const int device, StatusCallback callback) {
+                             const int device, 
+                             const bool require_mutex, 
+                             StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -388,6 +390,7 @@ Status EnqueuTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
+  e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -507,11 +510,11 @@ Status WindowUnlock(const std::string& name) {
   return status;
 }
 
-Status WindowMutexAcquire() {
+Status WindowMutexAcquire(const std::vector<int>& acquire_ranks) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinMutexAcquire();
+  Status status = bluefog_global.controller->WinMutexAcquire(acquire_ranks);
 
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot acquire window mutex";
@@ -520,11 +523,11 @@ Status WindowMutexAcquire() {
   return status;
 }
 
-Status WindowMutexRelease() {
+Status WindowMutexRelease(const std::vector<int>& release_ranks) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinMutexRelease();
+  Status status = bluefog_global.controller->WinMutexRelease(release_ranks);
 
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot release window mutex"; 
