@@ -452,8 +452,7 @@ class WinOpsTests(unittest.TestCase):
             assert (t_end - t_start) < 3, \
                 "The mutex acquire time should be shorter than 3 second"
 
-    @unittest.skip("Failed in Linux test env. Local test is ok. Unknwon why.")
-    def test_win_mutex_ring(self):
+    def test_win_mutex_given_ranks(self):
         size = bf.size()
         rank = bf.rank()
         if size < 4:
@@ -462,20 +461,24 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test above 4 nodes".format(fname))
             return
 
-        bf.set_topology(topology_util.BiRingGraph(size))
         if rank == 0:
-            with bf.win_mutex():
+            with bf.win_mutex([0]):
                 bf.barrier()
                 time.sleep(2.0)
         elif rank == 1:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex():
+            with bf.win_mutex([1]):
                 time.sleep(0.001)
             t_end = time.time()
-            # Rank 0 gets mutex for 1 and size - 1.
-            # while rank 1 gets mutex for 0 and 2.
             assert (t_end - t_start) < 0.1
+        elif rank == 2:
+            bf.barrier()
+            t_start = time.time()
+            with bf.win_mutex([0]):
+                time.sleep(0.001)
+            t_end = time.time()
+            assert (t_end - t_start) > 2
         else:
             bf.barrier()
 
