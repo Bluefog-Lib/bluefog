@@ -358,7 +358,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   return status;
 }
 
-Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                              const std::string& name,
                              const std::unordered_map<int, float>& dst_weights,
                              const int device, StatusCallback callback) {
@@ -377,7 +377,7 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status EnqueuTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
                              const std::string& name,
                              const std::unordered_map<int, float>& dst_weights,
                              const int device, 
@@ -399,7 +399,7 @@ Status EnqueuTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status EnqueuTensorWindowGet(const std::string& name,
+Status EnqueueTensorWindowGet(const std::string& name,
                              const std::unordered_map<int, float>& src_weights,
                              StatusCallback callback) {
   TensorTableEntry e;

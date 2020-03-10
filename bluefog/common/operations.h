@@ -98,18 +98,18 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 
-Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                              const std::string& name, 
                              const std::unordered_map<int, float>& dst_ranks,
                              const int device,
                              StatusCallback callback);
 
-Status EnqueuTensorWindowAccumulate(
+Status EnqueueTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
     const std::unordered_map<int, float>& dst_ranks, const int device,
     const bool require_mutex, StatusCallback callback);
 
-Status EnqueuTensorWindowGet(const std::string& name, 
+Status EnqueueTensorWindowGet(const std::string& name, 
                              const std::unordered_map<int, float>& src_ranks,
                              StatusCallback callback);
 
