@@ -614,7 +614,7 @@ Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks) {
 
   for (int rank : acquire_ranks) {
     mutex_win = mpi_ctx_.win_mutex[rank];
-    BFLOG(DEBUG, rank_) << "Get Win Mutex for rank " << rank;
+    BFLOG(DEBUG, rank_) << "Acquire Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     do {
       MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank, target_disp, MPI_SUM,
@@ -646,6 +646,7 @@ Status MPIController::WinMutexRelease(const std::vector<int>& release_ranks) {
   std::shared_ptr<MPI_Win> mutex_win;
   for (int rank : release_ranks) {
     mutex_win = mpi_ctx_.win_mutex[rank];
+    BFLOG(DEBUG, rank_) << "Release Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     // TODO(ybc) Notice the following accumulate may cause the value to be
     // negative, i.e. more release ops is called than acquire.

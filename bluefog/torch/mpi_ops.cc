@@ -214,7 +214,7 @@ int PollHandle(int handle) { return handle_manager.PollHandle(handle) ? 1 : 0; }
 
 void WaitAndClear(int handle) {
   while (!handle_manager.PollHandle(handle)) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
   auto status = handle_manager.ReleaseHandle(handle);
   ThrowIfError(*status);

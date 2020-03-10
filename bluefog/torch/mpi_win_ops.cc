@@ -19,7 +19,7 @@ using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::Status;
-using ::bluefog::common::EnqueuTensorWindowGet;
+using ::bluefog::common::EnqueueTensorWindowGet;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
@@ -289,7 +289,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
 
-  auto enqueue_result = EnqueuTensorWindowPut(
+  auto enqueue_result = EnqueueTensorWindowPut(
       bf_tensor, name, dst_weights, device, [handle](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
       });
@@ -307,7 +307,7 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   auto handle = win_handle_manager.AllocateHandle();
 
-  auto enqueue_result = EnqueuTensorWindowAccumulate(
+  auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
       [handle](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
@@ -322,7 +322,7 @@ int DoWinGet(const std::string& name,
   ThrowIfError(common::CheckInitialized());
 
   auto handle = win_handle_manager.AllocateHandle();
-  auto enqueue_result = EnqueuTensorWindowGet(
+  auto enqueue_result = EnqueueTensorWindowGet(
       name, src_weights,
       [handle, name, src_weights](const Status& status) mutable {
         std::shared_ptr<TorchTensor> bf_neighbor_tensor;
@@ -350,7 +350,7 @@ int DoWinPollHandle(int handle) {
 
 void DoWinWait(int handle) {
   while (!win_handle_manager.PollHandle(handle)) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
   auto status = win_handle_manager.ReleaseHandle(handle);
   ThrowIfError(*status);

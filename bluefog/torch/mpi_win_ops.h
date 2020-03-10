@@ -114,6 +114,13 @@ WIN_SYNC_H(torch_LongTensor, THLongTensor)
 WIN_SYNC_H(torch_FloatTensor, THFloatTensor)
 WIN_SYNC_H(torch_DoubleTensor, THDoubleTensor)
 
+#if HAVE_CUDA
+WIN_SYNC_H(torch_cuda_IntTensor, THCudaIntTensor)
+WIN_SYNC_H(torch_cuda_LongTensor, THCudaLongTensor)
+WIN_SYNC_H(torch_cuda_FloatTensor, THCudaTensor)
+WIN_SYNC_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
+#endif
+
 #define WIN_SYNC_WITH_WEIGHTS_H(torch_Tensor, THTensor)                     \
   extern "C" int bluefog_torch_win_sync_with_weights_##torch_Tensor(        \
       THTensor* tensor, char* name,                                         \
@@ -126,10 +133,10 @@ WIN_SYNC_WITH_WEIGHTS_H(torch_FloatTensor, THFloatTensor)
 WIN_SYNC_WITH_WEIGHTS_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
-WIN_SYNC_H(torch_cuda_IntTensor, THCudaIntTensor)
-WIN_SYNC_H(torch_cuda_LongTensor, THCudaLongTensor)
-WIN_SYNC_H(torch_cuda_FloatTensor, THCudaTensor)
-WIN_SYNC_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
+WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_IntTensor, THCudaIntTensor)
+WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_LongTensor, THCudaLongTensor)
+WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_FloatTensor, THCudaTensor)
+WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
 #define WIN_PUT_H(torch_Tensor, THTensor)                             \

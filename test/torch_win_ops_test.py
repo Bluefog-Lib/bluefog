@@ -75,10 +75,10 @@ class WinOpsTests(unittest.TestCase):
                 "bf.win_sync produce wrong shape tensor.")
             assert (sync_result.data.min() == rank), (
                 "bf.win_sync produces wrong tensor value " +
-                "{}!={} at rank {}.".format(sync_result.data.min(), num_indegree*rank, rank))
+                "{}!={} at rank {}.".format(sync_result.data.min(), rank, rank))
             assert (sync_result.data.max() == rank), (
                 "bf.win_sync produces wrong tensor value " +
-                "{}!={} at rank {}.".format(sync_result.data.max(), num_indegree*rank, rank))
+                "{}!={} at rank {}.".format(sync_result.data.max(), rank, rank))
 
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_create_{}_{}".format(dim, dtype)
