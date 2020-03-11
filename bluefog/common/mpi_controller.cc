@@ -472,19 +472,17 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
 
-  std::vector<int> ranks = {}; // used in mutex only.
-  if (entry.require_mutex) {
-    for (auto kv : entry.dst_weights) {
-      int target_rank = kv.first;
-      ranks.push_back(target_rank);
-    }
-    WinMutexAcquire(ranks);
-  }
+  std::vector<int> mutex_ranks = {}; // used in mutex only.
 
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     float weight = kv.second;
+    if (entry.require_mutex) {
+      mutex_ranks.clear();
+      mutex_ranks.push_back(target_rank);
+      WinMutexAcquire(mutex_ranks);
+    };
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
@@ -493,12 +491,12 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     int ret_code = MPI_Accumulate(sendbuf, num_elements, data_type, target_rank,
                                   target_disp, num_elements, data_type, MPI_SUM, mpi_win);
     if (ret_code != MPI_SUCCESS) {
-      if (entry.require_mutex) WinMutexRelease(ranks);
+      if (entry.require_mutex) WinMutexRelease(mutex_ranks);
       throw std::runtime_error("MPI_Accumulate failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
+    if (entry.require_mutex) WinMutexRelease(mutex_ranks);
   }
-  if (entry.require_mutex) WinMutexRelease(ranks);
 
   BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());

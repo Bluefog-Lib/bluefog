@@ -216,23 +216,18 @@ namespace {
 int InplaceUpdateNeighborTensor(
     const std::string& name,
     const std::unordered_map<int, float>& update_weights) {
-  // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
-  const std::vector<int> self_rank = {common::bluefog_rank()};
-  if (!update_weights.empty()) common::WindowMutexAcquire(self_rank);
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
   for (auto& kv : update_weights) {
     int rank = kv.first;
     float weight = kv.second;
     if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                   bf_neighbor_tensor)) {
-      if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
       BFLOG(FATAL) << "Cannot get neighbor tensor with " << name << " at rank "
                    << rank;
       return 0;
     }
     bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
   }
-  if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
   return 1;
 }
 
@@ -242,11 +237,16 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
               const std::unordered_map<int, float>& update_weights) {
   ThrowIfError(common::CheckInitialized());
 
+  // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
+  const std::vector<int> self_rank = {common::bluefog_rank()};
+  if (!update_weights.empty()) common::WindowMutexAcquire(self_rank);
   Status status = common::WindowSync(name);
 
   // Averaging with neighbors' tensors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, tensor)) return 0;
   if (!InplaceUpdateNeighborTensor(name, update_weights)) return 0;
+
+  if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
 
   return 1;
 }
@@ -255,12 +255,17 @@ int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
                       const std::unordered_map<int, float>& weights,
                       const std::unordered_map<int, float>& update_weights) {
   ThrowIfError(common::CheckInitialized());
-
+  
+  // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
+  const std::vector<int> self_rank = {common::bluefog_rank()};
+  if (!update_weights.empty()) common::WindowMutexAcquire(self_rank);
   Status status = common::WindowSync(name);
 
   // Weighted averaging with neighbors' tensors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, tensor, weights)) return 0;
   if (!InplaceUpdateNeighborTensor(name, update_weights)) return 0;
+
+  if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
 
   return 1;
 }

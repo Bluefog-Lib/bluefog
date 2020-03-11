@@ -37,37 +37,34 @@ outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
 # Remember we do not create buffer with 0.
-p = torch.Tensor([[1.0/bf.size()/(indegree+1)]])
-bf.win_create(p, name="p_buff")
-p = bf.win_sync_then_collect(name="p_buff")
-
-
-x = torch.Tensor([[bf.rank()/(indegree+1)]])
+# we append the p at the last of data.
+x = torch.Tensor([bf.rank()/(indegree+1), 1.0/bf.size()/(indegree+1)])
 bf.win_create(x, name="x_buff")
 x = bf.win_sync_then_collect(name="x_buff")
 
-for i in range(200):
-    handle1 = bf.win_accumulate(p, name="p_buff", dst_weights={
-        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-    handle2 = bf.win_accumulate(x, name="x_buff", dst_weights={
-        rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()})
-    bf.win_wait(handle1)
-    bf.win_wait(handle2)
-    x.mul_(1.0/(1+outdegree))
-    p.mul_(1.0/(1+outdegree))  # Do not forget to update self!
-
-    bf.barrier()
-    with bf.win_lock("p_buff"), bf.win_lock("x_buff"):
-        p = bf.win_sync_then_collect(name="p_buff")
+bf.barrier()
+for i in range(100):
+    skip = np.random.rand(1) < 0.2
+    if not skip:
+        bf.win_accumulate_blocking(
+            x, name="x_buff",
+            dst_weights={rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()},
+            require_mutex=True)
+        x.div_(1+outdegree)
         x = bf.win_sync_then_collect(name="x_buff")
 
-
 bf.barrier()
-print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), p, x, x/p))
+# Do not forget to sync at last!
+x = bf.win_sync_then_collect(name="x_buff")
 
-sum_push_sum = bf.allreduce(x/p, average=False)
+print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), x[1], x[0], x[0] / x[1]))
+
+sum_push_sum = bf.allreduce(x[0]/x[1], average=False)
 if bf.rank() == 0:
     print("Total Sum ", sum_push_sum)
 
+p_push_sum = bf.allreduce(x[1], average=False)
+if bf.rank() == 0:
+    print("Total Sum ", p_push_sum)
+
 bf.win_free(name="x_buff")
-bf.win_free(name="p_buff")
