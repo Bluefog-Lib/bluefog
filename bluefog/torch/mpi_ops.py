@@ -563,7 +563,7 @@ def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 
 
-def win_put(tensor: torch.Tensor, name: str,
+def win_put_async(tensor: torch.Tensor, name: str,
             dst_weights: Dict[int, float] = None) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
@@ -594,7 +594,7 @@ def win_put(tensor: torch.Tensor, name: str,
     return handle
 
 
-def win_put_blocking(tensor: torch.Tensor, name: str,
+def win_put(tensor: torch.Tensor, name: str,
                      dst_weights: Dict[int, float] = None) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
@@ -612,13 +612,13 @@ def win_put_blocking(tensor: torch.Tensor, name: str,
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put(tensor, name, dst_weights)
+    handle = win_put_async(tensor, name, dst_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
 
 
-def win_get(name: str, src_weights: Dict[int, float] = None) -> int:
+def win_get_async(name: str, src_weights: Dict[int, float] = None) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_sync function is responsible for fetching that memeory.
@@ -649,7 +649,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None) -> int:
     return handle
 
 
-def win_get_blocking(name: str, src_weights: Dict[int, float] = None) -> bool:
+def win_get(name: str, src_weights: Dict[int, float] = None) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_sync function is responsible for fetching that memeory.
@@ -671,7 +671,7 @@ def win_get_blocking(name: str, src_weights: Dict[int, float] = None) -> bool:
         A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
         processes (or all neighbor processes).
     """
-    handle = win_get(name, src_weights)
+    handle = win_get_async(name, src_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
@@ -681,7 +681,7 @@ def _win_accumulate_function_factory(tensor):
     return 'bluefog_torch_win_accumulate_' + tensor.type().replace('.', '_')
 
 
-def win_accumulate(tensor: torch.Tensor, name: str,
+def win_accumulate_async(tensor: torch.Tensor, name: str,
                    dst_weights: Dict[int, float] = None,
                    require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
@@ -716,7 +716,7 @@ def win_accumulate(tensor: torch.Tensor, name: str,
     return handle
 
 
-def win_accumulate_blocking(tensor: torch.Tensor, name: str,
+def win_accumulate(tensor: torch.Tensor, name: str,
                             dst_weights: Dict[int, float] = None,
                             require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
@@ -739,7 +739,7 @@ def win_accumulate_blocking(tensor: torch.Tensor, name: str,
         A handle to the win_accmulate operation that can be used with `win_poll()` or
         `win_wait()`.
     """
-    handle = win_accumulate(tensor, name, dst_weights, require_mutex)
+    handle = win_accumulate_async(tensor, name, dst_weights, require_mutex)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True

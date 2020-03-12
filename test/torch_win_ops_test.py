@@ -208,7 +208,7 @@ class WinOpsTests(unittest.TestCase):
                     "[{}-{}]!={} at rank {}.".format(collect_tensor.min(),
                                                      collect_tensor.max(), rank, rank))
 
-    def test_win_put_blocking(self):
+    def test_win_put(self):
         """Test that the window put operation."""
         size = bf.size()
         rank = bf.rank()
@@ -233,7 +233,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_put_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
 
-            bf.win_put_blocking(tensor, window_name)
+            bf.win_put(tensor, window_name)
             bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -249,7 +249,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully."
 
-    def test_win_put_blocking_with_given_destination(self):
+    def test_win_put_with_given_destination(self):
         """Test that the window put operation with given destination."""
         size = bf.size()
         rank = bf.rank()
@@ -272,7 +272,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_put_blocking(tensor, window_name, dst_weights={(rank+1) % size: 1.23})
+            bf.win_put(tensor, window_name, dst_weights={(rank+1) % size: 1.23})
             bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -288,7 +288,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully."
 
-    def test_win_accumulate_blocking(self):
+    def test_win_accumulate(self):
         """Test that the window accumulate operation."""
         size = bf.size()
         rank = bf.rank()
@@ -312,7 +312,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_accumulate_blocking(tensor, window_name)
+            bf.win_accumulate(tensor, window_name)
 
             bf.barrier()
             sync_result = bf.win_sync(window_name)
@@ -324,7 +324,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
-    def test_win_accumulate_blocking_with_given_destination(self):
+    def test_win_accumulate_with_given_destination(self):
         """Test that the window accumulate operation with given destination."""
         size = bf.size()
         rank = bf.rank()
@@ -344,7 +344,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_accumulate_blocking(tensor, window_name,
+            bf.win_accumulate(tensor, window_name,
                                        dst_weights={(rank+1) % size: 1.23})
 
             bf.barrier()
@@ -358,7 +358,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
-    def test_win_get_blocking(self):
+    def test_win_get(self):
         """Test that the window get operation."""
         size = bf.size()
         rank = bf.rank()
@@ -382,7 +382,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_get_blocking(window_name)
+            bf.win_get(window_name)
             bf.barrier()
             recv_tensor = bf.win_sync(window_name, clone=True)
 
@@ -393,7 +393,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(
                     recv_tensor.min(), recv_tensor.max(), avg_value, rank))
 
-    def test_win_get_blocking_with_given_sources(self):
+    def test_win_get_with_given_sources(self):
         """Test that the window get operation with given sources."""
         size = bf.size()
         rank = bf.rank()
@@ -414,7 +414,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_get_blocking(window_name, src_weights={
+            bf.win_get(window_name, src_weights={
                                 (rank-1) % size: 1.23})
             bf.barrier()
             recv_tensor = bf.win_sync(window_name,

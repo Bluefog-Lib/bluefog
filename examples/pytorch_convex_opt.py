@@ -44,14 +44,12 @@ x = bf.win_sync_then_collect(name="x_buff")
 
 bf.barrier()
 for i in range(100):
-    skip = np.random.rand(1) < 0.2
-    if not skip:
-        bf.win_accumulate_blocking(
-            x, name="x_buff",
-            dst_weights={rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()},
-            require_mutex=True)
-        x.div_(1+outdegree)
-        x = bf.win_sync_then_collect(name="x_buff")
+    bf.win_accumulate(
+        x, name="x_buff",
+        dst_weights={rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()},
+        require_mutex=True)
+    x.div_(1+outdegree)
+    x = bf.win_sync_then_collect(name="x_buff")
 
 bf.barrier()
 # Do not forget to sync at last!

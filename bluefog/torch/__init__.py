@@ -28,9 +28,9 @@ from bluefog.torch.mpi_ops import poll, synchronize, barrier
 
 from bluefog.torch.mpi_ops import win_create, win_free
 from bluefog.torch.mpi_ops import win_sync, win_sync_then_collect
-from bluefog.torch.mpi_ops import win_put, win_put_blocking
-from bluefog.torch.mpi_ops import win_get, win_get_blocking
-from bluefog.torch.mpi_ops import win_accumulate, win_accumulate_blocking
+from bluefog.torch.mpi_ops import win_put, win_put
+from bluefog.torch.mpi_ops import win_get_async, win_get
+from bluefog.torch.mpi_ops import win_accumulate_async, win_accumulate
 from bluefog.torch.mpi_ops import win_wait, win_poll
 from bluefog.torch.mpi_ops import win_lock, win_mutex
 
