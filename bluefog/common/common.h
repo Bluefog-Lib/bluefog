@@ -10,6 +10,12 @@
 namespace bluefog {
 namespace common {
 
+// Activity names, see BLUEFOG Timeline for more details.
+#define MPI_ALLREDUCE "MPI_ALLREDUCE"
+#define ENQUEUE_ALLREDUCE "ENQUEUE_ALLREDUCE"
+#define MPI_NEIGHBOR_ALLREDUCE "MPI_NEIGHBOR_ALLREDUCE"
+#define ENQUEUE_NEIGHBOR_ALLREDUCE "ENQUEUE_NEIGHBOR_ALLREDUCE"
+
 // Device ID used for CPU.
 #define CPU_DEVICE_ID (-1)
 
