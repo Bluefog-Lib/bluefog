@@ -15,13 +15,14 @@
 namespace bluefog {
 namespace common {
 
-enum TimelineRecordType { EVENT, MARKER };
+enum TimelineRecordType { EVENT };
 
 struct TimelineRecord {
   TimelineRecordType type;
   std::string tensor_name;
   char phase;
   std::string op_name;
+  // std::string args;
   long ts_micros;
 };
 
@@ -52,7 +53,7 @@ class TimelineWriter {
   std::unordered_map<std::string, int> tensor_table_;
 };
 
-enum TimelineState { UNKNOWN, NEGOTIATING, TOP_LEVEL, ACTIVITY };
+enum TimelineState { ACTIVITY, TOP_LEVEL };
 
 // Writes timeline in Chrome Tracing format. Timeline spec is from:
 // https://github.com/catapult-project/catapult/tree/master/tracing
@@ -60,20 +61,10 @@ class Timeline {
  public:
   void Initialize(const std::string&& file_name, unsigned int bluefog_size);
   inline bool Initialized() const { return initialized_; }
-  // void NegotiateStart(const std::string& tensor_name,
-  //                     Request::RequestType request_type);
-  // void NegotiateRankReady(const std::string& tensor_name, int rank);
-  // void NegotiateEnd(const std::string& tensor_name);
-  // void Start(const std::string& tensor_name,
-  //            const Response::ResponseType response_type);
-  // void ActivityStartAll(const std::vector<TensorTableEntry>& entries,
-  //                       const std::string& activity);
+
   void ActivityStart(const std::string& tensor_name,
                      const std::string& activity);
-  // void ActivityEndAll(const std::vector<TensorTableEntry>& entries);
   void ActivityEnd(const std::string& tensor_name);
-  // void End(const std::string& tensor_name, std::shared_ptr<Tensor> tensor);
-  // void MarkCycleStart();
 
  private:
   long TimeSinceStartMicros() const;

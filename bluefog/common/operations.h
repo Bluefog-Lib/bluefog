@@ -7,6 +7,9 @@
 namespace bluefog {
 namespace common {
 
+// Bluefog knobs.
+#define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
+
 // Check that bluefog is initialized.
 Status CheckInitialized();
 
