@@ -420,9 +420,11 @@ def barrier():
     """ Barrier function to sychronize all MPI processes.
     After this function, it is guaranteed that all asynch function before it is finished.
     """
-    return mpi_lib.bluefog_torch_barrier();
+    return mpi_lib.bluefog_torch_barrier()
 
 # MPI one sided ops, which will be useful in the asynchronized algorithm.
+
+
 def _win_create_function_factory(tensor):
     return 'bluefog_torch_win_create_' + tensor.type().replace('.', '_')
 
@@ -497,6 +499,7 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
         update_weights[r] = 0.0
     return win_sync(name, weights, update_weights)
 
+
 def win_sync(name: str, weights: Dict[int, float] = None,
              update_weights: Dict[int, float] = None,
              clone=False) -> torch.Tensor:
@@ -564,7 +567,7 @@ def _win_put_function_factory(tensor):
 
 
 def win_put_async(tensor: torch.Tensor, name: str,
-            dst_weights: Dict[int, float] = None) -> int:
+                  dst_weights: Dict[int, float] = None) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
     win_put operation is really finished.
@@ -595,7 +598,7 @@ def win_put_async(tensor: torch.Tensor, name: str,
 
 
 def win_put(tensor: torch.Tensor, name: str,
-                     dst_weights: Dict[int, float] = None) -> bool:
+            dst_weights: Dict[int, float] = None) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
     is finished.
@@ -682,8 +685,8 @@ def _win_accumulate_function_factory(tensor):
 
 
 def win_accumulate_async(tensor: torch.Tensor, name: str,
-                   dst_weights: Dict[int, float] = None,
-                   require_mutex: bool = False) -> bool:
+                         dst_weights: Dict[int, float] = None,
+                         require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a non-blocking function, which will return without waiting the
@@ -711,14 +714,15 @@ def win_accumulate_async(tensor: torch.Tensor, name: str,
         raise ValueError(
             "The key of dst_weights should only containranks that "
             " belong to out-neighbors (self-rank is not allowed).")
-    handle = getattr(mpi_lib, function)(tensor, name, dst_weights, require_mutex)
+    handle = getattr(mpi_lib, function)(
+        tensor, name, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_accumulate(tensor: torch.Tensor, name: str,
-                            dst_weights: Dict[int, float] = None,
-                            require_mutex: bool = False) -> bool:
+                   dst_weights: Dict[int, float] = None,
+                   require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a blocking function, which will return until win_accumulate operation
