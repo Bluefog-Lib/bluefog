@@ -26,6 +26,9 @@ using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
+static const char* BLUEFOG_WIN_ON_CPU = getenv("BLUEFOG_WIN_ON_CPU");
+static const bool WIN_ON_CPU = (BLUEFOG_WIN_ON_CPU != nullptr) && (*BLUEFOG_WIN_ON_CPU == '1');
+
 namespace {
 
 int GetDeviceID(const ::torch::Tensor& tensor) {
