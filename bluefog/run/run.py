@@ -52,8 +52,6 @@ def make_override_action(override_args):
                 help=help)
 
         def __call__(self, parser, args, values, option_string=None):
-            print(self.dest)
-            print(values[0])
             override_args.add(self.dest)
             setattr(args, self.dest, values[0])
 
@@ -128,8 +126,6 @@ def set_env_from_args(env, args):
 
 def main():
     args = parse_args()
-
-    # print('line 140:', args.timeline_filename)
 
     if args.version:
         print(bluefog.__version__)
