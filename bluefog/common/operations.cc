@@ -40,8 +40,25 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   state.initialization_done = true;
   BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
 
-  // // Open the timeline file
-  // auto bluefog_timeline = std::getenv(BLUEFOG_TIMELINE);
+  // Open the timeline file
+  auto bluefog_timeline = std::getenv(BLUEFOG_TIMELINE);
+
+  unsigned int size = bluefog_global.controller->GetSize();
+
+  if (bluefog_timeline != nullptr) {
+
+    std::cout << "hello, world c++!" << std::endl;
+
+    // TODO: make line 53 nicer with rank
+    state.timeline.Initialize(std::string(bluefog_timeline) +
+                                  std::to_string(bluefog_rank()) +
+                                  std::string(".json"),
+                              size);
+
+    state.timeline_enabled = true;
+  }
+
+  // // Initialize the timeline
   // unsigned int size = bluefog_global.controller->GetSize();
   // // const std::string bluefog_timeline = "test_timeline.txt";
   // state.timeline.Initialize(std::string("test_timeline_rank") +
@@ -49,15 +66,6 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   //                               std::string(".json"),
   //                           size);
   // state.timeline_enabled = true;
-
-  // Initialize the timeline
-  unsigned int size = bluefog_global.controller->GetSize();
-  // const std::string bluefog_timeline = "test_timeline.txt";
-  state.timeline.Initialize(std::string("test_timeline_rank") +
-                                std::to_string(bluefog_rank()) +
-                                std::string(".json"),
-                            size);
-  state.timeline_enabled = true;
 
   // Iterate until shutdown.
   while (RunLoopOnce(state))
@@ -112,7 +120,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
         state.controller->NeighborAllreduce(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name); // End activity for enqueue
+        state.timeline.ActivityEnd(
+            entry.tensor_name);  // End activity for enqueue
         break;
       case MPIOpsType::BARRIER:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
