@@ -7,6 +7,7 @@
 #include "adapter.h"
 #include "cuda_util.h"
 #include "handle_manager.h"
+#include "../common/logging.h"
 #include "../common/operations.h"
 
 namespace bluefog {
@@ -98,25 +99,43 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
                 const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
+  auto handle = handle_manager.AllocateHandle();
+
   auto device = GetDeviceID(tensor);
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   std::shared_ptr<common::Tensor> bf_output = nullptr;
-  if (bluefog_rank() == root_rank) {
-    if (tensor.data_ptr() != output.data_ptr()) {
-      with_device device_context(device);
-      output.copy_(tensor);
-    }
-  } else {
-    bf_output = std::make_shared<TorchTensor>(output);
-  }
 
-  auto handle = handle_manager.AllocateHandle();
-  auto enqueue_result = EnqueueTensorBroadcast(
-      bf_tensor, bf_output, root_rank, GetOpName("broadcast", name, handle),
-      device, [handle](const Status& status) {
-        handle_manager.MarkDone(handle, status);
-      });
-  ThrowIfError(enqueue_result);
+  if (OPS_ON_CPU && tensor.device().is_cuda()) {
+    ::torch::Tensor cpu_buffer =
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
+
+    auto enqueue_result = EnqueueTensorBroadcast(
+        bf_tensor, bf_tensor, root_rank, GetOpName("broadcast", name, handle),
+        device,
+        [handle, output, cpu_buffer, device](const Status& status) mutable {
+          with_device device_guard(device);
+          output.copy_(cpu_buffer);
+          handle_manager.MarkDone(handle, status);
+        });
+    ThrowIfError(enqueue_result);
+  } else {
+    if (bluefog_rank() == root_rank) {
+      if (tensor.data_ptr() != output.data_ptr()) {
+        with_device device_context(device);
+        output.copy_(tensor);
+      }
+    } else {
+      bf_output = std::make_shared<TorchTensor>(output);
+    }
+
+    auto enqueue_result = EnqueueTensorBroadcast(
+        bf_tensor, bf_output, root_rank, GetOpName("broadcast", name, handle),
+        device, [handle](const Status& status) {
+          handle_manager.MarkDone(handle, status);
+        });
+    ThrowIfError(enqueue_result);
+  }
 
   return handle;
 }

@@ -16,8 +16,7 @@ from bluefog.common import topology_util
 
 
 EPSILON = 1e-5
-#TEST_ON_GPU = torch.cuda.is_available()
-TEST_ON_GPU = False
+TEST_ON_GPU = torch.cuda.is_available()
 
 class OpsTests(unittest.TestCase):
     """
