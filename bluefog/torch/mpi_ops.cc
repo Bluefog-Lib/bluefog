@@ -23,7 +23,8 @@ using ::bluefog::common::Status;
 static HandleManager handle_manager;
 
 static const char* BLUEFOG_OPS_ON_CPU = getenv("BLUEFOG_OPS_ON_CPU");
-static const bool OPS_ON_CPU = (BLUEFOG_OPS_ON_CPU != nullptr) && (*BLUEFOG_OPS_ON_CPU == '1');
+static const bool OPS_ON_CPU =
+    (BLUEFOG_OPS_ON_CPU != nullptr) && (*BLUEFOG_OPS_ON_CPU == '1');
 
 namespace {
 
@@ -59,21 +60,21 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     // allocate two cpu memories.
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto bf_output = bf_tensor;
-  
+
     auto enqueue_result = EnqueueTensorAllreduce(
         bf_tensor, bf_tensor, GetOpName("allreduce", name, handle), device,
-        [handle, average, output, cpu_buffer, device](const Status& status) mutable {
+        [handle, average, output, cpu_buffer,
+         device](const Status& status) mutable {
           with_device device_guard(device);
           output.copy_(cpu_buffer);
 
           // Will execute in the `device` context.
-          if (average && bluefog_size() > 1 ) {
+          if (average && bluefog_size() > 1) {
             output.div_(bluefog_size());
           }
           handle_manager.MarkDone(handle, status);
         });
     ThrowIfError(enqueue_result);
-
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_output = std::make_shared<TorchTensor>(output);
@@ -82,7 +83,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
         bf_tensor, bf_output, GetOpName("allreduce", name, handle), device,
         [handle, average, output](const Status& status) mutable {
           // Will execute in the `device` context.
-          if (average) {
+          if (average && bluefog_size() > 1) {
             output.div_(bluefog_size());
           }
           handle_manager.MarkDone(handle, status);
