@@ -140,7 +140,9 @@ void MPIController::Allgather(TensorTableEntry& entry) {
 }
 
 void MPIController::Allreduce(TensorTableEntry& entry) {
-  const void* sendbuf = entry.tensor->data();
+  const void* sendbuf = entry.tensor->data() == entry.output->data()
+                            ? MPI_IN_PLACE
+                            : entry.tensor->data();
   void* buffer_data = (void*)entry.output->data();
   int num_elements = entry.tensor->shape().num_elements();
   int ret_code = MPI_Allreduce(

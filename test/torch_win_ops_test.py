@@ -345,7 +345,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_accumulate(tensor, window_name,
-                                       dst_weights={(rank+1) % size: 1.23})
+                              dst_weights={(rank+1) % size: 1.23})
 
             bf.barrier()
             sync_result = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
@@ -369,6 +369,7 @@ class WinOpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
+            print("test win_get on gpu!")
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))

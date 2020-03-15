@@ -22,6 +22,9 @@ using ::bluefog::common::Status;
 // static here means Local/private variable.
 static HandleManager handle_manager;
 
+static const char* BLUEFOG_OPS_ON_CPU = getenv("BLUEFOG_OPS_ON_CPU");
+static const bool OPS_ON_CPU = (BLUEFOG_OPS_ON_CPU != nullptr) && (*BLUEFOG_OPS_ON_CPU == '1');
+
 namespace {
 
 std::string GetOpName(const std::string& prefix, const std::string& name,
@@ -47,19 +50,45 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
 
   auto handle = handle_manager.AllocateHandle();
   auto device = GetDeviceID(tensor);
-  auto bf_tensor = std::make_shared<TorchTensor>(tensor);
-  auto bf_output = std::make_shared<TorchTensor>(output);
 
-  auto enqueue_result = EnqueueTensorAllreduce(
-      bf_tensor, bf_output, GetOpName("allreduce", name, handle), device,
-      [handle, average, output](const Status& status) mutable {
-        // Will execute in the `device` context.
-        if (average) {
-          output.div_(bluefog_size());
-        }
-        handle_manager.MarkDone(handle, status);
-      });
-  ThrowIfError(enqueue_result);
+  if (OPS_ON_CPU && tensor.device().is_cuda()) {
+    ::torch::Tensor cpu_buffer =
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    // When input and out are the same, mpi_allreduce use IN_PLACE mode.
+    // Because we will copy from cpu to gpu anway, there is no reason
+    // allocate two cpu memories.
+    auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
+    auto bf_output = bf_tensor;
+  
+    auto enqueue_result = EnqueueTensorAllreduce(
+        bf_tensor, bf_tensor, GetOpName("allreduce", name, handle), device,
+        [handle, average, output, cpu_buffer, device](const Status& status) mutable {
+          with_device device_guard(device);
+          output.copy_(cpu_buffer);
+
+          // Will execute in the `device` context.
+          if (average && bluefog_size() > 1 ) {
+            output.div_(bluefog_size());
+          }
+          handle_manager.MarkDone(handle, status);
+        });
+    ThrowIfError(enqueue_result);
+
+  } else {
+    auto bf_tensor = std::make_shared<TorchTensor>(tensor);
+    auto bf_output = std::make_shared<TorchTensor>(output);
+
+    auto enqueue_result = EnqueueTensorAllreduce(
+        bf_tensor, bf_output, GetOpName("allreduce", name, handle), device,
+        [handle, average, output](const Status& status) mutable {
+          // Will execute in the `device` context.
+          if (average) {
+            output.div_(bluefog_size());
+          }
+          handle_manager.MarkDone(handle, status);
+        });
+    ThrowIfError(enqueue_result);
+  }
 
   return handle;
 }
