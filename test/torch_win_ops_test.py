@@ -369,7 +369,6 @@ class WinOpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            print("test win_get on gpu!")
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))

@@ -42,7 +42,6 @@ x = torch.Tensor([bf.rank()/(indegree+1), 1.0/bf.size()/(indegree+1)])
 bf.win_create(x, name="x_buff")
 x = bf.win_sync_then_collect(name="x_buff")
 
-bf.barrier()
 for i in range(100):
     bf.win_accumulate(
         x, name="x_buff",

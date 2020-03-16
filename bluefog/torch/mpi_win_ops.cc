@@ -4,6 +4,7 @@
 #include <torch/torch.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <memory>
 #include <thread>
 
@@ -27,7 +28,7 @@ using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
-static const char* BLUEFOG_WIN_ON_CPU = getenv("BLUEFOG_WIN_ON_CPU");
+static const char* BLUEFOG_WIN_ON_CPU = std::getenv("BLUEFOG_WIN_ON_CPU");
 static const bool WIN_ON_CPU = (BLUEFOG_WIN_ON_CPU != nullptr) && (*BLUEFOG_WIN_ON_CPU == '1');
 
 // A map store {name -> gpu_tensor}. Used only when BLUEFOG_WIN_ON_CPU is turned on.
