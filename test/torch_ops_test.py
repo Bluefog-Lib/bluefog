@@ -54,13 +54,13 @@ class OpsTests(unittest.TestCase):
             torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
             tensor = self.cast_and_place(tensor, dtype)
+            name = "broadcast_tensor_{}_{}".format(dim, dtype)
             if bf.rank() == root_rank:
-                bf.broadcast(tensor, root_rank=root_rank,
-                             name="test_broadcast_tensor")
+                bf.broadcast(tensor, root_rank=root_rank, name=name)
             else:
                 zero_tensor = torch.zeros_like(tensor)
                 output = bf.broadcast(
-                    zero_tensor, root_rank=root_rank, name="test_broadcast_tensor"
+                    zero_tensor, root_rank=root_rank, name=name
                 )
                 max_difference = output.data.sub(tensor).max()
                 assert max_difference <= 1e-4
@@ -83,14 +83,13 @@ class OpsTests(unittest.TestCase):
         for dtype, dim, root_rank in itertools.product(dtypes, dims, root_ranks):
             torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            name = "broadcast_inplace_tensor_{}_{}".format(dim, dtype)
             root_tensor = torch.FloatTensor(
                 *([23] * dim)).fill_(1).mul_(root_rank)
             tensor = self.cast_and_place(tensor, dtype)
             root_tensor = self.cast_and_place(root_tensor, dtype)
 
-            broadcasted_tensor = bf.broadcast_(
-                tensor, root_rank=root_rank, name="test_broadcast_inplace_tensor"
-            )
+            broadcasted_tensor = bf.broadcast_(tensor, root_rank=root_rank, name=name)
 
             assert (
                 tensor == broadcasted_tensor
@@ -114,12 +113,12 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
+            name = "allreduce_tensor_{}_{}".format(dim, dtype)
             tensor = self.cast_and_place(tensor, dtype)
 
-            output = bf.allreduce(tensor, average=True,
-                                  name="test_allreduce_tensor")
+            output = bf.allreduce(tensor, average=True, name=name)
             max_difference = output.data.sub(tensor).max()
-            assert max_difference <= 1e-4
+            assert max_difference <= 1e-4, "bf.allreduce(avg) produces incorrect tensor"
 
     def test_allreduce_sum(self):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
@@ -137,11 +136,11 @@ class OpsTests(unittest.TestCase):
             torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
             tensor = self.cast_and_place(tensor, dtype)
+            name = "allreduce_tensor_{}_{}".format(dim, dtype)
 
-            output = bf.allreduce(tensor, average=False,
-                                  name="test_allreduce_tensor")
+            output = bf.allreduce(tensor, average=False, name=name)
             max_difference = output.data.sub(tensor.mul(size)).max()
-            assert max_difference <= 1e-4
+            assert max_difference <= 1e-4, "bf.allreduce(sum) produces incorrect tensor"
 
     def test_allgather(self):
         """Test that the allgather correctly gathers 1D, 2D, 3D tensors."""
@@ -163,7 +162,8 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gathered = bf.allgather(tensor)
+            name = "allgather_tensor_{}_{}".format(dim, dtype)
+            gathered = bf.allgather(tensor, name=name)
 
             assert list(gathered.shape) == [2 * size] + [2] * (dim - 1)
 
@@ -206,7 +206,8 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(
                 *([tensor_sizes[rank]] + [17] * (dim - 1))).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gathered = bf.allgather(tensor)
+            name = "allgather_tensor_{}_{}".format(dim, dtype)
+            gathered = bf.allgather(tensor, name=name)
 
             expected_size = sum(tensor_sizes)
             assert list(gathered.shape) == [expected_size] + [17] * (dim - 1)
@@ -215,9 +216,12 @@ class OpsTests(unittest.TestCase):
                 rank_size = [tensor_sizes[i]] + [17] * (dim - 1)
                 rank_tensor = gathered[sum(
                     tensor_sizes[:i]):sum(tensor_sizes[:i + 1])]
-                assert list(rank_tensor.shape) == rank_size
-                assert rank_tensor.data.min() == i
-                assert rank_tensor.data.max() == i
+                assert list(rank_tensor.shape) == rank_size, \
+                    "bf.allgather(var) produces incorrect gathered shape"
+                assert rank_tensor.data.min() == i, \
+                    "bf.allgather(var) produces incorrect gathered tensor"
+                assert rank_tensor.data.max() == i, \
+                    "bf.allgather(var) produces incorrect gathered tensor"
 
     def test_neighbor_allreduce_avg(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
@@ -254,7 +258,7 @@ class OpsTests(unittest.TestCase):
 
     def test_neighbor_allreduce_avg_meshgrid_topo(self):
         """
-        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors 
+        Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors
         correctly in a 2D meshgrid topology.
         """
         size = bf.size()
