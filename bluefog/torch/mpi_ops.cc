@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstdlib>
 #include <memory>
 #include <thread>
 #include <torch/extension.h>
@@ -23,7 +24,7 @@ using ::bluefog::common::Status;
 // static here means Local/private variable.
 static HandleManager handle_manager;
 
-static const char* BLUEFOG_OPS_ON_CPU = getenv("BLUEFOG_OPS_ON_CPU");
+static const char* BLUEFOG_OPS_ON_CPU = std::getenv("BLUEFOG_OPS_ON_CPU");
 static const bool OPS_ON_CPU =
     (BLUEFOG_OPS_ON_CPU != nullptr) && (*BLUEFOG_OPS_ON_CPU == '1');
 
@@ -143,18 +144,39 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
 int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
-  auto device = GetDeviceID(tensor);
-  auto bf_tensor = std::make_shared<TorchTensor>(tensor);
-  // The real output space of allgather is allocated later because we don't know the size
-  // of output in advance.
-  auto bf_context = std::make_shared<TorchOpContext>(device, output);
   auto handle = handle_manager.AllocateHandle();
-  auto enqueue_result = EnqueueTensorAllgather(
-      bf_tensor, bf_context, GetOpName("allgather", name, handle), device,
-      [handle](const Status& status) {
-        handle_manager.MarkDone(handle, status);
-      });
-  ThrowIfError(enqueue_result);
+  auto device = GetDeviceID(tensor);
+
+  if (OPS_ON_CPU && tensor.device().is_cuda()) {
+    ::torch::Tensor cpu_buffer =
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
+    auto cpu_output = ::torch::empty_like(cpu_buffer);
+    auto bf_context =
+        std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
+
+    auto enqueue_result = EnqueueTensorAllgather(
+        bf_tensor, bf_context, GetOpName("allgather", name, handle), device,
+        [handle, cpu_output, device, output](const Status& status) mutable {
+          with_device device_guard(device);
+          // output needs to be resized before copying in the CPU tensor.
+          output.resize_(cpu_output.sizes());
+          output.copy_(cpu_output);
+          handle_manager.MarkDone(handle, status);
+        });
+    ThrowIfError(enqueue_result);
+  } else {
+    auto bf_tensor = std::make_shared<TorchTensor>(tensor);
+    // The real output space of allgather is allocated later because we don't
+    // know the size of output in advance.
+    auto bf_context = std::make_shared<TorchOpContext>(device, output);
+    auto enqueue_result = EnqueueTensorAllgather(
+        bf_tensor, bf_context, GetOpName("allgather", name, handle), device,
+        [handle](const Status& status) {
+          handle_manager.MarkDone(handle, status);
+        });
+    ThrowIfError(enqueue_result);
+  }
 
   return handle;
 }
