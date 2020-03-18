@@ -1,4 +1,6 @@
-// Copyright 2019 Uber Technologies, Inc. All Rights Reserved.
+// Copyright 2020 BlueFog Team. All Rights Reserved.
+//
+// This code is modified from Uber Horovod timelime.cc
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.

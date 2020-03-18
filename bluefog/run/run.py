@@ -5,8 +5,6 @@ import subprocess
 import sys
 import traceback
 
-# import yaml
-
 import bluefog
 
 from bluefog.run.common.util import env as env_util
@@ -94,7 +92,7 @@ def parse_args():
     group_timeline = parser.add_argument_group('timeline arguments')
     group_timeline.add_argument('--timeline-filename', action=make_override_action(override_args),
                                 help='JSON file containing timeline of '
-                                     'Horovod events used for debugging '
+                                     'Bluefog events used for debugging '
                                      'performance. If this is provided, '
                                      'timeline events will be recorded, '
                                      'which can have a negative impact on training performance.')
@@ -116,13 +114,11 @@ def _add_arg_to_env(env, env_key, arg_value, transform_fn=None):
         env[env_key] = str(value)
 
 def set_env_from_args(env, args):
-
     # Timeline
     if args.timeline_filename:
         _add_arg_to_env(env, BLUEFOG_TIMELINE, args.timeline_filename)
 
     return env
-
 
 def main():
     args = parse_args()
@@ -151,7 +147,6 @@ def main():
             'training script using the standard way provided by your'
             ' MPI distribution (usually mpirun, srun, or jsrun).')
 
-    # with env_bluefog(timeline=args.timeline_filename):
     # Pass all the env variables to the mpirun command.
     env = os.environ.copy()
     env = set_env_from_args(env, args)
@@ -165,12 +160,11 @@ def main():
         .format(num_proc=args.np,
                 hosts_arg=hosts_arg,
                 ssh_port_arg=ssh_port_arg,
-                env=' '.join('-x %s' % key for key in env.keys()
-                                if env_util.is_exportable(key)),
+                env=' '.join('-x %s' % key for key in env.keys() if env_util.is_exportable(key)),
                 command=' '.join(shlex.quote(par) for par in args.command))
     )
 
-    # TODO: There is a bug when using timeline and verbose at the same time; fix it!
+    # TODO (Kun): There is a bug when using timeline and verbose at the same time; fix it!
     if args.verbose >= 2:
         print(mpirun_command)
     # Execute the mpirun command.
