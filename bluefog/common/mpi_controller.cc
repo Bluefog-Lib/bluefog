@@ -547,8 +547,6 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
   for (auto kv : entry.src_weights) {
     int target_rank = kv.first;
-    float weight =
-        kv.second;  // Unused. The real weight is happened at callback.
     // avoid getting the tensor for itself.
     if (target_rank == rank_) continue;
 
