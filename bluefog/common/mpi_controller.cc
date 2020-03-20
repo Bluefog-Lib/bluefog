@@ -1,5 +1,9 @@
 #include "mpi_controller.h"
 
+#if HAVE_CUDA
+#include "cuda_runtime.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <thread>
@@ -125,6 +129,13 @@ void MPIController::Allgather(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
+
+#if HAVE_CUDA
+  if (entry.device != CPU_DEVICE_ID) {
+    // We need to explicitly se the device here.
+    cudaSetDevice(entry.device);
+  }
+#endif
 
   int ret_code = MPI_Allgatherv(
       sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
@@ -259,6 +270,13 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
 
+#if HAVE_CUDA
+  if (entry.device != CPU_DEVICE_ID) {
+    // We need to explicitly se the device here.
+    cudaSetDevice(entry.device);
+  }
+#endif
+
   // Pitfall: mpi_neighbor_allgather do not include itself.
   int ret_code = MPI_Neighbor_allgatherv(
       sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
@@ -291,6 +309,13 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   }
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   void* buffer_data = (void*)entry.output->data();
+
+#if HAVE_CUDA
+  if (entry.device != CPU_DEVICE_ID) {
+    // We need to explicitly se the device here.
+    cudaSetDevice(entry.device);
+  }
+#endif
 
   // Pitfall: Our neighbor_allreduce include itself, while
   // mpi_neighbor_allgather do not! Because for saving the communication there

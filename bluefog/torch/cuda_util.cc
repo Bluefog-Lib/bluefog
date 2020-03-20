@@ -4,6 +4,7 @@
 #endif
 
 #include "../common/common.h"
+#include "../common/logging.h"
 #include "cuda_util.h"
 
 namespace bluefog {

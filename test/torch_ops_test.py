@@ -154,9 +154,6 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -190,9 +187,6 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -234,9 +228,6 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
@@ -247,7 +238,8 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, average=True, name=name)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -270,9 +262,6 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         is_set = bf.set_topology(topology_util.MeshGrid2DGraph(size))
         assert is_set, "Topology set failed."
@@ -310,9 +299,6 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         is_set = bf.set_topology(topology_util.BiRingGraph(size))
         assert is_set, "Topology set failed."
@@ -351,9 +337,6 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         for connect_direction in [False, True]:
             is_set = bf.set_topology(
@@ -390,9 +373,6 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         for center_rank in range(size):
             is_set = bf.set_topology(
@@ -431,9 +411,6 @@ class OpsTests(unittest.TestCase):
                   torch.IntTensor, torch.LongTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
@@ -466,9 +443,6 @@ class OpsTests(unittest.TestCase):
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         bf.set_topology(topology_util.StarGraph(size), is_weighted=True)
 
@@ -501,9 +475,6 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
-            # Use allreduce as a barrier.
-            bf.allreduce(torch.FloatTensor([1]).cuda(
-                bf.local_rank() % torch.cuda.device_count()))
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
