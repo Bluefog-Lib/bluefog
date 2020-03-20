@@ -211,19 +211,8 @@ def get_common_options(build_ext):
 
     MACROS = []
     INCLUDES = [
-        'third_party/boost/assert/include',
-        'third_party/boost/config/include',
-        'third_party/boost/core/include',
-        'third_party/boost/detail/include',
-        'third_party/boost/iterator/include',
         'third_party/boost/lockfree/include',
-        'third_party/boost/mpl/include',
-        'third_party/boost/parameter/include',
-        'third_party/boost/predef/include',
-        'third_party/boost/preprocessor/include',
-        'third_party/boost/static_assert/include',
-        'third_party/boost/type_traits/include',
-        'third_party/boost/utility/include',
+        'third_party/boost/parameter/include'
     ]
     SOURCES = ["bluefog/common/common.cc",
                "bluefog/common/logging.cc",
