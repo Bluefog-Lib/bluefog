@@ -46,7 +46,6 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   unsigned int size = bluefog_global.controller->GetSize();
 
   if (bluefog_timeline != nullptr) {
-
     // TODO: make line 53 nicer with rank
     state.timeline.Initialize(std::string(bluefog_timeline) +
                                   std::to_string(bluefog_rank()) +
@@ -82,26 +81,34 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
         state.controller->Allreduce(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-
+        state.timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
         break;
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
+        state.timeline.ActivityStart(entry.tensor_name, MPI_BROADCAST);
         state.controller->Broadcast(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
+        state.timeline.ActivityStart(entry.tensor_name, MPI_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         state.controller->Allgather(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        state.timeline.ActivityEnd(entry.tensor_name);  
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
+        state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         state.controller->NeighborAllgather(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        state.timeline.ActivityEnd(entry.tensor_name); 
         break;
       case MPIOpsType::NEIGHBOR_ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
@@ -109,7 +116,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
         state.controller->NeighborAllreduce(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
+        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BARRIER:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
@@ -123,17 +130,26 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_PUT on " << entry.tensor_name;
+        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_PUT);
         state.controller->WinPut(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_GET on " << entry.tensor_name;
+        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_GET);
         state.controller->WinGet(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
+        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_ACCUMULATE);
         state.controller->WinAccumulate(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       default:
         throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
@@ -298,6 +314,9 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLREDUCE;
 
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_ALLREDUCE);
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
@@ -318,6 +337,9 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::BROADCAST;
 
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_BROADCAST);
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
@@ -336,6 +358,9 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLGATHER;
+
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_ALLGATHER);
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -399,6 +424,9 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
   e.dst_weights = dst_weights;
 
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_WIN_PUT);
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
@@ -418,6 +446,9 @@ Status EnqueuTensorWindowAccumulate(
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
 
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_WIN_ACCUMULATE);
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
@@ -433,6 +464,9 @@ Status EnqueuTensorWindowGet(const std::string& name,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
   e.src_weights = src_weights;
+
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_WIN_GET);
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
