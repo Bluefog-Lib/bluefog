@@ -15,6 +15,9 @@
 #include "global_state.h"
 #include "logging.h"
 
+// Bluefog knobs.
+#define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
+
 namespace bluefog {
 namespace common {
 
@@ -84,14 +87,12 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
         state.controller->Allreduce(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
         break;
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_BROADCAST);
         state.controller->Broadcast(entry);
-        state.timeline.ActivityEnd(entry.tensor_name);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
@@ -100,7 +101,6 @@ bool RunLoopOnce(BluefogGlobalState& state) {
             << "Processing " << entry.tensor_name;
         state.controller->Allgather(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name);  
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLGATHER);
@@ -108,14 +108,12 @@ bool RunLoopOnce(BluefogGlobalState& state) {
             << "Processing " << entry.tensor_name;
         state.controller->NeighborAllgather(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name); 
         break;
       case MPIOpsType::NEIGHBOR_ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
         state.controller->NeighborAllreduce(entry);
-        state.timeline.ActivityEnd(entry.tensor_name);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BARRIER:
@@ -133,14 +131,12 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_PUT);
         state.controller->WinPut(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_GET on " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_GET);
         state.controller->WinGet(entry);
-        state.timeline.ActivityEnd(entry.tensor_name);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
@@ -149,11 +145,12 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_ACCUMULATE);
         state.controller->WinAccumulate(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
-        state.timeline.ActivityEnd(entry.tensor_name);
         break;
       default:
+        state.timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
         throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
     }
+    state.timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
   } catch (std::length_error& e) {
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   } catch (std::exception& e) {
