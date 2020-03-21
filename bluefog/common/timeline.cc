@@ -117,13 +117,13 @@ void TimelineWriter::WriterLoop() {
   }
 }
 
-void Timeline::Initialize(const std::string&& file_name, unsigned int bluefog_size) {
+void Timeline::Initialize(const std::string& file_name, unsigned int bluefog_size) {
   if (initialized_) {
     return;
   }
 
   // Start the writer.
-  writer_.Initialize(std::move(file_name));
+  writer_.Initialize(file_name);
 
   // Initialize if we were able to open the file successfully.
   initialized_ = writer_.IsHealthy();

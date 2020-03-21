@@ -44,16 +44,13 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
 
   // Open the timeline file
-  auto bluefog_timeline = std::getenv(BLUEFOG_TIMELINE);
+  char* bluefog_timeline_loc = std::getenv(BLUEFOG_TIMELINE);
 
-  unsigned int size = bluefog_global.controller->GetSize();
-
-  if (bluefog_timeline != nullptr) {
-    // TODO: make line 53 nicer with rank
-    state.timeline.Initialize(std::string(bluefog_timeline) +
-                                  std::to_string(bluefog_rank()) +
-                                  std::string(".json"),
-                              size);
+  if (bluefog_timeline_loc != nullptr) {
+    std::string timeline_filename = std::string(bluefog_timeline_loc) +
+                                    std::to_string(bluefog_rank()) +
+                                    std::string(".json");
+    state.timeline.Initialize(timeline_filename, bluefog_size());
 
     state.timeline_enabled = true;
   }

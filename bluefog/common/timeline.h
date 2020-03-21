@@ -59,7 +59,7 @@ enum TimelineState { ACTIVITY, TOP_LEVEL };
 // https://github.com/catapult-project/catapult/tree/master/tracing
 class Timeline {
  public:
-  void Initialize(const std::string&& file_name, unsigned int bluefog_size);
+  void Initialize(const std::string& file_name, unsigned int bluefog_size);
   inline bool Initialized() const { return initialized_; }
 
   void ActivityStart(const std::string& tensor_name,
