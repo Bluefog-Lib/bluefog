@@ -217,6 +217,7 @@ def get_common_options(build_ext):
         'third_party/boost/detail/include',
         'third_party/boost/iterator/include',
         'third_party/boost/lockfree/include',
+        'third_party/boost/mp11/include',
         'third_party/boost/mpl/include',
         'third_party/boost/parameter/include',
         'third_party/boost/predef/include',
