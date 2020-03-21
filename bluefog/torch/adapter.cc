@@ -3,7 +3,7 @@
 #endif
 
 #include "adapter.h"
-#include "cuda_util.h"
+#include "../common/cuda_util.h"
 #include "../common/logging.h"
 
 #if HAVE_CUDA
@@ -18,6 +18,7 @@ using ::bluefog::common::Framework;
 using ::bluefog::common::Status;
 using ::bluefog::common::StatusType;
 using ::bluefog::common::OpContext;
+using ::bluefog::common::with_device;
 
 TorchTensor::TorchTensor(::torch::Tensor tensor) : tensor_(tensor) {}
 

@@ -8,6 +8,8 @@
 #include <cassert>
 #include <thread>
 
+#include "cuda_util.h"
+
 namespace bluefog {
 namespace common {
 
@@ -130,12 +132,8 @@ void MPIController::Allgather(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
 
-#if HAVE_CUDA
-  if (entry.device != CPU_DEVICE_ID) {
-    // We need to explicitly se the device here.
-    cudaSetDevice(entry.device);
-  }
-#endif
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
 
   int ret_code = MPI_Allgatherv(
       sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
@@ -157,6 +155,9 @@ void MPIController::Allreduce(TensorTableEntry& entry) {
                             : entry.tensor->data();
   void* buffer_data = (void*)entry.output->data();
   int num_elements = entry.tensor->shape().num_elements();
+
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
   int ret_code = MPI_Allreduce(
       sendbuf, buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
       MPI_SUM, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
@@ -177,6 +178,9 @@ void MPIController::Broadcast(TensorTableEntry& entry) {
     data_ptr = (void*)entry.output->data();
   }
   int num_elements = entry.tensor->shape().num_elements();
+
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
   int ret_code =
       MPI_Bcast(data_ptr, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
                 root_rank, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
@@ -270,12 +274,8 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
 
-#if HAVE_CUDA
-  if (entry.device != CPU_DEVICE_ID) {
-    // We need to explicitly se the device here.
-    cudaSetDevice(entry.device);
-  }
-#endif
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
 
   // Pitfall: mpi_neighbor_allgather do not include itself.
   int ret_code = MPI_Neighbor_allgatherv(
@@ -310,12 +310,8 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   void* buffer_data = (void*)entry.output->data();
 
-#if HAVE_CUDA
-  if (entry.device != CPU_DEVICE_ID) {
-    // We need to explicitly se the device here.
-    cudaSetDevice(entry.device);
-  }
-#endif
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
 
   // Pitfall: Our neighbor_allreduce include itself, while
   // mpi_neighbor_allgather do not! Because for saving the communication there

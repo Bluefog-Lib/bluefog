@@ -10,8 +10,8 @@
 
 #include "../common/logging.h"
 #include "../common/operations.h"
+#include "../common/cuda_util.h"
 #include "adapter.h"
-#include "cuda_util.h"
 #include "handle_manager.h"
 
 namespace bluefog {
@@ -20,6 +20,7 @@ namespace torch {
 using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
+using ::bluefog::common::with_device;
 using ::bluefog::common::Status;
 using ::bluefog::common::EnqueueTensorWindowGet;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;

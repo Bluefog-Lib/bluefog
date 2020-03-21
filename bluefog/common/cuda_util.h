@@ -1,8 +1,8 @@
-#ifndef BLUEFOG_TORCH_CUDA_UTIL_H
-#define BLUEFOG_TORCH_CUDA_UTIL_H
+#ifndef BLUEFOG_COMMON_CUDA_UTIL_H
+#define BLUEFOG_COMMON_CUDA_UTIL_H
 
 namespace bluefog {
-namespace torch {
+namespace common {
 
 class with_device {
 public:
@@ -16,4 +16,4 @@ private:
 }
 }
 
-#endif // BLUEFOG_TORCH_CUDA_UTIL_H
+#endif // BLUEFOG_COMMON_CUDA_UTIL_H

@@ -215,6 +215,7 @@ def get_common_options(build_ext):
         'third_party/boost/parameter/include'
     ]
     SOURCES = ["bluefog/common/common.cc",
+               "bluefog/common/cuda_util.cc",
                "bluefog/common/logging.cc",
                "bluefog/common/mpi_context.cc",
                "bluefog/common/mpi_controller.cc",
@@ -360,7 +361,6 @@ def build_torch_extension(build_ext, global_options):
                          include_dirs=options['INCLUDES'],
                          sources=options['SOURCES'] + [
                              "bluefog/torch/adapter.cc",
-                             "bluefog/torch/cuda_util.cc",
                              "bluefog/torch/handle_manager.cc",
                              "bluefog/torch/mpi_ops.cc",
                              "bluefog/torch/mpi_win_ops.cc"
