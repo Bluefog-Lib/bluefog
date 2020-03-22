@@ -483,8 +483,7 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
-        >>> win_sync(name, weights={neighbor + self : 1.0}, update_weights={neighbor: 0.0})
-    where "neighbor + self" means all (in-)neighbor's rank plus self rank.
+        >>> win_sync(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
 
     Args:
         name: The unique name to associate the window object.
@@ -492,31 +491,26 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
     """
-    weights = {rank(): 1.0}
-    update_weights = {}
-    for r in in_neighbor_ranks():
-        weights[r] = 1.0
-        update_weights[r] = 0.0
-    return win_sync(name, weights, update_weights)
+    neighbor_weights = {r:1.0 for r in in_neighbor_ranks()}
+    return win_sync(name, 1.0, neighbor_weights, reset=True)
 
 
-def win_sync(name: str, weights: Dict[int, float] = None,
-             update_weights: Dict[int, float] = None,
-             clone=False) -> torch.Tensor:
+def win_sync(name: str,
+             self_weight: float = 1.0, neighbor_weights: Dict[int, float] = None,
+             reset: bool = False, clone: bool = False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened.
 
     Args:
         name: The unique name to associate the window object.
-        weights: If weights is presented, the return tensor will return the weighted average
-            defined by this weights. The data structure of weights should be {rank : weight}
-            and rank has to belonge the (in-)neighbors and self.
-        update_weights: If update_weights is presented, the buffer used to store the neighbor
-            tensor will update its tensor. The new buffer tensor will be tensor * weight.
-            The update_weights is always happened after the weights computation.
-            The data structure of weights should be {rank : weight}
-            and rank has to belonge the (in-)neighbors.
+        self_weight: the weight for self node, used with neighbor_weights.
+        neighbor_weights: If neighbor_weights is presented, the return tensor will return the
+            weighted average defined by these weights and the self_weight. The data structure
+            of weights should be {rank : weight} and rank has to belong to the (in-)neighbors.
+        reset: If reset is True, the buffer used to store the neighbor tensor included in 
+            neighbor_weights will be reset to zero.
+            The reset is always happened after the weights computation.
         clone: If set up to be true, the win_sync result will return a new tensor instead of
             in-place change.
 
@@ -528,22 +522,28 @@ def win_sync(name: str, weights: Dict[int, float] = None,
     bf.set_topology(.., is_weighted=True) is a better choice.
 
     Note2:
-        If update_weights is not empty, mutex for self is acquired.
+        If reset is True, mutex for self is acquired.
     """
     tensor = _win_map[name]
     if clone:
         tensor = tensor.clone()
-    function = _check_function(_win_sync_function_factory, tensor, weights)
-    update_weights = {} if update_weights is None else update_weights
-    if weights is not None:
+    function = _check_function(_win_sync_function_factory, tensor, neighbor_weights)
+    update_weights = {}
+    if reset:
+        for r in neighbor_weights:
+            update_weights[r] = 0.0
+
+    if neighbor_weights is not None:
         # Pre-condition check for weights dictionary.
-        if not isinstance(weights, dict):
+        if not isinstance(neighbor_weights, dict):
             raise ValueError("Argument weights has to be a dictionary map from the (in-)neighbor "
                              "rank to the weights.")
-        if not set(weights.keys()).issubset(set(in_neighbor_ranks() + [rank()])):
+        if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
 
+        weights=neighbor_weights
+        weights[rank()] = self_weight
         if not getattr(mpi_lib, function)(tensor, name, weights, update_weights):
             raise RuntimeError("Cannot apply win_sync on " + name)
         return tensor
