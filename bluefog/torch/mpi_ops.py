@@ -505,12 +505,14 @@ def win_sync(name: str,
     Args:
         name: The unique name to associate the window object.
         self_weight: the weight for self node, used with neighbor_weights.
+            If neighbor_weights is not presented, its value will be ignored.
         neighbor_weights: If neighbor_weights is presented, the return tensor will return the
             weighted average defined by these weights and the self_weight. The data structure
             of weights should be {rank : weight} and rank has to belong to the (in-)neighbors.
         reset: If reset is True, the buffer used to store the neighbor tensor included in 
             neighbor_weights will be reset to zero.
             The reset is always happened after the weights computation.
+            If neighbor_weights is not presented, its value will be ignored.
         clone: If set up to be true, the win_sync result will return a new tensor instead of
             in-place change.
 
@@ -528,10 +530,6 @@ def win_sync(name: str,
     if clone:
         tensor = tensor.clone()
     function = _check_function(_win_sync_function_factory, tensor, neighbor_weights)
-    update_weights = {}
-    if reset:
-        for r in neighbor_weights:
-            update_weights[r] = 0.0
 
     if neighbor_weights is not None:
         # Pre-condition check for weights dictionary.
@@ -542,13 +540,11 @@ def win_sync(name: str,
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
 
-        weights=neighbor_weights
-        weights[rank()] = self_weight
-        if not getattr(mpi_lib, function)(tensor, name, weights, update_weights):
+        if not getattr(mpi_lib, function)(tensor, name, self_weight, neighbor_weights, reset):
             raise RuntimeError("Cannot apply win_sync on " + name)
         return tensor
 
-    if not getattr(mpi_lib, function)(tensor, name, update_weights):
+    if not getattr(mpi_lib, function)(tensor, name):
         raise RuntimeError("Cannot apply win_sync on " + name)
     return tensor
 

@@ -234,33 +234,29 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 
 namespace {
 
-int InplaceUpdateNeighborTensor(
-    const std::string& name,
-    const std::unordered_map<int, float>& update_weights) {
+int ResetNeighborTensor(const std::string& name,
+        const std::unordered_map<int, float>& neighbor_map) {
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
-  for (auto& kv : update_weights) {
+  for (auto& kv : neighbor_map) {
     int rank = kv.first;
-    float weight = kv.second;
     if (!win_storage_manager.GetStorageByNameRank(name, rank,
                                                   bf_neighbor_tensor)) {
       BFLOG(FATAL) << "Cannot get neighbor tensor with " << name << " at rank "
                    << rank;
       return 0;
     }
-    bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
+    bf_neighbor_tensor->GetUnderlyingTensor().fill_(0.0);
   }
   return 1;
 }
 
 } // namespace
 
-int DoWinSync(::torch::Tensor tensor, const std::string& name,
-              const std::unordered_map<int, float>& update_weights) {
+int DoWinSync(::torch::Tensor tensor, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
-  if (!update_weights.empty()) common::WindowMutexAcquire(self_rank);
   Status status = common::WindowSync(name);
 
   ::torch::Tensor cpu_buffer = tensor;
@@ -270,9 +266,6 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 
   // Averaging with neighbors' tensors happens in-place.
   if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer)) return 0;
-  if (!InplaceUpdateNeighborTensor(name, update_weights)) return 0;
-
-  if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
@@ -284,13 +277,14 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
-                      const std::unordered_map<int, float>& weights,
-                      const std::unordered_map<int, float>& update_weights) {
+                      float self_weight,
+                      const std::unordered_map<int, float>& neighbor_weights,
+                      bool reset) {
   ThrowIfError(common::CheckInitialized());
   
   // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
-  if (!update_weights.empty()) common::WindowMutexAcquire(self_rank);
+  if (reset && !neighbor_weights.empty()) common::WindowMutexAcquire(self_rank);
   Status status = common::WindowSync(name);
 
   ::torch::Tensor cpu_buffer = tensor;
@@ -299,10 +293,12 @@ int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
   }
 
   // Weighted averaging with neighbors' tensors happens in-place.
+  auto weights = neighbor_weights;
+  weights[common::bluefog_rank()] = self_weight;
   if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, weights)) return 0;
-  if (!InplaceUpdateNeighborTensor(name, update_weights)) return 0;
+  if (reset && !ResetNeighborTensor(name, neighbor_weights)) return 0;
 
-  if (!update_weights.empty()) common::WindowMutexRelease(self_rank);
+  if (reset && !neighbor_weights.empty()) common::WindowMutexRelease(self_rank);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
