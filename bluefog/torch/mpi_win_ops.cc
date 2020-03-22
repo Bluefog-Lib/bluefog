@@ -173,7 +173,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   local_tensor.mul_(self_weight);
 
   auto neighbor_map = it->second;
-  for(auto& kv: weights) {
+  for(auto& kv: neighbor_weights) {
     int rank = kv.first;
     if(rank == common::bluefog_rank()) continue;
     float weight = kv.second;
@@ -296,9 +296,8 @@ int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
   }
 
   // Weighted averaging with neighbors' tensors happens in-place.
-  auto weights = neighbor_weights;
-  weights[common::bluefog_rank()] = self_weight;
-  if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, weights)) return 0;
+  if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight, neighbor_weights)) 
+      return 0;
   if (reset && !ResetNeighborTensor(name, neighbor_weights)) return 0;
 
   if (reset && !neighbor_weights.empty()) common::WindowMutexRelease(self_rank);
