@@ -105,10 +105,10 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     int provided;
     MPI_Query_thread(&provided);
     if (provided < MPI_THREAD_MULTIPLE) {
-        BFLOG(WARNING)
-            << "MPI has already been initialized without "
-               "multi-threading support (MPI_THREAD_MULTIPLE). This will "
-               "likely cause a segmentation fault.";
+      BFLOG(WARNING)
+          << "MPI has already been initialized without "
+             "multi-threading support (MPI_THREAD_MULTIPLE). This will "
+             "likely cause a segmentation fault.";
     }
   } else {
     // MPI environment has not been created, using manager to initialize.
@@ -123,7 +123,7 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     MPI_Group_incl(world_group, ranks.size(), ranks.data(), &work_group);
     MPI_Comm_create_group(MPI_COMM_WORLD, work_group, 0, &(mpi_comm));
     if (mpi_comm == MPI_COMM_NULL) {
-        BFLOG(WARNING) << "Unable to create bluefog communicator, using "
+      BFLOG(WARNING) << "Unable to create bluefog communicator, using "
                         "MPI_COMM_WORLD instead.";
       mpi_comm = MPI_COMM_WORLD;
     }

@@ -70,7 +70,7 @@ parser.add_argument("--no-rma", action="store_true",
                     default=False, help="Do no use remote memory access(no window ops).")
 
 args = parser.parse_args()
-args.cuda = not args.no_cuda and torch.cuda.is_available()
+args.cuda = (not args.no_cuda) and (torch.cuda.is_available())
 args.bluefog = not args.no_bluefog
 
 allreduce_batch_size = args.batch_size * args.batches_per_allreduce
@@ -92,6 +92,7 @@ if args.bluefog:
 torch.manual_seed(args.seed)
 
 if args.cuda:
+    print("using cuda.")
     # Bluefog: pin GPU to local rank.
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
     torch.cuda.manual_seed(args.seed)
@@ -160,7 +161,7 @@ val_loader = torch.utils.data.DataLoader(
 )
 
 
-# Set up standard ResNet-50 model.
+# Set up standard ResNet-18 model.
 model = models.resnet18()
 
 if args.cuda:
