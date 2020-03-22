@@ -6,8 +6,8 @@
 #include <torch/torch.h>
 
 #include "adapter.h"
-#include "cuda_util.h"
 #include "handle_manager.h"
+#include "../common/cuda_util.h"
 #include "../common/logging.h"
 #include "../common/operations.h"
 
@@ -19,6 +19,7 @@ using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::bluefog_rank;
 using ::bluefog::common::bluefog_size;
+using ::bluefog::common::with_device;
 using ::bluefog::common::Status;
 
 // static here means Local/private variable.
