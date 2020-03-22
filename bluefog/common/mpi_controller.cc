@@ -437,7 +437,7 @@ Status MPIController::WinFreeAll() {
 Status MPIController::WinSync(const std::string& name) {
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
-    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+    return Status::InvalidArgument(std::string("Win_sync failed with ") + name);
   }
 
   auto win_mananger = it->second;
@@ -451,7 +451,7 @@ Status MPIController::WinSync(const std::string& name) {
 Status MPIController::WinFence(const std::string& name) {
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
-    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+    return Status::InvalidArgument(std::string("Win_fence failed with ") + name);
   }
 
   std::shared_ptr<WindowManager> win_mananger = it->second;
