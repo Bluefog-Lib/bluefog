@@ -143,7 +143,13 @@ bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
   const std::unordered_map<int, float>* weights;
   int is_weighted = bluefog_load_topology_weights(weights);
   if (is_weighted == 1) {
-    return AvgWithNeighbor(name, local_tensor, *weights);
+    // TODO(hhb): consider change topology weights definition
+    auto it = weights->find(common::bluefog_rank());
+    if (it == weights->end()) {
+      return false;
+    }
+    float self_weight = it->second;
+    return AvgWithNeighbor(name, local_tensor, self_weight, *weights);
   } else {
     // By default we use the (uniform) average.
     if (!SumWithNeighbor(name, local_tensor)) {
@@ -157,19 +163,16 @@ bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
 
 bool WinTorchStorageManager::AvgWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor,
-    const std::unordered_map<int, float>& weights) {
+    float self_weight,
+    const std::unordered_map<int, float>& neighbor_weights) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
     return false;
   }
   
-  auto neighbor_map = it->second;
-  float self_weight = 0.0;
-  if(weights.find(common::bluefog_rank()) != weights.end()) {
-    self_weight = static_cast<float>(weights.at(common::bluefog_rank()));
-  }
   local_tensor.mul_(self_weight);
 
+  auto neighbor_map = it->second;
   for(auto& kv: weights) {
     int rank = kv.first;
     if(rank == common::bluefog_rank()) continue;

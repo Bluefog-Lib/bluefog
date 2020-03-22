@@ -51,13 +51,15 @@ class WinTorchStorageManager {
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
 
   // Weighted Average the local tensor with neighbor tensors according to weights map.
-  // Weights map { rank: weights }. Rank has to be neighbor ranks or self rank.
+  // Weights map { rank: weights }. Rank has to be (in-)neighbor ranks. self_weight
+  // specifies the weight for self rank.
   // The sum weights are not necessary to be 1.
   // No matter the weights in the mpi_context class is set or not, weights provided in
   // the argument will override it.
   bool AvgWithNeighbor(
       const std::string& name, ::torch::Tensor local_tensor,
-      const std::unordered_map<int, float>& weights);
+      float self_weight,
+      const std::unordered_map<int, float>& neighbor_weights);
 
   
   // This is just utility functions and never used the weights defined in the
