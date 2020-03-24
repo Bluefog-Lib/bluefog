@@ -354,6 +354,8 @@ Status MPIController::WinCreate(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
     const std::string& name, const int device) {
+  // We need to explicitly set the device here.
+  with_device device_guard(device);
   // 1. Regist a Name and create a window first.
   if (!mpi_ctx_.RegisterWindowName(name)) {
     return Status::InvalidArgument(std::string("Win_create failed with ") +
@@ -415,7 +417,7 @@ Status MPIController::WinCreate(
   return Status::OK();
 }
 
-Status MPIController::WinFree(const std::string& name) {
+Status MPIController::WinFree(const std::string& name, int device) {
   if (!mpi_ctx_.UnregisterWindowName(name)) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
@@ -430,12 +432,13 @@ Status MPIController::WinFreeAll() {
   return Status::OK();
 }
 
-Status MPIController::WinSync(const std::string& name) {
+Status MPIController::WinSync(const std::string& name, int device) {
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_sync failed with ") + name);
   }
 
+  with_device device_guard(device);
   auto win_mananger = it->second;
   for (auto rank : neighbor_in_ranks_) {
     MPI_Win_sync(*(win_mananger->GetWinByRank(rank)));
@@ -459,6 +462,9 @@ Status MPIController::WinFence(const std::string& name) {
 }
 
 void MPIController::WinPut(TensorTableEntry& entry) {
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
   int num_elements = entry.tensor->shape().num_elements();
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
@@ -489,6 +495,9 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 }
 
 void MPIController::WinAccumulate(TensorTableEntry& entry) {
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
   int num_elements = entry.tensor->shape().num_elements();
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
@@ -532,6 +541,9 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
 }
 
 void MPIController::WinGet(TensorTableEntry& entry) {
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +

@@ -122,9 +122,9 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, int device);
 
-Status WindowSync(const std::string& name);
+Status WindowSync(const std::string& name, int device);
 
-Status WindowFree(const std::string& name);
+Status WindowFree(const std::string& name, int device);
 
 Status WindowFence(const std::string& name);
 

@@ -42,6 +42,9 @@ class WinTorchStorageManager {
   bool GetStorageByNameRank(const std::string& name, const int rank,
                             std::shared_ptr<TorchTensor>& tensor);
 
+  // Get the device associated with registered name.
+  bool GetDeviceByName(const std::string& name, int* device);
+
   // Sum the local tensor with all neighbor tensors.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
   
@@ -82,6 +85,8 @@ class WinTorchStorageManager {
       tensors_map_;
   
   std::unordered_map<std::string, std::shared_ptr<TorchTensor>> self_tensor_map_;
+
+  std::unordered_map<std::string, int> device_map_;
 
   mutable std::mutex mutex_;
   int in_neighbor_degree_;
