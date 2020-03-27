@@ -96,6 +96,8 @@ if args.cuda:
     # Bluefog: pin GPU to local rank.
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
     torch.cuda.manual_seed(args.seed)
+else:
+    print("using cpu")
 
 cudnn.benchmark = True
 
@@ -159,7 +161,6 @@ val_sampler = torch.utils.data.distributed.DistributedSampler(
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=args.val_batch_size, sampler=val_sampler, **kwargs
 )
-
 
 # Set up standard ResNet-18 model.
 model = models.resnet18()

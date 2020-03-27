@@ -1,5 +1,11 @@
 NUM_PROC ?= 4
-EXTRA_MPI_FLAG =
+$(info $(shell mpirun --version))
+ifeq ($(findstring Open MPI, $(shell mpirun --version)), Open MPI)
+  EXTRA_MPI_FLAG = --allow-run-as-root
+else
+  EXTRA_MPI_FLAG = 
+endif
+
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest -s
 MPICH_NOT_EXIST = $(shell which mpichversion)
