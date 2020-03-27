@@ -53,7 +53,7 @@ RUN pip install numpy \
         keras \
         h5py
 
-RUN pip install torch==${PYTORCH_VERSION}
+RUN pip install torch==${PYTORCH_VERSION} torchvision==${TORCHVISION_VERSION}
 
 # Install Open MPI
 RUN mkdir /tmp/openmpi && \
