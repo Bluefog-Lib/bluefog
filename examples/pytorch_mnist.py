@@ -181,6 +181,7 @@ else:
         optimizer, named_parameters=model.named_parameters()
     )
 
+
 def train(epoch):
     model.train()
     # Bluefog: set epoch to sampler for shuffling.
@@ -225,7 +226,8 @@ def test():
         test_loss += F.nll_loss(output, target, size_average=False).item()
         # get the index of the max log-probability
         pred = output.data.max(1, keepdim=True)[1]
-        test_accuracy += pred.eq(target.data.view_as(pred)).cpu().float().sum().item()
+        test_accuracy += pred.eq(target.data.view_as(pred)
+                                 ).cpu().float().sum().item()
 
     # Bluefog: use test_sampler to determine the number of examples in
     # this worker's partition.
