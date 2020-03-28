@@ -200,6 +200,17 @@ If None, BlueFog will use MPI_COMM_WORLD Communicator.</p></li>
 </dd></dl>
 
 <dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.is_topo_weighted">
+<code class="sig-name descname">is_topo_weighted</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.is_topo_weighted" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns if the virtual topology weights are used</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating if the topology weights are used.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
 <dt id="bluefog.common.basics.BlueFogBasics.load_topology">
 <code class="sig-name descname">load_topology</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.load_topology" title="Permalink to this definition">¶</a></dt>
 <dd><p>A funnction that return the virtual topology MPI used.</p>
@@ -351,11 +362,8 @@ this information.</p>
 
 <dl class="function">
 <dt id="bluefog.common.topology_util.GetWeights">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param">topo: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">rank: int</em><span class="sig-paren">)</span> &#x2192; List[float]<a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return a List of (in-)weights of rank.</p>
-<p>Self weights is always put at the beginning. If there is no self-loop,
-the first element will be zero. The rest will be the same order as
-predecessors returned.</p>
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param">topo: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">rank: int</em><span class="sig-paren">)</span> &#x2192; Tuple[float, Dict[int, float]]<a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights dictionary.</p>
 </dd></dl>
 
 <dl class="function">
