@@ -271,9 +271,9 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     cpu_buffer = tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
-  // internal_avg specifies the detailed the flow to average operation in the neighbors
-  // it leads to efficiency and precision difference.
-  // but when internal_avg = False, the results are only correct when all weights are
+  // internal_avg specifies the detailed flow for weighted reduction operation for the neighbors
+  // which may lead to efficiency and precision difference.
+  // but when internal_avg is false, the results are only correct when all weights are
   // 1/(neighbor size+1).
   if (internal_avg) {
     // Weighted averaging with neighbors' tensors happens in-place.
