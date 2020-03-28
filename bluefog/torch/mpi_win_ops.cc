@@ -21,7 +21,9 @@ using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::with_device;
-using ::bluefog::common::EnqueuTensorWindowGet;
+using ::bluefog::common::EnqueueTensorWindowAccumulate;
+using ::bluefog::common::EnqueueTensorWindowGet;
+using ::bluefog::common::EnqueueTensorWindowPut;
 using ::bluefog::common::Status;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
