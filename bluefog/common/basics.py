@@ -25,6 +25,7 @@ class BlueFogBasics(object):
         full_path = util.get_extension_full_path(pkg_path, *args)
         self._topology = None
         self._MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
+        self._is_topo_weighted = False
 
     def init(self, topology: networkx.DiGraph = None,
              is_weighted: bool = False, comm=None):
@@ -121,6 +122,14 @@ class BlueFogBasics(object):
             raise ValueError(
                 "BlueFog has not been initialized; use bf.init().")
         return mpi_threads_supported
+
+    def is_topo_weighted(self) -> bool:
+        """A function that returns if the virtual topology weights are used
+
+        Returns:
+          A boolean value indicating if the topology weights are used.
+        """
+        return self._is_topo_weighted
 
     def load_topology(self) -> networkx.DiGraph:
         """A funnction that return the virtual topology MPI used.
@@ -238,4 +247,5 @@ class BlueFogBasics(object):
                 )
             return False
         self._topology = topology
+        self._is_topo_weighted = is_weighted
         return True

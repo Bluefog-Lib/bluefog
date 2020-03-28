@@ -255,34 +255,10 @@ int ResetNeighborTensor(const std::string& name,
 
 } // namespace
 
-int DoWinSync(::torch::Tensor tensor, const std::string& name) {
-  ThrowIfError(common::CheckInitialized());
-
-  // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
-  const std::vector<int> self_rank = {common::bluefog_rank()};
-  Status status = common::WindowSync(name);
-
-  ::torch::Tensor cpu_buffer = tensor;
-  if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    cpu_buffer = tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
-  }
-
-  // Averaging with neighbors' tensors happens in-place.
-  if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer)) return 0;
-
-  if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    auto device = GetDeviceID(tensor);
-    with_device device_guard(device);
-    tensor.copy_(cpu_buffer);
-  }
-
-  return 1;
-}
-
-int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
-                      float self_weight,
-                      const std::unordered_map<int, float>& neighbor_weights,
-                      bool reset) {
+int DoWinSync(::torch::Tensor tensor, const std::string& name,
+              float self_weight,
+              const std::unordered_map<int, float>& neighbor_weights,
+              bool reset, bool internal_avg) {
   ThrowIfError(common::CheckInitialized());
   
   // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
@@ -295,9 +271,24 @@ int DoWinSyncWeighted(::torch::Tensor tensor, const std::string& name,
     cpu_buffer = tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
-  // Weighted averaging with neighbors' tensors happens in-place.
-  if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight, neighbor_weights)) 
+  // internal_avg specifies the detailed the flow to average operation in the neighbors
+  // it leads to efficiency and precision difference.
+  // but when internal_avg = False, the results are only correct when all weights are
+  // 1/(neighbor size+1).
+  if (internal_avg) {
+    // Weighted averaging with neighbors' tensors happens in-place.
+    if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight, neighbor_weights))
       return 0;
+  } else {
+    // Sum over neighbors' tensors happens in-place.
+    if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer)) {
+      return 0;
+    }
+    // +1 here because in neighbor degree doesn't include self rank.
+    float neighbor_size = neighbor_weights.size()+1.0;
+    cpu_buffer.div_(neighbor_size);
+  }
+
   if (reset && !ResetNeighborTensor(name, neighbor_weights)) return 0;
 
   if (reset && !neighbor_weights.empty()) common::WindowMutexRelease(self_rank);
@@ -476,17 +467,6 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_sync_torch_cuda_LongTensor", &DoWinSync);
   m.def("bluefog_torch_win_sync_torch_cuda_FloatTensor", &DoWinSync);
   m.def("bluefog_torch_win_sync_torch_cuda_DoubleTensor", &DoWinSync);
-#endif
-
-  m.def("bluefog_torch_win_sync_with_weights_torch_IntTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_LongTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_FloatTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_DoubleTensor", &DoWinSyncWeighted);
-#if HAVE_CUDA
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_IntTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_LongTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_FloatTensor", &DoWinSyncWeighted);
-  m.def("bluefog_torch_win_sync_with_weights_torch_cuda_DoubleTensor", &DoWinSyncWeighted);
 #endif
 
   m.def("bluefog_torch_win_put_torch_IntTensor", &DoWinPut);
