@@ -15,30 +15,33 @@ def bfprint(*args, **kwargs):
 
 bf.init()
 
-x = torch.Tensor([[bf.rank()]])
-for i in range(100):
-    x = bf.neighbor_allreduce(x)
+x = torch.FloatTensor(1000, 1000).fill_(1).mul_(bf.rank())
+for i in range(50):
+    x = bf.neighbor_allreduce(x, name='ybc')
+    print(i, end='\r')
 
 # Expected average should be (0+1+2+...+size-1)/(size) = (size-1)/2
-print("Rank {}: Normal consensus result".format(bf.rank()), x)
+print("Rank {}: Normal consensus result".format(bf.rank()),x[0,0])
 
 # Change to star topology with hasting rule, which should be unbiased as well.
 bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
-x = torch.Tensor([[bf.rank()]])
-for i in range(100):
-    x = bf.neighbor_allreduce(x)
+x = torch.FloatTensor(1000, 1000).fill_(1).mul_(bf.rank())
+for i in range(50):
+    x = bf.neighbor_allreduce(x, name='liuji')
+    print(i, end='\r')
 
 # Expected average should be (0+1+2+...+size-1)/(size) = (size-1)/2
-print("Rank {}: consensus with weights".format(bf.rank()), x)
+print("Rank {}: consensus with weights".format(bf.rank()), x[0,0])
 
 # Use win_accumulate to simulate the push-sum algorithm (sync).
 bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
 outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
-# Remember we do not create buffer with 0.
 # we append the p at the last of data.
 x = torch.Tensor([bf.rank()/(indegree+1), 1.0/bf.size()/(indegree+1)])
+
+# Remember we do not create buffer with 0.
 bf.win_create(x, name="x_buff")
 x = bf.win_sync_then_collect(name="x_buff")
 

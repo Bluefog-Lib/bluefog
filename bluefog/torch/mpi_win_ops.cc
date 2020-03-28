@@ -21,8 +21,10 @@ using ::bluefog::common::bluefog_load_topology;
 using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::with_device;
-using ::bluefog::common::Status;
+using ::bluefog::common::EnqueueTensorWindowAccumulate;
 using ::bluefog::common::EnqueueTensorWindowGet;
+using ::bluefog::common::EnqueueTensorWindowPut;
+using ::bluefog::common::Status;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
@@ -65,6 +67,7 @@ bool WinTorchStorageManager::RegisterWinName(
   }
   tensors_map_[name] = neighbor_tensors;
   self_tensor_map_[name] = tensor;
+  device_map_[name] = device;
   return true;
 }
 
@@ -75,10 +78,11 @@ bool WinTorchStorageManager::UnregisterWinName(const std::string& name) {
   }
   tensors_map_.erase(it);
   self_tensor_map_.erase(self_tensor_map_.find(name));
+  device_map_.erase(device_map_.find(name));
   return true;
 }
 
-void WinTorchStorageManager::ClearAll() { 
+void WinTorchStorageManager::ClearAll() {
   tensors_map_.clear();
   self_tensor_map_.clear();
 }
@@ -102,6 +106,16 @@ bool WinTorchStorageManager::GetStorageByname(
     int source_rank = *(sources_ptr + i);
     tensors.emplace_back(neighbor_map[source_rank]);
   }
+  return true;
+}
+
+bool WinTorchStorageManager::GetDeviceByName(const std::string& name,
+                                             int* device) {
+  auto it = device_map_.find(name);
+  if (it == device_map_.end()) {
+    return false;
+  }
+  *device = it->second;
   return true;
 }
 
@@ -175,7 +189,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   auto neighbor_map = it->second;
   for(auto& kv: neighbor_weights) {
     int rank = kv.first;
-    if(rank == common::bluefog_rank()) continue;
+    if (rank == common::bluefog_rank()) continue;
     float weight = kv.second;
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul(weight));
@@ -253,7 +267,7 @@ int ResetNeighborTensor(const std::string& name,
   return 1;
 }
 
-} // namespace
+}  // namespace
 
 int DoWinSync(::torch::Tensor tensor, const std::string& name,
               float self_weight,
@@ -264,7 +278,14 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
   if (reset && !neighbor_weights.empty()) common::WindowMutexAcquire(self_rank);
-  Status status = common::WindowSync(name);
+
+  int device = CPU_DEVICE_ID;
+  if(!win_storage_manager.GetDeviceByName(name, &device)) {
+    BFLOG(ERROR) << "Cannot get device of win " << name;
+    return 0;
+  }
+
+  Status status = common::WindowSync(name, device);
 
   ::torch::Tensor cpu_buffer = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
@@ -305,10 +326,15 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 int DoWinFree(const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
+  int device = CPU_DEVICE_ID;
   if (name.empty()) {
     win_storage_manager.ClearAll();
     if (WIN_ON_CPU) win_gpu_tensor_map.clear();
   } else {
+    if(!win_storage_manager.GetDeviceByName(name, &device)) {
+      BFLOG(ERROR) << "Cannot get device of win " << name;
+      return 0;
+    }
     auto res = win_storage_manager.UnregisterWinName(name);
     if (!res) {
       BFLOG(ERROR) << "Cannot unregister win " << name;
@@ -318,7 +344,8 @@ int DoWinFree(const std::string& name) {
       win_gpu_tensor_map.erase(name);
     }
   }
-  Status status = common::WindowFree(name);
+
+  Status status = common::WindowFree(name, device);
   return status.ok() ? 1 : 0;
 }
 
@@ -487,8 +514,10 @@ void AddWinOpsIntoPybind(py::module& m) {
 #if HAVE_CUDA
   m.def("bluefog_torch_win_accumulate_torch_cuda_IntTensor", &DoWinAccumulate);
   m.def("bluefog_torch_win_accumulate_torch_cuda_LongTensor", &DoWinAccumulate);
-  m.def("bluefog_torch_win_accumulate_torch_cuda_FloatTensor", &DoWinAccumulate);
-  m.def("bluefog_torch_win_accumulate_torch_cuda_DoubleTensor", &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_FloatTensor",
+        &DoWinAccumulate);
+  m.def("bluefog_torch_win_accumulate_torch_cuda_DoubleTensor",
+        &DoWinAccumulate);
 #endif
 
   m.def("bluefog_torch_win_get", &DoWinGet);

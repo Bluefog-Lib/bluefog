@@ -1,5 +1,11 @@
 NUM_PROC ?= 4
-EXTRA_MPI_FLAG =
+$(info $(shell mpirun --version))
+ifeq ($(findstring Open MPI, $(shell mpirun --version)), Open MPI)
+  EXTRA_MPI_FLAG = --allow-run-as-root
+else
+  EXTRA_MPI_FLAG = 
+endif
+
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
 PYTEST = pytest -s
 MPICH_NOT_EXIST = $(shell which mpichversion)
@@ -9,9 +15,9 @@ build:
 	python setup.py build_ext -i
 
 test: test_torch
-test_torch: test_torch_basic test_torch_ops test_torch_win_ops
+test_torch: test_torch_basic test_torch_ops test_torch_win_ops test_timeline
 test_tensorflow: test_tensorflow_basic test_tensorflow_ops
-test_all: test_torch test_tensorflow test_torch_win_ops
+test_all: test_torch test_tensorflow
 
 clean: clean_build clean_so
 
@@ -22,6 +28,12 @@ test_torch_basic:
 .PHONY: test_torch_ops
 test_torch_ops:
 	${MPIRUN} ${PYTEST} ./test/torch_ops_test.py
+
+.PHONY: test_timeline
+test_timeline:
+ifeq (${MPICH_NOT_EXIST},)
+	${MPIRUN} ${PYTEST} ./test/test_timeline.py
+endif
 
 .PHONY: test_torch_win_ops
 test_torch_win_ops:

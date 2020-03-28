@@ -5,9 +5,12 @@ import subprocess
 import sys
 import traceback
 
-
 import bluefog
 
+from bluefog.run.common.util import env as env_util
+
+# Timeline knobs
+BLUEFOG_TIMELINE = 'BLUEFOG_TIMELINE'
 
 def _is_open_mpi_installed():
     command = 'mpirun --version'
@@ -26,8 +29,37 @@ def _is_open_mpi_installed():
         return False
     return True
 
+def make_override_action(override_args):
+    class StoreOverrideAction(argparse.Action):
+        def __init__(self,
+                     option_strings,
+                     dest,
+                     default=None,
+                     type=None,
+                     choices=None,
+                     required=False,
+                     help=None):
+            super(StoreOverrideAction, self).__init__(
+                option_strings=option_strings,
+                dest=dest,
+                nargs=1,
+                default=default,
+                type=type,
+                choices=choices,
+                required=required,
+                help=help)
+
+        def __call__(self, parser, args, values, option_string=None):
+            override_args.add(self.dest)
+            setattr(args, self.dest, values[0])
+
+    return StoreOverrideAction
+
 
 def parse_args():
+
+    override_args = set()
+
     parser = argparse.ArgumentParser(description='Bluefog Runner')
 
     parser.add_argument('-v', '--version', action="store_true", dest="version",
@@ -57,6 +89,14 @@ def parse_args():
     parser.add_argument('command', nargs=argparse.REMAINDER,
                         help="Command to be executed.")
 
+    group_timeline = parser.add_argument_group('timeline arguments')
+    group_timeline.add_argument('--timeline-filename', action=make_override_action(override_args),
+                                help='JSON file containing timeline of '
+                                     'Bluefog events used for debugging '
+                                     'performance. If this is provided, '
+                                     'timeline events will be recorded, '
+                                     'which can have a negative impact on training performance.')
+
     parsed_args = parser.parse_args()
 
     parsed_args.verbose = 2 if parsed_args.verbose else 1
@@ -66,8 +106,23 @@ def parse_args():
     return parsed_args
 
 
+def _add_arg_to_env(env, env_key, arg_value, transform_fn=None):
+    if arg_value is not None:
+        value = arg_value
+        if transform_fn:
+            value = transform_fn(value)
+        env[env_key] = str(value)
+
+def set_env_from_args(env, args):
+    # Timeline
+    if args.timeline_filename:
+        _add_arg_to_env(env, BLUEFOG_TIMELINE, args.timeline_filename)
+
+    return env
+
 def main():
     args = parse_args()
+
     if args.version:
         print(bluefog.__version__)
         exit(0)
@@ -94,7 +149,7 @@ def main():
 
     # Pass all the env variables to the mpirun command.
     env = os.environ.copy()
-
+    env = set_env_from_args(env, args)
     mpirun_command = (
         'mpirun --allow-run-as-root --tag-output '
         '-np {num_proc} {hosts_arg} '
@@ -105,10 +160,11 @@ def main():
         .format(num_proc=args.np,
                 hosts_arg=hosts_arg,
                 ssh_port_arg=ssh_port_arg,
-                env='',
+                env=' '.join('-x %s' % key for key in env.keys() if env_util.is_exportable(key)),
                 command=' '.join(shlex.quote(par) for par in args.command))
     )
 
+    # TODO (Kun): There is a bug when using timeline and verbose at the same time; fix it!
     if args.verbose >= 2:
         print(mpirun_command)
     # Execute the mpirun command.

@@ -57,9 +57,9 @@ class MPIController {
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                    const std::string& name, int device);
-  Status WinFree(const std::string& name);
+  Status WinFree(const std::string& name, int device);
   Status WinFreeAll();
-  Status WinSync(const std::string& name);
+  Status WinSync(const std::string& name, int device);
   Status WinFence(const std::string& name);
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
