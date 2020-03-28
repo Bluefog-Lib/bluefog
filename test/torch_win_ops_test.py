@@ -4,8 +4,10 @@ from __future__ import print_function
 
 import inspect
 import itertools
-import unittest
+import os
+import sys
 import time
+import unittest
 import warnings
 warnings.simplefilter("ignore")
 
@@ -18,7 +20,7 @@ from bluefog.common import topology_util
 
 
 EPSILON = 1e-5
-TEST_ON_GPU = False and torch.cuda.is_available()
+TEST_ON_GPU = torch.cuda.is_available()
 
 class WinOpsTests(unittest.TestCase):
     """
@@ -73,10 +75,10 @@ class WinOpsTests(unittest.TestCase):
                 "bf.win_sync produce wrong shape tensor.")
             assert (sync_result.data.min() == rank), (
                 "bf.win_sync produces wrong tensor value " +
-                "{}!={} at rank {}.".format(sync_result.data.min(), num_indegree*rank, rank))
+                "{}!={} at rank {}.".format(sync_result.data.min(), rank, rank))
             assert (sync_result.data.max() == rank), (
                 "bf.win_sync produces wrong tensor value " +
-                "{}!={} at rank {}.".format(sync_result.data.max(), num_indegree*rank, rank))
+                "{}!={} at rank {}.".format(sync_result.data.max(), rank, rank))
 
         for dtype, dim in itertools.product(dtypes, dims):
             window_name = "win_create_{}_{}".format(dim, dtype)
@@ -206,7 +208,7 @@ class WinOpsTests(unittest.TestCase):
                     "[{}-{}]!={} at rank {}.".format(collect_tensor.min(),
                                                      collect_tensor.max(), rank, rank))
 
-    def test_win_put_blocking(self):
+    def test_win_put(self):
         """Test that the window put operation."""
         size = bf.size()
         rank = bf.rank()
@@ -231,7 +233,7 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_put_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
 
-            bf.win_put_blocking(tensor, window_name)
+            bf.win_put(tensor, window_name)
             bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -247,7 +249,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully."
 
-    def test_win_put_blocking_with_given_destination(self):
+    def test_win_put_with_given_destination(self):
         """Test that the window put operation with given destination."""
         size = bf.size()
         rank = bf.rank()
@@ -270,7 +272,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_put_blocking(tensor, window_name, dst_weights={(rank+1) % size: 1.23})
+            bf.win_put(tensor, window_name, dst_weights={(rank+1) % size: 1.23})
             bf.barrier()
             sync_result = bf.win_sync(window_name)
             assert (list(sync_result.shape) == [3] * dim), (
@@ -286,7 +288,7 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully."
 
-    def test_win_accumulate_blocking(self):
+    def test_win_accumulate(self):
         """Test that the window accumulate operation."""
         size = bf.size()
         rank = bf.rank()
@@ -310,7 +312,7 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_accumulate_blocking(tensor, window_name)
+            bf.win_accumulate(tensor, window_name)
 
             bf.barrier()
             sync_result = bf.win_sync(window_name)
@@ -322,7 +324,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
-    def test_win_accumulate_blocking_with_given_destination(self):
+    def test_win_accumulate_with_given_destination(self):
         """Test that the window accumulate operation with given destination."""
         size = bf.size()
         rank = bf.rank()
@@ -342,8 +344,8 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_accumulate_blocking(tensor, window_name,
-                                       dst_weights={(rank+1) % size: 1.23})
+            bf.win_accumulate(tensor, window_name,
+                              dst_weights={(rank+1) % size: 1.23})
 
             bf.barrier()
             sync_result = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
@@ -356,7 +358,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
-    def test_win_get_blocking(self):
+    def test_win_get(self):
         """Test that the window get operation."""
         size = bf.size()
         rank = bf.rank()
@@ -380,9 +382,9 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_get_blocking(window_name)
+            bf.win_get(window_name)
             bf.barrier()
-            recv_tensor = bf.win_sync(window_name)
+            recv_tensor = bf.win_sync(window_name, clone=True)
 
             assert (list(tensor.shape) == [3] * dim), (
                 "bf.win_get produce wrong shape tensor.")
@@ -391,7 +393,7 @@ class WinOpsTests(unittest.TestCase):
                 "[{}-{}]!={} at rank {}.".format(
                     recv_tensor.min(), recv_tensor.max(), avg_value, rank))
 
-    def test_win_get_blocking_with_given_sources(self):
+    def test_win_get_with_given_sources(self):
         """Test that the window get operation with given sources."""
         size = bf.size()
         rank = bf.rank()
@@ -412,11 +414,12 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_get_blocking(window_name, src_weights={
+            bf.win_get(window_name, src_weights={
                                 (rank-1) % size: 1.23})
             bf.barrier()
-            recv_tensor = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
-                                                            rank: 0.5})
+            recv_tensor = bf.win_sync(window_name,
+                                      weights={(rank-1) % size: 0.5, rank: 0.5},
+                                      clone=True)
 
             assert (list(recv_tensor.shape) == [3] * dim), (
                 "bf.win_get with given sources produces wrong shape tensor.")
@@ -424,6 +427,60 @@ class WinOpsTests(unittest.TestCase):
                 "bf.win_get with given sources produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(recv_tensor.min(),
                                                  recv_tensor.max(), avg_value, rank))
+
+    def test_win_mutex_full(self):
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 2:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn(
+                "Skip {} because it only supports test over at least 3 nodes".format(fname))
+            return
+        bf.set_topology(topology_util.FullyConnectedGraph(size))
+        if rank == 0:
+            with bf.win_mutex():
+                bf.barrier()
+                time.sleep(2.0)
+        else:
+            bf.barrier()
+            t_start = time.time()
+            with bf.win_mutex():
+                time.sleep(0.001)
+            t_end = time.time()
+            assert (t_end - t_start) > 2, \
+                "The mutex acquire time should be longer than 2 second"
+            assert (t_end - t_start) < 3, \
+                "The mutex acquire time should be shorter than 3 second"
+
+    def test_win_mutex_given_ranks(self):
+        size = bf.size()
+        rank = bf.rank()
+        if size < 4:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn(
+                "Skip {} because it only supports test above 4 nodes".format(fname))
+            return
+
+        if rank == 0:
+            with bf.win_mutex([0]):
+                bf.barrier()
+                time.sleep(2.0)
+        elif rank == 1:
+            bf.barrier()
+            t_start = time.time()
+            with bf.win_mutex([1]):
+                time.sleep(0.001)
+            t_end = time.time()
+            assert (t_end - t_start) < 0.1
+        elif rank == 2:
+            bf.barrier()
+            t_start = time.time()
+            with bf.win_mutex([0]):
+                time.sleep(0.001)
+            t_end = time.time()
+            assert (t_end - t_start) > 2
+        else:
+            bf.barrier()
 
 
 if __name__ == "__main__":

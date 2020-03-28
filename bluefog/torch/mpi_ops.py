@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import List, Dict
 
 import torch
@@ -419,9 +420,11 @@ def barrier():
     """ Barrier function to sychronize all MPI processes.
     After this function, it is guaranteed that all asynch function before it is finished.
     """
-    return mpi_lib.bluefog_torch_barrier();
+    return mpi_lib.bluefog_torch_barrier()
 
 # MPI one sided ops, which will be useful in the asynchronized algorithm.
+
+
 def _win_create_function_factory(tensor):
     return 'bluefog_torch_win_create_' + tensor.type().replace('.', '_')
 
@@ -496,8 +499,10 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
         update_weights[r] = 0.0
     return win_sync(name, weights, update_weights)
 
+
 def win_sync(name: str, weights: Dict[int, float] = None,
-             update_weights: Dict[int, float] = None) -> torch.Tensor:
+             update_weights: Dict[int, float] = None,
+             clone=False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened.
@@ -512,6 +517,8 @@ def win_sync(name: str, weights: Dict[int, float] = None,
             The update_weights is always happened after the weights computation.
             The data structure of weights should be {rank : weight}
             and rank has to belonge the (in-)neighbors.
+        clone: If set up to be true, the win_sync result will return a new tensor instead of
+            in-place change.
 
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
@@ -519,8 +526,13 @@ def win_sync(name: str, weights: Dict[int, float] = None,
     Note: Weights here will be useful if you need a dynamic weighted average, i.e. the weights
     change with the iterations. If static weight need, then setting the weights through the
     bf.set_topology(.., is_weighted=True) is a better choice.
+
+    Note2:
+        If update_weights is not empty, mutex for self is acquired.
     """
     tensor = _win_map[name]
+    if clone:
+        tensor = tensor.clone()
     function = _check_function(_win_sync_function_factory, tensor, weights)
     update_weights = {} if update_weights is None else update_weights
     if weights is not None:
@@ -554,8 +566,8 @@ def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 
 
-def win_put(tensor: torch.Tensor, name: str,
-            dst_weights: Dict[int, float] = None) -> int:
+def win_put_async(tensor: torch.Tensor, name: str,
+                  dst_weights: Dict[int, float] = None) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
     win_put operation is really finished.
@@ -585,8 +597,8 @@ def win_put(tensor: torch.Tensor, name: str,
     return handle
 
 
-def win_put_blocking(tensor: torch.Tensor, name: str,
-                     dst_weights: Dict[int, float] = None) -> bool:
+def win_put(tensor: torch.Tensor, name: str,
+            dst_weights: Dict[int, float] = None) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
     is finished.
@@ -603,13 +615,13 @@ def win_put_blocking(tensor: torch.Tensor, name: str,
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put(tensor, name, dst_weights)
+    handle = win_put_async(tensor, name, dst_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
 
 
-def win_get(name: str, src_weights: Dict[int, float] = None) -> int:
+def win_get_async(name: str, src_weights: Dict[int, float] = None) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_sync function is responsible for fetching that memeory.
@@ -640,7 +652,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None) -> int:
     return handle
 
 
-def win_get_blocking(name: str, src_weights: Dict[int, float] = None) -> bool:
+def win_get(name: str, src_weights: Dict[int, float] = None) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_sync function is responsible for fetching that memeory.
@@ -662,7 +674,7 @@ def win_get_blocking(name: str, src_weights: Dict[int, float] = None) -> bool:
         A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
         processes (or all neighbor processes).
     """
-    handle = win_get(name, src_weights)
+    handle = win_get_async(name, src_weights)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
@@ -672,8 +684,9 @@ def _win_accumulate_function_factory(tensor):
     return 'bluefog_torch_win_accumulate_' + tensor.type().replace('.', '_')
 
 
-def win_accumulate(tensor: torch.Tensor, name: str,
-                   dst_weights: Dict[int, float] = None) -> bool:
+def win_accumulate_async(tensor: torch.Tensor, name: str,
+                         dst_weights: Dict[int, float] = None,
+                         require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a non-blocking function, which will return without waiting the
@@ -687,6 +700,8 @@ def win_accumulate(tensor: torch.Tensor, name: str,
             If not provided, dst_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.
             Note dst_weights should only contain the ranks that belong to out-neighbors.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A handle to the win_accmulate operation that can be used with `win_poll()` or
@@ -699,13 +714,15 @@ def win_accumulate(tensor: torch.Tensor, name: str,
         raise ValueError(
             "The key of dst_weights should only containranks that "
             " belong to out-neighbors (self-rank is not allowed).")
-    handle = getattr(mpi_lib, function)(tensor, name, dst_weights)
+    handle = getattr(mpi_lib, function)(
+        tensor, name, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
-def win_accumulate_blocking(tensor: torch.Tensor, name: str,
-                            dst_weights: Dict[int, float] = None) -> bool:
+def win_accumulate(tensor: torch.Tensor, name: str,
+                   dst_weights: Dict[int, float] = None,
+                   require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a blocking function, which will return until win_accumulate operation
@@ -719,15 +736,18 @@ def win_accumulate_blocking(tensor: torch.Tensor, name: str,
             If not provided, dst_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.
             Note dst_weights should only contain the ranks that belong to out-neighbors.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A handle to the win_accmulate operation that can be used with `win_poll()` or
         `win_wait()`.
     """
-    handle = win_accumulate(tensor, name, dst_weights)
+    handle = win_accumulate_async(tensor, name, dst_weights, require_mutex)
     win_wait(handle)
     # TODO(ybc) Error handling.
     return True
+
 
 def win_poll(handle: int) -> bool:
     """Return whether the win ops identified by handle is done or not."""
@@ -743,3 +763,64 @@ def win_wait(handle: int) -> bool:
     mpi_lib.bluefog_torch_win_wait(handle)
     _ = _win_handle_map.pop(handle)
     return True
+
+
+@contextmanager
+def win_lock(name: str):
+    """ win_lock context manager. Within the context, an RMA access epoch
+    for its neihbor is created.
+    Note The ops of win_get, win_accumulate, and win_put do not need win_lock context.
+
+    Args:
+        name: The name of existing MPI_win object. If not found, ValueError will raise.
+    """
+    _win_lock(name)
+    try:
+        yield
+    finally:
+        _win_unlock(name)
+
+
+def _win_lock(name: str):
+    if name not in _win_map:
+        raise ValueError(
+            "{} is not found in the registered window object.".format(name))
+    mpi_lib.bluefog_torch_win_lock(name)
+
+
+def _win_unlock(name: str):
+    if name not in _win_map:
+        raise ValueError(
+            "{} is not found in the registered window object.".format(name))
+    mpi_lib.bluefog_torch_win_unlock(name)
+
+
+@contextmanager
+def win_mutex(ranks: List[int] = None):
+    """ A win object implemented mutex context manager. Note, there are N distributed
+    mutex over N corresponding processes.
+
+    Args:
+        ranks: The mutex associated with the ranks will be acquired.
+            If not presented, out_neighbor ranks will be used.
+
+    Example:
+        >>> bf.win_create(tensor, name)
+        >>> with win_mutex():
+                tensor = bf.win_sync_then_collect(name)
+        >>> win_put(tensor, name)
+    """
+    _ranks = out_neighbor_ranks() if ranks is None else ranks
+    _win_mutex_acquire(_ranks)
+    try:
+        yield
+    finally:
+        _win_mutex_release(_ranks)
+
+
+def _win_mutex_acquire(ranks):
+    mpi_lib.bluefog_torch_win_mutex_acquire(ranks)
+
+
+def _win_mutex_release(ranks):
+    mpi_lib.bluefog_torch_win_mutex_release(ranks)

@@ -148,6 +148,7 @@ class Net(nn.Module):
 model = Net()
 
 if args.cuda:
+    print("using cuda.")
     # Move model to GPU.
     model.cuda()
 

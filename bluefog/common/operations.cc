@@ -406,7 +406,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   return status;
 }
 
-Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                              const std::string& name,
                              const std::unordered_map<int, float>& dst_weights,
                              const int device, StatusCallback callback) {
@@ -428,10 +428,13 @@ Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status EnqueuTensorWindowAccumulate(
-    std::shared_ptr<Tensor> tensor, const std::string& name,
-    const std::unordered_map<int, float>& dst_weights, const int device,
-    StatusCallback callback) {
+
+Status EnqueueTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
+                             const std::string& name,
+                             const std::unordered_map<int, float>& dst_weights,
+                             const int device, 
+                             const bool require_mutex, 
+                             StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -439,6 +442,7 @@ Status EnqueuTensorWindowAccumulate(
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
+  e.require_mutex = require_mutex;
 
   bluefog_global.timeline.ActivityStart(e.tensor_name,
                                         ENQUEUE_WIN_ACCUMULATE);
@@ -450,7 +454,7 @@ Status EnqueuTensorWindowAccumulate(
   return status;
 }
 
-Status EnqueuTensorWindowGet(const std::string& name,
+Status EnqueueTensorWindowGet(const std::string& name,
                              const std::unordered_map<int, float>& src_weights,
                              StatusCallback callback) {
   TensorTableEntry e;
@@ -484,11 +488,11 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status WindowSync(const std::string& name) {
+Status WindowSync(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinSync(name);
+  Status status = bluefog_global.controller->WinSync(name, device);
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -496,7 +500,7 @@ Status WindowSync(const std::string& name) {
   return status;
 }
 
-Status WindowFree(const std::string& name) {
+Status WindowFree(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
@@ -504,7 +508,7 @@ Status WindowFree(const std::string& name) {
   if (name.empty()) {
     status = bluefog_global.controller->WinFreeAll();
   } else {
-    status = bluefog_global.controller->WinFree(name);
+    status = bluefog_global.controller->WinFree(name, device);
   }
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
@@ -535,6 +539,58 @@ Status Barrier(StatusCallback callback) {
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  return status;
+}
+
+Status WindowLock(const std::string& name) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinLock(name);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot Lock the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowUnlock(const std::string& name) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinUnlock(name);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot Unlock the MPI_Win for " << name;
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowMutexAcquire(const std::vector<int>& acquire_ranks) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinMutexAcquire(acquire_ranks);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot acquire window mutex";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowMutexRelease(const std::vector<int>& release_ranks) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.controller->WinMutexRelease(release_ranks);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot release window mutex"; 
+    BFLOG(ERROR) << status.reason();
+  }
   return status;
 }
 

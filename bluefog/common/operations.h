@@ -98,32 +98,43 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 
-Status EnqueuTensorWindowPut(std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                              const std::string& name, 
                              const std::unordered_map<int, float>& dst_ranks,
                              const int device,
                              StatusCallback callback);
 
-Status EnqueuTensorWindowAccumulate(
+Status EnqueueTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
     const std::unordered_map<int, float>& dst_ranks, const int device,
-    StatusCallback callback);
+    const bool require_mutex, StatusCallback callback);
 
-Status EnqueuTensorWindowGet(const std::string& name, 
+Status EnqueueTensorWindowGet(const std::string& name, 
                              const std::unordered_map<int, float>& src_ranks,
                              StatusCallback callback);
+
+Status Barrier(StatusCallback callback);
+
+// Note all following ops are not proccessed through the communication thread.
+// it is executed throug the main thread. It may cause some mismatch.
 
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, int device);
 
-Status WindowSync(const std::string& name);
+Status WindowSync(const std::string& name, int device);
 
-Status WindowFree(const std::string& name);
+Status WindowFree(const std::string& name, int device);
 
 Status WindowFence(const std::string& name);
 
-Status Barrier(StatusCallback callback);
+Status WindowLock(const std::string& name);
+
+Status WindowUnlock(const std::string& name);
+
+Status WindowMutexAcquire(const std::vector<int>& acquire_ranks);
+
+Status WindowMutexRelease(const std::vector<int>& release_ranks);
 
 }  // namespace common
 }  // namespace bluefog

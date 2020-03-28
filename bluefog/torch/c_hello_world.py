@@ -19,8 +19,8 @@ from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
 from bluefog.torch.mpi_ops import load_topology, set_topology
 from bluefog.torch.mpi_ops import mpi_threads_supported
 from bluefog.torch.mpi_ops import win_create, win_free, win_sync
-from bluefog.torch.mpi_ops import win_put, win_put_blocking
-from bluefog.torch.mpi_ops import win_get, win_get_blocking
+from bluefog.torch.mpi_ops import win_put_async, win_put
+from bluefog.torch.mpi_ops import win_get_async, win_get
 from bluefog.torch.mpi_ops import win_wait, win_poll
 
 full_path = get_extension_full_path(__file__, 'mpi_lib')
@@ -76,11 +76,9 @@ print(rank, "--neighbor_allreduce: ", result)
 assert win_create(torch.Tensor([[1, 2, 3], [4, 5, 6]]).mul(rank+1), name="win_test")
 result = win_sync(name="win_test")
 print(rank, "--win_sync: ", result)
-win_put_blocking(torch.Tensor([[1, 2, 3], [4, 5, 6]]).mul(rank+1), name="win_test")
+win_put(torch.Tensor([[1, 2, 3], [4, 5, 6]]).mul(rank+1), name="win_test")
 time.sleep(0.01)
 result = win_sync(name="win_test")
 print(rank, "--win_sync: ", result)
-win_get(torch.Tensor([[1, 2, 3], [4, 5, 6]]).mul(rank+1),
-        name="win_test", average=True)
 
 MPI_LIB_CTYPES.bluefog_shutdown()

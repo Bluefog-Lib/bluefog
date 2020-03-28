@@ -3,7 +3,7 @@
 #endif
 
 #include "adapter.h"
-#include "cuda_util.h"
+#include "../common/cuda_util.h"
 #include "../common/logging.h"
 
 #if HAVE_CUDA
@@ -18,6 +18,7 @@ using ::bluefog::common::Framework;
 using ::bluefog::common::Status;
 using ::bluefog::common::StatusType;
 using ::bluefog::common::OpContext;
+using ::bluefog::common::with_device;
 
 TorchTensor::TorchTensor(::torch::Tensor tensor) : tensor_(tensor) {}
 
@@ -131,11 +132,10 @@ Status TorchOpContext::AllocateOutput(common::TensorShape shape,
   for (int idx = 0; idx < shape.dims(); ++idx) {
     shape_vector.push_back(shape.dim_size(idx));
   }
-  // TODO(ybc) CUDA device setup is not correct yet.
   with_device device_context(device_);
   output_.resize_(shape_vector);
-  BFLOG(TRACE) << "Output tensor after allocated " << output_.scalar_type() << " " << output_.size(0)
-             << " " << output_.device();
+  BFLOG(TRACE) << "Output tensor after allocated " << output_.scalar_type()
+               << " " << output_.size(0) << " " << output_.device();
   *tensor = std::make_shared<TorchTensor>(output_);
   return Status::OK();
 }

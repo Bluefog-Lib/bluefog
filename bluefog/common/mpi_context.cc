@@ -1,3 +1,5 @@
+#include <memory>
+
 #include "mpi_context.h"
 #include "logging.h"
 
@@ -103,10 +105,10 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     int provided;
     MPI_Query_thread(&provided);
     if (provided < MPI_THREAD_MULTIPLE) {
-        BFLOG(WARNING)
-            << "MPI has already been initialized without "
-               "multi-threading support (MPI_THREAD_MULTIPLE). This will "
-               "likely cause a segmentation fault.";
+      BFLOG(WARNING)
+          << "MPI has already been initialized without "
+             "multi-threading support (MPI_THREAD_MULTIPLE). This will "
+             "likely cause a segmentation fault.";
     }
   } else {
     // MPI environment has not been created, using manager to initialize.
@@ -121,7 +123,7 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     MPI_Group_incl(world_group, ranks.size(), ranks.data(), &work_group);
     MPI_Comm_create_group(MPI_COMM_WORLD, work_group, 0, &(mpi_comm));
     if (mpi_comm == MPI_COMM_NULL) {
-        BFLOG(WARNING) << "Unable to create bluefog communicator, using "
+      BFLOG(WARNING) << "Unable to create bluefog communicator, using "
                         "MPI_COMM_WORLD instead.";
       mpi_comm = MPI_COMM_WORLD;
     }
@@ -175,6 +177,8 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
   }
 
   UnregisterAllWindowName();
+
+  DestroyWinMutex();
 
   if (should_finalize) {
     ctx_manager.EnvFinalize();
@@ -234,6 +238,61 @@ bool MPIContext::UnregisterAllWindowName() {
     kv.second->FreeAllWins();
   }
   named_win_map.clear();
+  return true;
+}
+
+bool MPIContext::InitializeWinMutex() {
+  BFLOG(TRACE) << "InitializeWinMutex is called";
+  if (!win_mutex.empty()) {
+    return false;
+  }
+
+  int self_rank = 0;
+  int global_size = 1;
+  MPI_Comm_rank(mpi_comm, &self_rank);
+  MPI_Comm_size(mpi_comm, &global_size);
+  if (global_size <= 1) {
+    // We don't need any mutex for this case.
+    return false;
+  }
+
+  // We only need one value for self mutex.
+  self_mutex_mem = std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
+
+  int element_size = 0;
+  int win_size = 0;
+  void* data_buf;
+
+  for (int rank = 0; rank < global_size; rank++) {
+    auto mpi_win_ptr = std::make_shared<MPI_Win>();
+    if (rank == self_rank) {
+      data_buf = self_mutex_mem.get();
+      MPI_Type_size(MPI_INT, &element_size);
+      win_size = 1 * element_size;
+    } else {
+      data_buf = nullptr;
+      element_size = 1;
+      win_size = 0;
+    }
+    MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
+                   GetMPICommunicator(Communicator::GLOBAL),
+                   mpi_win_ptr.get());
+    win_mutex.push_back(mpi_win_ptr);
+  }
+  return true;
+}
+
+bool MPIContext::DestroyWinMutex() {
+  BFLOG(TRACE) << "DestroyWinMutex is called";
+  if (win_mutex.empty()) {
+    return false;
+  } 
+
+  for (auto mpi_win_ptr : win_mutex) {
+    MPI_Win_free(mpi_win_ptr.get());
+  }
+  win_mutex.clear();
+  self_mutex_mem.reset();
   return true;
 }
 

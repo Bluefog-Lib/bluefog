@@ -6,6 +6,7 @@ import networkx as nx
 
 def IsTopologyEquivalent(topo1: nx.DiGraph, topo2: nx.DiGraph) -> bool:
     """ Determine two topologies are equivalent or not.
+
     Notice we do not check two topologies are isomorphism. Instead checking
     the adjacenty matrix is the same only.
     """
@@ -21,7 +22,9 @@ def IsTopologyEquivalent(topo1: nx.DiGraph, topo2: nx.DiGraph) -> bool:
 
 
 def PowerTwoRingGraph(size: int) -> nx.DiGraph:
-    """Each point only connected to a point such that the index difference is power of 2."""
+    """Generate graph topology such that each points only
+    connected to a point such that the index difference is power of 2.
+    """
     assert size > 0
     x = np.array([1.0 if i & (i - 1) == 0 else 0 for i in range(size)])
     x /= x.sum()
@@ -31,9 +34,21 @@ def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
+
+def FullyConnectedGraph(size: int) -> nx.DiGraph:
+    """Generate fully connected structure of graph."""
+    assert size > 0
+    x = np.array([1/size] * size)
+    topo = np.empty((size, size))
+    for i in range(size):
+        topo[i] = np.roll(x, i)
+    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    return G
+
+
 def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
-    """ 
-    2D MeshGrid structure of a graph.
+    """Generate 2D MeshGrid structure of graph.
+
     Assume shape = (nrow, ncol)
     - When shape is provided, a meshgrid of nrow*ncol will be generated.
     - When shape is not provided, nrow and ncol will be the two closest factors of size.
@@ -46,7 +61,8 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
     assert size > 0
     if shape is None:
         i = int(np.sqrt(size))
-        while size%i != 0: i -= 1
+        while size % i != 0:
+            i -= 1
         shape = (i, size//i)
     nrow, ncol = shape
     assert size == nrow*ncol, "The shape doesn't match the size provided."
@@ -61,13 +77,13 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
             topo[i+ncol][i] = 1.0
 
     # According to Hasting rule (Policy 1) in https://arxiv.org/pdf/1702.05122.pdf
-    # The neighbor definition in the paper is different from our implementation, 
+    # The neighbor definition in the paper is different from our implementation,
     # which includes the self node.
     topo_neighbor_with_self = [np.nonzero(topo[i])[0] for i in range(size)]
     for i in range(size):
         for j in topo_neighbor_with_self[i]:
             if i != j:
-                topo[i][j] = 1.0/max(len(topo_neighbor_with_self[i]), 
+                topo[i][j] = 1.0/max(len(topo_neighbor_with_self[i]),
                                      len(topo_neighbor_with_self[j]))
         topo[i][i] = 2.0-topo[i].sum()
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
@@ -75,7 +91,12 @@ def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
 
 
 def StarGraph(size: int, center_rank: int = 0) -> nx.DiGraph:
-    """Star structure of graph, i.e. all other ranks are connected to rank 0 (bidirection)."""
+    """Generate star structure of graph.
+
+    All other ranks are connected to the center_rank. The connection is
+    bidirection, i.e. if the weight from node i to node j is non-zero, so
+    is the weight from node j to node i.
+    """
     assert size > 0
     topo = np.zeros((size, size))
     for i in range(size):
@@ -87,7 +108,7 @@ def StarGraph(size: int, center_rank: int = 0) -> nx.DiGraph:
 
 
 def RingGraph(size: int, left_connect: bool = False) -> nx.DiGraph:
-    """Ring structure of graph (uniliteral)."""
+    """Generate ring structure of graph (uniliteral)."""
     assert size > 0
     if size == 1:
         return nx.from_numpy_array(np.array([[1.0]]), create_using=nx.DiGraph)
@@ -105,12 +126,12 @@ def RingGraph(size: int, left_connect: bool = False) -> nx.DiGraph:
 
 
 def BiRingGraph(size: int) -> nx.DiGraph:
-    """Ring structure of graph (bidirection)."""
+    """Generate ring structure of graph (bidirection)."""
     assert size > 0
     if size == 1:
         return nx.from_numpy_array(np.array([[1.0]]), create_using=nx.DiGraph)
     if size == 2:
-        return nx.from_numpy_array(np.array([[0.5,0.5],[0.5,0.5]]), create_using=nx.DiGraph)
+        return nx.from_numpy_array(np.array([[0.5, 0.5], [0.5, 0.5]]), create_using=nx.DiGraph)
     x = np.zeros(size)
     x[0] = 1/3.0
     x[-1] = 1/3.0
@@ -121,8 +142,10 @@ def BiRingGraph(size: int) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
+
 def GetWeights(topo: nx.DiGraph, rank: int) -> List[float]:
     """Return a List of (in-)weights of rank.
+
     Self weights is always put at the beginning. If there is no self-loop,
     the first element will be zero. The rest will be the same order as
     predecessors returned.

@@ -350,13 +350,13 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         def hook(*ignore):
             assert not p.grad.requires_grad
             name = self._parameter_names.get(p)
-            handle = bf.win_put(tensor=p.data, name=name)
+            handle = bf.win_put_async(tensor=p.data, name=name)
             self._handles[p] = handle
         return hook
 
     def _win_put_async(self, p):
         name = self._parameter_names.get(p)
-        handle = bf.win_put(tensor=p.data, name=name)
+        handle = bf.win_put_async(tensor=p.data, name=name)
         return handle
 
     def synchronize(self):
