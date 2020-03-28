@@ -126,9 +126,10 @@ class WinOpsTests(unittest.TestCase):
             assert is_created, "bf.win_create do not create window object successfully."
 
             # Test simple average rule.
+            weight = 1.0/(len(bf.in_neighbor_ranks())+1)
             sync_result = bf.win_sync(window_name,
-                                      weights={x: 1.0/(len(bf.in_neighbor_ranks())+1)
-                                               for x in bf.in_neighbor_ranks() + [bf.rank()]}
+                                      self_weight=weight,
+                                      neighbor_weights={x: weight for x in bf.in_neighbor_ranks()}
                                       )
             assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync (weighted) produces wrong shape tensor.")
@@ -348,8 +349,9 @@ class WinOpsTests(unittest.TestCase):
                               dst_weights={(rank+1) % size: 1.23})
 
             bf.barrier()
-            sync_result = bf.win_sync(window_name, weights={(rank-1) % size: 0.5,
-                                                            rank: 0.5})
+            sync_result = bf.win_sync(window_name, 
+                                      self_weight=0.5,
+                                      neighbor_weights={(rank-1) % size: 0.5})
 
             assert (list(sync_result.shape) == [3] * dim), (
                 "bf.win_sync after win_accmulate given destination produces wrong shape tensor.")
@@ -418,7 +420,8 @@ class WinOpsTests(unittest.TestCase):
                                 (rank-1) % size: 1.23})
             bf.barrier()
             recv_tensor = bf.win_sync(window_name,
-                                      weights={(rank-1) % size: 0.5, rank: 0.5},
+                                      self_weight=0.5,
+                                      neighbor_weights={(rank-1) % size: 0.5},
                                       clone=True)
 
             assert (list(recv_tensor.shape) == [3] * dim), (

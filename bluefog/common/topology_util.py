@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import numpy as np
 import networkx as nx
@@ -142,19 +142,14 @@ def BiRingGraph(size: int) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
-
-def GetWeights(topo: nx.DiGraph, rank: int) -> List[float]:
-    """Return a List of (in-)weights of rank.
-
-    Self weights is always put at the beginning. If there is no self-loop,
-    the first element will be zero. The rest will be the same order as
-    predecessors returned.
-    """
+def GetWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]]:
+    """Return a Tuple of self_weight and neighbor_weights dictionary."""
     weight_matrix = nx.to_numpy_array(topo)
-    ret_weights = [0.0]
+    self_weight = 0.0
+    neighbor_weights = {}
     for src_rank in topo.predecessors(rank):
         if src_rank == rank:
-            ret_weights[0] = weight_matrix[src_rank, rank]
+            self_weight = weight_matrix[src_rank, rank]
         else:
-            ret_weights.append(weight_matrix[src_rank, rank])
-    return ret_weights
+            neighbor_weights[src_rank] = weight_matrix[src_rank, rank]
+    return self_weight, neighbor_weights

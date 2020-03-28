@@ -5,6 +5,7 @@ import torch
 
 from bluefog.torch import mpi_lib  # C library
 from bluefog.common.basics import BlueFogBasics, logger
+from bluefog.common.topology_util import GetWeights
 
 _basics = BlueFogBasics(__file__, 'mpi_lib')
 
@@ -16,6 +17,7 @@ local_size = _basics.local_size
 rank = _basics.rank
 local_rank = _basics.local_rank
 load_topology = _basics.load_topology
+is_topo_weighted = _basics.is_topo_weighted
 set_topology = _basics.set_topology
 in_neighbor_ranks = _basics.in_neighbor_ranks
 out_neighbor_ranks = _basics.out_neighbor_ranks
@@ -473,18 +475,15 @@ def win_free(name: str = None) -> bool:
     return getattr(mpi_lib, 'bluefog_torch_win_free')(name)
 
 
-def _win_sync_function_factory(tensor, weights):
-    return ('bluefog_torch_win_sync_'
-            + ('with_weights_' if weights else '')
-            + tensor.type().replace('.', '_'))
+def _win_sync_function_factory(tensor):
+    return ('bluefog_torch_win_sync_' + tensor.type().replace('.', '_'))
 
 
 def win_sync_then_collect(name: str) -> torch.Tensor:
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
-        >>> win_sync(name, weights={neighbor + self : 1.0}, update_weights={neighbor: 0.0})
-    where "neighbor + self" means all (in-)neighbor's rank plus self rank.
+        >>> win_sync(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
 
     Args:
         name: The unique name to associate the window object.
@@ -492,31 +491,30 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
     """
-    weights = {rank(): 1.0}
-    update_weights = {}
-    for r in in_neighbor_ranks():
-        weights[r] = 1.0
-        update_weights[r] = 0.0
-    return win_sync(name, weights, update_weights)
+    neighbor_weights = {r:1.0 for r in in_neighbor_ranks()}
+    return win_sync(name, 1.0, neighbor_weights, reset=True)
 
 
-def win_sync(name: str, weights: Dict[int, float] = None,
-             update_weights: Dict[int, float] = None,
-             clone=False) -> torch.Tensor:
+def win_sync(name: str,
+             self_weight: float = None, neighbor_weights: Dict[int, float] = None,
+             reset: bool = False, clone: bool = False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened.
 
     Args:
         name: The unique name to associate the window object.
-        weights: If weights is presented, the return tensor will return the weighted average
-            defined by this weights. The data structure of weights should be {rank : weight}
-            and rank has to belonge the (in-)neighbors and self.
-        update_weights: If update_weights is presented, the buffer used to store the neighbor
-            tensor will update its tensor. The new buffer tensor will be tensor * weight.
-            The update_weights is always happened after the weights computation.
-            The data structure of weights should be {rank : weight}
-            and rank has to belonge the (in-)neighbors.
+        self_weight: the weight for self node, used with neighbor_weights.
+        neighbor_weights: the weights for neighbor nodes, used with self_weight.
+            If neighbor_weights is presented, the return tensor will return the weighted average
+            defined by these weights and the self_weight. If not, the return tensor will return
+            the weighted average defined by the topology weights if provided or mean value.
+            The data structure of weights should be {rank : weight} and rank has to belong to
+            the (in-)neighbors.
+        reset: If reset is True, the buffer used to store the neighbor tensor included in 
+            neighbor_weights will be reset to zero.
+            The reset is always happened after the weights computation.
+            If neighbor_weights is not presented and reset is True, all the neighbor will be reset.
         clone: If set up to be true, the win_sync result will return a new tensor instead of
             in-place change.
 
@@ -527,28 +525,44 @@ def win_sync(name: str, weights: Dict[int, float] = None,
     change with the iterations. If static weight need, then setting the weights through the
     bf.set_topology(.., is_weighted=True) is a better choice.
 
-    Note2:
-        If update_weights is not empty, mutex for self is acquired.
+    Note2: If reset is True, mutex for self is acquired.
+
+    Note3: self_weight and neighbor_weights are bind together, and must be presented at the same
+    time.
     """
     tensor = _win_map[name]
     if clone:
         tensor = tensor.clone()
-    function = _check_function(_win_sync_function_factory, tensor, weights)
-    update_weights = {} if update_weights is None else update_weights
-    if weights is not None:
+    function = _check_function(_win_sync_function_factory, tensor)
+
+    if neighbor_weights is not None and self_weight is not None:
         # Pre-condition check for weights dictionary.
-        if not isinstance(weights, dict):
-            raise ValueError("Argument weights has to be a dictionary map from the (in-)neighbor "
-                             "rank to the weights.")
-        if not set(weights.keys()).issubset(set(in_neighbor_ranks() + [rank()])):
+        if not isinstance(neighbor_weights, dict):
+            raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
+                             "(in-)neighbor rank to the weights.")
+        if not isinstance(self_weight, float):
+            raise ValueError("Argument self_weight has to be a float for self rank.")
+        if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
+        avg_computation = True
 
-        if not getattr(mpi_lib, function)(tensor, name, weights, update_weights):
-            raise RuntimeError("Cannot apply win_sync on " + name)
-        return tensor
+    elif neighbor_weights is None and self_weight is None:
+        if is_topo_weighted():
+            topology = load_topology()
+            self_weight, neighbor_weights = GetWeights(topology, rank())
+            avg_computation = True
+        else:
+            weight = 1.0/(len(in_neighbor_ranks())+1)
+            self_weight = weight
+            neighbor_weights = {r:weight for r in in_neighbor_ranks()}
+            avg_computation = False
+    else:
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+                         "the same time")
 
-    if not getattr(mpi_lib, function)(tensor, name, update_weights):
+    if not getattr(mpi_lib, function)(tensor, name, self_weight, neighbor_weights,
+            reset, avg_computation):
         raise RuntimeError("Cannot apply win_sync on " + name)
     return tensor
 

@@ -54,13 +54,15 @@ class WinTorchStorageManager {
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
 
   // Weighted Average the local tensor with neighbor tensors according to weights map.
-  // Weights map { rank: weights }. Rank has to be neighbor ranks or self rank.
+  // Weights map { rank: weights }. Rank has to be (in-)neighbor ranks. self_weight
+  // specifies the weight for self rank.
   // The sum weights are not necessary to be 1.
   // No matter the weights in the mpi_context class is set or not, weights provided in
   // the argument will override it.
   bool AvgWithNeighbor(
       const std::string& name, ::torch::Tensor local_tensor,
-      const std::unordered_map<int, float>& weights);
+      float self_weight,
+      const std::unordered_map<int, float>& neighbor_weights);
 
   
   // This is just utility functions and never used the weights defined in the
@@ -112,7 +114,9 @@ WIN_CREATE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #define WIN_SYNC_H(torch_Tensor, THTensor)                     \
   extern "C" int bluefog_torch_win_sync_##torch_Tensor(        \
       THTensor* tensor, char* name,                            \
-      const std::unordered_map<int, float>& update_weights);
+      float self_weight,                                       \
+      const std::unordered_map<int, float>& neighbor_weights,  \
+      bool reset, bool internal_avg);
 
 WIN_SYNC_H(torch_IntTensor, THIntTensor)
 WIN_SYNC_H(torch_LongTensor, THLongTensor)
@@ -124,24 +128,6 @@ WIN_SYNC_H(torch_cuda_IntTensor, THCudaIntTensor)
 WIN_SYNC_H(torch_cuda_LongTensor, THCudaLongTensor)
 WIN_SYNC_H(torch_cuda_FloatTensor, THCudaTensor)
 WIN_SYNC_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
-#endif
-
-#define WIN_SYNC_WITH_WEIGHTS_H(torch_Tensor, THTensor)                     \
-  extern "C" int bluefog_torch_win_sync_with_weights_##torch_Tensor(        \
-      THTensor* tensor, char* name,                                         \
-      const std::unordered_map<int, float>& weights,                        \
-      const std::unordered_map<int, float>& update_weights);
-
-WIN_SYNC_WITH_WEIGHTS_H(torch_IntTensor, THIntTensor)
-WIN_SYNC_WITH_WEIGHTS_H(torch_LongTensor, THLongTensor)
-WIN_SYNC_WITH_WEIGHTS_H(torch_FloatTensor, THFloatTensor)
-WIN_SYNC_WITH_WEIGHTS_H(torch_DoubleTensor, THDoubleTensor)
-
-#if HAVE_CUDA
-WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_IntTensor, THCudaIntTensor)
-WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_LongTensor, THCudaLongTensor)
-WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_FloatTensor, THCudaTensor)
-WIN_SYNC_WITH_WEIGHTS_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
 #define WIN_PUT_H(torch_Tensor, THTensor)                             \
