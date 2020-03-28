@@ -221,7 +221,7 @@ class BlueFogBasics(object):
                 indegree, sources_type(*sources),
                 outdegree, destinations_type(*destinations))
         else:
-            source_weights = topology_util.GetWeights(topology, self.rank())
+            source_weights = topology_util.GetWeightsList(topology, self.rank())
             source_weights_type = ctypes.c_float * \
                 (indegree+1)  # +1 becuase of self-weights
             self._MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (

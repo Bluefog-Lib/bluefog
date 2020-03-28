@@ -550,11 +550,7 @@ def win_sync(name: str,
     elif neighbor_weights is None and self_weight is None:
         if is_topo_weighted():
             topology = load_topology()
-            # TODO(hhb): change GetWeights definition
-            weights = GetWeights(topology, rank())
-            self_weight = weights[0]
-            neighbor_ranks = [r for r in topology.predecessors(rank()) if r != rank()]
-            neighbor_weights = {neighbor_ranks[i]:weights[i+1] for i in range(len(neighbor_ranks))}
+            self_weight, neighbor_weights = GetWeights(topology, rank())
             avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
