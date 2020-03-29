@@ -24,6 +24,9 @@ out_neighbor_ranks = _basics.out_neighbor_ranks
 mpi_threads_supported = _basics.mpi_threads_supported
 unified_mpi_window_model_supported = _basics.unified_mpi_window_model_supported
 
+timeline_start_activity = _basics.timeline_start_activity
+timeline_end_activity = _basics.timeline_end_activity
+
 # Schema: handle -> input, output
 # We keep input in order to make sure it does not get garbage collected
 # before the operation is finished.

@@ -251,3 +251,50 @@ class BlueFogBasics(object):
         self._topology = topology
         self._is_topo_weighted = is_weighted
         return True
+
+    def timeline_start_activity(self, tensor_name: str, activity_name: str) -> bool:
+        """A python interface to call the timeline for StartActivity.
+        If you want to use this function, please make sure to turn on the timeline first by
+        setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use
+        bfrun --timeline-filename {file_name} ...
+
+        Args:
+            tensor_name (str): The activity associated tensor name.
+            activity_name (str): The activity type.
+
+        Returns:
+            bool: Whether timeline is executed correctly or not.
+
+        TODO(ky): Add usage example.
+        Example:
+            >>> import bluefog.torch as bf
+            >>> from bluefog.common.util import env
+            >>> with env(BLUEFOG_TIMELINE="./timeline_file"):
+                    bf.init()
+        """
+        self._MPI_LIB_CTYPES.bluefog_timeline.argtypes = (
+            [ctypes.c_bool, ctypes.c_char_p, ctypes.c_char_p]
+        )
+        ret = self._MPI_LIB_CTYPES.bluefog_timeline(
+            True, tensor_name.encode("utf-8"), activity_name.encode('utf-8'))
+        if ret != 1:
+            logger.error("Cannot start activity in the timeline. Check "
+                         "BFLOG for more details.")
+            return False
+        return True
+
+    def timeline_end_activity(self, tensor_name: str) -> bool:
+        """A python interface to call the timeline for EndActivity.
+
+        Please check comments in timeline_start_activity for more explanation.
+        """
+        self._MPI_LIB_CTYPES.bluefog_timeline.argtypes = (
+            [ctypes.c_bool, ctypes.c_char_p, ctypes.c_char_p]
+        )
+        ret = self._MPI_LIB_CTYPES.bluefog_timeline(
+            False, tensor_name.encode("utf-8"), "".encode('utf-8'))
+        if ret != 1:
+            logger.error("Cannot end activity in the timeline. Check "
+                         "BFLOG for more details.")
+            return False
+        return True

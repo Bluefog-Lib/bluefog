@@ -9,6 +9,8 @@
 #include <thread>
 
 #include "cuda_util.h"
+#include "operations.h"
+#include "timeline.h"
 
 namespace bluefog {
 namespace common {
@@ -45,6 +47,14 @@ int MPIController::GetTypeSize(DataType dtype) {
 
 Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                      Communicator comm_type) {
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  if (!timeline_status.ok()) {
+    BFLOG(ERROR) << "Cannot get timeline for AllocateOutput.";
+  }
+  if (timeline_status.ok())
+    timeline_ptr->ActivityStart(entry.tensor_name, "Allocate_Output");
+
   // Every tensor participating in Allgather operation may have different
   // first dimension size, but the rest of dimensions are same for all
   // tensors.  Here we get shape of tensor sliced by first dimension.
@@ -102,6 +112,9 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
 
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   delete[] gather_count;
+
+  if (timeline_status.ok())
+    timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
   return status;
 }
 

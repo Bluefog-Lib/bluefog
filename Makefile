@@ -32,7 +32,7 @@ test_torch_ops:
 .PHONY: test_timeline
 test_timeline:
 ifeq (${MPICH_NOT_EXIST},)
-	${MPIRUN} ${PYTEST} ./test/test_timeline.py
+	${MPIRUN} ${PYTEST} ./test/timeline_test.py
 endif
 
 .PHONY: test_torch_win_ops

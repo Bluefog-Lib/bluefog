@@ -294,6 +294,30 @@ int bluefog_load_topology_weights(
   return bluefog_global.controller->LoadTopologyWeights(neighbor_weights_);
 }
 
+
+int bluefog_timeline(const bool start_activity, const char* tensor_name,
+                     const char* activity_name) {
+  if (!bluefog_global.initialization_done) {
+    return -1;
+  }
+
+  Timeline* timeline_ptr;
+  Status status = GetBluefogTimeline(timeline_ptr);
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Failed to get timeline: " << status.reason();
+    return -1;
+  }
+
+  if (start_activity) {
+    BFLOG(ERROR) << "timeline activity start called";
+    timeline_ptr->ActivityStart(tensor_name, activity_name);
+  } else {
+    BFLOG(ERROR) << "timeline activity end called";
+    timeline_ptr->ActivityEnd(tensor_name);
+  }
+  return 1;
+}
+
 }  // extern "C"
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
@@ -374,6 +398,9 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::NEIGHBOR_ALLGATHER;
+
+  bluefog_global.timeline.ActivityStart(e.tensor_name,
+                                        ENQUEUE_NEIGHBOR_ALLGATHER);
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -592,6 +619,17 @@ Status WindowMutexRelease(const std::vector<int>& release_ranks) {
     BFLOG(ERROR) << status.reason();
   }
   return status;
+}
+
+Status GetBluefogTimeline(Timeline*& timeline) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  if (!bluefog_global.timeline_enabled) {
+    return Status::Aborted("timeline is not enabled.");
+  }
+  timeline = &(bluefog_global.timeline);
+  return Status::OK();
 }
 
 }  // namespace common

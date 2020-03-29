@@ -2,16 +2,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tempfile
+import os
+import time
 import unittest
 import warnings
 
-import os
-import numpy as np
 import torch
 import bluefog.torch as bf
 from bluefog.common import topology_util
 from bluefog.common.util import env
+
 
 class TimelineTests(unittest.TestCase):
     """
@@ -21,22 +21,24 @@ class TimelineTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(TimelineTests, self).__init__(*args, **kwargs)
         warnings.simplefilter('module')
-        self.temp_file = './timeline_temp'
 
-    def setUp(self):
-        with env(BLUEFOG_TIMELINE=self.temp_file):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_file = './timeline_temp'
+
+        with env(BLUEFOG_TIMELINE=cls.temp_file):
             bf.init()
 
-    def __del__(self):
+    @classmethod
+    def tearDownClass(cls):
         # file_name is just a temprary file generated in bluefog timeline
-        file_name = f"{self.temp_file}{bf.rank()}.json"
-        if os.path.exists(file_name):
-            os.remove(file_name)
+        file_name = f"{cls.temp_file}{bf.rank()}.json"
+        os.remove(file_name)
 
     def test_timeline_neighbor_allreduce(self):
         x = torch.FloatTensor(10, 10).fill_(1).mul_(bf.rank())
-        for _ in range(50):
-            x = bf.neighbor_allreduce(x, name='test_neighbor_allreduce')
+        x = bf.neighbor_allreduce(x, name='test_neighbor_allreduce')
+        time.sleep(0.1)
 
         file_name = f"{self.temp_file}{bf.rank()}.json"
         with open(file_name, 'r') as tf:
@@ -44,9 +46,29 @@ class TimelineTests(unittest.TestCase):
             assert 'MPI_NEIGHBOR_ALLREDUCE' in timeline_text, timeline_text
             assert 'ENQUEUE_NEIGHBOR_ALLREDUCE' in timeline_text, timeline_text
 
+    def test_timeline_neighbor_allgather(self):
+        x = torch.FloatTensor(10, 10).fill_(1).mul_(bf.rank())
+        x = bf.neighbor_allgather(x, name='test_neighbor_allgather')
+        time.sleep(0.1)
+
+        file_name = f"{self.temp_file}{bf.rank()}.json"
+        with open(file_name, 'r') as tf:
+            timeline_text = tf.read()
+            assert 'MPI_NEIGHBOR_ALLGATHER' in timeline_text, timeline_text
+            assert 'ENQUEUE_NEIGHBOR_ALLGATHER' in timeline_text, timeline_text
+
+    def test_timeline_with_python_interface(self):
+        bf.timeline_start_activity("test_python_interface_x", "FAKE_ACTIVITY")
+        time.sleep(0.1)
+        bf.timeline_end_activity("test_python_interface_x")
+
+        file_name = f"{self.temp_file}{bf.rank()}.json"
+        with open(file_name, 'r') as tf:
+            timeline_text = tf.read()
+            assert 'FAKE_ACTIVITY' in timeline_text, timeline_text
+
     def test_timeline_push_sum(self):
         # Use win_accumulate to simulate the push-sum algorithm (sync).
-        bf.set_topology(topology_util.StarGraph(bf.size()))
         outdegree = len(bf.out_neighbor_ranks())
         indegree = len(bf.in_neighbor_ranks())
         # we append the p at the last of data.
@@ -56,7 +78,7 @@ class TimelineTests(unittest.TestCase):
         bf.win_create(x, name="x_buff")
         x = bf.win_sync_then_collect(name="x_buff")
 
-        for _ in range(100):
+        for _ in range(10):
             bf.win_accumulate(
                 x, name="x_buff",
                 dst_weights={rank: 1.0 / (outdegree + 1)
@@ -74,6 +96,9 @@ class TimelineTests(unittest.TestCase):
             timeline_text = tf.read()
             assert 'MPI_WIN_ACCUMULATE' in timeline_text, timeline_text
             assert 'ENQUEUE_WIN_ACCUMULATE' in timeline_text, timeline_text
+
+        bf.win_free()
+
 
 if __name__ == "__main__":
     unittest.main()
