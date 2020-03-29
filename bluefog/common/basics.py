@@ -265,12 +265,14 @@ class BlueFogBasics(object):
         Returns:
             bool: Whether timeline is executed correctly or not.
 
-        TODO(ky): Add usage example.
         Example:
             >>> import bluefog.torch as bf
             >>> from bluefog.common.util import env
             >>> with env(BLUEFOG_TIMELINE="./timeline_file"):
                     bf.init()
+            >>> bf.timeline_start_activity(tensor_name, activity_name)
+            >>> ...
+            >>> bf.timeline_end_activity(tensor_name)
         """
         self._MPI_LIB_CTYPES.bluefog_timeline.argtypes = (
             [ctypes.c_bool, ctypes.c_char_p, ctypes.c_char_p]
