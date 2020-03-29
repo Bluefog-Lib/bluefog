@@ -337,6 +337,44 @@ not use this weight due to ambiguity.</p></li>
 </dd></dl>
 
 <dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.timeline_end_activity">
+<code class="sig-name descname">timeline_end_activity</code><span class="sig-paren">(</span><em class="sig-param">tensor_name: str</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.timeline_end_activity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A python interface to call the timeline for EndActivity.</p>
+<p>Please check comments in timeline_start_activity for more explanation.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.timeline_start_activity">
+<code class="sig-name descname">timeline_start_activity</code><span class="sig-paren">(</span><em class="sig-param">tensor_name: str</em>, <em class="sig-param">activity_name: str</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.timeline_start_activity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A python interface to call the timeline for StartActivity.
+If you want to use this function, please make sure to turn on the timeline first by
+setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use
+bfrun –timeline-filename {file_name} …</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor_name</strong> (<em>str</em>) – The activity associated tensor name.</p></li>
+<li><p><strong>activity_name</strong> (<em>str</em>) – The activity type.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Whether timeline is executed correctly or not.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+<p>TODO(ky): Add usage example.
+.. rubric:: Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common.util</span> <span class="kn">import</span> <span class="n">env</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">env</span><span class="p">(</span><span class="n">BLUEFOG_TIMELINE</span><span class="o">=</span><span class="s2">&quot;./timeline_file&quot;</span><span class="p">):</span>
+<span class="go">        bf.init()</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="method">
 <dt id="bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported">
 <code class="sig-name descname">unified_mpi_window_model_supported</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a boolean value to indicate the MPI_Win model is unified or not.
