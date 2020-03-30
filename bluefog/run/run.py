@@ -128,7 +128,7 @@ def main():
         exit(0)
 
     if args.host:
-        hosts_arg = args.host
+        hosts_arg = "-H " + args.host
     else:
         hosts_arg = ""
 

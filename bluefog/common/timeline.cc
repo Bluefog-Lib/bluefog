@@ -97,9 +97,6 @@ void TimelineWriter::WriterLoop() {
         case TimelineRecordType::EVENT:
           DoWriteEvent(r);
           break;
-          //   case TimelineRecordType::MARKER:
-          //     DoWriteMarker(r);
-          //     break;
         default:
           throw std::logic_error("Unknown event type provided.");
       }
@@ -107,7 +104,7 @@ void TimelineWriter::WriterLoop() {
 
       if (!file_.good()) {
         BFLOG(ERROR) << "Error writing to the Bluefog Timeline after it was "
-                      "successfully opened, will stop writing the timeline.";
+                        "successfully opened, will stop writing the timeline.";
         healthy_ = false;
       }
     }
