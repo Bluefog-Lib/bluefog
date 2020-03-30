@@ -49,9 +49,6 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                      Communicator comm_type) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  if (!timeline_status.ok()) {
-    BFLOG(ERROR) << "Cannot get timeline for AllocateOutput.";
-  }
   if (timeline_status.ok())
     timeline_ptr->ActivityStart(entry.tensor_name, "Allocate_Output");
 
