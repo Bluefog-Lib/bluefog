@@ -309,10 +309,8 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
   }
 
   if (start_activity) {
-    BFLOG(ERROR) << "timeline activity start called";
     timeline_ptr->ActivityStart(tensor_name, activity_name);
   } else {
-    BFLOG(ERROR) << "timeline activity end called";
     timeline_ptr->ActivityEnd(tensor_name);
   }
   return 1;
