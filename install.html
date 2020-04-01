@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Tensorflow Module (API Reference) &mdash; Bluefog 0.1 documentation</title>
+  <title>Installing Bluefog &mdash; Bluefog 0.1 documentation</title>
   
 
   
@@ -35,8 +35,8 @@
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Bluefog WinOps Explanation" href="bluefog_winops.html" />
-    <link rel="prev" title="Torch Module (API Reference)" href="torch_api.html" /> 
+    <link rel="next" title="Bluefog Common (API Reference)" href="common_api.html" />
+    <link rel="prev" title="Bluefog" href="index.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -81,14 +81,19 @@
             
             
               <p class="caption"><span class="caption-text">INSTALLATION</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="install.html">Installing Bluefog</a></li>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installing Bluefog</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#building-bluefog-from-pip-cpu">Building Bluefog from Pip (CPU)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#building-bluefog-from-pip-gpu">Building Bluefog from Pip (GPU)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#use-bluefog-through-docker">Use Bluefog through Docker</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption"><span class="caption-text">API</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="common_api.html">Bluefog Common API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Tensorflow API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorflow_api.html">Bluefog Tensorflow API</a></li>
 </ul>
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul>
@@ -141,13 +146,13 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Tensorflow Module (API Reference)</li>
+      <li>Installing Bluefog</li>
     
     
       <li class="wy-breadcrumbs-aside">
         
             
-            <a href="_sources/tensorflow_api.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/install.rst.txt" rel="nofollow"> View page source</a>
           
         
       </li>
@@ -160,12 +165,44 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="tensorflow-module-api-reference">
-<h1>Tensorflow Module (API Reference)<a class="headerlink" href="#tensorflow-module-api-reference" title="Permalink to this headline">¶</a></h1>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>The tensorflow module is not finished yet. There is no guarantee for the
-tensorflow API. Please consider to use pytorch api first.</p>
+  <div class="section" id="installing-bluefog">
+<h1>Installing Bluefog<a class="headerlink" href="#installing-bluefog" title="Permalink to this headline">¶</a></h1>
+<p>Bluefog currently supports MacOS and Linux only.</p>
+<div class="section" id="building-bluefog-from-pip-cpu">
+<h2>Building Bluefog from Pip (CPU)<a class="headerlink" href="#building-bluefog-from-pip-cpu" title="Permalink to this headline">¶</a></h2>
+<p>Installing from pip should be sufficient for most Bluefog users.
+However, our implementation highly independent on the MPI and other libraries. Please
+make sure that <code class="docutils literal notranslate"><span class="pre">python&gt;=3.7</span></code> and
+<code class="docutils literal notranslate"><span class="pre">gcc&gt;=4.0</span></code> and supporting <code class="docutils literal notranslate"><span class="pre">std=C++11</span></code> in your development environment.
+We recommend using <a class="reference external" href="https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html">conda</a> as python environment control.
+Most dependent python package should be automatically installed through the pip.
+Lastly, we relied on the MPI implementation, please install
+<cite>open-mpi&gt;=4.0</cite> <a class="reference external" href="https://www.open-mpi.org/software/ompi/v4.0/">download link</a> and <a class="reference external" href="https://www.open-mpi.org/faq/?category=building#easy-build">instruction</a> for CPU usage.
+After you think the environment is all set, just run following command to install Bluefog:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install bluefog
+</pre></div>
+</div>
+</div>
+<div class="section" id="building-bluefog-from-pip-gpu">
+<h2>Building Bluefog from Pip (GPU)<a class="headerlink" href="#building-bluefog-from-pip-gpu" title="Permalink to this headline">¶</a></h2>
+<p>All steps for GPU case are the same as CPU case except for the OpenMPI installation.
+In order to get full support of GPU, you have to install <cite>CUDA&gt;=10.0</cite>
+and install pytorch and/or tensorflow with the GPU support version.
+To maximize the efficiency of GPU and MPI, our implementation assumes the
+MPI installed is GPU-aware if GPU is available. It will avoid the extra cost
+that copy and moving the data from the GPU and host memory, i.e. the address of
+GPU location can be used directly. However, if MPI built is not GPU-aware,
+there will be a segmentation fault. To do that, you can configure the open install setting
+after the download of OpenMPI:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./configure --prefix<span class="o">={</span>YOUR_OWN_PREFIX<span class="o">}</span> --with-cuda <span class="o">&amp;&amp;</span> <span class="se">\</span>
+make -j <span class="k">$(</span>nproc<span class="k">)</span> all <span class="o">&amp;&amp;</span> <span class="se">\</span>
+make install
+</pre></div>
+</div>
+</div>
+<div class="section" id="use-bluefog-through-docker">
+<h2>Use Bluefog through Docker<a class="headerlink" href="#use-bluefog-through-docker" title="Permalink to this headline">¶</a></h2>
+<p>To be added.</p>
 </div>
 </div>
 
@@ -177,10 +214,10 @@ tensorflow API. Please consider to use pytorch api first.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="bluefog_winops.html" class="btn btn-neutral float-right" title="Bluefog WinOps Explanation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="common_api.html" class="btn btn-neutral float-right" title="Bluefog Common (API Reference)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="torch_api.html" class="btn btn-neutral float-left" title="Torch Module (API Reference)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="index.html" class="btn btn-neutral float-left" title="Bluefog" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
