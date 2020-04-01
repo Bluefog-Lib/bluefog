@@ -87,8 +87,9 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorflow_api.html">Bluefog Tensorflow API</a></li>
 </ul>
-<p class="caption"><span class="caption-text">Development:</span></p>
+<p class="caption"><span class="caption-text">More Information:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_winops.html">Bluefog WinOps Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -165,18 +166,9 @@
 <em class="property">class </em><code class="sig-prename descclassname">bluefog.common.basics.</code><code class="sig-name descname">BlueFogBasics</code><span class="sig-paren">(</span><em class="sig-param">pkg_path</em>, <em class="sig-param">*args</em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.common.basics.BlueFogBasics" title="Permalink to this definition">¶</a></dt>
 <dd><p>Wrapper class for the basic BlueFog API.</p>
 <dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.in_neighbor_ranks">
-<code class="sig-name descname">in_neighbor_ranks</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; List[int]<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.in_neighbor_ranks" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return the ranks of all in-neighbors.
-Notice: No matter self-loop is presented or not, self rank will not be included.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>in_neighbor_ranks</p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>List[int]</p>
-</dd>
-</dl>
+<dt id="bluefog.common.basics.BlueFogBasics.__init__">
+<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">pkg_path</em>, <em class="sig-param">*args</em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize self.  See help(type(self)) for accurate signature.</p>
 </dd></dl>
 
 <dl class="method">
@@ -195,6 +187,80 @@ topology matrix (including self).</p></li>
 communicator OR the MPI communicator to use. Given communicator will be duplicated.
 If None, BlueFog will use MPI_COMM_WORLD Communicator.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.shutdown">
+<code class="sig-name descname">shutdown</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that shuts BlueFog down.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.size">
+<code class="sig-name descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.size" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the number of BlueFog processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar containing the number of BlueFog processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.local_size">
+<code class="sig-name descname">local_size</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.local_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the number of BlueFog processes within the
+node the current process is running on.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar containing the number of local BlueFog processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.rank">
+<code class="sig-name descname">rank</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.rank" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the BlueFog rank of the calling process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar with the BlueFog rank of the calling process.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.local_rank">
+<code class="sig-name descname">local_rank</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.local_rank" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the local BlueFog rank of the calling process, within the
+node that it is running on. For example, if there are seven processes running
+on a node, their local ranks will be zero through six, inclusive.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar with the local BlueFog rank of the calling process.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported">
+<code class="sig-name descname">unified_mpi_window_model_supported</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a boolean value to indicate the MPI_Win model is unified or not.
+Unfornuately, it is a collective call. We have to create a fake win to get
+this information.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.mpi_threads_supported">
+<code class="sig-name descname">mpi_threads_supported</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.mpi_threads_supported" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns a flag indicating whether MPI multi-threading is supported.</p>
+<p>If MPI multi-threading is supported, users may mix and match BlueFog usage with other
+MPI libraries, such as <cite>mpi4py</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating whether MPI multi-threading is supported.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -225,39 +291,16 @@ If None, BlueFog will use MPI_COMM_WORLD Communicator.</p></li>
 </dd></dl>
 
 <dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.local_rank">
-<code class="sig-name descname">local_rank</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.local_rank" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that returns the local BlueFog rank of the calling process, within the
-node that it is running on. For example, if there are seven processes running
-on a node, their local ranks will be zero through six, inclusive.</p>
+<dt id="bluefog.common.basics.BlueFogBasics.in_neighbor_ranks">
+<code class="sig-name descname">in_neighbor_ranks</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; List[int]<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.in_neighbor_ranks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the ranks of all in-neighbors.
+Notice: No matter self-loop is presented or not, self rank will not be included.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>An integer scalar with the local BlueFog rank of the calling process.</p>
+<dd class="field-odd"><p>in_neighbor_ranks</p>
 </dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.local_size">
-<code class="sig-name descname">local_size</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.local_size" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that returns the number of BlueFog processes within the
-node the current process is running on.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>An integer scalar containing the number of local BlueFog processes.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.mpi_threads_supported">
-<code class="sig-name descname">mpi_threads_supported</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.mpi_threads_supported" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that returns a flag indicating whether MPI multi-threading is supported.</p>
-<p>If MPI multi-threading is supported, users may mix and match BlueFog usage with other
-MPI libraries, such as <cite>mpi4py</cite>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>A boolean value indicating whether MPI multi-threading is supported.</p>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>List[int]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -273,17 +316,6 @@ Notice: No matter self-loop is presented or not, self rank will not be included.
 </dd>
 <dt class="field-even">Return type</dt>
 <dd class="field-even"><p>List[int]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.rank">
-<code class="sig-name descname">rank</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.rank" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that returns the BlueFog rank of the calling process.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>An integer scalar with the BlueFog rank of the calling process.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -320,30 +352,6 @@ not use this weight due to ambiguity.</p></li>
 </dd></dl>
 
 <dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.shutdown">
-<code class="sig-name descname">shutdown</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.shutdown" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that shuts BlueFog down.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.size">
-<code class="sig-name descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.size" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that returns the number of BlueFog processes.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>An integer scalar containing the number of BlueFog processes.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.timeline_end_activity">
-<code class="sig-name descname">timeline_end_activity</code><span class="sig-paren">(</span><em class="sig-param">tensor_name: str</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.timeline_end_activity" title="Permalink to this definition">¶</a></dt>
-<dd><p>A python interface to call the timeline for EndActivity.</p>
-<p>Please check comments in timeline_start_activity for more explanation.</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="bluefog.common.basics.BlueFogBasics.timeline_start_activity">
 <code class="sig-name descname">timeline_start_activity</code><span class="sig-paren">(</span><em class="sig-param">tensor_name: str</em>, <em class="sig-param">activity_name: str</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.timeline_start_activity" title="Permalink to this definition">¶</a></dt>
 <dd><p>A python interface to call the timeline for StartActivity.
@@ -368,7 +376,7 @@ bfrun –timeline-filename {file_name} …</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common.util</span> <span class="kn">import</span> <span class="n">env</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">env</span><span class="p">(</span><span class="n">BLUEFOG_TIMELINE</span><span class="o">=</span><span class="s2">&quot;./timeline_file&quot;</span><span class="p">):</span>
-<span class="go">        bf.init()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">timeline_start_activity</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">,</span> <span class="n">activity_name</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="o">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">timeline_end_activity</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">)</span>
@@ -377,11 +385,10 @@ bfrun –timeline-filename {file_name} …</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported">
-<code class="sig-name descname">unified_mpi_window_model_supported</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.unified_mpi_window_model_supported" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a boolean value to indicate the MPI_Win model is unified or not.
-Unfornuately, it is a collective call. We have to create a fake win to get
-this information.</p>
+<dt id="bluefog.common.basics.BlueFogBasics.timeline_end_activity">
+<code class="sig-name descname">timeline_end_activity</code><span class="sig-paren">(</span><em class="sig-param">tensor_name: str</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.timeline_end_activity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A python interface to call the timeline for EndActivity.</p>
+<p>Please check comments in timeline_start_activity for more explanation.</p>
 </dd></dl>
 
 </dd></dl>
@@ -389,44 +396,11 @@ this information.</p>
 <div class="section" id="module-bluefog.common.topology_util">
 <span id="topology-related-utility-functions"></span><h2>Topology Related Utility Functions<a class="headerlink" href="#module-bluefog.common.topology_util" title="Permalink to this headline">¶</a></h2>
 <dl class="function">
-<dt id="bluefog.common.topology_util.BiRingGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">BiRingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.BiRingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate ring structure of graph (bidirection).</p>
-</dd></dl>
-
-<dl class="function">
-<dt id="bluefog.common.topology_util.FullyConnectedGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">FullyConnectedGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.FullyConnectedGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate fully connected structure of graph.</p>
-</dd></dl>
-
-<dl class="function">
-<dt id="bluefog.common.topology_util.GetWeights">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param">topo: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">rank: int</em><span class="sig-paren">)</span> &#x2192; Tuple[float, Dict[int, float]]<a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return a Tuple of self_weight and neighbor_weights dictionary.</p>
-</dd></dl>
-
-<dl class="function">
 <dt id="bluefog.common.topology_util.IsTopologyEquivalent">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">IsTopologyEquivalent</code><span class="sig-paren">(</span><em class="sig-param">topo1: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">topo2: networkx.classes.digraph.DiGraph</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.topology_util.IsTopologyEquivalent" title="Permalink to this definition">¶</a></dt>
 <dd><p>Determine two topologies are equivalent or not.</p>
 <p>Notice we do not check two topologies are isomorphism. Instead checking
 the adjacenty matrix is the same only.</p>
-</dd></dl>
-
-<dl class="function">
-<dt id="bluefog.common.topology_util.MeshGrid2DGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">MeshGrid2DGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">shape: Tuple[int</em>, <em class="sig-param">int] = None</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate 2D MeshGrid structure of graph.</p>
-<p>Assume shape = (nrow, ncol)
-- When shape is provided, a meshgrid of nrow*ncol will be generated.
-- When shape is not provided, nrow and ncol will be the two closest factors of size.</p>
-<blockquote>
-<div><p>For example: size = 24, nrow and ncol will be 4 and 6, respectively.
-We assume  nrow will be equal to or smaller than ncol.
-If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology
-into a linear one.</p>
-</div></blockquote>
 </dd></dl>
 
 <dl class="function">
@@ -437,9 +411,21 @@ connected to a point such that the index difference is power of 2.</p>
 </dd></dl>
 
 <dl class="function">
-<dt id="bluefog.common.topology_util.RingGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">RingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">left_connect: bool = False</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.RingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate ring structure of graph (uniliteral).</p>
+<dt id="bluefog.common.topology_util.FullyConnectedGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">FullyConnectedGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.FullyConnectedGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate fully connected structure of graph.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="bluefog.common.topology_util.MeshGrid2DGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">MeshGrid2DGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">shape: Tuple[int</em>, <em class="sig-param">int] = None</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate 2D MeshGrid structure of graph.</p>
+<p>Assume shape = (nrow, ncol), when shape is provided, a meshgrid of nrow*ncol will be generated.
+when shape is not provided, nrow and ncol will be the two closest factors of size.</p>
+<p>For example: size = 24, nrow and ncol will be 4 and 6, respectively.
+We assume  nrow will be equal to or smaller than ncol.
+If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology
+into a linear one.</p>
 </dd></dl>
 
 <dl class="function">
@@ -449,6 +435,24 @@ connected to a point such that the index difference is power of 2.</p>
 <p>All other ranks are connected to the center_rank. The connection is
 bidirection, i.e. if the weight from node i to node j is non-zero, so
 is the weight from node j to node i.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="bluefog.common.topology_util.RingGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">RingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em>, <em class="sig-param">left_connect: bool = False</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.RingGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate ring structure of graph (uniliteral).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="bluefog.common.topology_util.BiRingGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">BiRingGraph</code><span class="sig-paren">(</span><em class="sig-param">size: int</em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.BiRingGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate ring structure of graph (bidirection).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="bluefog.common.topology_util.GetWeights">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param">topo: networkx.classes.digraph.DiGraph</em>, <em class="sig-param">rank: int</em><span class="sig-paren">)</span> &#x2192; Tuple[float, Dict[int, float]]<a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights dictionary.</p>
 </dd></dl>
 
 </div>

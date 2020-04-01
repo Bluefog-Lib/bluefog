@@ -83,8 +83,9 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="common_api.html">Bluefog Common API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorflow_api.html">Bluefog Tensorflow API</a></li>
 </ul>
-<p class="caption"><span class="caption-text">Development:</span></p>
+<p class="caption"><span class="caption-text">More Information:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_winops.html">Bluefog WinOps Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -160,10 +161,32 @@
 on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed machine learning fast,
 fault-tolerant, friendly to heterogeneuous environment, and easy to use.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This repository is still under development. Please check it later.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Although most torch-based APIs perform well, this repository is still
+in the early stage of development and more features are waiting to be implemented.
+If you are interested, you are more than welcome to join us and contribute this project!</p>
 </div>
+<div class="section" id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this headline">¶</a></h2>
+<p>First, make sure your environment has <code class="docutils literal notranslate"><span class="pre">python&gt;=3.7</span></code> and <a class="reference external" href="https://www.open-mpi.org/">openmpi</a> &gt;= 4.0.
+Then, install Bluefog with: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">bluefog</span></code>. The following example
+illustrate how to use bluefog run a simple consensus algorithm.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Execute Python functions in parallel through</span>
+<span class="c1"># bfrun -np 4 python file.py</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+
+<span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">()])</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+   <span class="n">x</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span><span class="si">}</span><span class="s2">: Average value of all ranks is </span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Please explore our <a class="reference external" href="https://github.com/ybc1991/bluefog/tree/master/examples">examples</a> folder to see more examples about
+how to use bluefoge implemented deep learning trainning and distributed
+optimization algorithm quickly and easily.</p>
 <div class="toctree-wrapper compound">
 <p class="caption"><span class="caption-text">API:</span></p>
 <ul>
@@ -172,10 +195,11 @@ fault-tolerant, friendly to heterogeneuous environment, and easy to use.</p>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorflow_api.html">Bluefog Tensorflow API</a></li>
 </ul>
 </div>
 <div class="toctree-wrapper compound">
-<p class="caption"><span class="caption-text">Development:</span></p>
+<p class="caption"><span class="caption-text">More Information:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_winops.html">Bluefog WinOps Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -191,6 +215,7 @@ fault-tolerant, friendly to heterogeneuous environment, and easy to use.</p>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 </ul>
+</div>
 </div>
 </div>
 
