@@ -25,8 +25,9 @@ import bluefog
 
 from bluefog.run.common.util import env as env_util
 
-# Timeline knobs
+
 BLUEFOG_TIMELINE = 'BLUEFOG_TIMELINE'
+BLUEFOG_LOG_LEVEL = 'BLUEFOG_LOG_LEVEL'
 
 def _is_open_mpi_installed():
     command = 'mpirun --version'
@@ -97,8 +98,7 @@ def parse_args():
                              "host1, 4 processes on host2, and 1 process "
                              "on host3.")
 
-    parser.add_argument('--verbose', action="store_true",
-                        dest="verbose",
+    parser.add_argument('--verbose', action="store_true", dest="verbose",
                         help="If this flag is set, extra messages will "
                              "printed.")
 
@@ -115,7 +115,6 @@ def parse_args():
 
     parsed_args = parser.parse_args()
 
-    parsed_args.verbose = 2 if parsed_args.verbose else 1
     if not parsed_args.version and not parsed_args.np:
         parser.error('argument -np/--num-proc is required')
 
@@ -133,6 +132,9 @@ def set_env_from_args(env, args):
     # Timeline
     if args.timeline_filename:
         _add_arg_to_env(env, BLUEFOG_TIMELINE, args.timeline_filename)
+
+    if args.verbose:
+        _add_arg_to_env(env, BLUEFOG_LOG_LEVEL, "debug")
 
     return env
 
@@ -167,7 +169,7 @@ def main():
     env = os.environ.copy()
     env = set_env_from_args(env, args)
     mpirun_command = (
-        'mpirun --allow-run-as-root --tag-output '
+        'mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
         '-mca pml ob1 -mca btl,mtl ^openib '
@@ -180,8 +182,7 @@ def main():
                 command=' '.join(shlex.quote(par) for par in args.command))
     )
 
-    # TODO (Kun): There is a bug when using timeline and verbose at the same time; fix it!
-    if args.verbose >= 2:
+    if args.verbose:
         print(mpirun_command)
     # Execute the mpirun command.
     os.execve('/bin/sh', ['/bin/sh', '-c', mpirun_command], env)
