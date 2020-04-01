@@ -47,8 +47,14 @@ how to use bluefoge implemented deep learning trainning and distributed
 optimization algorithm quickly and easily.
 
 .. toctree::
+   :caption: INSTALLATION
+
+   Installing Bluefog <install>
+
+
+.. toctree::
    :maxdepth: 2
-   :caption: API:
+   :caption: API
 
    Bluefog Common API <common_api>
    Bluefog Torch API <torch_api>
@@ -56,7 +62,7 @@ optimization algorithm quickly and easily.
 
 .. toctree::
    :maxdepth: 2
-   :caption: More Information:
+   :caption: More Information
 
    Bluefog WinOps Explanation <bluefog_winops>
    Codebase Structure <code_structure>
