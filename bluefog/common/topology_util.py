@@ -64,13 +64,13 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
 def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
     """Generate 2D MeshGrid structure of graph.
 
-    Assume shape = (nrow, ncol)
-    - When shape is provided, a meshgrid of nrow*ncol will be generated.
-    - When shape is not provided, nrow and ncol will be the two closest factors of size.
-      For example: size = 24, nrow and ncol will be 4 and 6, respectively.
-      We assume  nrow will be equal to or smaller than ncol.
-      If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology 
-      into a linear one.
+    Assume shape = (nrow, ncol), when shape is provided, a meshgrid of nrow*ncol will be generated.
+    when shape is not provided, nrow and ncol will be the two closest factors of size.
+
+    For example: size = 24, nrow and ncol will be 4 and 6, respectively.
+    We assume  nrow will be equal to or smaller than ncol.
+    If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology
+    into a linear one.
     """
 
     assert size > 0

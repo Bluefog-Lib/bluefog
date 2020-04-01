@@ -495,14 +495,14 @@ def win_free(name: str = None) -> bool:
 
 
 def _win_sync_function_factory(tensor):
-    return ('bluefog_torch_win_sync_' + tensor.type().replace('.', '_'))
+    return 'bluefog_torch_win_sync_' + tensor.type().replace('.', '_')
 
 
 def win_sync_then_collect(name: str) -> torch.Tensor:
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
-        >>> win_sync(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
+    >>> win_sync(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
 
     Args:
         name: The unique name to associate the window object.

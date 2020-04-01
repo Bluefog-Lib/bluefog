@@ -44,6 +44,17 @@ templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 
+# -- Autodoc configuration ---------------------------------------------------
+
+autodoc_default_options = {
+    'members': None,
+    'member-order': 'bysource',
+    'special-members': '__init__',
+    'imported-members': None,
+    'undoc-members': None,
+    'exclude-members': 'contextmanager',
+}
+
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for

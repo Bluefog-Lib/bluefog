@@ -284,7 +284,7 @@ class BlueFogBasics(object):
             >>> import bluefog.torch as bf
             >>> from bluefog.common.util import env
             >>> with env(BLUEFOG_TIMELINE="./timeline_file"):
-                    bf.init()
+            >>>     bf.init()
             >>> bf.timeline_start_activity(tensor_name, activity_name)
             >>> ...
             >>> bf.timeline_end_activity(tensor_name)
