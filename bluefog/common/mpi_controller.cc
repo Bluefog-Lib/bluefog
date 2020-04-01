@@ -662,7 +662,6 @@ Status MPIController::WinUnlock(const std::string& name) {
   return Status::OK();
 }
 
-// Todo(ybc) Use RAII pattern to manage the mutex instead of manual control.
 Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks) {
   if (mpi_ctx_.win_mutex.empty()) {
     return Status::PreconditionError(
@@ -725,6 +724,16 @@ Status MPIController::WinMutexRelease(const std::vector<int>& release_ranks) {
   }
 
   return Status::OK();
+}
+
+WinMutexGuard::WinMutexGuard(MPIController* mpi_controller,
+                             const std::vector<int>& acquire_ranks)
+    : mpi_controller_(mpi_controller), acquire_ranks_(acquire_ranks) {
+  mpi_controller_->WinMutexAcquire(acquire_ranks_);
+}
+
+WinMutexGuard::~WinMutexGuard() {
+  mpi_controller_->WinMutexAcquire(acquire_ranks_);
 }
 
 }  // namespace common

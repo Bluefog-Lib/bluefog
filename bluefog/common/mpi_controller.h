@@ -31,18 +31,18 @@ class MPIController {
     BFLOG(DEBUG) << "MPI Controller Initialized.";
   }
   void Initialize();
-  
+
   int GetTypeSize(DataType dtype);
 
-  inline std::vector<int>& GetRanks() { return ranks_; };
-  inline int GetRank() { return rank_; };
-  inline int GetLocalRank() { return local_rank_; };
-  inline int GetCrossRank() { return cross_rank_; };
-  inline int GetSize() { return size_; };
-  inline int GetLocalSize() { return local_size_; };
-  inline int GetCrossSize() { return cross_size_; };
-  inline int GetNeighborSize() { return neighbor_indgree_; };
-  inline const std::vector<int>& GetLocalCommRanks() {
+  inline const std::vector<int>& GetRanks() const { return ranks_; };
+  inline int GetRank() const { return rank_; };
+  inline int GetLocalRank() const { return local_rank_; };
+  inline int GetCrossRank() const { return cross_rank_; };
+  inline int GetSize() const { return size_; };
+  inline int GetLocalSize() const { return local_size_; };
+  inline int GetCrossSize() const { return cross_size_; };
+  inline int GetNeighborSize() const { return neighbor_indgree_; };
+  inline const std::vector<int>& GetLocalCommRanks() const {
     return local_comm_ranks_;
   };
 
@@ -125,6 +125,19 @@ class MPIController {
   std::vector<int> local_comm_ranks_;
 
   std::unordered_map<int, float> neighbor_weights_;
+};
+
+class WinMutexGuard {
+ public:
+  explicit WinMutexGuard(MPIController* mpi_controller,
+                         const std::vector<int>& acquire_ranks);
+  virtual ~WinMutexGuard();
+  WinMutexGuard(const WinMutexGuard&) = delete;
+  WinMutexGuard& operator=(const WinMutexGuard&) = delete;
+
+ private:
+  std::vector<int> acquire_ranks_;
+  MPIController* const mpi_controller_;
 };
 
 }  // namespace common
