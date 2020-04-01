@@ -65,7 +65,8 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                      Communicator comm_type) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  timeline_ptr->ActivityStart(entry.tensor_name, "Allocate_Output");
+  if (timeline_status.ok())
+    timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
 
   // Every tensor participating in Allgather operation may have different
   // first dimension size, but the rest of dimensions are same for all
@@ -298,9 +299,14 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
+  if (timeline_status.ok())
+    timeline_ptr->ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER_COMMUNICATE");
   // Pitfall: mpi_neighbor_allgather do not include itself.
   int ret_code = MPI_Neighbor_allgatherv(
       sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
@@ -312,8 +318,14 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   }
   delete[] recvcounts;
   delete[] displcmnts;
+  if (timeline_status.ok())
+    timeline_ptr->ActivityEnd(entry.tensor_name);
 
+  if (timeline_status.ok())
+    timeline_ptr->ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER_CALLBACK");
   entry.callback(Status::OK());
+  if (timeline_status.ok())
+    timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
@@ -334,9 +346,14 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   void* buffer_data = (void*)entry.output->data();
 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
+  if (timeline_status.ok())
+    timeline_ptr->ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE_COMMUNICATE");
   // Pitfall: Our neighbor_allreduce include itself, while
   // mpi_neighbor_allgather do not! Because for saving the communication there
   // is no need to transfer the local info again. However, for computation view,
@@ -350,8 +367,14 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
         "MPI_Neighbor_allreduce(through neighbor_allgather) failed, see MPI "
         "output for details.");
   }
+  if (timeline_status.ok())
+    timeline_ptr->ActivityEnd(entry.tensor_name);
 
+  if (timeline_status.ok())
+    timeline_ptr->ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE_COMPUTE_AVERAGE");
   entry.callback(Status::OK());
+  if (timeline_status.ok())
+    timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
 bool MPIController::IsMpiUnifiedModel() {
