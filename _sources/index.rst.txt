@@ -3,8 +3,13 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Bluefog's documentation!
-===================================
+Bluefog
+=======
+
+.. image:: _static/bluefog_logo.png
+   :width: 350
+   :align: center
+   :alt: Bluefog Logo
 
 Bluefog is a distributed training framework for PyTorch based
 on diffusion/consensus-type algorithm.
