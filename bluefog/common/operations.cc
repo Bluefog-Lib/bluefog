@@ -639,10 +639,10 @@ Status GetBluefogTimeline(Timeline*& timeline) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  timeline = &(bluefog_global.timeline);
   if (!bluefog_global.timeline_enabled) {
     return Status::Aborted("timeline is not enabled.");
   }
-  timeline = &(bluefog_global.timeline);
   return Status::OK();
 }
 

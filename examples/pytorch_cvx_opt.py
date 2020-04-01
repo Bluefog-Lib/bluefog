@@ -50,7 +50,7 @@ outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
 # we append the p at the last of data.
-x = torch.Tensor([bf.rank()/(indegree+1), 1.0/bf.size()/(indegree+1)])
+x = torch.Tensor([bf.rank()/(indegree+1)] * 100000 + [1.0/bf.size()/(indegree+1)])
 
 # Remember we do not create buffer with 0.
 bf.win_create(x, name="x_buff")
@@ -70,11 +70,11 @@ x = bf.win_sync_then_collect(name="x_buff")
 
 print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), x[1], x[0], x[0] / x[1]))
 
-sum_push_sum = bf.allreduce(x[0]/x[1], average=False)
+sum_push_sum = bf.allreduce(x[0]/x[-1], average=False)
 if bf.rank() == 0:
     print("Total Sum ", sum_push_sum)
 
-p_push_sum = bf.allreduce(x[1], average=False)
+p_push_sum = bf.allreduce(x[-1], average=False)
 if bf.rank() == 0:
     print("Total Sum ", p_push_sum)
 

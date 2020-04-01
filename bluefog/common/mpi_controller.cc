@@ -65,8 +65,7 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                      Communicator comm_type) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "Allocate_Output");
+  timeline_ptr->ActivityStart(entry.tensor_name, "Allocate_Output");
 
   // Every tensor participating in Allgather operation may have different
   // first dimension size, but the rest of dimensions are same for all
@@ -126,8 +125,7 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   delete[] gather_count;
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
+  timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
   return status;
 }
 
@@ -533,6 +531,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   int target_disp = 0;  // offset in win buffer
@@ -542,7 +542,9 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     if (entry.require_mutex) {
       mutex_ranks.clear();
       mutex_ranks.push_back(target_rank);
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
       WinMutexAcquire(mutex_ranks);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
     };
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
@@ -558,7 +560,9 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
           "MPI_Accumulate failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
-    if (entry.require_mutex) WinMutexRelease(mutex_ranks);
+    if (entry.require_mutex) {
+      WinMutexRelease(mutex_ranks);
+    }
   }
 
   BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name
