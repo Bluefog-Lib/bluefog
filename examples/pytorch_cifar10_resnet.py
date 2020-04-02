@@ -326,6 +326,9 @@ def accuracy(output, target):
 def save_checkpoint(epoch):
     if bf.rank() == 0:
         filepath = args.checkpoint_format.format(epoch=epoch + 1)
+        dirpath = os.path.dirname(filepath)
+        if not os.path.exists(dirpath):
+            os.makedirs(dirpath)
         state = {"model": model.state_dict(), "optimizer": optimizer.state_dict()}
         torch.save(state, filepath)
 
