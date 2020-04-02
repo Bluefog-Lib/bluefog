@@ -15,6 +15,7 @@
 
 from typing import List
 import atexit
+import contextlib
 import ctypes
 import logging
 import networkx
@@ -311,3 +312,24 @@ class BlueFogBasics(object):
                          "BFLOG for more details.")
             return False
         return True
+
+    @contextlib.contextmanager
+    def timeline_context(self, tensor_name: str, activity_name: str):
+        """Context manager for activating timeline record.
+        If you want to use this function, please make sure to turn on the timeline first by
+        setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use
+        bfrun --timeline-filename {file_name} ...
+
+        Args:
+            tensor_name (str): The activity associated tensor name.
+            activity_name (str): The activity type.
+
+        Example:
+            >>> with bf.timeline_context(tensor_name, activity_name):
+            >>>     time.sleep(1.0)
+        """
+        assert self.timeline_start_activity(tensor_name, activity_name)
+        try:
+            yield
+        finally:
+            assert self.timeline_end_activity(tensor_name)

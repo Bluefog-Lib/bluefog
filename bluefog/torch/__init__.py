@@ -51,6 +51,7 @@ from bluefog.torch.mpi_ops import win_wait, win_poll
 from bluefog.torch.mpi_ops import win_lock, win_mutex
 
 from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
+from bluefog.torch.mpi_ops import timeline_context
 
 def broadcast_parameters(params, root_rank):
     """
