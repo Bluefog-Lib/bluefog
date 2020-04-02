@@ -224,7 +224,7 @@ window operations. Typically just <code class="docutils literal notranslate"><sp
 
 <dl class="function">
 <dt id="bluefog.torch.init">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">init</code><span class="sig-paren">(</span><em class="sig-param">topology: networkx.classes.digraph.DiGraph = None</em>, <em class="sig-param">is_weighted: bool = False</em>, <em class="sig-param">comm=None</em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.init" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">init</code><span class="sig-paren">(</span><em class="sig-param">topology: networkx.classes.digraph.DiGraph = None</em>, <em class="sig-param">is_weighted: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.init" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that initializes BlueFog.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -234,9 +234,6 @@ a default power_two_ring structure is used.</p></li>
 <li><p><strong>is_weighted</strong> – If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
 execute the weighted average instead, where the weight is the value used in
 topology matrix (including self).</p></li>
-<li><p><strong>comm</strong> – List specifying ranks for the communicator, relative to the MPI_COMM_WORLD
-communicator OR the MPI communicator to use. Given communicator will be duplicated.
-If None, BlueFog will use MPI_COMM_WORLD Communicator.</p></li>
 </ul>
 </dd>
 </dl>
