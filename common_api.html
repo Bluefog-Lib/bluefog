@@ -392,6 +392,28 @@ bfrun –timeline-filename {file_name} …</p>
 <p>Please check comments in timeline_start_activity for more explanation.</p>
 </dd></dl>
 
+<dl class="method">
+<dt id="bluefog.common.basics.BlueFogBasics.timeline_context">
+<code class="sig-name descname">timeline_context</code><span class="sig-paren">(</span><em class="sig-param">tensor_name: str</em>, <em class="sig-param">activity_name: str</em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.common.basics.BlueFogBasics.timeline_context" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager for activating timeline record.
+If you want to use this function, please make sure to turn on the timeline first by
+setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use
+bfrun –timeline-filename {file_name} …</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor_name</strong> (<em>str</em>) – The activity associated tensor name.</p></li>
+<li><p><strong>activity_name</strong> (<em>str</em>) – The activity type.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">bf</span><span class="o">.</span><span class="n">timeline_context</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">,</span> <span class="n">activity_name</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
 </dd></dl>
 
 <div class="section" id="module-bluefog.common.topology_util">
