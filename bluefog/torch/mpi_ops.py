@@ -467,8 +467,6 @@ def win_create(tensor: torch.Tensor, name: str) -> bool:
     the tensor with same shape. Otherwise, the rest win_ops like win_sync, win_put will
     encounter unrecoverable memory segmentation fault.
     """
-    # TODO(ybc): How to make sure that different ranks
-    # create window wtih same name and size?
     function = _check_function(_win_create_function_factory, tensor)
     if getattr(mpi_lib, function)(tensor, name):
         _win_map[name] = tensor
@@ -649,9 +647,7 @@ def win_put(tensor: torch.Tensor, name: str,
         A bool value to indicate the put succeeded or not.
     """
     handle = win_put_async(tensor, name, dst_weights)
-    win_wait(handle)
-    # TODO(ybc) Error handling.
-    return True
+    return win_wait(handle)
 
 
 def win_get_async(name: str, src_weights: Dict[int, float] = None) -> int:
@@ -708,9 +704,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None) -> bool:
         processes (or all neighbor processes).
     """
     handle = win_get_async(name, src_weights)
-    win_wait(handle)
-    # TODO(ybc) Error handling.
-    return True
+    return win_wait(handle)
 
 
 def _win_accumulate_function_factory(tensor):
@@ -777,9 +771,7 @@ def win_accumulate(tensor: torch.Tensor, name: str,
         `win_wait()`.
     """
     handle = win_accumulate_async(tensor, name, dst_weights, require_mutex)
-    win_wait(handle)
-    # TODO(ybc) Error handling.
-    return True
+    return win_wait(handle)
 
 
 def win_poll(handle: int) -> bool:

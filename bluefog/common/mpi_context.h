@@ -120,9 +120,8 @@ struct MPIContext {
 
   // Flag indicating whether mpi is enabled.
   bool enabled_ = false;
+
   // Flag indicating whether mpi virtual topology is setup.
-  // TODO(ybc) We need a topo finialized flag. After it turns ture, no more
-  // modification of topology.
   bool topo_setup_ = false;
   bool is_weighted_ = false;
 

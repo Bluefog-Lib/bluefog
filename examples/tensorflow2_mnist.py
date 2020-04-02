@@ -80,7 +80,7 @@ tf.config.experimental_run_functions_eagerly(False)
 
 #TODO(ybc) Unfortunately, the tensorflow code won't work because the tensorflow is triggered
 # through the graph flow engine so that the parallel ops can occur with any order. The mismatch
-# of allreduce/broadcast order will cause the procedure crash or hang. 
+# of allreduce/broadcast order will cause the procedure crash or hang.
 # One-sided ops can avoid this problem in theory.
 
 # Bluefog: adjust number of steps based on number of GPUs.

@@ -203,7 +203,6 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
 int MPIContext::BuildGraphComm(const int indegree, const int* sources,
                                const int outdegree, const int* destinations) {
-  // TODO(ybc) Understand better of how weight works here.
   // The weights is about network optimization instead of computation.
   std::vector<int> source_weights(indegree, 1);
   std::vector<int> dest_weights (outdegree, 1);

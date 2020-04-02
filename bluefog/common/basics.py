@@ -43,7 +43,7 @@ class BlueFogBasics(object):
         self._is_topo_weighted = False
 
     def init(self, topology: networkx.DiGraph = None,
-             is_weighted: bool = False, comm=None):
+             is_weighted: bool = False):
         """A function that initializes BlueFog.
 
         Args:
@@ -52,11 +52,7 @@ class BlueFogBasics(object):
           is_weighted: If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
             execute the weighted average instead, where the weight is the value used in
             topology matrix (including self).
-          comm: List specifying ranks for the communicator, relative to the MPI_COMM_WORLD
-            communicator OR the MPI communicator to use. Given communicator will be duplicated.
-            If None, BlueFog will use MPI_COMM_WORLD Communicator.
         """
-        del comm  # TODO(ybc) Allow to duplicate other communicator.
         self._MPI_LIB_CTYPES.bluefog_init()
         self.set_topology(topology, is_weighted)
         atexit.register(self.shutdown)
