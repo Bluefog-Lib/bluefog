@@ -68,7 +68,7 @@ bf.barrier()
 # Do not forget to sync at last!
 x = bf.win_sync_then_collect(name="x_buff")
 
-print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), x[1], x[0], x[0] / x[1]))
+print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), x[-1], x[0], x[0] / x[-1]))
 
 sum_push_sum = bf.allreduce(x[0]/x[-1], average=False)
 if bf.rank() == 0:
