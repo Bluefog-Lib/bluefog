@@ -43,7 +43,8 @@ RUN pip install numpy \
         keras \
         h5py
 RUN pip install torch==${PYTORCH_VERSION} torchvision==${TORCHVISION_VERSION}
-
+# Pin Pillow<7.0: https://github.com/pytorch/vision/issues/1718
+RUN pip install "Pillow<7.0" --no-deps
 
 # Install Open MPI
 RUN mkdir /tmp/openmpi && \

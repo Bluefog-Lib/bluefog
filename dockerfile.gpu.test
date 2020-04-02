@@ -55,6 +55,8 @@ RUN pip install numpy \
 
 RUN pip install https://download.pytorch.org/whl/cu101/torch-${PYTORCH_VERSION}-$(python -c "import wheel.pep425tags as w; print('-'.join(w.get_supported(None)[0][:-1]))")-linux_x86_64.whl \
         https://download.pytorch.org/whl/cu101/torchvision-${TORCHVISION_VERSION}-$(python -c "import wheel.pep425tags as w; print('-'.join(w.get_supported(None)[0][:-1]))")-linux_x86_64.whl
+# Pin Pillow<7.0: https://github.com/pytorch/vision/issues/1718
+RUN pip install "Pillow<7.0" --no-deps
 
 # Install Open MPI
 RUN mkdir /tmp/openmpi && \
