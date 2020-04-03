@@ -41,7 +41,43 @@ illustrate how to use bluefog run a simple consensus algorithm.
    for _ in range(100):
       x = bf.neighbor_allreduce(x)
    print(f"{bf.rank()}: Average value of all ranks is {x}")
-    
+
+One main feature of Bluefog is that we leverage the One-sided Communication of MPI
+to build a real decentralized and asynchronized algorithms. The following code illustrate
+how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
+
+.. code-block:: python
+
+   import torch
+   import bluefog.torch as bf
+   from bluefog.common import topology_util
+
+   bf.init()
+
+   # Setup the topology for communication
+   bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+   outdegree = len(bf.out_neighbor_ranks())
+   indegree = len(bf.in_neighbor_ranks())
+
+   # Create the buffer for neighbors.
+   x = torch.Tensor([bf.rank()/(outdegree+1), 1.0/(outdegree+1)])
+   bf.win_create(x, name="x_buff")
+   bf.win_sync_then_collect(name="x_buff")
+
+   for _ in range(100):
+      bf.win_accumulate(
+         x, name="x_buff",
+         dst_weights={rank: 1.0 / (outdegree + 1)
+                        for rank in bf.out_neighbor_ranks()},
+         require_mutex=True)
+      x.div_(1+outdegree)
+      bf.win_sync_then_collect(name="x_buff")
+
+   bf.barrier()
+   # Do not forget to sync at last!
+   bf.win_sync_then_collect(name="x_buff")
+   print(f"{bf.rank()}: Average value of all ranks is {x[0]/x[-1]}")
+
 Please explore our `examples`_ folder to see more examples about
 how to use bluefoge implemented deep learning trainning and distributed
 optimization algorithm quickly and easily.
