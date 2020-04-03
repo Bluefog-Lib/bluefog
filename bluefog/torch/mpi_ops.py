@@ -431,6 +431,17 @@ def poll(handle: int) -> bool:
 
 
 def synchronize(handle: int) -> torch.Tensor:
+    """
+    Synchronizes an asynchronous allreduce, allgather or broadcast operation until
+    it's completed. Returns the result of the operation.
+
+    Args:
+        handle: A handle returned by an allreduce, allgather or broadcast asynchronous
+                operation.
+
+    Returns:
+        torch.Tensor: An output tensor of the operation.
+    """
     if handle not in _handle_map:
         return None
     mpi_lib.bluefog_torch_wait_and_clear(handle)
@@ -439,8 +450,10 @@ def synchronize(handle: int) -> torch.Tensor:
 
 
 def barrier():
-    """ Barrier function to sychronize all MPI processes.
-    After this function, it is guaranteed that all asynch function before it is finished.
+    """Barrier function to sychronize all MPI processes.
+
+    After this function returns, it is guaranteed that all async functions
+    before it is finished.
     """
     return mpi_lib.bluefog_torch_barrier()
 
@@ -529,7 +542,7 @@ def win_sync(name: str,
             the weighted average defined by the topology weights if provided or mean value.
             The data structure of weights should be {rank : weight} and rank has to belong to
             the (in-)neighbors.
-        reset: If reset is True, the buffer used to store the neighbor tensor included in 
+        reset: If reset is True, the buffer used to store the neighbor tensor included in
             neighbor_weights will be reset to zero.
             The reset is always happened after the weights computation.
             If neighbor_weights is not presented and reset is True, all the neighbor will be reset.
@@ -580,7 +593,7 @@ def win_sync(name: str,
                          "the same time")
 
     if not getattr(mpi_lib, function)(tensor, name, self_weight, neighbor_weights,
-            reset, avg_computation):
+                                      reset, avg_computation):
         raise RuntimeError("Cannot apply win_sync on " + name)
     return tensor
 
