@@ -698,13 +698,28 @@ operation.</p>
 <dl class="function">
 <dt id="bluefog.torch.synchronize">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">synchronize</code><span class="sig-paren">(</span><em class="sig-param">handle: int</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.synchronize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Synchronizes an asynchronous allreduce, allgather or broadcast operation until
+it’s completed. Returns the result of the operation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, allgather or broadcast asynchronous
+operation.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>An output tensor of the operation.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="function">
 <dt id="bluefog.torch.barrier">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">barrier</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.barrier" title="Permalink to this definition">¶</a></dt>
-<dd><p>Barrier function to sychronize all MPI processes.
-After this function, it is guaranteed that all asynch function before it is finished.</p>
+<dd><p>Barrier function to sychronize all MPI processes.</p>
+<p>After this function returns, it is guaranteed that all async functions
+before it is finished.</p>
 </dd></dl>
 
 <dl class="function">
