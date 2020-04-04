@@ -204,15 +204,14 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.</
 <span class="n">indegree</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">in_neighbor_ranks</span><span class="p">())</span>
 
 <span class="c1"># Create the buffer for neighbors.</span>
-<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span><span class="o">/</span><span class="p">(</span><span class="n">outdegree</span><span class="o">+</span><span class="mi">1</span><span class="p">),</span> <span class="mf">1.0</span><span class="o">/</span><span class="p">(</span><span class="n">outdegree</span><span class="o">+</span><span class="mi">1</span><span class="p">)])</span>
-<span class="n">bf</span><span class="o">.</span><span class="n">win_create</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
-<span class="n">bf</span><span class="o">.</span><span class="n">win_sync_then_collect</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">(),</span> <span class="mf">1.0</span><span class="p">])</span>
+<span class="n">bf</span><span class="o">.</span><span class="n">win_create</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">,</span> <span class="n">zero_init</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
    <span class="n">bf</span><span class="o">.</span><span class="n">win_accumulate</span><span class="p">(</span>
       <span class="n">x</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">,</span>
       <span class="n">dst_weights</span><span class="o">=</span><span class="p">{</span><span class="n">rank</span><span class="p">:</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">outdegree</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-                     <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="n">bf</span><span class="o">.</span><span class="n">out_neighbor_ranks</span><span class="p">()},</span>
+                   <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="n">bf</span><span class="o">.</span><span class="n">out_neighbor_ranks</span><span class="p">()},</span>
       <span class="n">require_mutex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
    <span class="n">x</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="n">outdegree</span><span class="p">)</span>
    <span class="n">bf</span><span class="o">.</span><span class="n">win_sync_then_collect</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
@@ -229,12 +228,7 @@ optimization algorithm quickly and easily.</p>
 <div class="toctree-wrapper compound">
 <p class="caption"><span class="caption-text">INSTALLATION</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="install.html">Installing Bluefog</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="install.html#building-bluefog-from-pip-cpu">Building Bluefog from Pip (CPU)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="install.html#building-bluefog-from-pip-gpu">Building Bluefog from Pip (GPU)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="install.html#use-bluefog-through-docker">Use Bluefog through Docker</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installing Bluefog</a></li>
 </ul>
 </div>
 <div class="toctree-wrapper compound">

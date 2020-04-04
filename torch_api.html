@@ -724,16 +724,19 @@ before it is finished.</p>
 
 <dl class="function">
 <dt id="bluefog.torch.win_create">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_create</code><span class="sig-paren">(</span><em class="sig-param">tensor: torch.Tensor</em>, <em class="sig-param">name: str</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_create" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create MPI window for remote memoery access. The window is dedicated to
-the provided tensor only, which is identified by unqiue name.
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_create</code><span class="sig-paren">(</span><em class="sig-param">tensor: torch.Tensor</em>, <em class="sig-param">name: str</em>, <em class="sig-param">zero_init: bool = False</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_create" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create MPI window for remote memoery access.</p>
+<p>The window is dedicated to the provided tensor only, which is identified by unqiue name.
 It is a blocking operation, which required all bluefog process involved.
-The initial values of MPI windows for neighbors are the same as input tensor.</p>
+The initial values of MPI windows for neighbors are the same as input tensor unless
+zero_init is set to be true.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> (<em>torch.Tensor</em>) – Provide the size, data type, and/or memory for window.</p></li>
 <li><p><strong>name</strong> (<em>str</em>) – The unique name to associate the window object.</p></li>
+<li><p><strong>zero_init</strong> (<em>boll</em>) – If set true, the buffer value initialize as zero instead of
+the value of tensor.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
