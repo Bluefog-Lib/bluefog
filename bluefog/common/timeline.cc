@@ -43,13 +43,12 @@ void TimelineWriter::Initialize(std::string file_name) {
 
 void TimelineWriter::EnqueueWriteEvent(const std::string& tensor_name,
                                        char phase, const std::string& op_name,
-                                       const std::thread::id tid, long ts_micros) {
+                                       long ts_micros) {
   TimelineRecord r{};
   r.type = TimelineRecordType::EVENT;
   r.tensor_name = tensor_name;
   r.phase = phase;
   r.op_name = op_name;
-  r.tid = tid;
   r.ts_micros = ts_micros;
 
   while (healthy_ && !record_queue_.push(r))
@@ -58,11 +57,6 @@ void TimelineWriter::EnqueueWriteEvent(const std::string& tensor_name,
 
 void TimelineWriter::DoWriteEvent(const TimelineRecord& r) {
   assert(r.type == TimelineRecordType::EVENT);
-
-  auto& thread_idx = tid_table_[r.tid];
-  if (thread_idx == 0) {
-    thread_idx = (int)tid_table_.size();
-  }
 
   auto& tensor_idx = tensor_table_[r.tensor_name];
   if (tensor_idx == 0) {
@@ -73,14 +67,12 @@ void TimelineWriter::DoWriteEvent(const TimelineRecord& r) {
     file_ << "\"name\": \"process_name\"";
     file_ << ", \"ph\": \"M\"";
     file_ << ", \"pid\": " << tensor_idx << "";
-    file_ << ", \"tid\": " << thread_idx << "";
     file_ << ", \"args\": {\"name\": \"" << r.tensor_name << "\"}";
     file_ << "}," << std::endl;
     file_ << "{";
     file_ << "\"name\": \"process_sort_index\"";
     file_ << ", \"ph\": \"M\"";
     file_ << ", \"pid\": " << tensor_idx << "";
-    file_ << ", \"tid\": " << thread_idx << "";
     file_ << ", \"args\": {\"sort_index\": " << tensor_idx << "}";
     file_ << "}," << std::endl;
   }
@@ -93,7 +85,6 @@ void TimelineWriter::DoWriteEvent(const TimelineRecord& r) {
   }
   file_ << ", \"ts\": " << r.ts_micros << "";
   file_ << ", \"pid\": " << tensor_idx << "";
-  file_ << ", \"tid\": " << thread_idx << "";
   file_ << "}," << std::endl;
 }
 
@@ -148,33 +139,31 @@ long Timeline::TimeSinceStartMicros() const {
 
 // Write event to the Bluefog Timeline file.
 void Timeline::WriteEvent(const std::string& tensor_name, const char phase,
-                          const std::thread::id tid,
                           const std::string& op_name) {
   auto ts_micros = TimeSinceStartMicros();
-  writer_.EnqueueWriteEvent(tensor_name, phase, op_name, tid, ts_micros);
+  writer_.EnqueueWriteEvent(tensor_name, phase, op_name, ts_micros);
 }
 
 void Timeline::ActivityStart(const std::string& tensor_name,
-                             const std::string& activity,
-                             const std::thread::id tid) {
+                             const std::string& activity) {
   if (!initialized_) {
     return;
   }
 
   std::lock_guard<std::recursive_mutex> guard(mutex_);
   assert(tensor_states_[tensor_name] == TimelineState::TOP_LEVEL);
-  WriteEvent(tensor_name, 'B', tid, activity);
+  WriteEvent(tensor_name, 'B', activity);
   tensor_states_[tensor_name] = TimelineState::ACTIVITY;
 }
 
-void Timeline::ActivityEnd(const std::string& tensor_name, const std::thread::id tid) {
+void Timeline::ActivityEnd(const std::string& tensor_name) {
   if (!initialized_) {
     return;
   }
 
   std::lock_guard<std::recursive_mutex> guard(mutex_);
   assert(tensor_states_[tensor_name] == TimelineState::ACTIVITY);
-  WriteEvent(tensor_name, 'E', tid);
+  WriteEvent(tensor_name, 'E');
   tensor_states_[tensor_name] = TimelineState::TOP_LEVEL;
 }
 

@@ -91,7 +91,7 @@ int bluefog_load_topology_weights(const std::unordered_map<int, float>*& neighbo
 // C interface to allow python to call timeline.
 // If start_activity == true, call ActivityStart, else call ActivityEnd.
 int bluefog_timeline(const bool start_activity, const char* tensor_name,
-                     const char* activity_name, const std::thread::id tid);
+                     const char* activity_name);
 
 }
 
@@ -160,8 +160,6 @@ Status WindowMutexAcquire(const std::vector<int>& acquire_ranks);
 Status WindowMutexRelease(const std::vector<int>& release_ranks);
 
 Status GetBluefogTimeline(Timeline*& timeline);
-
-std::thread::id GetBluefogBackgroundThreadID();
 
 }  // namespace common
 }  // namespace bluefog

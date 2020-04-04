@@ -314,10 +314,9 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  std::thread::id tid = std::this_thread::get_id();
 
   if (timeline_status.ok())
-    timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE", tid);
+    timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
   // internal_avg specifies the detailed flow for weighted reduction operation for the neighbors
   // which may lead to efficiency and precision difference.
   // but when internal_avg is false, the results are only correct when all weights are
@@ -346,7 +345,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     tensor.copy_(cpu_buffer);
   }
   if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(name, tid);
+    timeline_ptr->ActivityEnd(name);
 
   return 1;
 }
