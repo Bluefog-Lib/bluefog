@@ -65,7 +65,7 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
 
 bool WinTorchStorageManager::RegisterWinName(
     const std::string& name, const int device,
-    std::shared_ptr<TorchTensor> tensor) {
+    std::shared_ptr<TorchTensor> tensor, const bool zero_init) {
   if (tensors_map_.find(name) != tensors_map_.end()) {
     return false;
   }
@@ -77,6 +77,7 @@ bool WinTorchStorageManager::RegisterWinName(
   NeighborTable neighbor_tensors;
   for (int i = 0; i < in_neighbor_degree_; i++) {
     auto t = std::make_shared<TorchTensor>(tensor->MakeCopy(device));
+    if (zero_init) t->GetUnderlyingTensor().fill_(0.0);
     int source_rank = *(sources_ptr + i);
     neighbor_tensors[source_rank] = t;
   }
@@ -237,7 +238,8 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   return true;
 }
 
-int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
+int DoWinCreate(::torch::Tensor tensor, const std::string& name,
+                const bool zero_init) {
   ThrowIfError(common::CheckInitialized());
 
   auto device = GetDeviceID(tensor);
@@ -253,7 +255,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 
   std::vector<std::shared_ptr<common::Tensor>> bf_neighbor_tensors;
 
-  if (!win_storage_manager.RegisterWinName(name, device, bf_tensor)) return 0;
+  if (!win_storage_manager.RegisterWinName(name, device, bf_tensor, zero_init)) return 0;
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
     return 0;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {

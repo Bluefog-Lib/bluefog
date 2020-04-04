@@ -41,7 +41,8 @@ class WinTorchStorageManager {
   // 2. Those new tensors will be managed by shared_ptr and pushed into
   // tensors_map_, which use name as the key.
   bool RegisterWinName(const std::string& name, int device,
-                       std::shared_ptr<TorchTensor> tensor);
+                       std::shared_ptr<TorchTensor> tensor,
+                       const bool zero_init);
   
   // Pop the coresponding tnesors out of tensors_map_ and allocated memory
   // of torch tensor should be destroyed here.
@@ -112,7 +113,7 @@ class WinTorchStorageManager {
 
 #define WIN_CREATE_H(torch_Tensor, THTensor)                     \
   extern "C" int bluefog_torch_win_create_##torch_Tensor(        \
-      THTensor* tensor, char* name);
+      THTensor* tensor, char* name, bool zero_init);
 
 WIN_CREATE_H(torch_IntTensor, THIntTensor)
 WIN_CREATE_H(torch_LongTensor, THLongTensor)

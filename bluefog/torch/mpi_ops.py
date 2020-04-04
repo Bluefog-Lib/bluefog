@@ -464,15 +464,19 @@ def _win_create_function_factory(tensor):
     return 'bluefog_torch_win_create_' + tensor.type().replace('.', '_')
 
 
-def win_create(tensor: torch.Tensor, name: str) -> bool:
-    """ Create MPI window for remote memoery access. The window is dedicated to
-    the provided tensor only, which is identified by unqiue name.
+def win_create(tensor: torch.Tensor, name: str, zero_init: bool = False) -> bool:
+    """ Create MPI window for remote memoery access.
+
+    The window is dedicated to the provided tensor only, which is identified by unqiue name.
     It is a blocking operation, which required all bluefog process involved.
-    The initial values of MPI windows for neighbors are the same as input tensor.
+    The initial values of MPI windows for neighbors are the same as input tensor unless
+    zero_init is set to be true.
 
     Args:
         tensor (torch.Tensor): Provide the size, data type, and/or memory for window.
         name (str): The unique name to associate the window object.
+        zero_init (boll): If set true, the buffer value initialize as zero instead of
+            the value of tensor.
 
     Returns:
         bool: Indicate the creation succeed or not.
@@ -482,7 +486,7 @@ def win_create(tensor: torch.Tensor, name: str) -> bool:
     encounter unrecoverable memory segmentation fault.
     """
     function = _check_function(_win_create_function_factory, tensor)
-    if getattr(mpi_lib, function)(tensor, name):
+    if getattr(mpi_lib, function)(tensor, name, zero_init):
         _win_map[name] = tensor
         return True
     return False
@@ -522,7 +526,7 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
     """
-    neighbor_weights = {r:1.0 for r in in_neighbor_ranks()}
+    neighbor_weights = {r: 1.0 for r in in_neighbor_ranks()}
     return win_sync(name, 1.0, neighbor_weights, reset=True)
 
 

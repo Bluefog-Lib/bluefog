@@ -60,15 +60,14 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
    indegree = len(bf.in_neighbor_ranks())
 
    # Create the buffer for neighbors.
-   x = torch.Tensor([bf.rank()/(outdegree+1), 1.0/(outdegree+1)])
-   bf.win_create(x, name="x_buff")
-   bf.win_sync_then_collect(name="x_buff")
+   x = torch.Tensor([bf.rank(), 1.0])
+   bf.win_create(x, name="x_buff", zero_init=True)
 
    for _ in range(100):
       bf.win_accumulate(
          x, name="x_buff",
          dst_weights={rank: 1.0 / (outdegree + 1)
-                        for rank in bf.out_neighbor_ranks()},
+                      for rank in bf.out_neighbor_ranks()},
          require_mutex=True)
       x.div_(1+outdegree)
       bf.win_sync_then_collect(name="x_buff")
@@ -83,6 +82,7 @@ how to use bluefoge implemented deep learning trainning and distributed
 optimization algorithm quickly and easily.
 
 .. toctree::
+   :maxdepth: 1
    :caption: INSTALLATION
 
    Installing Bluefog <install>
