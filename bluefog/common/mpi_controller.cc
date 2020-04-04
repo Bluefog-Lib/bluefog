@@ -65,8 +65,7 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                      Communicator comm_type) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
+  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
 
   // Every tensor participating in Allgather operation may have different
   // first dimension size, but the rest of dimensions are same for all
@@ -126,8 +125,7 @@ Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   delete[] gather_count;
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
+  timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
   return status;
 }
 
@@ -306,8 +304,7 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   // Pitfall: mpi_neighbor_allgather do not include itself.
   int ret_code = MPI_Neighbor_allgatherv(
       sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
@@ -319,14 +316,11 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   }
   delete[] recvcounts;
   delete[] displcmnts;
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
+  timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
@@ -348,19 +342,17 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
     output_shape.AddDim(entry.tensor->shape().dim_size(i));
   }
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
+  
+  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 
   void* buffer_data = (void*)entry.output->data();
 
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   // Pitfall: Our neighbor_allreduce include itself, while
   // mpi_neighbor_allgather do not! Because for saving the communication there
   // is no need to transfer the local info again. However, for computation view,
@@ -374,14 +366,11 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
         "MPI_Neighbor_allreduce(through neighbor_allgather) failed, see MPI "
         "output for details.");
   }
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "COMPUTE_AVERAGE");
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMPUTE_AVERAGE");
   entry.callback(Status::OK());
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
 bool MPIController::IsMpiUnifiedModel() {
@@ -412,7 +401,7 @@ Status MPIController::WinCreate(
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
-  if (timeline_status.ok())
+  
     timeline_ptr->ActivityStart(name, "WIN_CREATE");
 
   // We need to explicitly set the device here.
@@ -474,9 +463,7 @@ Status MPIController::WinCreate(
                    mpi_win_ptr.get());
     win_manager->PushBackWinAndTensor(mpi_win_ptr, t);
   }
-
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(name);
+  timeline_ptr->ActivityEnd(name);
 
   return Status::OK();
 }
@@ -540,9 +527,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
@@ -560,14 +546,11 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     MPI_Win_unlock(target_rank, mpi_win);
   }
   BFLOG(TRACE, rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
+  timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
 void MPIController::WinAccumulate(TensorTableEntry& entry) {
@@ -590,8 +573,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
@@ -622,17 +604,13 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       WinMutexRelease(mutex_ranks);
     }
   }
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
-
+  timeline_ptr->ActivityEnd(entry.tensor_name);
   BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name
                       << " is done.";
 
-  if (timeline_status.ok())
-    timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
+  timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
-  if (timeline_status.ok())
-    timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
 void MPIController::WinGet(TensorTableEntry& entry) {
