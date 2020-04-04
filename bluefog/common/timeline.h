@@ -25,6 +25,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <thread>
 
 #include "common.h"
 
@@ -38,6 +39,7 @@ struct TimelineRecord {
   std::string tensor_name;
   char phase;
   std::string op_name;
+  std::thread::id tid;
   // std::string args;
   long ts_micros;
 };
@@ -47,7 +49,7 @@ class TimelineWriter {
   void Initialize(std::string file_name);
   inline bool IsHealthy() const { return healthy_; }
   void EnqueueWriteEvent(const std::string& tensor_name, char phase,
-                         const std::string& op_name, long ts_micros);
+                         const std::string& op_name, const std::thread::id tid, long ts_micros);
 
  private:
   void DoWriteEvent(const TimelineRecord& r);
@@ -67,6 +69,10 @@ class TimelineWriter {
   // Mapping of tensor names to indexes. It is used to reduce size of the
   // timeline file.
   std::unordered_map<std::string, int> tensor_table_;
+
+  // Mapping of thread ID to indexes. It is used to transform thread::id
+  // to int and reduce size of the timeline file.
+  std::unordered_map<std::thread::id, int> tid_table_;
 };
 
 enum TimelineState { ACTIVITY, TOP_LEVEL };
@@ -79,13 +85,16 @@ class Timeline {
   inline bool Initialized() const { return initialized_; }
 
   void ActivityStart(const std::string& tensor_name,
-                     const std::string& activity);
-  void ActivityEnd(const std::string& tensor_name);
+                     const std::string& activity,
+                     const std::thread::id tid);
+  void ActivityEnd(const std::string& tensor_name, const std::thread::id tid);
 
  private:
   long TimeSinceStartMicros() const;
-  void WriteEvent(const std::string& tensor_name, char phase,
+  void WriteEvent(const std::string& tensor_name, char phase, const std::thread::id tid,
                   const std::string& op_name = "");
+  // void WriteEvent(const std::string& tensor_name, const char phase,
+  //                 const std::thread::id tid, const std::string& op_name = "");
 
   // Boolean flag indicating whether Timeline was initialized (and thus should
   // be recorded).
