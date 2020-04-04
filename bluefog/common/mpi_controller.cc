@@ -570,9 +570,6 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
-  Timeline* timeline_ptr;
-  Status timeline_status = GetBluefogTimeline(timeline_ptr);
-
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
