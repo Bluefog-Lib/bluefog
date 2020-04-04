@@ -1,7 +1,0 @@
-[
-{"name": "process_name", "ph": "M", "pid": 1, "tid": 1, "args": {"name": "test_multi_thread"}},
-{"name": "process_sort_index", "ph": "M", "pid": 1, "tid": 1, "args": {"sort_index": 1}},
-{"ph": "B", "name": "THREAD", "ts": 1854832066710, "pid": 1, "tid": 1},
-{"ph": "B", "name": "THREAD", "ts": 1854832067044, "pid": 1, "tid": 2},
-{"ph": "E", "ts": 1854832168684, "pid": 1, "tid": 1},
-{"ph": "E", "ts": 1854832168714, "pid": 1, "tid": 2},
