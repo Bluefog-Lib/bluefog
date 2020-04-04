@@ -292,8 +292,10 @@ class BlueFogBasics(object):
         ret = self._MPI_LIB_CTYPES.bluefog_timeline(
             True, tensor_name.encode("utf-8"), activity_name.encode('utf-8'))
         if ret != 1:
-            logger.error("Cannot start activity in the timeline. Check "
-                         "BFLOG for more details.")
+            logger.error("Cannot start activity in the timeline. "
+                         "Most common reason is you didn't turn on the timeline function. "
+                         "Use bfrun --timeline-filename file_name ... or "
+                         "setting the ENV variable BLUEFOG_TIMELINE = file_name")
             return False
         return True
 
@@ -309,7 +311,9 @@ class BlueFogBasics(object):
             False, tensor_name.encode("utf-8"), "".encode('utf-8'))
         if ret != 1:
             logger.error("Cannot end activity in the timeline. Check "
-                         "BFLOG for more details.")
+                         "Most common reason is you didn't turn on the timeline function. "
+                         "Use bfrun --timeline-filename file_name ... or "
+                         "setting the ENV variable BLUEFOG_TIMELINE = file_name")
             return False
         return True
 
@@ -328,8 +332,8 @@ class BlueFogBasics(object):
             >>> with bf.timeline_context(tensor_name, activity_name):
             >>>     time.sleep(1.0)
         """
-        assert self.timeline_start_activity(tensor_name, activity_name)
+        self.timeline_start_activity(tensor_name, activity_name)
         try:
             yield
         finally:
-            assert self.timeline_end_activity(tensor_name)
+            self.timeline_end_activity(tensor_name)
