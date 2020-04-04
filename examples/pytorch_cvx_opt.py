@@ -32,7 +32,7 @@ for i in range(50):
     print(i, end='\r')
 
 # Expected average should be (0+1+2+...+size-1)/(size) = (size-1)/2
-print("Rank {}: Normal consensus result".format(bf.rank()),x[0,0])
+print("Rank {}: Normal consensus result".format(bf.rank()), x[0, 0])
 
 # Change to star topology with hasting rule, which should be unbiased as well.
 bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
@@ -42,7 +42,7 @@ for i in range(50):
     print(i, end='\r')
 
 # Expected average should be (0+1+2+...+size-1)/(size) = (size-1)/2
-print("Rank {}: consensus with weights".format(bf.rank()), x[0,0])
+print("Rank {}: consensus with weights".format(bf.rank()), x[0, 0])
 
 # Use win_accumulate to simulate the push-sum algorithm (sync).
 bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
@@ -50,32 +50,46 @@ outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
 # we append the p at the last of data.
-x = torch.Tensor([bf.rank()/(indegree+1)] * 100000 + [1.0/bf.size()/(indegree+1)])
+x = torch.Tensor([bf.rank()] * 3 + [1.0])
+x2 = torch.Tensor([bf.rank()] * 10000 + [1.0])
 
-# Remember we do not create buffer with 0.
-bf.win_create(x, name="x_buff")
-x = bf.win_sync_then_collect(name="x_buff")
+bf.win_create(x, name="x_buff", zero_init=True)
+bf.win_sync_then_collect(name="x_buff")
+bf.win_create(x2, name="x2_buff", zero_init=True)
 
 for i in range(100):
-    bf.win_accumulate(
+    handle1 = bf.win_accumulate_async(
         x, name="x_buff",
-        dst_weights={rank: 1.0 / (outdegree + 1) for rank in bf.out_neighbor_ranks()},
+        dst_weights={rank: 1.0 / (outdegree + 1)
+                     for rank in bf.out_neighbor_ranks()},
         require_mutex=True)
+    handle2 = bf.win_accumulate_async(
+        x2, name="x2_buff",
+        dst_weights={rank: 1.0 / (outdegree + 1)
+                     for rank in bf.out_neighbor_ranks()},
+        require_mutex=True)
+    bf.win_wait(handle1)
+    bf.win_wait(handle2)
+
     x.div_(1+outdegree)
-    x = bf.win_sync_then_collect(name="x_buff")
+    x2.div_(1+outdegree)
+
+    with bf.timeline_context(tensor_name="x_buff", activity_name="WIN_SYNC"):
+        bf.win_sync_then_collect(name="x_buff")
+    with bf.timeline_context(tensor_name="x2_buff", activity_name="WIN_SYNC"):
+        bf.win_sync_then_collect(name="x2_buff")
 
 bf.barrier()
 # Do not forget to sync at last!
 x = bf.win_sync_then_collect(name="x_buff")
 
-print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(bf.rank(), x[-1], x[0], x[0] / x[-1]))
+print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(
+    bf.rank(), x[-1], x[0], x[0] / x[-1]))
 
 sum_push_sum = bf.allreduce(x[0]/x[-1], average=False)
-if bf.rank() == 0:
-    print("Total Sum ", sum_push_sum)
+bfprint("Total Sum of x/p", sum_push_sum)
 
-p_push_sum = bf.allreduce(x[-1], average=False)
-if bf.rank() == 0:
-    print("Total Sum ", p_push_sum)
+p_push_sum = bf.allreduce(x[-1], average=True)
+bfprint("Total Sum of p", p_push_sum)
 
 bf.win_free(name="x_buff")
