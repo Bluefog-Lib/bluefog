@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import time
+import threading
 import unittest
 import warnings
 
@@ -82,6 +83,26 @@ class TimelineTests(unittest.TestCase):
         with open(file_name, 'r') as tf:
             timeline_text = tf.read()
             assert 'FAKE_ACTIVITY' in timeline_text, timeline_text
+
+    def test_timeline_multi_threads(self):
+        def f():
+            bf.timeline_start_activity("test_multi_thread", "THREAD")
+            time.sleep(0.1)
+            bf.timeline_end_activity("test_multi_thread")
+
+        t1 = threading.Thread(target=f)
+        t2 = threading.Thread(target=f)
+
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        file_name = f"{self.temp_file}{bf.rank()}.json"
+        with open(file_name, 'r') as tf:
+            timeline_text = tf.read()
+            assert '"tid": 1' in timeline_text, timeline_text
+            assert '"tid": 2' in timeline_text, timeline_text
 
     def test_timeline_push_sum(self):
         # Use win_accumulate to simulate the push-sum algorithm (sync).

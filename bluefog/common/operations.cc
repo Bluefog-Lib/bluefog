@@ -636,10 +636,10 @@ Status WindowMutexRelease(const std::vector<int>& release_ranks) {
 }
 
 Status GetBluefogTimeline(Timeline*& timeline) {
+  timeline = &(bluefog_global.timeline);
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  timeline = &(bluefog_global.timeline);
   if (!bluefog_global.timeline_enabled) {
     return Status::Aborted("timeline is not enabled.");
   }

@@ -23,9 +23,10 @@
 #include <memory>
 #include <thread>
 
+#include "../common/cuda_util.h"
 #include "../common/logging.h"
 #include "../common/operations.h"
-#include "../common/cuda_util.h"
+#include "../common/timeline.h"
 #include "adapter.h"
 #include "handle_manager.h"
 
@@ -39,7 +40,9 @@ using ::bluefog::common::with_device;
 using ::bluefog::common::EnqueueTensorWindowAccumulate;
 using ::bluefog::common::EnqueueTensorWindowGet;
 using ::bluefog::common::EnqueueTensorWindowPut;
+using ::bluefog::common::GetBluefogTimeline;
 using ::bluefog::common::Status;
+using ::bluefog::common::Timeline;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
@@ -309,6 +312,10 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     cpu_buffer = tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
   // internal_avg specifies the detailed flow for weighted reduction operation for the neighbors
   // which may lead to efficiency and precision difference.
   // but when internal_avg is false, the results are only correct when all weights are
@@ -336,6 +343,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     with_device device_guard(device);
     tensor.copy_(cpu_buffer);
   }
+  timeline_ptr->ActivityEnd(name);
 
   return 1;
 }
