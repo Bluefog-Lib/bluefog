@@ -26,13 +26,32 @@ Quick Start
 -----------
 
 First, make sure your environment has ``python>=3.7`` and `openmpi`_ >= 4.0.
-Then, install Bluefog with: ``pip install bluefog``. The following example
-illustrate how to use bluefog run a simple consensus algorithm.
+Then, install Bluefog with: ``pip install bluefog``.  We provide high-level wrapper for optimizer. 
+Probably, the only thing you need to modify
+the existing script is wrapping the optimizer with our ``DistributedBluefogOptimizer``,
+then run it through ``bfrun``. That is it!
 
 .. code-block:: python
 
    # Execute Python functions in parallel through
    # bfrun -np 4 python file.py
+
+   import torch 
+   import bluefog.torch as bf
+   ...
+   bf.init()
+   optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
+   optimizer = bf.DistributedBluefogOptimizer(
+      optimizer, named_parameters=model.named_parameters()
+   )
+   ...
+
+We also provide low-level functions, which you can use those as building
+blocks to construct your own distributed trainning algorithm. The following example
+illustrate how to use bluefog run a simple consensus algorithm.
+
+.. code-block:: python
+
    import torch
    import bluefog.torch as bf
 

@@ -175,11 +175,28 @@ If you are interested, you are more than welcome to join us and contribute this 
 <div class="section" id="quick-start">
 <h2>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this headline">¶</a></h2>
 <p>First, make sure your environment has <code class="docutils literal notranslate"><span class="pre">python&gt;=3.7</span></code> and <a class="reference external" href="https://www.open-mpi.org/">openmpi</a> &gt;= 4.0.
-Then, install Bluefog with: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">bluefog</span></code>. The following example
-illustrate how to use bluefog run a simple consensus algorithm.</p>
+Then, install Bluefog with: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">bluefog</span></code>.  We provide high-level wrapper for optimizer.
+Probably, the only thing you need to modify
+the existing script is wrapping the optimizer with our <code class="docutils literal notranslate"><span class="pre">DistributedBluefogOptimizer</span></code>,
+then run it through <code class="docutils literal notranslate"><span class="pre">bfrun</span></code>. That is it!</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Execute Python functions in parallel through</span>
 <span class="c1"># bfrun -np 4 python file.py</span>
+
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="o">...</span>
+<span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">lr</span> <span class="o">*</span> <span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedBluefogOptimizer</span><span class="p">(</span>
+   <span class="n">optimizer</span><span class="p">,</span> <span class="n">named_parameters</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="o">...</span>
+</pre></div>
+</div>
+<p>We also provide low-level functions, which you can use those as building
+blocks to construct your own distributed trainning algorithm. The following example
+illustrate how to use bluefog run a simple consensus algorithm.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
 
 <span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
