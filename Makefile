@@ -31,15 +31,11 @@ test_torch_ops:
 
 .PHONY: test_timeline
 test_timeline:
-ifeq (${MPICH_NOT_EXIST},)
 	${MPIRUN} ${PYTEST} ./test/timeline_test.py
-endif
 
 .PHONY: test_torch_win_ops
 test_torch_win_ops:
-ifeq (${MPICH_NOT_EXIST},)
 	${MPIRUN} ${PYTEST} ./test/torch_win_ops_test.py
-endif
 
 .PHONY: test_tensorflow_basic
 test_tensorflow_basic:

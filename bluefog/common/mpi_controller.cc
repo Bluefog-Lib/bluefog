@@ -465,7 +465,10 @@ Status MPIController::WinSync(const std::string& name, int device) {
   with_device device_guard(device);
   auto win_mananger = it->second;
   for (auto rank : neighbor_in_ranks_) {
-    MPI_Win_sync(*(win_mananger->GetWinByRank(rank)));
+    auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
+    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, rank_, MPI_MODE_NOCHECK, *mpi_win_ptr);
+    MPI_Win_sync(*mpi_win_ptr);
+    MPI_Win_unlock(rank_, *mpi_win_ptr);
   }
 
   return Status::OK();
