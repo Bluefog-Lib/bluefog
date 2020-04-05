@@ -26,6 +26,7 @@
 #include "../common/cuda_util.h"
 #include "../common/logging.h"
 #include "../common/operations.h"
+#include "../common/timeline.h"
 
 namespace bluefog {
 namespace torch {
@@ -36,7 +37,9 @@ using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::bluefog_rank;
 using ::bluefog::common::bluefog_size;
 using ::bluefog::common::with_device;
+using ::bluefog::common::GetBluefogTimeline;
 using ::bluefog::common::Status;
+using ::bluefog::common::Timeline;
 
 // static here means Local/private variable.
 static HandleManager handle_manager;
@@ -70,6 +73,11 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
 
   auto handle = handle_manager.AllocateHandle();
   auto device = GetDeviceID(tensor);
+  auto op_name = GetOpName("allreduce", name, handle);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(op_name, "ENQUEUE_ALLREDUCE");
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
@@ -99,7 +107,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto bf_output = std::make_shared<TorchTensor>(output);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_output, GetOpName("allreduce", name, handle), device,
+        bf_tensor, bf_output, op_name, device,
         [handle, average, output](const Status& status) mutable {
           // Will execute in the `device` context.
           if (average && bluefog_size() > 1) {
@@ -109,7 +117,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
         });
     ThrowIfError(enqueue_result);
   }
-
+  timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
   return handle;
 }
 
@@ -118,8 +126,13 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
-
   auto device = GetDeviceID(tensor);
+  auto op_name = GetOpName("broadcast", name, handle);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(op_name, "ENQUEUE_BROADCAST");
+
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   std::shared_ptr<common::Tensor> bf_output = nullptr;
 
@@ -129,8 +142,7 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
 
     auto enqueue_result = EnqueueTensorBroadcast(
-        bf_tensor, bf_tensor, root_rank, GetOpName("broadcast", name, handle),
-        device,
+        bf_tensor, bf_tensor, root_rank, op_name, device,
         [handle, output, cpu_buffer, device](const Status& status) mutable {
           with_device device_guard(device);
           output.copy_(cpu_buffer);
@@ -148,13 +160,13 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
     }
 
     auto enqueue_result = EnqueueTensorBroadcast(
-        bf_tensor, bf_output, root_rank, GetOpName("broadcast", name, handle),
+        bf_tensor, bf_output, root_rank, op_name,
         device, [handle](const Status& status) {
           handle_manager.MarkDone(handle, status);
         });
     ThrowIfError(enqueue_result);
   }
-
+  timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
   return handle;
 }
 
@@ -163,6 +175,11 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
 
   auto handle = handle_manager.AllocateHandle();
   auto device = GetDeviceID(tensor);
+  auto op_name = GetOpName("allgather", name, handle);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(op_name, "ENQUEUE_ALLGATHER");
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
@@ -173,7 +190,7 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
 
     auto enqueue_result = EnqueueTensorAllgather(
-        bf_tensor, bf_context, GetOpName("allgather", name, handle), device,
+        bf_tensor, bf_context, op_name, device,
         [handle, cpu_output, device, output](const Status& status) mutable {
           with_device device_guard(device);
           // output needs to be resized before copying in the CPU tensor.
@@ -188,13 +205,13 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
     // know the size of output in advance.
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto enqueue_result = EnqueueTensorAllgather(
-        bf_tensor, bf_context, GetOpName("allgather", name, handle), device,
+        bf_tensor, bf_context, op_name, device,
         [handle](const Status& status) {
           handle_manager.MarkDone(handle, status);
         });
     ThrowIfError(enqueue_result);
   }
-
+  timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
   return handle;
 }
 
@@ -204,6 +221,12 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 
   auto handle = handle_manager.AllocateHandle();
   auto device = GetDeviceID(tensor);
+  auto op_name = GetOpName("neighbor.allgather", name, handle);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(op_name, "ENQUEUE_NEIGHBOR_ALLGATHER");
+
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
@@ -213,8 +236,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
 
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, GetOpName("neighbor.allgather", name, handle),
-        device,
+        bf_tensor, bf_context, op_name, device,
         [handle, cpu_output, device, output](const Status& status) mutable {
           with_device device_guard(device);
           // output needs to be resized before copying in the CPU tensor.
@@ -229,12 +251,13 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     // we don't know the size of output in advance.
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, GetOpName("neighbor.allgather", name, handle),
+        bf_tensor, bf_context, op_name,
         device, [handle](const Status& status) {
           handle_manager.MarkDone(handle, status);
         });
     ThrowIfError(enqueue_result);
   }
+  timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
   return handle;
 }
 
@@ -244,6 +267,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
   auto handle = handle_manager.AllocateHandle();
   auto device = GetDeviceID(tensor);
+  auto op_name = GetOpName("neighbor.allreduce", name, handle);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(op_name, "ENQUEUE_NEIGHBOR_ALLREDUCE");
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
@@ -255,7 +283,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output,
-        GetOpName("neighbor.allreduce", name, handle), device,
+        op_name, device,
         [handle, average, cpu_output, tensor, output, device](const Status& status) mutable {
           with_device device_guard(device);
           output.resize_(cpu_output.sizes());
@@ -333,8 +361,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(tensor);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output,
-        GetOpName("neighbor.allreduce", name, handle), device,
+        bf_context, bf_tensor, bf_output, op_name, device,
         [handle, average, tensor, output](const Status& status) mutable {
           int first_dim = output.size(0) / bluefog_neighbor_size();
           std::vector<int64_t> shape_vector;
@@ -402,6 +429,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         });
     ThrowIfError(enqueue_result);
   }
+  timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
   return handle;
 }
 

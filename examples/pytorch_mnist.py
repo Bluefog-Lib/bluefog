@@ -179,7 +179,7 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.bluefog:
-    # optimizer = bf.DistributedOptimizer(
+    # optimizer = bf.DistributedAllreduceOptimizer(
     #     optimizer, named_parameters=model.named_parameters()
     # )
     if args.no_rma:

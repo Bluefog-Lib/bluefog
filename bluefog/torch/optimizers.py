@@ -434,7 +434,7 @@ def DistributedBluefogOptimizer(optimizer, named_parameters=None):
         ... )
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
-    # The goal is to override the `step()` method with an allreduce implementation.
+    # The goal is to override the `step()` method.
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
@@ -453,7 +453,7 @@ def DistributedConsensusOptimizer(optimizer, named_parameters=None):
                           allreduce operations. Typically just ``model.named_parameters()``
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
-    # The goal is to override the `step()` method with an allreduce implementation.
+    # The goal is to override the `step()` method with neighbor_allreduce implementation.
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
@@ -462,7 +462,7 @@ def DistributedConsensusOptimizer(optimizer, named_parameters=None):
     return cls(optimizer.param_groups, named_parameters)
 
 
-def DistributedOptimizer(optimizer, named_parameters=None):
+def DistributedAllreduceOptimizer(optimizer, named_parameters=None):
     """
     An optimizer that wraps another torch.optim.Optimizer.
 

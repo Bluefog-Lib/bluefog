@@ -23,7 +23,7 @@ import os
 import torch
 from bluefog.common.util import check_extension
 from bluefog.torch.optimizers import (
-    DistributedOptimizer, DistributedConsensusOptimizer, DistributedBluefogOptimizer)
+    DistributedAllreduceOptimizer, DistributedConsensusOptimizer, DistributedBluefogOptimizer)
 
 check_extension('bluefog.torch', __file__, 'mpi_lib')
 
@@ -110,7 +110,7 @@ def broadcast_optimizer_state(optimizer, root_rank):
         # forces allreduce on all model parameters, which will result in deadlock
         # unless every rank calls step(). Therefore, to finish state initialization
         # only call optimizer.step() with a torch.optim.Optimizer.
-        if optimizer.__module__ == DistributedOptimizer.__module__:
+        if optimizer.__module__ == DistributedAllreduceOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
         else:
             optimizer.step()

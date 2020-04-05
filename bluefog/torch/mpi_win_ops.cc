@@ -23,9 +23,10 @@
 #include <memory>
 #include <thread>
 
+#include "../common/cuda_util.h"
 #include "../common/logging.h"
 #include "../common/operations.h"
-#include "../common/cuda_util.h"
+#include "../common/timeline.h"
 #include "adapter.h"
 #include "handle_manager.h"
 
@@ -39,7 +40,9 @@ using ::bluefog::common::with_device;
 using ::bluefog::common::EnqueueTensorWindowAccumulate;
 using ::bluefog::common::EnqueueTensorWindowGet;
 using ::bluefog::common::EnqueueTensorWindowPut;
+using ::bluefog::common::GetBluefogTimeline;
 using ::bluefog::common::Status;
+using ::bluefog::common::Timeline;
 using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 
 // static here means Local/private variable.
@@ -65,7 +68,7 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
 
 bool WinTorchStorageManager::RegisterWinName(
     const std::string& name, const int device,
-    std::shared_ptr<TorchTensor> tensor) {
+    std::shared_ptr<TorchTensor> tensor, const bool zero_init) {
   if (tensors_map_.find(name) != tensors_map_.end()) {
     return false;
   }
@@ -77,6 +80,7 @@ bool WinTorchStorageManager::RegisterWinName(
   NeighborTable neighbor_tensors;
   for (int i = 0; i < in_neighbor_degree_; i++) {
     auto t = std::make_shared<TorchTensor>(tensor->MakeCopy(device));
+    if (zero_init) t->GetUnderlyingTensor().fill_(0.0);
     int source_rank = *(sources_ptr + i);
     neighbor_tensors[source_rank] = t;
   }
@@ -237,7 +241,8 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   return true;
 }
 
-int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
+int DoWinCreate(::torch::Tensor tensor, const std::string& name,
+                const bool zero_init) {
   ThrowIfError(common::CheckInitialized());
 
   auto device = GetDeviceID(tensor);
@@ -253,7 +258,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name) {
 
   std::vector<std::shared_ptr<common::Tensor>> bf_neighbor_tensors;
 
-  if (!win_storage_manager.RegisterWinName(name, device, bf_tensor)) return 0;
+  if (!win_storage_manager.RegisterWinName(name, device, bf_tensor, zero_init)) return 0;
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
     return 0;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
@@ -289,7 +294,11 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
               const std::unordered_map<int, float>& neighbor_weights,
               bool reset, bool internal_avg) {
   ThrowIfError(common::CheckInitialized());
-  
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
+
   // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
   if (reset && !neighbor_weights.empty()) common::WindowMutexAcquire(self_rank);
@@ -334,6 +343,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     with_device device_guard(device);
     tensor.copy_(cpu_buffer);
   }
+  timeline_ptr->ActivityEnd(name);  // WIN_SYNC_COMPUTE_AVERAGE
 
   return 1;
 }
@@ -368,6 +378,10 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
              const std::unordered_map<int, float>& dst_weights) {
   ThrowIfError(common::CheckInitialized());
 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_PUT");
+
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
 
@@ -388,6 +402,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
+  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
@@ -395,6 +410,10 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
                     const std::unordered_map<int, float>& dst_weights,
                     const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_PUT");
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
@@ -415,12 +434,17 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
+  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
 int DoWinGet(const std::string& name,
              const std::unordered_map<int, float>& src_weights) {
   ThrowIfError(common::CheckInitialized());
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_GET");
 
   auto handle = win_handle_manager.AllocateHandle();
   auto enqueue_result = EnqueueTensorWindowGet(
@@ -441,7 +465,7 @@ int DoWinGet(const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
-
+  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
