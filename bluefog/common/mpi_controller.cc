@@ -401,9 +401,7 @@ Status MPIController::WinCreate(
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
-  
-    timeline_ptr->ActivityStart(name, "WIN_CREATE");
-
+  timeline_ptr->ActivityStart(name, "WIN_CREATE");
   // We need to explicitly set the device here.
   with_device device_guard(device);
   // 1. Regist a Name and create a window first.
@@ -528,7 +526,6 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   
-  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
@@ -537,6 +534,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     if (target_rank == rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
+    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Put(sendbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
@@ -544,9 +542,9 @@ void MPIController::WinPut(TensorTableEntry& entry) {
       throw std::runtime_error("MPI_Put failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
+    timeline_ptr->ActivityEnd(entry.tensor_name);
   }
   BFLOG(TRACE, rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
-  timeline_ptr->ActivityEnd(entry.tensor_name);
 
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
@@ -570,7 +568,6 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
-  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
@@ -587,6 +584,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
 
+    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code =
         MPI_Accumulate(sendbuf, num_elements, data_type, target_rank,
@@ -597,11 +595,11 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
           "MPI_Accumulate failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
+    timeline_ptr->ActivityEnd(entry.tensor_name);
     if (entry.require_mutex) {
       WinMutexRelease(mutex_ranks);
     }
   }
-  timeline_ptr->ActivityEnd(entry.tensor_name);
   BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name
                       << " is done.";
 
@@ -620,6 +618,8 @@ void MPIController::WinGet(TensorTableEntry& entry) {
                              std::string(" in registered win object name."));
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
   int target_disp = 0;  // offset in win buffer
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
@@ -636,6 +636,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     BFLOG(DEBUG, rank_) << "MPI_Get for " << entry.tensor_name << " is to get "
                         << num_elements << " from " << target_rank;
 
+    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int ret_code = MPI_Get(recvbuf, num_elements, data_type, target_rank,
                            target_disp, num_elements, data_type, mpi_win);
@@ -643,6 +644,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
       throw std::runtime_error("MPI_Get failed, see MPI output for details.");
     }
     MPI_Win_unlock(target_rank, mpi_win);
+    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   }
 
   BFLOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";

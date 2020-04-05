@@ -54,7 +54,6 @@ x = torch.Tensor([bf.rank()] * 3 + [1.0])
 x2 = torch.Tensor([bf.rank()] * 10000 + [1.0])
 
 bf.win_create(x, name="x_buff", zero_init=True)
-bf.win_sync_then_collect(name="x_buff")
 bf.win_create(x2, name="x2_buff", zero_init=True)
 
 for i in range(100):
@@ -74,10 +73,8 @@ for i in range(100):
     x.div_(1+outdegree)
     x2.div_(1+outdegree)
 
-    with bf.timeline_context(tensor_name="x_buff", activity_name="WIN_SYNC"):
-        bf.win_sync_then_collect(name="x_buff")
-    with bf.timeline_context(tensor_name="x2_buff", activity_name="WIN_SYNC"):
-        bf.win_sync_then_collect(name="x2_buff")
+    bf.win_sync_then_collect(name="x_buff")
+    bf.win_sync_then_collect(name="x2_buff")
 
 bf.barrier()
 # Do not forget to sync at last!

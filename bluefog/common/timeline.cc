@@ -63,6 +63,7 @@ void TimelineWriter::DoWriteEvent(const TimelineRecord& r) {
   auto& thread_idx = tid_table_[r.tid];
   if (thread_idx == 0) {
     thread_idx = (int)tid_table_.size();
+    tid_table_[r.tid] = thread_idx;
   }
   if (tensor_idx == 0) {
     tensor_idx = (int)tensor_table_.size();

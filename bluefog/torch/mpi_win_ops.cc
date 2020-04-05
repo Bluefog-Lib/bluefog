@@ -294,7 +294,11 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
               const std::unordered_map<int, float>& neighbor_weights,
               bool reset, bool internal_avg) {
   ThrowIfError(common::CheckInitialized());
-  
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
+
   // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
   if (reset && !neighbor_weights.empty()) common::WindowMutexAcquire(self_rank);
@@ -312,10 +316,6 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     cpu_buffer = tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
-  Timeline* timeline_ptr;
-  Status timeline_status = GetBluefogTimeline(timeline_ptr);
-
-  timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
   // internal_avg specifies the detailed flow for weighted reduction operation for the neighbors
   // which may lead to efficiency and precision difference.
   // but when internal_avg is false, the results are only correct when all weights are
@@ -343,7 +343,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     with_device device_guard(device);
     tensor.copy_(cpu_buffer);
   }
-  timeline_ptr->ActivityEnd(name);
+  timeline_ptr->ActivityEnd(name);  // WIN_SYNC_COMPUTE_AVERAGE
 
   return 1;
 }
@@ -378,6 +378,10 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
              const std::unordered_map<int, float>& dst_weights) {
   ThrowIfError(common::CheckInitialized());
 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_PUT");
+
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
 
@@ -398,6 +402,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
+  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
@@ -405,6 +410,10 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
                     const std::unordered_map<int, float>& dst_weights,
                     const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_PUT");
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
@@ -425,12 +434,17 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
+  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
 int DoWinGet(const std::string& name,
              const std::unordered_map<int, float>& src_weights) {
   ThrowIfError(common::CheckInitialized());
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_GET");
 
   auto handle = win_handle_manager.AllocateHandle();
   auto enqueue_result = EnqueueTensorWindowGet(
@@ -451,7 +465,7 @@ int DoWinGet(const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
-
+  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
