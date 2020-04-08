@@ -410,15 +410,28 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 bf.timeline_start_activity(
                     name, activity_name="GRADIENT COMPT.")
         model.register_backward_hook(_timeline_hook)
+
+        def _timeline_forward_pre_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_start_activity(name, activity_name="FORWARD")
+
+        def _timeline_forward_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_end_activity(name)
+
+        model.register_forward_pre_hook(_timeline_forward_pre_hook)
+        model.register_forward_hook(_timeline_forward_hook)
         self._use_timeline = True
 
     def turn_off_timeline(self, model):
         assert isinstance(
             model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
 
-        def _timeline_hook(model, *unused):
+        def _empty_hook(model, *unused):
             pass
-        model.register_backward_hook(_timeline_hook)
+        model.register_backward_hook(_empty_hook)
+        model.register_forward_pre_hook(_empty_hook)
+        model.register_forward_hook(_empty_hook)
         self._use_timeline = False
 
     def step(self, closure=None):
