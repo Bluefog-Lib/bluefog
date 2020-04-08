@@ -119,6 +119,7 @@ optimization algorithm quickly and easily.
    :maxdepth: 2
    :caption: More Information
 
+   Bluefog Timeline <timeline>
    Bluefog WinOps Explanation <bluefog_winops>
    Codebase Structure <code_structure>
    Development Guide <devel_guide>

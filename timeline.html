@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>The Structure of Codebase &mdash; Bluefog 0.1 documentation</title>
+  <title>Bluefog Timeline &mdash; Bluefog 0.1 documentation</title>
   
 
   
@@ -36,8 +36,8 @@
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="BlueFog Development Guide" href="devel_guide.html" />
-    <link rel="prev" title="Bluefog WinOps Explanation" href="bluefog_winops.html" /> 
+    <link rel="next" title="Bluefog WinOps Explanation" href="bluefog_winops.html" />
+    <link rel="prev" title="Tensorflow Module (API Reference)" href="tensorflow_api.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -93,9 +93,9 @@
 </ul>
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_winops.html">Bluefog WinOps Explanation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
 <li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 </ul>
@@ -143,13 +143,13 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>The Structure of Codebase</li>
+      <li>Bluefog Timeline</li>
     
     
       <li class="wy-breadcrumbs-aside">
         
             
-            <a href="_sources/code_structure.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/timeline.rst.txt" rel="nofollow"> View page source</a>
           
         
       </li>
@@ -162,23 +162,15 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="the-structure-of-codebase">
-<h1>The Structure of Codebase<a class="headerlink" href="#the-structure-of-codebase" title="Permalink to this headline">¶</a></h1>
-<p>One the top level, the structure of this codebase looks like:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>├── bluefog
-├── docs
-├── examples
-├── <span class="nb">test</span>
-├── setup.py
-└── ...
+  <div class="section" id="bluefog-timeline">
+<h1>Bluefog Timeline<a class="headerlink" href="#bluefog-timeline" title="Permalink to this headline">¶</a></h1>
+<p>TODO(Kun)</p>
+<div class="math notranslate nohighlight">
+\[\frac{ \sum_{t=0}^{N}f(t,k) }{N}\]</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
 </pre></div>
 </div>
-<p>Main project code is under <code class="docutils literal notranslate"><span class="pre">bluefog</span></code> folder, <code class="docutils literal notranslate"><span class="pre">examples</span></code> folder
-contains the usage code for users, (served as e2e test as well) and
-<code class="docutils literal notranslate"><span class="pre">test</span></code> folder for test of course. <code class="docutils literal notranslate"><span class="pre">docs</span></code> folder contains the
-document including API, docker usagem, algorithm explaination, development etc.
-Overall, our repository shares a very similar organization like
-<a class="reference external" href="https://github.com/horovod/horovod">horovod</a> repository.</p>
 </div>
 
 
@@ -189,10 +181,10 @@ Overall, our repository shares a very similar organization like
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="devel_guide.html" class="btn btn-neutral float-right" title="BlueFog Development Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="bluefog_winops.html" class="btn btn-neutral float-right" title="Bluefog WinOps Explanation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="bluefog_winops.html" class="btn btn-neutral float-left" title="Bluefog WinOps Explanation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="tensorflow_api.html" class="btn btn-neutral float-left" title="Tensorflow Module (API Reference)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
