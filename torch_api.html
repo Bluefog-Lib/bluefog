@@ -202,7 +202,7 @@ allreduce operations. Typically just <code class="docutils literal notranslate">
 <dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>An consensus optimizer that wraps another torch.optim.Optimizer.</p>
+<dd><p>An distributed optimizer based on one-sided ops that wraps another torch.optim.Optimizer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
