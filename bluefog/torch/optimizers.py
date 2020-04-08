@@ -341,6 +341,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
+        self._use_timeline = False
         if bf.size() > 1:
             self._register_window()
             self._register_hooks()
@@ -366,6 +367,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         def hook(*ignore):
             assert not p.grad.requires_grad
             name = self._parameter_names.get(p)
+            if self._use_timeline:
+                bf.timeline_end_activity(name)
             handle = bf.win_put_async(tensor=p.data, name=name)
             self._handles[p] = handle
         return hook
@@ -398,6 +401,26 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._handles.clear()
         self._synchronized = True
 
+    def turn_on_timeline(self, model):
+        assert isinstance(
+            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
+
+        def _timeline_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_start_activity(
+                    name, activity_name="GRADIENT COMPT.")
+        model.register_backward_hook(_timeline_hook)
+        self._use_timeline = True
+
+    def turn_off_timeline(self, model):
+        assert isinstance(
+            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
+
+        def _timeline_hook(model, *unused):
+            pass
+        model.register_backward_hook(_timeline_hook)
+        self._use_timeline = False
+
     def step(self, closure=None):
         # some validation here?
         if self._should_synchronize:
@@ -415,9 +438,28 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
+def _MakeTimelineHook(model):
+    def hook(*unused):
+        for name, _ in model.named_parameters():
+            bf.timeline_start_activity(name, activity_name="GRADIENT COMPT.")
+    return hook
+    
+
+# def BluefogOptimizerTimeline(optimizer: torch.optim.Optimizer,
+#                      model: torch.nn.Module) -> torch.optim.Optimizer:
+#     """An distributed optimizer based on one-sided ops that wraps another torch.optim.Optimizer.
+#     """
+#     cls = type(
+#         optimizer.__class__.__name__,
+#         (optimizer.__class__,),
+#         dict(_DistributedBluefogOptimizer.__dict__),
+#     )
+#     model.re
+#     return cls(optimizer.param_groups, model.named_parameters)
+
+
 def DistributedBluefogOptimizer(optimizer, named_parameters=None):
-    """
-    An consensus optimizer that wraps another torch.optim.Optimizer.
+    """An distributed optimizer based on one-sided ops that wraps another torch.optim.Optimizer.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.

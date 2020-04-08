@@ -192,6 +192,9 @@ if args.bluefog:
         optimizer = bf.DistributedBluefogOptimizer(
             optimizer, named_parameters=model.named_parameters()
         )
+        if os.environ.get("BLUEFOG_TIMELINE"):
+            print("Timeline for optimizer is enabled")
+            optimizer.turn_on_timeline(model)
 else:
     optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
