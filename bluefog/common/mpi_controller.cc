@@ -575,6 +575,9 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     float weight = kv.second;
+    // avoid putting the tensor for itself (NOT valid).
+    if (target_rank == rank_) continue;
+
     if (entry.require_mutex) {
       mutex_ranks.clear();
       mutex_ranks.push_back(target_rank);
@@ -582,8 +585,6 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       WinMutexAcquire(mutex_ranks);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     };
-    // avoid putting the tensor for itself (NOT valid).
-    if (target_rank == rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
 
