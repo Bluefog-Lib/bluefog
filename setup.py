@@ -33,7 +33,7 @@ from setuptools.command.build_ext import build_ext as _build_ext
 
 # Package meta-data.
 NAME = "Bluefog"
-DESCRIPTION = ""
+DESCRIPTION = "A distributed training framework for diffusion/consensus-type algorithm."
 EMAIL = "bichengying@gmail.com"
 AUTHOR = "Bicheng Ying"
 REQUIRES_PYTHON = ">=3.7.0"
