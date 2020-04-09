@@ -32,7 +32,7 @@ from setuptools.command.build_ext import build_ext as _build_ext
 
 
 # Package meta-data.
-NAME = "bluefog"
+NAME = "Bluefog"
 DESCRIPTION = ""
 EMAIL = "bichengying@gmail.com"
 AUTHOR = "Bicheng Ying"
@@ -452,7 +452,7 @@ class custom_build_ext(_build_ext):
 
         if not any(built_plugins):
             raise DistutilsError(
-                'None of TensorFlow or PyTorch plugins were built. See errors above.')
+                'Neither PyTorch or TensorFlow plugins were built. See errors above.')
 
 
 setup(
@@ -465,13 +465,11 @@ setup(
     author=AUTHOR,
     author_email=EMAIL,
     python_requires=REQUIRES_PYTHON,
-    packages=find_packages(exclude=["test", "obselete"]),
+    packages=find_packages(exclude=["test", "examples"]),
     include_package_data=True,
     license=lic,
     classifiers=[
-        "License :: OSI Approved :: Apache Software License"
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
