@@ -1,7 +1,7 @@
 Bluefog Timeline
 ================
 
-TODO(Kun)
+TODO(Kun Yuan)
 
 .. math::
 
