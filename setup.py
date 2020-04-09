@@ -42,9 +42,6 @@ VERSION = "0.1.0"
 EXTRAS = {}
 
 
-with open('README.rst') as f:
-    readme = f.read()
-
 with open('LICENSE') as f:
     lic = f.read()
 
@@ -459,8 +456,11 @@ setup(
     name=NAME,
     version=VERSION,
     description=DESCRIPTION,
-    long_description=readme,
-    long_description_content_type="text/x-rst",
+    long_description=textwrap.dedent('''
+        Bluefog is a distributed training framework for PyTorch based on 
+        diffusion/consensus-type algorithm. The goal of Bluefog is to make 
+        distributed machine learning over graph fast, fault-tolerant, friendly
+        to heterogeneuous environment, and easy to use.'''),
     url='https://github.com/ybc1991/bluefog',
     author=AUTHOR,
     author_email=EMAIL,
