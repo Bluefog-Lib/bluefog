@@ -173,14 +173,25 @@ algorithm, indentify the bottleneck, and then improve it.</p>
 <p>The development of Bluefog timeline is based on the <a class="reference external" href="https://github.com/horovod/horovod/blob/master/docs/timeline.rst">Horovod timeline</a>. Similar to Horovod,
 Bluefog timeline clearly visualizes the start and end of all communication stages between
 agents such as <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>,
-<code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code> and many others. Some of these communication primitives are exclusive to Bluefog.</p>
+<code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code> and many others. Some of these communication primitives are exclusive
+to Bluefog.</p>
 <p>An enhanced feature of Bluefog timeline is it also visualizes the computation states of each
-agent such as <code class="docutils literal notranslate"><span class="pre">forward</span></code> and <code class="docutils literal notranslate"><span class="pre">backward</span> <span class="pre">propogation</span></code>. The visualization of both communication and
-computation will help a better understanding of your training algorithm. For example, Bluefog
-timeline will tell how your computation is in parallel with the communication.</p>
+agent such as <code class="docutils literal notranslate"><span class="pre">forward</span> <span class="pre">propogation</span></code> and <code class="docutils literal notranslate"><span class="pre">backward</span> <span class="pre">propogation</span></code>. The visualization of both
+communication and computation will help a better understanding of your training algorithm.
+For example, Bluefog timeline will tell how your computation is in parallel with the
+communication.</p>
 <div class="section" id="usage">
 <h2>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h2>
-<p>To be added</p>
+<p>To record a Bluefog timeline, set <code class="docutils literal notranslate"><span class="pre">--timeline-filename</span></code> command line argument to the
+location of the timeline file to be created. This will generate a timeline record file
+for each agent. For example, the following command</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ bfrun -np 4 --timeline-filename /path/to/timeline_filename python example.py
+</pre></div>
+</div>
+<p>will generate four timeline files: <code class="docutils literal notranslate"><span class="pre">timeline_filename0.json</span></code>, <code class="docutils literal notranslate"><span class="pre">timeline_filename1.json</span></code>,
+<code class="docutils literal notranslate"><span class="pre">timeline_filename2.json</span></code>, and <code class="docutils literal notranslate"><span class="pre">timeline_filename3.json</span></code>, and each json file is for
+a different agent. You can then load the timeline file into the
+<a class="reference external" href="chrome://tracing/">chrome://tracing</a> facility of the Chrome browser.</p>
 </div>
 <div class="section" id="an-example">
 <h2>An Example<a class="headerlink" href="#an-example" title="Permalink to this headline">¶</a></h2>
