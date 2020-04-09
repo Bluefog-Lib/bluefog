@@ -28,7 +28,8 @@ for each agent. For example, the following command ::
 will generate four timeline files: ``timeline_filename0.json``, ``timeline_filename1.json``, 
 ``timeline_filename2.json``, and ``timeline_filename3.json``, and each json file is for 
 a different agent. You can then load the timeline file into the 
-`chrome://tracing`_ facility of the Chrome browser.
+`chrome://tracing`_ facility of the Chrome browser. If the operation ``--timeline-filename``
+is not set, the timeline function will be deactivated by default.
 
 
 
