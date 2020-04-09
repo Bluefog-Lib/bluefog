@@ -25,7 +25,6 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
-        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -93,7 +92,11 @@
 </ul>
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Timeline</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Timeline</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#an-example">An Example</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_winops.html">Bluefog WinOps Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
 <li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
@@ -164,12 +167,23 @@
             
   <div class="section" id="bluefog-timeline">
 <h1>Bluefog Timeline<a class="headerlink" href="#bluefog-timeline" title="Permalink to this headline">¶</a></h1>
-<p>TODO(Kun Yuan)</p>
-<div class="math notranslate nohighlight">
-\[\frac{ \sum_{t=0}^{N}f(t,k) }{N}\]</div>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
-</pre></div>
+<p>Bluefog timeline is used to record all activities occurred during your distributed training
+process. With Bluefog timeline, you can understand the performance of your training
+algorithm, indentify the bottleneck, and then improve it.</p>
+<p>The development of Bluefog timeline is based on the <a class="reference external" href="https://github.com/horovod/horovod/blob/master/docs/timeline.rst">Horovod timeline</a>. Similar to Horovod,
+Bluefog timeline clearly visualizes the start and end of all communication stages between
+agents such as <cite>allreduce</cite>, <cite>broadcast</cite>, <cite>neighbor_allreduce</cite>, <cite>win_put</cite>, <cite>win_accumulate</cite>
+and many others. Some of these communication primitives are exclusive to Bluefog.</p>
+<p>An enhanced feature of Bluefog timeline is it also visualizes the computation states of each
+agent such as <cite>forward</cite> and <cite>backward propogation</cite>. The visualization of both communication and
+computation will help a better understanding of your training algorithm. For example, Bluefog
+timeline will tell how your computation is in parallel with the communication.</p>
+<div class="section" id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h2>
+<p>To be added</p>
+</div>
+<div class="section" id="an-example">
+<h2>An Example<a class="headerlink" href="#an-example" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
 

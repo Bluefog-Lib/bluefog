@@ -1,13 +1,25 @@
 Bluefog Timeline
 ================
 
-TODO(Kun Yuan)
+Bluefog timeline is used to record all activities occurred during your distributed training 
+process. With Bluefog timeline, you can understand the performance of your training 
+algorithm, indentify the bottleneck, and then improve it. 
 
-.. math::
+The development of Bluefog timeline is based on the `Horovod timeline`_. Similar to Horovod, 
+Bluefog timeline clearly visualizes the start and end of all communication stages between 
+agents such as `allreduce`, `broadcast`, `neighbor_allreduce`, `win_put`, `win_accumulate` 
+and many others. Some of these communication primitives are exclusive to Bluefog. 
 
-   \frac{ \sum_{t=0}^{N}f(t,k) }{N}
+An enhanced feature of Bluefog timeline is it also visualizes the computation states of each 
+agent such as `forward` and `backward propogation`. The visualization of both communication and
+computation will help a better understanding of your training algorithm. For example, Bluefog
+timeline will tell how your computation is in parallel with the communication.
 
-.. code-block:: python
+Usage
+--------------------------
+To be added
 
-   import torch
-   import bluefog.torch as bf
+An Example
+--------------------------
+
+.. _Horovod timeline:  https://github.com/horovod/horovod/blob/master/docs/timeline.rst
