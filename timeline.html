@@ -172,10 +172,10 @@ process. With Bluefog timeline, you can understand the performance of your train
 algorithm, indentify the bottleneck, and then improve it.</p>
 <p>The development of Bluefog timeline is based on the <a class="reference external" href="https://github.com/horovod/horovod/blob/master/docs/timeline.rst">Horovod timeline</a>. Similar to Horovod,
 Bluefog timeline clearly visualizes the start and end of all communication stages between
-agents such as <cite>allreduce</cite>, <cite>broadcast</cite>, <cite>neighbor_allreduce</cite>, <cite>win_put</cite>, <cite>win_accumulate</cite>
-and many others. Some of these communication primitives are exclusive to Bluefog.</p>
+agents such as <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>,
+<code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code> and many others. Some of these communication primitives are exclusive to Bluefog.</p>
 <p>An enhanced feature of Bluefog timeline is it also visualizes the computation states of each
-agent such as <cite>forward</cite> and <cite>backward propogation</cite>. The visualization of both communication and
+agent such as <code class="docutils literal notranslate"><span class="pre">forward</span></code> and <code class="docutils literal notranslate"><span class="pre">backward</span> <span class="pre">propogation</span></code>. The visualization of both communication and
 computation will help a better understanding of your training algorithm. For example, Bluefog
 timeline will tell how your computation is in parallel with the communication.</p>
 <div class="section" id="usage">
