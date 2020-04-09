@@ -470,7 +470,7 @@ setup(
     license=lic,
     classifiers=[
         "License :: OSI Approved :: Apache Software License",
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
     ext_modules=[bluefog_torch_mpi_lib, bluefog_tensorflow_mpi_lib],
