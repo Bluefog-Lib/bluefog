@@ -85,8 +85,10 @@ class Timeline {
   inline bool Initialized() const { return initialized_; }
 
   void ActivityStart(const std::string& tensor_name,
-                     const std::string& activity);
-  void ActivityEnd(const std::string& tensor_name);
+                     const std::string& activity,
+                     const std::thread::id* tid_ptr = nullptr);
+  void ActivityEnd(const std::string& tensor_name,
+                   const std::thread::id* tid_ptr = nullptr);
 
  private:
   long TimeSinceStartMicros() const;
