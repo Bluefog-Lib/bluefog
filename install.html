@@ -83,8 +83,9 @@
               <p class="caption"><span class="caption-text">INSTALLATION</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installing Bluefog</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#building-bluefog-from-pip-cpu">Building Bluefog from Pip (CPU)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-bluefog-from-pip-gpu">Building Bluefog from Pip (GPU)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installing-bluefog-from-pip-cpu">Installing Bluefog from Pip (CPU)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installing-bluefog-from-pip-gpu">Installing Bluefog from Pip (GPU)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installing-bluefog-from-github-directly">Installing Bluefog from Github Directly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#use-bluefog-through-docker">Use Bluefog through Docker</a></li>
 </ul>
 </li>
@@ -169,8 +170,8 @@
   <div class="section" id="installing-bluefog">
 <h1>Installing Bluefog<a class="headerlink" href="#installing-bluefog" title="Permalink to this headline">¶</a></h1>
 <p>Bluefog currently supports MacOS and Linux only.</p>
-<div class="section" id="building-bluefog-from-pip-cpu">
-<h2>Building Bluefog from Pip (CPU)<a class="headerlink" href="#building-bluefog-from-pip-cpu" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="installing-bluefog-from-pip-cpu">
+<h2>Installing Bluefog from Pip (CPU)<a class="headerlink" href="#installing-bluefog-from-pip-cpu" title="Permalink to this headline">¶</a></h2>
 <p>Installing from pip should be sufficient for most Bluefog users.
 However, our implementation highly independent on the MPI and other libraries. Please
 make sure that <code class="docutils literal notranslate"><span class="pre">python&gt;=3.7</span></code> and
@@ -184,8 +185,8 @@ After you think the environment is all set, just run following command to instal
 </pre></div>
 </div>
 </div>
-<div class="section" id="building-bluefog-from-pip-gpu">
-<h2>Building Bluefog from Pip (GPU)<a class="headerlink" href="#building-bluefog-from-pip-gpu" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="installing-bluefog-from-pip-gpu">
+<h2>Installing Bluefog from Pip (GPU)<a class="headerlink" href="#installing-bluefog-from-pip-gpu" title="Permalink to this headline">¶</a></h2>
 <p>All steps for GPU case are the same as CPU case except for the OpenMPI installation.
 In order to get full support of GPU, you have to install <cite>CUDA&gt;=10.0</cite>
 and install pytorch and/or tensorflow with the GPU support version.
@@ -198,6 +199,15 @@ after the download of OpenMPI:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./configure --prefix<span class="o">={</span>YOUR_OWN_PREFIX<span class="o">}</span> --with-cuda <span class="o">&amp;&amp;</span> <span class="se">\</span>
 make -j <span class="k">$(</span>nproc<span class="k">)</span> all <span class="o">&amp;&amp;</span> <span class="se">\</span>
 make install
+</pre></div>
+</div>
+</div>
+<div class="section" id="installing-bluefog-from-github-directly">
+<h2>Installing Bluefog from Github Directly<a class="headerlink" href="#installing-bluefog-from-github-directly" title="Permalink to this headline">¶</a></h2>
+<p>First, please check your environment as mentioned in above subsections. Then,
+clone or download the bluefog repository from <a class="reference external" href="https://github.com/ybc1991/bluefog">Github</a>. Last, just run the
+following command under the root folder of bluefog repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install .
 </pre></div>
 </div>
 </div>
