@@ -27,14 +27,14 @@ bf.init()
 # y = A@x + ns where ns is Gaussion noise
 torch.random.manual_seed(123417 * bf.rank())
 m, n = 10, 3
-A = torch.randn(m, n)
-x = torch.randn(n, 1)
-ns = 0.1*torch.randn(m, 1)
+A = torch.randn(m, n).to(torch.double)
+x = torch.randn(n, 1).to(torch.double)
+ns = 0.1*torch.randn(m, 1).to(torch.double)
 b = A.mm(x) + ns
 
 # Calculate the true solution with distributed gradient descent
 # x^{k+1} = x^k - alpha * \sum_i A_i.T(A_i x - b_i)
-x = torch.zeros(n, 1)
+x = torch.zeros(n, 1).to(torch.double)
 maxite = 2000
 alpha = 5e-2
 for i in range(maxite):
@@ -57,8 +57,10 @@ print("Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
 # psi^{k+1} = x^k - alpha * grad(x^k)
 # phi^{k+1} = psi^{k+1} + x^k - psi^{k}
 # x^{k+1} = neighbor_allreduce(phi^{k+1})
-x, phi = torch.zeros(n, 1), torch.zeros(n, 1)
-psi, psi_prev = torch.zeros(n, 1), torch.zeros(n, 1)
+x = torch.zeros(n, 1).to(torch.double)
+phi = x.clone()
+psi = x.clone()
+psi_prev = x.clone()
 alpha_ed = 5e-2  # step-size for exact diffusion
 for i in range(maxite):
     grad = A.T.mm(A.mm(x)-b)    # local gradient
