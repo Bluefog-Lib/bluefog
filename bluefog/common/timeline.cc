@@ -63,7 +63,6 @@ void TimelineWriter::DoWriteEvent(const TimelineRecord& r) {
   auto& thread_idx = tid_table_[r.tid];
   if (thread_idx == 0) {
     thread_idx = (int)tid_table_.size();
-    tid_table_[r.tid] = thread_idx;
   }
   if (tensor_idx == 0) {
     tensor_idx = (int)tensor_table_.size();
@@ -154,26 +153,38 @@ void Timeline::WriteEvent(const std::string& tensor_name, const char phase,
 }
 
 void Timeline::ActivityStart(const std::string& tensor_name,
-                             const std::string& activity) {
+                             const std::string& activity,
+                             const std::thread::id* tid_ptr) {
   if (!initialized_) {
     return;
   }
 
   std::lock_guard<std::recursive_mutex> guard(mutex_);
   assert(tensor_states_[tensor_name] == TimelineState::TOP_LEVEL);
-  auto tid = std::this_thread::get_id();
+  std::thread::id tid;
+  if (tid_ptr == nullptr) {
+    tid = std::this_thread::get_id();
+  } else {
+    tid = *tid_ptr;
+  }
   WriteEvent(tensor_name, 'B', tid, activity);
   tensor_states_[tensor_name] = TimelineState::ACTIVITY;
 }
 
-void Timeline::ActivityEnd(const std::string& tensor_name) {
+void Timeline::ActivityEnd(const std::string& tensor_name,
+                           const std::thread::id* tid_ptr) {
   if (!initialized_) {
     return;
   }
 
   std::lock_guard<std::recursive_mutex> guard(mutex_);
   assert(tensor_states_[tensor_name] == TimelineState::ACTIVITY);
-  auto tid = std::this_thread::get_id();
+  std::thread::id tid;
+  if (tid_ptr == nullptr) {
+    tid = std::this_thread::get_id();
+  } else {
+    tid = *tid_ptr;
+  }
   WriteEvent(tensor_name, 'E', tid);
   tensor_states_[tensor_name] = TimelineState::TOP_LEVEL;
 }

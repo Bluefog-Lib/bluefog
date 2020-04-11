@@ -396,13 +396,16 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
     bf_tensor = std::make_shared<TorchTensor>(tensor);
   }
 
+  // Note callback function will be called by different thread.
+  std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowPut(
-      bf_tensor, name, dst_weights, device, [handle](const Status& status) {
+      bf_tensor, name, dst_weights, device, 
+      [handle, name, timeline_ptr, tid](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
+        timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
       });
 
   ThrowIfError(enqueue_result);
-  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
@@ -413,7 +416,7 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_PUT");
+  timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_ACCUMULATE");
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
@@ -427,10 +430,13 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
     bf_tensor = std::make_shared<TorchTensor>(tensor);
   }
 
+  // Note callback function will be called by different thread.
+  std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle](const Status& status) {
+      [handle, name, timeline_ptr, tid](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
+        timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
       });
 
   ThrowIfError(enqueue_result);
@@ -447,9 +453,13 @@ int DoWinGet(const std::string& name,
   timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_GET");
 
   auto handle = win_handle_manager.AllocateHandle();
+
+  // Note callback function will be called by different thread.
+  std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowGet(
       name, src_weights,
-      [handle, name, src_weights](const Status& status) mutable {
+      [handle, name, src_weights, timeline_ptr,
+       tid](const Status& status) mutable {
         std::shared_ptr<TorchTensor> bf_neighbor_tensor;
         for (auto& kv : src_weights) {
           int rank = kv.first;
@@ -462,10 +472,10 @@ int DoWinGet(const std::string& name,
           bf_neighbor_tensor->GetUnderlyingTensor().mul_(weight);
         }
         win_handle_manager.MarkDone(handle, status);
+        timeline_ptr->ActivityEnd(name);  // ENQUEUE
       });
 
   ThrowIfError(enqueue_result);
-  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 

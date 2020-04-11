@@ -4,8 +4,8 @@ Installing Bluefog
 Bluefog currently supports MacOS and Linux only. 
 
 
-Building Bluefog from Pip (CPU)
----------------------------------------
+Installing Bluefog from Pip (CPU)
+--------------------------------
 Installing from pip should be sufficient for most Bluefog users.
 However, our implementation highly independent on the MPI and other libraries. Please
 make sure that ``python>=3.7`` and
@@ -20,7 +20,7 @@ After you think the environment is all set, just run following command to instal
 
     pip install bluefog
 
-Building Bluefog from Pip (GPU)
+Installing Bluefog from Pip (GPU)
 ---------------------------------------
 All steps for GPU case are the same as CPU case except for the OpenMPI installation.
 In order to get full support of GPU, you have to install `CUDA>=10.0` 
@@ -38,6 +38,15 @@ after the download of OpenMPI:
     make -j $(nproc) all && \
     make install
 
+Installing Bluefog from Github Directly
+-------------------------------------
+First, please check your environment as mentioned in above subsections. Then,
+clone or download the bluefog repository from `Github`_. Last, just run the
+following command under the root folder of bluefog repository:
+
+.. code-block:: bash
+
+    pip install .
 
 Use Bluefog through Docker
 --------------------------
@@ -46,3 +55,4 @@ To be added.
 .. _conda: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 .. _download link: https://www.open-mpi.org/software/ompi/v4.0/
 .. _instruction:  https://www.open-mpi.org/faq/?category=building#easy-build
+.. _Github: https://github.com/ybc1991/bluefog
