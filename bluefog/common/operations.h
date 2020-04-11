@@ -85,7 +85,8 @@ int bluefog_load_topology(int* indegree, int*& sources,
 
 // Load the weights for neighbors. 
 // TODO(ybc) Make it as C compatible interface.
-int bluefog_load_topology_weights(const std::unordered_map<int, float>*& neighbor_weights);
+int bluefog_load_topology_weights(float& self_weight, 
+                                  const std::unordered_map<int, float>*& neighbor_weights);
 
 
 // C interface to allow python to call timeline.

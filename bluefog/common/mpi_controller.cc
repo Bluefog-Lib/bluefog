@@ -259,7 +259,7 @@ int MPIController::SetTopologyWeights(int indegree, const int* sources,
   if (!mpi_ctx_.IsTopoSetup()) {
     return -1;
   }
-  neighbor_weights_[rank_] = weights[0];
+  self_weight_ = weights[0];
   for (int i = 0; i < indegree; i++) {
     neighbor_weights_[sources[i]] = weights[i + 1];
   }
@@ -277,10 +277,12 @@ int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
 }
 
 int MPIController::LoadTopologyWeights(
+    float& self_weight,
     const std::unordered_map<int, float>*& neighbor_weights) {
   if (!mpi_ctx_.IsWeighted()) {
     return 0;
   }
+  self_weight = self_weight_;
   neighbor_weights = &neighbor_weights_;
   return 1;
 }
