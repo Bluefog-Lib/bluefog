@@ -11,7 +11,7 @@ agents such as ``allreduce``, ``broadcast``, ``neighbor_allreduce``, ``win_put``
 ``win_accumulate`` and many others. Some of these communication primitives are exclusive 
 to Bluefog. 
 
-An enhanced feature of Bluefog timeline is it also visualizes the computation states of each 
+An enhanced feature of Bluefog timeline is to visualize the computation states of each 
 agent such as ``forward propogation`` and ``backward propogation``. The visualization of both 
 communication and computation will help a better understanding of your training algorithm. 
 For example, Bluefog timeline will tell how your computation is in parallel with the 
