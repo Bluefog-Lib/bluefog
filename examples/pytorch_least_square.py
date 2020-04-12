@@ -73,7 +73,7 @@ for i in range(maxite):
         mse.append(torch.norm(x - x_opt, p=2))
 
 # evaluate the convergence of exact diffuion least-squares
-# the norm of global gradient is expected to 0 (optimality condition)
+# the norm of global gradient is expected to be 0 (optimality condition)
 global_grad_norm = torch.norm(bf.allreduce(A.T.mm(A.mm(x) - b)), p=2)
 print("Rank {}: global gradient norm: {}".format(bf.rank(), global_grad_norm))
 
@@ -85,4 +85,36 @@ print("Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
 
 if bf.rank() == 0:
     plt.semilogy(mse)
+    plt.show()
+
+# Calculate the true solution with gradient tracking (GT for short):
+# Reference: https://arxiv.org/abs/1607.03218
+# x^{k+1} = neighbor_allreduce(x^k) - alpha*y^k
+# y^{k+1} = neighbor_allreduce(y^k) + grad(x^{k+1}) - grad(x^k)
+# where y^0 = grad(x^0)
+x = torch.zeros(n, 1).to(torch.double)
+y = A.T.mm(A.mm(x)-b)
+grad_prev = y.clone()
+alpha_gt = 5e-3  # step-size for GT (should be smaller than exact diffusion)
+mse_gt = []
+for i in range(maxite):
+    x = bf.neighbor_allreduce(x, name='local variable x') - alpha_gt * y
+    grad = A.T.mm(A.mm(x)-b)    # local gradient at x^{k+1}
+    y = bf.neighbor_allreduce(y, name='local variable y') + grad - grad_prev
+    grad_prev = grad
+    if bf.rank() == 0:
+        mse_gt.append(torch.norm(x - x_opt, p=2))
+
+# evaluate the convergence of gradient tracking for least-squares
+# the norm of global gradient is expected to be 0 (optimality condition)
+global_grad_norm = torch.norm(bf.allreduce(A.T.mm(A.mm(x) - b)), p=2)
+print("Rank {}: global gradient norm: {}".format(bf.rank(), global_grad_norm))
+
+# the norm of local gradient is expected not be be close to 0
+# this is because each rank converges to global solution, not local solution
+local_grad_norm = torch.norm(A.T.mm(A.mm(x) - b), p=2)
+print("Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+
+if bf.rank() == 0:
+    plt.semilogy(mse_gt)
     plt.show()
