@@ -1,1 +1,6 @@
-include README.md LICENSE
+recursive-include * *.h *.hpp *.cc *.md *.rst
+
+include README.rst LICENSE requirements.txt
+prune .eggs
+
+graft third_party/boost
