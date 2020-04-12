@@ -75,7 +75,7 @@ int bluefog_set_topology(int indegree, const int* sources,
 // Bluefog is not initialized or failed.
 int bluefog_set_topology_with_weights(int indegree, const int* sources,
                                       int outdegree, const int* destinations,
-                                      const float* source_weights);
+                                      float self_weight, const float* neighbor_weights);
 
 // C interface to load the virtual topology for MPI graph communicator.
 // Self-rank is never included no matter self-loop is presented in setup or not.

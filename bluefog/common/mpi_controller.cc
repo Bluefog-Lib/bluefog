@@ -252,16 +252,15 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
 }
 
 int MPIController::SetTopologyWeights(int indegree, const int* sources,
-                                      const float* weights) {
+                                      float self_weight, const float* neighbor_weights) {
   // We assume when this function is called, the base topology has already
-  // been set. The order of corresponding ranks of weights is always
-  //  [self-rank, ...sources]
+  // been set.
   if (!mpi_ctx_.IsTopoSetup()) {
     return -1;
   }
-  self_weight_ = weights[0];
+  self_weight_ = self_weight;
   for (int i = 0; i < indegree; i++) {
-    neighbor_weights_[sources[i]] = weights[i + 1];
+    neighbor_weights_[sources[i]] = neighbor_weights[i];
   }
   mpi_ctx_.EnableTopoWeights();
   return 1;
