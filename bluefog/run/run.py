@@ -23,7 +23,7 @@ import traceback
 
 import bluefog
 
-from bluefog.run.common.util import env as env_util
+from bluefog.run import env_util
 
 
 BLUEFOG_TIMELINE = 'BLUEFOG_TIMELINE'
