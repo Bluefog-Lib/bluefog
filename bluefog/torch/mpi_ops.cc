@@ -330,8 +330,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                 destinations_ptr);
 
-          const std::unordered_map<int, float>* weights_map_ptr;
-          int is_weighted = bluefog_load_topology_weights(weights_map_ptr);
+          float self_weight = 1.0;
+          const std::unordered_map<int, float>* neighbor_weights_ptr;
+          int is_weighted = bluefog_load_topology_weights(self_weight, neighbor_weights_ptr);
           // No matter the topology is weighted or not, if we do not need
           // average for the neighbor allreduce result, the weights will not be
           // used.
@@ -339,8 +340,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
               float weight = 0.0;
-              auto it = weights_map_ptr->find(*(sources_ptr + i));
-              if (it != weights_map_ptr->end()) {
+              auto it = neighbor_weights_ptr->find(*(sources_ptr + i));
+              if (it != neighbor_weights_ptr->end()) {
                 weight = it->second;
               }
 
@@ -353,7 +354,6 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
             }
             output.resize_(shape_vector);
-            float self_weight = weights_map_ptr->at(bluefog_rank());
             output.add_(tensor.mul_(self_weight));
           } else {
             auto output_reduced = output.slice(0, 0, first_dim);
@@ -406,8 +406,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                 destinations_ptr);
 
-          const std::unordered_map<int, float>* weights_map_ptr;
-          int is_weighted = bluefog_load_topology_weights(weights_map_ptr);
+          float self_weight = 1.0;
+          const std::unordered_map<int, float>* neighbor_weights_ptr;
+          int is_weighted = bluefog_load_topology_weights(self_weight, neighbor_weights_ptr);
           // No matter the topology is weighted or not, if we do not need
           // average for the neighbor allreduce result, the weights will not be
           // used.
@@ -415,8 +416,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
               float weight = 0.0;
-              auto it = weights_map_ptr->find(*(sources_ptr + i));
-              if (it != weights_map_ptr->end()) {
+              auto it = neighbor_weights_ptr->find(*(sources_ptr + i));
+              if (it != neighbor_weights_ptr->end()) {
                 weight = it->second;
               }
 
@@ -429,7 +430,6 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
             }
             output.resize_(shape_vector);
-            float self_weight = weights_map_ptr->at(bluefog_rank());
             output.add_(tensor.mul_(self_weight));
           } else {
             auto output_reduced = output.slice(0, 0, first_dim);

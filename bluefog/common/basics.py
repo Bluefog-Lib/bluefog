@@ -233,20 +233,20 @@ class BlueFogBasics(object):
                 indegree, sources_type(*sources),
                 outdegree, destinations_type(*destinations))
         else:
+            # Here the source_weights is a vector containing weights from source, i.e.,
+            # (in-)neighbors, converted from the neighbor_weights dictionary.
             self_weight, neighbor_weights = topology_util.GetWeights(topology, self.rank())
-            source_weights = [self_weight]
-            source_weights.extend([neighbor_weights[r] for r in sorted(neighbor_weights.keys())])
-            source_weights_type = ctypes.c_float * \
-                (indegree+1)  # +1 becuase of self-weights
-            self._MPI_LIB_CTYPES.bluefog_set_topology.argtypes = (
+            source_weights = [neighbor_weights[r] for r in sorted(neighbor_weights.keys())]
+            source_weights_type = ctypes.c_float * indegree
+            self._MPI_LIB_CTYPES.bluefog_set_topology_with_weights.argtypes = (
                 [ctypes.c_int, ctypes.POINTER(ctypes.c_int),
                  ctypes.c_int, ctypes.POINTER(ctypes.c_int),
-                 ctypes.POINTER(ctypes.c_float)]
+                 ctypes.c_float, ctypes.POINTER(ctypes.c_float)]
             )
             ret = self._MPI_LIB_CTYPES.bluefog_set_topology_with_weights(
                 indegree, sources_type(*sources),
                 outdegree, destinations_type(*destinations),
-                source_weights_type(*source_weights)
+                self_weight, source_weights_type(*source_weights)
             )
         if ret != 1:
             if self.local_rank() == 0:

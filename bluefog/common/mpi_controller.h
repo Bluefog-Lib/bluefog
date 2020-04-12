@@ -65,10 +65,12 @@ class MPIController {
 
   int SetTopology(int indegree, const int* sources, int outdegree,
                   const int* destinations);
-  int SetTopologyWeights(int indegree, const int* sources, const float* weights);
+  int SetTopologyWeights(int indegree, const int* sources,
+                         float self_weight, const float* neighbor_weights);
   int LoadTopology(int* indegree, int*& sources, int* outdegree,
                    int*& destinations);
-  int LoadTopologyWeights(const std::unordered_map<int, float>*& neighbor_weights_);
+  int LoadTopologyWeights(float& self_weight,
+                          const std::unordered_map<int, float>*& neighbor_weights);
 
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
@@ -124,6 +126,7 @@ class MPIController {
   // COMM_WORLD ranks of processes running on this node.
   std::vector<int> local_comm_ranks_;
 
+  float self_weight_;
   std::unordered_map<int, float> neighbor_weights_;
 };
 
