@@ -254,7 +254,7 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
 int MPIController::SetTopologyWeights(int indegree, const int* sources,
                                       float self_weight, const float* neighbor_weights) {
   // We assume when this function is called, the base topology has already
-  // been set.
+  // been set. Here the neighbor_weights specifies the weights from the sources.
   if (!mpi_ctx_.IsTopoSetup()) {
     return -1;
   }
