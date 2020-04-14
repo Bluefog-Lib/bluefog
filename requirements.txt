@@ -1,4 +1,4 @@
-networkx>=2.2
-pytest>=5.3
-tensorboardX>=1.9
-tqdm>=4.24
+networkx>=2.0
+pytest>=5.0
+tensorboardX>=1.5
+tqdm>=4.0
