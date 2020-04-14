@@ -423,7 +423,7 @@ class custom_build_ext(_build_ext):
                 built_plugins.append(True)
                 print('INFO: Tensorflow extension is built successfully.')
             except:  # pylint: disable=bare-except
-                if not os.environ.get('BLUEFOG_WITHOUT_TENSORFLOW'):
+                if not os.environ.get('BLUEFOG_WITH_TENSORFLOW'):
                     print(
                         'INFO: Unable to build TensorFlow plugin, will skip it.\n\n'
                         '%s' % traceback.format_exc(), file=sys.stderr)
@@ -438,7 +438,7 @@ class custom_build_ext(_build_ext):
                 built_plugins.append(True)
                 print('INFO: PyTorch extension is built successfully.')
             except:  # pylint: disable=bare-except
-                if not os.environ.get('BLUEFOG_WITHOUT_PYTORCH'):
+                if not os.environ.get('BLUEFOG_WITH_TENSORFLOW'):
                     print('INFO: Unable to build PyTorch plugin, will skip it.\n\n'
                           '%s' % traceback.format_exc())
                     built_plugins.append(False)
