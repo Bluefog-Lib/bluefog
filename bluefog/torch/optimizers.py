@@ -456,19 +456,6 @@ def _MakeTimelineHook(model):
         for name, _ in model.named_parameters():
             bf.timeline_start_activity(name, activity_name="GRADIENT COMPT.")
     return hook
-    
-
-# def BluefogOptimizerTimeline(optimizer: torch.optim.Optimizer,
-#                      model: torch.nn.Module) -> torch.optim.Optimizer:
-#     """An distributed optimizer based on one-sided ops that wraps another torch.optim.Optimizer.
-#     """
-#     cls = type(
-#         optimizer.__class__.__name__,
-#         (optimizer.__class__,),
-#         dict(_DistributedBluefogOptimizer.__dict__),
-#     )
-#     model.re
-#     return cls(optimizer.param_groups, model.named_parameters)
 
 
 def DistributedBluefogOptimizer(optimizer, named_parameters=None):

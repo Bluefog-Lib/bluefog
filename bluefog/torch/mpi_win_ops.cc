@@ -49,8 +49,8 @@ using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
-static const char* BLUEFOG_WIN_ON_CPU = std::getenv("BLUEFOG_WIN_ON_CPU");
-static const bool WIN_ON_CPU = (BLUEFOG_WIN_ON_CPU != nullptr) && (*BLUEFOG_WIN_ON_CPU == '1');
+static const char* BLUEFOG_WIN_ON_GPU = std::getenv("BLUEFOG_WIN_ON_GPU");
+static const bool WIN_ON_CPU = ~((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
 
 // A map store {name -> gpu_tensor}. Used only when BLUEFOG_WIN_ON_CPU is turned on.
 static std::unordered_map<std::string, ::torch::Tensor> win_gpu_tensor_map;
