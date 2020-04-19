@@ -168,7 +168,7 @@
            <div itemprop="articleBody">
             
   <div class="section" id="installing-bluefog">
-<h1>Installing Bluefog<a class="headerlink" href="#installing-bluefog" title="Permalink to this headline">¶</a></h1>
+<span id="install-bluefog"></span><h1>Installing Bluefog<a class="headerlink" href="#installing-bluefog" title="Permalink to this headline">¶</a></h1>
 <p>Bluefog currently supports MacOS and Linux only.</p>
 <div class="section" id="installing-bluefog-from-pip-cpu">
 <h2>Installing Bluefog from Pip (CPU)<a class="headerlink" href="#installing-bluefog-from-pip-cpu" title="Permalink to this headline">¶</a></h2>
@@ -181,8 +181,15 @@ Most dependent python package should be automatically installed through the pip.
 Lastly, we relied on the MPI implementation, please install
 <cite>open-mpi&gt;=4.0</cite> <a class="reference external" href="https://www.open-mpi.org/software/ompi/v4.0/">download link</a> and <a class="reference external" href="https://www.open-mpi.org/faq/?category=building#easy-build">instruction</a> for CPU usage.
 After you think the environment is all set, just run following command to install Bluefog:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install bluefog
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install --no-cache-dir bluefog
 </pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">--no-cache-dir</span></code> is not present, you may receive the error information like
+<code class="docutils literal notranslate"><span class="pre">Failed</span> <span class="pre">building</span> <span class="pre">wheel</span> <span class="pre">for</span> <span class="pre">bluefog</span></code>, which won’t fail the installation though.
+The reason is Bluefog is a library with C-extention,
+which needs to be built on your system. Check this <a class="reference external" href="https://stackoverflow.com/questions/53204916/what-is-the-meaning-of-failed-building-wheel-for-x-in-pip-install">stack overflow</a> answer if you are interested.</p>
 </div>
 </div>
 <div class="section" id="installing-bluefog-from-pip-gpu">

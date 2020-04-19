@@ -176,7 +176,9 @@ If you are interested, you are more than welcome to join us and contribute this 
 <div class="section" id="quick-start">
 <h2>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this headline">¶</a></h2>
 <p>First, make sure your environment has <code class="docutils literal notranslate"><span class="pre">python&gt;=3.7</span></code> and <a class="reference external" href="https://www.open-mpi.org/">openmpi</a> &gt;= 4.0.
-Then, install Bluefog with: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">bluefog</span></code>.  We provide high-level wrapper for optimizer.
+Then, install Bluefog with: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--no-cache-dir</span> <span class="pre">bluefog</span></code>.  Check
+our <a class="reference internal" href="install.html#install-bluefog"><span class="std std-ref">Installing Bluefog</span></a> page if you need more information or other install options.
+We provide high-level wrapper for optimizer.
 Probably, the only thing you need to modify
 the existing script is wrapping the optimizer with our <code class="docutils literal notranslate"><span class="pre">DistributedBluefogOptimizer</span></code>,
 then run it through <code class="docutils literal notranslate"><span class="pre">bfrun</span></code>. That is it!</p>

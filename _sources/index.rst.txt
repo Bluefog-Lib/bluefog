@@ -26,7 +26,9 @@ Quick Start
 -----------
 
 First, make sure your environment has ``python>=3.7`` and `openmpi`_ >= 4.0.
-Then, install Bluefog with: ``pip install bluefog``.  We provide high-level wrapper for optimizer. 
+Then, install Bluefog with: ``pip install --no-cache-dir bluefog``.  Check
+our :ref:`install_bluefog` page if you need more information or other install options.
+We provide high-level wrapper for optimizer. 
 Probably, the only thing you need to modify
 the existing script is wrapping the optimizer with our ``DistributedBluefogOptimizer``,
 then run it through ``bfrun``. That is it!
