@@ -99,45 +99,7 @@ recommended to have an editor to run ``pylint`` easily (But do not turn
 on format-on-save.) Otherwise, remember to run ``pylint {FILENANE}`` on
 your changes.
 
-For C++, we use ``clang-tidy``? I am not very familiar with C++ format.
-Right now, we have a simple ``.clang-format`` file. I just use vscode
-``clang-format`` plugin.
-
-
-6. FAQ for Mac users:
----------------------
-
-1. If my default python version is 2, how to set the default python
-   version to 3?
-
-**Answer**: alias python=python3
-
-2. If my pytorch is not well installed, how to reinstall pytorch?
-
-**Answer**: Uninstall torch: pip uninstall torch
-
-Install torch: pip3 install torch torchvision
-
-3. I got the following error when executing “BLUEFOG_LOG_LEVEL=debug
-   mpirun -n 2 python bluefog/torch/c_hello_world.py”. How to address
-   this issue? Error: File “bluefog/torch/c_hello_world.py”, line 36
-   print(f“Rank: {rank}, local rank: {local_rank} Size: {size}, local
-   size: {local_size}”) ^ SyntaxError: invalid syntax
-
-**Answer**: you should precise python3 using the following command:
-BLUEFOG_LOG_LEVEL=debug mpirun -n 2 python3
-bluefog/torch/c_hello_world.py
-
-4. If I get the following error when executing “make test” command, how
-   to address this issue? Error: Test error: There are not enough slots
-   available in the system to satisfy the 4
-
-**Answer**: Reason: there are not enough physical CPU cores (the test
-requires 4) in your machine. In order to address this issue, you should
-first use “sysctl hw.physicalcpu hw.logicalcpu” command to know the
-number of physical CPU cores. Assume that you have 2 physical CPU cores
-in your machine, you need to modify 4 in python/Makefile to 2. Then, the
-issue is resolved.
+For C++, we use ``clang-tidy``. We follow the google style for C++ as well.
 
 
 .. _conda: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html

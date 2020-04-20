@@ -12,20 +12,21 @@ The communication ops that bluefog supported can be catogorized into three types
 
 1. Collective Ops: ``broadcast``, ``allreduce``, ``allgather``.
 2. Neighbor Colletive Ops: ``neighbor_allreduce``, ``neighbor_allgather``.
-3. One-sided Communication Ops: ``win_create``, ``win_free``, ``win_sync``, ``win_put``, ``win_get``, ``win_accumulate``.
+3. One-sided Communication Ops: ``win_create``, ``win_free``, ``win_put``, ``win_get``, ``win_accumulate``, ``win_sync``, ``win_sync_then_collect``.
 
 We use figure to illustrate all those ops with 
 similar style as in `MPI tutorials blog`_. 
 In the figure, we use *circle* to represent one process, which is exchangeablely called node,
 agent, host, etc. under some circumstance, and use *square* to represent the data or tensor. 
 The number inside of circle is the rank of that process and th number inside of square is the value of data.
+If you need more background information about MPI, we recommend this nice `tutorial`_.
 
 
 Collective Ops
 --------------
 These three ``broadcast``, ``allreduce``, ``allgather`` ops are most basic collective MPI ops.
 The bluefog implementation is almost exactly the same as the MPI definition. One small difference
-is allreduce only support average and summation since we focused on the numerical calculation only.
+is allreduce only support average and summation since bluefog focused on the numerical calculation only.
 
 allgather
 #########
@@ -77,11 +78,21 @@ neighbor_allreduce
 
 One-sided Communication Ops
 ---------------------------
-
-To be added.
+One-sided communication ops is introduced after MPI-2. The most notable feature of 
+one-sided communication is indicated by the name that allow the communication ops of 
+one process to be detached from the behavior of another process. Bluefog heavily relied
+on this feature to build the asynchronous algorithm. Except the win_create and win_free is
+the collective ops, all rest ops only need be called by one process. `Here`_ is a nice introduction
+for the MPI one-sided ops. As mentioned before, please note the usage and definition of Bluefog
+is slightly different.
 
 win_create
 ##########
+Win create is always the first step to start use the one-sided communication. After this call,
+each process will allocate the number of incoming neighbor's window as buffer, which is illustrated
+in the figure as red square. Each buffer is dedicated to one neighbor. You don't need to know
+which one is dedicated to which neighbor because these buffer is invisible to the python frontend.
+
 .. image:: _static/bf_win_create.png
     :alt: BluefogWinCreateExplanation
     :width: 650
@@ -92,28 +103,58 @@ win_free
     :alt: BluefogWinFreeExplanation
     :width: 650
 
+.. Note::
+    In the following figures, we only show the behavior of win_put/get/accumulate/sync to all neighbors
+    with no weights. Actually, you are allowed to customize which neighbor to send/receive and 
+    assign any weight on tensor. Please check our API doc to see how to use it.
+
 win_put
 #######
+Win_put is one of three main method to exchange the information between process in window.
+By default, it will *put* its own tensor value into all *outgoing* neighbor's buffer.
+Note it doesn't need the receiver to do anything.
+
 .. image:: _static/bf_win_put.png
     :alt: BluefogWinPutExplanation
     :width: 650
 
 win_get
 #######
+Win_get is one of three main method to exchange the information between process in window.
+By default, it will *get* (fetch) the *incoming* neighbor's local value into the its own buffer.
+Note it doesn't need the sender to do anything.
+
 .. image:: _static/bf_win_get.png
     :alt: BluefogWinGetExplanation
     :width: 650
 
 win_accumulate
 ##############
+Win_accumulate is one of three main method to exchange the information between process in window.
+By default, it will *accumulate* its own tensor value into all *outgoing* neighbor's buffer, i.e. sum up.
+Note it doesn't need the receiver to do anything.
+
 .. image:: _static/bf_win_accum.png
     :alt: BluefogWinAccumExplanation
     :width: 650
 
 win_sync
 ########
+Win_sync is the bridge to connected the value of buffer corresponding to the neighbor value
+and the local value. It has two functionalities. One is to update the buffer to make sure the
+neighbor value, which may be changed through win_put, win_get, and/or win_accumulate, is synchronized
+and visible to local memory. Another is it will update the local value to the average of self and neighbor's.
+
 .. image:: _static/bf_win_sync.png
     :alt: BluefogWinSyncExplanation
     :width: 650
 
-..  _MPI tutorials blog: https://mpitutorial.com/tutorials/
+win_sync_then_collect
+#####################
+.. image:: _static/bf_win_sync_collect.png
+    :alt: BluefogWinSyncThenCollectExplanation
+    :width: 675
+
+.. _MPI tutorials blog: https://mpitutorial.com/tutorials/
+.. _tutorial: https://computing.llnl.gov/tutorials/mpi/
+.. _Here: https://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-onesided.html

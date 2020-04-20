@@ -112,6 +112,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#win-get">win_get</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#win-accumulate">win_accumulate</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#win-sync">win_sync</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-sync-then-collect">win_sync_then_collect</a></li>
 </ul>
 </li>
 </ul>
@@ -193,18 +194,19 @@ is highly associated with the virtual topology of network.</p>
 <ol class="arabic simple">
 <li><p>Collective Ops: <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">allgather</span></code>.</p></li>
 <li><p>Neighbor Colletive Ops: <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_allgather</span></code>.</p></li>
-<li><p>One-sided Communication Ops: <code class="docutils literal notranslate"><span class="pre">win_create</span></code>, <code class="docutils literal notranslate"><span class="pre">win_free</span></code>, <code class="docutils literal notranslate"><span class="pre">win_sync</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>, <code class="docutils literal notranslate"><span class="pre">win_get</span></code>, <code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code>.</p></li>
+<li><p>One-sided Communication Ops: <code class="docutils literal notranslate"><span class="pre">win_create</span></code>, <code class="docutils literal notranslate"><span class="pre">win_free</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>, <code class="docutils literal notranslate"><span class="pre">win_get</span></code>, <code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code>, <code class="docutils literal notranslate"><span class="pre">win_sync</span></code>, <code class="docutils literal notranslate"><span class="pre">win_sync_then_collect</span></code>.</p></li>
 </ol>
 <p>We use figure to illustrate all those ops with
 similar style as in <a class="reference external" href="https://mpitutorial.com/tutorials/">MPI tutorials blog</a>.
 In the figure, we use <em>circle</em> to represent one process, which is exchangeablely called node,
 agent, host, etc. under some circumstance, and use <em>square</em> to represent the data or tensor.
-The number inside of circle is the rank of that process and th number inside of square is the value of data.</p>
+The number inside of circle is the rank of that process and th number inside of square is the value of data.
+If you need more background information about MPI, we recommend this nice <a class="reference external" href="https://computing.llnl.gov/tutorials/mpi/">tutorial</a>.</p>
 <div class="section" id="collective-ops">
 <h2>Collective Ops<a class="headerlink" href="#collective-ops" title="Permalink to this headline">¶</a></h2>
 <p>These three <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">allgather</span></code> ops are most basic collective MPI ops.
 The bluefog implementation is almost exactly the same as the MPI definition. One small difference
-is allreduce only support average and summation since we focused on the numerical calculation only.</p>
+is allreduce only support average and summation since bluefog focused on the numerical calculation only.</p>
 <div class="section" id="allgather">
 <h3>allgather<a class="headerlink" href="#allgather" title="Permalink to this headline">¶</a></h3>
 <a class="reference internal image-reference" href="_images/bf_allgather.png"><img alt="BluefogAllgatherExplanation" src="_images/bf_allgather.png" style="width: 350px;" /></a>
@@ -241,30 +243,63 @@ API allows for any weights for incoming edges. Check out API doc to see how to u
 </div>
 <div class="section" id="one-sided-communication-ops">
 <h2>One-sided Communication Ops<a class="headerlink" href="#one-sided-communication-ops" title="Permalink to this headline">¶</a></h2>
-<p>To be added.</p>
+<p>One-sided communication ops is introduced after MPI-2. The most notable feature of
+one-sided communication is indicated by the name that allow the communication ops of
+one process to be detached from the behavior of another process. Bluefog heavily relied
+on this feature to build the asynchronous algorithm. Except the win_create and win_free is
+the collective ops, all rest ops only need be called by one process. <a class="reference external" href="https://pages.tacc.utexas.edu/~eijkhout/pcse/html/mpi-onesided.html">Here</a> is a nice introduction
+for the MPI one-sided ops. As mentioned before, please note the usage and definition of Bluefog
+is slightly different.</p>
 <div class="section" id="win-create">
 <h3>win_create<a class="headerlink" href="#win-create" title="Permalink to this headline">¶</a></h3>
+<p>Win create is always the first step to start use the one-sided communication. After this call,
+each process will allocate the number of incoming neighbor’s window as buffer, which is illustrated
+in the figure as red square. Each buffer is dedicated to one neighbor. You don’t need to know
+which one is dedicated to which neighbor because these buffer is invisible to the python frontend.</p>
 <a class="reference internal image-reference" href="_images/bf_win_create.png"><img alt="BluefogWinCreateExplanation" src="_images/bf_win_create.png" style="width: 650px;" /></a>
 </div>
 <div class="section" id="win-free">
 <h3>win_free<a class="headerlink" href="#win-free" title="Permalink to this headline">¶</a></h3>
 <a class="reference internal image-reference" href="_images/bf_win_free.png"><img alt="BluefogWinFreeExplanation" src="_images/bf_win_free.png" style="width: 650px;" /></a>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In the following figures, we only show the behavior of win_put/get/accumulate/sync to all neighbors
+with no weights. Actually, you are allowed to customize which neighbor to send/receive and
+assign any weight on tensor. Please check our API doc to see how to use it.</p>
+</div>
 </div>
 <div class="section" id="win-put">
 <h3>win_put<a class="headerlink" href="#win-put" title="Permalink to this headline">¶</a></h3>
+<p>Win_put is one of three main method to exchange the information between process in window.
+By default, it will <em>put</em> its own tensor value into all <em>outgoing</em> neighbor’s buffer.
+Note it doesn’t need the receiver to do anything.</p>
 <a class="reference internal image-reference" href="_images/bf_win_put.png"><img alt="BluefogWinPutExplanation" src="_images/bf_win_put.png" style="width: 650px;" /></a>
 </div>
 <div class="section" id="win-get">
 <h3>win_get<a class="headerlink" href="#win-get" title="Permalink to this headline">¶</a></h3>
+<p>Win_get is one of three main method to exchange the information between process in window.
+By default, it will <em>get</em> (fetch) the <em>incoming</em> neighbor’s local value into the its own buffer.
+Note it doesn’t need the sender to do anything.</p>
 <a class="reference internal image-reference" href="_images/bf_win_get.png"><img alt="BluefogWinGetExplanation" src="_images/bf_win_get.png" style="width: 650px;" /></a>
 </div>
 <div class="section" id="win-accumulate">
 <h3>win_accumulate<a class="headerlink" href="#win-accumulate" title="Permalink to this headline">¶</a></h3>
+<p>Win_accumulate is one of three main method to exchange the information between process in window.
+By default, it will <em>accumulate</em> its own tensor value into all <em>outgoing</em> neighbor’s buffer, i.e. sum up.
+Note it doesn’t need the receiver to do anything.</p>
 <a class="reference internal image-reference" href="_images/bf_win_accum.png"><img alt="BluefogWinAccumExplanation" src="_images/bf_win_accum.png" style="width: 650px;" /></a>
 </div>
 <div class="section" id="win-sync">
 <h3>win_sync<a class="headerlink" href="#win-sync" title="Permalink to this headline">¶</a></h3>
+<p>Win_sync is the bridge to connected the value of buffer corresponding to the neighbor value
+and the local value. It has two functionalities. One is to update the buffer to make sure the
+neighbor value, which may be changed through win_put, win_get, and/or win_accumulate, is synchronized
+and visible to local memory. Another is it will update the local value to the average of self and neighbor’s.</p>
 <a class="reference internal image-reference" href="_images/bf_win_sync.png"><img alt="BluefogWinSyncExplanation" src="_images/bf_win_sync.png" style="width: 650px;" /></a>
+</div>
+<div class="section" id="win-sync-then-collect">
+<h3>win_sync_then_collect<a class="headerlink" href="#win-sync-then-collect" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_sync_collect.png"><img alt="BluefogWinSyncThenCollectExplanation" src="_images/bf_win_sync_collect.png" style="width: 675px;" /></a>
 </div>
 </div>
 </div>
