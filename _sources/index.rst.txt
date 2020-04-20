@@ -100,7 +100,9 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
 
 Please explore our `examples`_ folder to see more examples about
 how to use bluefoge implemented deep learning trainning and distributed
-optimization algorithm quickly and easily.
+optimization algorithm quickly and easily. If you want to understand more on
+how to use the low-level API as the building blocks for your own distributed
+algorithm, please read our :ref:`Ops Explanation` page.
 
 .. toctree::
    :maxdepth: 1
@@ -122,7 +124,7 @@ optimization algorithm quickly and easily.
    :caption: More Information
 
    Bluefog Timeline <timeline>
-   Bluefog WinOps Explanation <bluefog_winops>
+   Bluefog Ops Explanation <bluefog_ops>
    Codebase Structure <code_structure>
    Development Guide <devel_guide>
    Spectrum of Machine Learning Algorithm<alg_spectrum>

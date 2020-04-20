@@ -1,0 +1,321 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Bluefog Operations Explanation &mdash; Bluefog 0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="The Structure of Codebase" href="code_structure.html" />
+    <link rel="prev" title="Bluefog Timeline" href="timeline.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> Bluefog
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">INSTALLATION</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installing Bluefog</a></li>
+</ul>
+<p class="caption"><span class="caption-text">API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="common_api.html">Bluefog Common API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorflow_api.html">Bluefog Tensorflow API</a></li>
+</ul>
+<p class="caption"><span class="caption-text">More Information</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Ops Explanation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#collective-ops">Collective Ops</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#allgather">allgather</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#allreduce">allreduce</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#broadcast">broadcast</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#neighbor-colletive-ops">Neighbor Colletive Ops</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#neighbor-allgather">neighbor_allgather</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#neighbor-allreduce">neighbor_allreduce</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#one-sided-communication-ops">One-sided Communication Ops</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#win-create">win_create</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-free">win_free</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-put">win_put</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-get">win_get</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-accumulate">win_accumulate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-sync">win_sync</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Bluefog</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Bluefog Operations Explanation</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/bluefog_ops.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="bluefog-operations-explanation">
+<span id="ops-explanation"></span><h1>Bluefog Operations Explanation<a class="headerlink" href="#bluefog-operations-explanation" title="Permalink to this headline">¶</a></h1>
+<p>The implementation of bluefog operations is built upon the MPI API.
+The naming of communication operations are all derived from MPI. However,
+our usage and definition is slightly different from the MPI since our focus
+is highly associated with the virtual topology of network.</p>
+<p>The communication ops that bluefog supported can be catogorized into three types:</p>
+<ol class="arabic simple">
+<li><p>Collective Ops: <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">allgather</span></code>.</p></li>
+<li><p>Neighbor Colletive Ops: <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_allgather</span></code>.</p></li>
+<li><p>One-sided Communication Ops: <code class="docutils literal notranslate"><span class="pre">win_create</span></code>, <code class="docutils literal notranslate"><span class="pre">win_free</span></code>, <code class="docutils literal notranslate"><span class="pre">win_sync</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>, <code class="docutils literal notranslate"><span class="pre">win_get</span></code>, <code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code>.</p></li>
+</ol>
+<p>We use figure to illustrate all those ops with
+similar style as in <a class="reference external" href="https://mpitutorial.com/tutorials/">MPI tutorials blog</a>.
+In the figure, we use <em>circle</em> to represent one process, which is exchangeablely called node,
+agent, host, etc. under some circumstance, and use <em>square</em> to represent the data or tensor.
+The number inside of circle is the rank of that process and th number inside of square is the value of data.</p>
+<div class="section" id="collective-ops">
+<h2>Collective Ops<a class="headerlink" href="#collective-ops" title="Permalink to this headline">¶</a></h2>
+<p>These three <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">allgather</span></code> ops are most basic collective MPI ops.
+The bluefog implementation is almost exactly the same as the MPI definition. One small difference
+is allreduce only support average and summation since we focused on the numerical calculation only.</p>
+<div class="section" id="allgather">
+<h3>allgather<a class="headerlink" href="#allgather" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_allgather.png"><img alt="BluefogAllgatherExplanation" src="_images/bf_allgather.png" style="width: 350px;" /></a>
+</div>
+<div class="section" id="allreduce">
+<h3>allreduce<a class="headerlink" href="#allreduce" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_allreduce.png"><img alt="BluefogAllreduceExplanation" src="_images/bf_allreduce.png" style="width: 300px;" /></a>
+</div>
+<div class="section" id="broadcast">
+<h3>broadcast<a class="headerlink" href="#broadcast" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_broadcast.png"><img alt="BluefogBroadcastExplanation" src="_images/bf_broadcast.png" style="width: 450px;" /></a>
+</div>
+</div>
+<div class="section" id="neighbor-colletive-ops">
+<h2>Neighbor Colletive Ops<a class="headerlink" href="#neighbor-colletive-ops" title="Permalink to this headline">¶</a></h2>
+<p>Similar to their collective ops cousins, the behavior of neighbor collective ops is very similar,
+except that their behavior is determined by the virtual topology as well. Loosenly speaking,
+allreduce and allgather are the same as running the neighbor_allreduce and neighbor_allgather
+over fully connected network. In the figure, we use the arrowed line to represent the connection of
+virtual topology (notice it is the directed graph.)</p>
+<div class="section" id="neighbor-allgather">
+<h3>neighbor_allgather<a class="headerlink" href="#neighbor-allgather" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_neighbor_allgather.png"><img alt="BluefogNeighborAllgatherExplanation" src="_images/bf_neighbor_allgather.png" style="width: 600px;" /></a>
+</div>
+<div class="section" id="neighbor-allreduce">
+<h3>neighbor_allreduce<a class="headerlink" href="#neighbor-allreduce" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_neighbor_allreduce.png"><img alt="BluefogNeighborAllreduceExplanation" src="_images/bf_neighbor_allreduce.png" style="width: 600px;" /></a>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In the figure, we only show the neighbor_allreduce with average with uniform weight. Actually, our
+API allows for any weights for incoming edges. Check out API doc to see how to use it.</p>
+</div>
+</div>
+</div>
+<div class="section" id="one-sided-communication-ops">
+<h2>One-sided Communication Ops<a class="headerlink" href="#one-sided-communication-ops" title="Permalink to this headline">¶</a></h2>
+<p>To be added.</p>
+<div class="section" id="win-create">
+<h3>win_create<a class="headerlink" href="#win-create" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_create.png"><img alt="BluefogWinCreateExplanation" src="_images/bf_win_create.png" style="width: 650px;" /></a>
+</div>
+<div class="section" id="win-free">
+<h3>win_free<a class="headerlink" href="#win-free" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_free.png"><img alt="BluefogWinFreeExplanation" src="_images/bf_win_free.png" style="width: 650px;" /></a>
+</div>
+<div class="section" id="win-put">
+<h3>win_put<a class="headerlink" href="#win-put" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_put.png"><img alt="BluefogWinPutExplanation" src="_images/bf_win_put.png" style="width: 650px;" /></a>
+</div>
+<div class="section" id="win-get">
+<h3>win_get<a class="headerlink" href="#win-get" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_get.png"><img alt="BluefogWinGetExplanation" src="_images/bf_win_get.png" style="width: 650px;" /></a>
+</div>
+<div class="section" id="win-accumulate">
+<h3>win_accumulate<a class="headerlink" href="#win-accumulate" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_accum.png"><img alt="BluefogWinAccumExplanation" src="_images/bf_win_accum.png" style="width: 650px;" /></a>
+</div>
+<div class="section" id="win-sync">
+<h3>win_sync<a class="headerlink" href="#win-sync" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_images/bf_win_sync.png"><img alt="BluefogWinSyncExplanation" src="_images/bf_win_sync.png" style="width: 650px;" /></a>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="code_structure.html" class="btn btn-neutral float-right" title="The Structure of Codebase" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="timeline.html" class="btn btn-neutral float-left" title="Bluefog Timeline" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Bicheng Ying
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
