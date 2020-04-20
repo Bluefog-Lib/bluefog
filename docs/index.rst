@@ -13,24 +13,25 @@ Bluefog
 
 Bluefog is a distributed training framework for PyTorch based
 on diffusion/consensus-type algorithm.
-The goal of Bluefog is to make distributed machine learning fast,
+The goal of Bluefog is to make distributed and decentralized machine learning fast,
 fault-tolerant, friendly to heterogeneuous environment, and easy to use.
 
 .. Important::
 
-   Although most torch-based APIs perform well, this repository is still 
+   Although the most torch-based APIs perform well, this repository is still 
    in the early stage of development and more features are waiting to be implemented.
    If you are interested, you are more than welcome to join us and contribute this project!
 
 Quick Start
 -----------
 
-First, make sure your environment has ``python>=3.7`` and `openmpi`_ >= 4.0.
+First, make sure your environment is with ``python>=3.7`` and `openmpi`_ >= 4.0.
 Then, install Bluefog with: ``pip install --no-cache-dir bluefog``.  Check
-our :ref:`install_bluefog` page if you need more information or other install options.
-We provide high-level wrapper for optimizer. 
+the :ref:`install_bluefog` page if you need more information or other install options.
+We provide high-level wrapper for torch optimizer. 
 Probably, the only thing you need to modify
-the existing script is wrapping the optimizer with our ``DistributedBluefogOptimizer``,
+the existing script to distributed implementation is wrapping the optimizer
+with our ``DistributedBluefogOptimizer``,
 then run it through ``bfrun``. That is it!
 
 .. code-block:: python
@@ -48,9 +49,9 @@ then run it through ``bfrun``. That is it!
    )
    ...
 
-We also provide low-level functions, which you can use those as building
+We also provide lots of low-level functions, which you can use those as building
 blocks to construct your own distributed trainning algorithm. The following example
-illustrate how to use bluefog run a simple consensus algorithm.
+illustrates how to run a simple consensus algorithm through bluefog.
 
 .. code-block:: python
 
@@ -63,8 +64,8 @@ illustrate how to use bluefog run a simple consensus algorithm.
       x = bf.neighbor_allreduce(x)
    print(f"{bf.rank()}: Average value of all ranks is {x}")
 
-One main feature of Bluefog is that we leverage the One-sided Communication of MPI
-to build a real decentralized and asynchronized algorithms. The following code illustrate
+One noteable feature of Bluefog is that we leverage the One-sided Communication of MPI
+to build a real decentralized and asynchronized algorithms. This is another example about
 how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
 
 .. code-block:: python
@@ -98,9 +99,9 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
    bf.win_sync_then_collect(name="x_buff")
    print(f"{bf.rank()}: Average value of all ranks is {x[0]/x[-1]}")
 
-Please explore our `examples`_ folder to see more examples about
-how to use bluefoge implemented deep learning trainning and distributed
-optimization algorithm quickly and easily. If you want to understand more on
+Please explore our `examples`_ folder to see more about
+how to implemented deep learning trainning and distributed 
+optimization algorithm quickly and easily through bluefog. If you want to understand more on
 how to use the low-level API as the building blocks for your own distributed
 algorithm, please read our :ref:`Ops Explanation` page.
 
