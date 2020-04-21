@@ -11,21 +11,19 @@ Bluefog
 .. image:: https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat
     :target: https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat
     
-.. image:: docs/_static/bf_logo_h.png
-   :width: 450
-   :align: center
-   :alt: Bluefog Logo
+.. raw:: html
+
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/79828058-c3947780-8354-11ea-847c-ef97cecc9a62.png" alt="Logo" width="450"/></p>
+
+Overview
+--------
 
 Bluefog is a distributed training framework for PyTorch based
 on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
 fault-tolerant, friendly to heterogeneuous environment, and easy to use.
 
-.. Important::
-
-   Although the most torch-based APIs perform well, this repository is still 
-   in the early stage of development and more features are waiting to be implemented.
-   If you are interested, you are more than welcome to join us and contribute this project!
+NOTE: Although the most torch-based APIs perform well, this repository is still in the early stage of development and more features are waiting to be implemented. If you are interested, you are more than welcome to join us and contribute this project!
 
 Quick Start
 -----------
