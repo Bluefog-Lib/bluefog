@@ -6,8 +6,8 @@
 Bluefog
 =======
 
-.. image:: _static/bluefog_logo.png
-   :width: 350
+.. image:: _static/bf_logo_h.png
+   :width: 450
    :align: center
    :alt: Bluefog Logo
 
