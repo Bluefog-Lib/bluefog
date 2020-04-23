@@ -24,18 +24,20 @@ The goal of Bluefog is to make distributed and decentralized machine learning fa
 fault-tolerant, friendly to heterogeneuous environment, and easy to use.
 
 The most distinguishable feature of Bluefog compared with other popular distributed frameworks, such as 
-DistributedDataParallel provided by pytorch, Horovod, BytePS, etc, is that our core implementation rooted on the idea
+DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
+that we introduce the virtual topology into the multiple processes and 
 
 .. math::
      LOCAL_AVG(grad_{k}) ==> GLOBAL_AVG(grad_{k})) as algorithm keep iterating
-     
+where local averaging is defined based on the connection in the virtual topology.
+
 Leveraging the *One-sided Communication Ops* (i.e. remote-memory access) of MPI, Bluefog is not only distributed 
 but also decentralized training framework with high performance.
 
 * Unlike the *ring-allreduce* based Bulk Synchronous Parallel algorithm, each process in bluefog is highly decoupled so that we can maximize the power of asynchronous algorithm. 
 * Unlike the *parameter-server* (PS) based architecture, there is no central node to collect and distribute information so that we can avoid the bottleneck problem existing in the PS. 
 
-The cost of those advantage is the inconsistence between models. Check our papers to see the theoratical guarantee.
+The cost of those advantages is the inconsistence between models. Please check our papers to see the theoratical guarantee.
 
 NOTE: Although the most torch-based APIs perform well, this repository is still in the early stage of development and more features are waiting to be implemented. If you are interested, you are more than welcome to join us and contribute this project!
 
