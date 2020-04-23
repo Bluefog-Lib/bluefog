@@ -32,12 +32,12 @@ from setuptools.command.build_ext import build_ext as _build_ext
 
 
 # Package meta-data.
-NAME = "Bluefog"
+NAME = "bluefog"
 DESCRIPTION = "A distributed training framework for diffusion or consensus-type algorithm."
 EMAIL = "bichengying@gmail.com"
 AUTHOR = "Bicheng Ying"
 REQUIRES_PYTHON = ">=3.7.0"
-VERSION = "0.1.2"
+VERSION = "0.1.0"
 
 EXTRAS = {}
 
