@@ -134,7 +134,7 @@ grad_prev = w[n:2*n].clone()
 
 bf.win_create(w, name="w_buff", zero_init=True)
 
-alpha_pd = 1e-2  # step-size for GT (should be smaller than exact diffusion)
+alpha_pd = 1e-2  # step-size for Push-DIGing (should be smaller than exact diffusion)
 mse_pd = []
 maxite = 1000
 for i in range(maxite):
