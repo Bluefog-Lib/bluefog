@@ -145,8 +145,14 @@ if bf.rank() == 0:
     plt.semilogy(mse_gt)
     plt.show()
 
+# ======================= Push-DIGing for directed graph =======================
 # Calculate the true solution with Push-DIGing:
-# Reference: https://arxiv.org/abs/1607.03218
+#
+# Reference: 
+#
+# [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence 
+# for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
+# ============================================================================
 bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
 outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
