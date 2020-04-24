@@ -54,11 +54,22 @@ print("[DG] Rank {}: global gradient norm: {}".format(bf.rank(), global_grad_nor
 local_grad_norm = torch.norm(A.T.mm(A.mm(x_opt) - b), p=2)
 print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
 
-# Calculate the true solution with exact diffusion:
-# Reference: https://arxiv.org/abs/1702.05122
-# psi^{k+1} = x^k - alpha * grad(x^k)
-# phi^{k+1} = psi^{k+1} + x^k - psi^{k}
-# x^{k+1} = neighbor_allreduce(phi^{k+1})
+# ==================== Exact Diffusion ===========================================
+# Calculate the true solution with exact diffusion recursion as follows:
+#
+# psi^{k+1} = w^k - alpha * grad(w^k)
+# phi^{k+1} = psi^{k+1} + w^k - psi^{k}
+# w^{k+1} = neighbor_allreduce(phi^{k+1})
+#
+# Reference: 
+#
+# [R1] K. Yuan, B. Ying, X. Zhao, and A. H. Sayed, ``Exact diffusion for distributed
+# optimization and learning -- Part I: Algorithm development'', 2018. (Alg. 1)
+# link: https://arxiv.org/abs/1702.05122 
+#
+# [R2] Z. Li, W. Shi and M. Yan, ``A Decentralized Proximal-gradient Method with 
+#  Network Independent Step-sizes and Separated Convergence Rates'', 2019
+# ================================================================================
 x = torch.zeros(n, 1).to(torch.double)
 phi, psi, psi_prev = x.clone(), x.clone(), x.clone()
 alpha_ed = 1e-2  # step-size for exact diffusion
@@ -87,11 +98,26 @@ if bf.rank() == 0:
     plt.semilogy(mse)
     plt.show()
 
+# ======================= gradient tracking =====================================
 # Calculate the true solution with gradient tracking (GT for short):
-# Reference: https://arxiv.org/abs/1607.03218
-# x^{k+1} = neighbor_allreduce(x^k) - alpha*y^k
-# y^{k+1} = neighbor_allreduce(y^k) + grad(x^{k+1}) - grad(x^k)
-# where y^0 = grad(x^0)
+# 
+# w^{k+1} = neighbor_allreduce(w^k) - alpha*q^k
+# q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
+# where q^0 = grad(w^0)
+# 
+# Reference: 
+# [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence 
+# for distributed optimization over time-varying graphs'', 2017. (Alg. 1)
+#
+# [R2] G. Qu and N. Li, ``Harnessing smoothness to accelerate distributed 
+# optimization'', 2018
+#
+# [R3] J. Xu et.al., ``Augmented distributed gradient methods for multi-agent 
+# optimization under uncoordinated constant stepsizes'', 2015
+#
+# [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'', 
+# 2016
+# ================================================================================
 x = torch.zeros(n, 1).to(torch.double)
 y = A.T.mm(A.mm(x)-b)
 grad_prev = y.clone()
