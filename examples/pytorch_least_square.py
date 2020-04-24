@@ -61,7 +61,7 @@ print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm)
 # phi^{k+1} = psi^{k+1} + w^k - psi^{k}
 # w^{k+1} = neighbor_allreduce(phi^{k+1})
 #
-# Reference: 
+# References: 
 #
 # [R1] K. Yuan, B. Ying, X. Zhao, and A. H. Sayed, ``Exact diffusion for distributed
 # optimization and learning -- Part I: Algorithm development'', 2018. (Alg. 1)
@@ -105,7 +105,7 @@ if bf.rank() == 0:
 # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
 # where q^0 = grad(w^0)
 # 
-# Reference: 
+# References: 
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence 
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 1)
 #
