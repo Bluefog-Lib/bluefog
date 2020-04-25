@@ -19,7 +19,7 @@ import io
 import socket
 
 import psutil
-from bluefog.run.util import safe_shell_exec
+from bluefog.run.horovodrun.common.util import safe_shell_exec
 
 # Number of retries for sshing into the hosts
 SSH_RETRIES = 3
@@ -71,7 +71,7 @@ def filter_local_addresses(all_host_names):
         except socket.gaierror:
             return None
 
-    args_list = [[host] for host in all_host_names]
+    args_list = [host for host in all_host_names]
     host_addresses = execute_function_multithreaded(
         resolve_host_name, args_list).values()
 
@@ -83,7 +83,7 @@ def filter_local_addresses(all_host_names):
     return remote_host_names
 
 
-def _check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
+def check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
     """Checks if ssh can successfully be performed to all the hosts.
 
     Args:
@@ -102,7 +102,7 @@ def _check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
 
         # Try ssh 3 times
         for _ in range(SSH_RETRIES):
-            output = io.StringIO
+            output = io.StringIO()
             try:
                 exit_code = safe_shell_exec.execute(command,
                                                     stdout=output,
@@ -122,8 +122,8 @@ def _check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
 
     ssh_command_format = 'ssh -o StrictHostKeyChecking=no {host} {ssh_port_arg} date'
 
-    args_list = [[ssh_command_format.format(host=host_address,
-                                            ssh_port_arg=ssh_port_arg)]
+    args_list = [ssh_command_format.format(host=host_address,
+                                            ssh_port_arg=ssh_port_arg)
                  for host_address in host_addresses]
     ssh_exit_codes = execute_function_multithreaded(exec_command,
                                                     args_list)

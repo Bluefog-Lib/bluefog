@@ -14,13 +14,12 @@
 # ==============================================================================
 
 import os
+import psutil
 import signal
 import subprocess
 import sys
 import threading
 import time
-
-import psutil
 
 
 GRACEFUL_TERMINATION_TIME_S = 5

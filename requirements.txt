@@ -1,5 +1,7 @@
+cloudpickle
 networkx>=2.0
-pytest>=5.0
 psutil
+pytest>=5.0
+six
 tensorboardX>=1.5
 tqdm>=4.0
