@@ -258,7 +258,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
           output.resize_(cpu_output.sizes());
           output.copy_(cpu_output);
           handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
     ThrowIfError(enqueue_result);
   } else {
@@ -270,7 +270,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
         bf_tensor, bf_context, op_name, device,
         [handle, op_name, tid, timeline_ptr](const Status& status) {
           handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
     ThrowIfError(enqueue_result);
   }
@@ -370,7 +370,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           }
 
           handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
 
     ThrowIfError(enqueue_result);
@@ -446,7 +446,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           }
 
           handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name);  // ENQUEUE
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
     ThrowIfError(enqueue_result);
   }
