@@ -116,19 +116,21 @@ algorithm, please read our :ref:`Ops Explanation` page.
    :maxdepth: 2
    :caption: API
 
-   Bluefog Common API <common_api>
    Bluefog Torch API <torch_api>
    Bluefog Tensorflow API <tensorflow_api>
+   Bluefog Topology API <topo_api>
 
 .. toctree::
    :maxdepth: 2
    :caption: More Information
 
-   Bluefog Timeline <timeline>
    Bluefog Ops Explanation <bluefog_ops>
+   Bluefog Perform Comparison <performance>
+   Bluefog Rationale <rationale>
+   Bluefog Timeline <timeline>
+   Spectrum of Machine Learning Algorithm<alg_spectrum>
    Codebase Structure <code_structure>
    Development Guide <devel_guide>
-   Spectrum of Machine Learning Algorithm<alg_spectrum>
 
 .. _openmpi: https://www.open-mpi.org/
 .. _examples: https://github.com/ybc1991/bluefog/tree/master/examples
