@@ -37,12 +37,15 @@ DESCRIPTION = "A distributed training framework for diffusion or consensus-type 
 EMAIL = "bichengying@gmail.com"
 AUTHOR = "Bicheng Ying"
 REQUIRES_PYTHON = ">=3.7.0"
-VERSION = "0.1.0"
+VERSION = "0.1.0.post2"
 
 EXTRAS = {}
 
-with open('README.rst') as f:
-    readme = f.read()
+readme = '''Bluefog is a distributed training framework for PyTorch based on
+diffusion/consensus-type algorithm.
+The goal of Bluefog is to make distributed and decentralized machine learning fast,
+fault-tolerant, friendly to heterogeneuous environment, and easy to use.
+'''
 
 with open('LICENSE') as f:
     lic = f.read()
@@ -473,6 +476,7 @@ setup(
     ],
     ext_modules=[bluefog_torch_mpi_lib, bluefog_tensorflow_mpi_lib],
     cmdclass={"build_ext": custom_build_ext},
+    setup_requires=['numpy>=1.17', 'cffi>=1.4.0'],
     install_requires=reqs,
     extras_require=EXTRAS,
     entry_points={
