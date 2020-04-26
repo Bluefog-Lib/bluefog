@@ -16,14 +16,16 @@
 
 import argparse
 import os
+import re
 import shlex
+import socket
 import subprocess
 import sys
 import traceback
 
+import psutil
 import bluefog
-
-from bluefog.run import env_util
+from bluefog.run import env_util, network_util, horovod_driver
 
 
 BLUEFOG_TIMELINE = 'BLUEFOG_TIMELINE'
@@ -45,6 +47,24 @@ def _is_open_mpi_installed():
               file=sys.stderr)
         return False
     return True
+
+
+def _parse_host_files(filename):
+    """Transform the hostfile into a format of <IP address> or <host name>:<Number of GPUs>
+
+    Args:
+        filename: Should contains only <IP address> or <host name> slots=<number of GPUs>
+    Returns:
+        Comma separated string of <IP address> or <host name>:<Number of GPUs>
+    """
+    hosts = []
+    for line in open(filename):
+        line = line.rstrip()
+        hostname = line.split()[0]
+        slots = line.split('=')[1]
+        hosts.append('{name}:{slots}'.format(name=hostname, slots=slots))
+
+    return ','.join(hosts)
 
 def make_override_action(override_args):
     class StoreOverrideAction(argparse.Action):
@@ -88,15 +108,24 @@ def parse_args():
     parser.add_argument('-p', '--ssh-port', action="store", dest="ssh_port",
                         type=int, help="SSH port on all the hosts.")
 
-    parser.add_argument('-H', '--host', action="store", dest="host",
-                        help="To specify the list of host names as well as the "
-                             "number of available slots on each host for "
-                             "training processes using the following format: "
-                             "<hostname>:<number of slots>,... . "
-                             "E.g., host1:2,host2:4,host3:1 "
-                             "indicates that 2 processes can run on "
-                             "host1, 4 processes on host2, and 1 process "
-                             "on host3.")
+    parser.add_argument('--network-interface', action='store', dest='nic',
+                        help='Specify the network interface used for communication.')
+
+    group_hosts_parent = parser.add_argument_group('host arguments')
+    group_hosts = group_hosts_parent.add_mutually_exclusive_group()
+    group_hosts.add_argument('-H', '--hosts', action='store', dest='hosts',
+                             help='List of host names and the number of available slots '
+                                  'for running processes on each, of the form: <hostname>:<slots> '
+                                  '(e.g.: host1:2,host2:4,host3:1 indicating 2 processes can run '
+                                  'on host1, 4 on host2, and 1 on host3). If not specified, '
+                                  'defaults to using localhost:<np>')
+    group_hosts.add_argument('-hostfile', '--hostfile', action='store', dest='hostfile',
+                             help='Path to a host file containing the list of host names and '
+                                  'the number of available slots. Each line of the file must be '
+                                  'of the form: <hostname> slots=<slots>')
+
+    parser.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
+                        help='Extra mpi flages you want to pass for mpirun.')
 
     parser.add_argument('--verbose', action="store_true", dest="verbose",
                         help="If this flag is set, extra messages will "
@@ -138,6 +167,28 @@ def set_env_from_args(env, args):
 
     return env
 
+def get_hosts_arg_and_hostnames(args):
+    # if hosts are not specified, either parse from hostfile, or default as
+    # localhost
+    if not args.hosts:
+        if args.hostfile:
+            args.hosts = _parse_host_files(args.hostfile)
+        else:
+            # Set hosts to localhost if not specified
+            args.hosts = 'localhost:{np}'.format(np=args.np)
+
+    all_host_names = []
+    host_list = args.hosts.split(',')
+    all_host_names = []
+    pattern = re.compile(r'^[\w.-]+:\d+$')
+    for host in host_list:
+        if not pattern.match(host.strip()):
+            raise ValueError('Invalid host input, please make sure it has '
+                             'format as : worker-0:2,worker-1:2.')
+        all_host_names.append(host.strip().split(':')[0])
+    hosts_arg = '-H {hosts}'.format(hosts=args.hosts)
+    return hosts_arg, all_host_names
+
 def main():
     args = parse_args()
 
@@ -145,10 +196,26 @@ def main():
         print(bluefog.__version__)
         exit(0)
 
-    if args.host:
-        hosts_arg = "-H " + args.host
-    else:
-        hosts_arg = ""
+    hosts_arg, all_host_names = get_hosts_arg_and_hostnames(args)
+    remote_host_names = network_util.filter_local_addresses(all_host_names)
+
+    common_intfs = set()
+    if remote_host_names:
+        # 1. Check if we can ssh into all remote hosts successfully.
+        assert network_util.check_all_hosts_ssh_successful(remote_host_names, args.ssh_port)
+        if not args.nic:
+            # 2. Find the set of common, routed interfaces on all the hosts (remote
+            # and local) and specify it in the args. It is expected that the following
+            # function will find at least one interface.
+            # otherwise, it will raise an exception.
+            # So far, we just use horovodrun to do this job since the task are the same.
+            local_host_names = set(all_host_names) - set(remote_host_names)
+            common_intfs = horovod_driver.driver_fn(all_host_names, local_host_names,
+                                                    args.ssh_port, args.verbose)
+        else:
+            common_intfs = [args.nic]
+    tcp_intf_arg = '-mca btl_tcp_if_include {common_intfs}'.format(
+        common_intfs=','.join(common_intfs)) if common_intfs else ''
 
     if args.ssh_port:
         ssh_port_arg = "-mca plm_rsh_args \"-p {ssh_port}\"".format(
@@ -165,6 +232,7 @@ def main():
             'training script using the standard way provided by your'
             ' MPI distribution (usually mpirun, srun, or jsrun).')
 
+    extra_flags = args.extra_flags if args.extra_flags else ''
     # Pass all the env variables to the mpirun command.
     env = os.environ.copy()
     env = set_env_from_args(env, args)
@@ -172,12 +240,14 @@ def main():
         'mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
-        '-mca pml ob1 -mca btl,mtl ^openib '
-        '{ssh_port_arg} '
-        '{env} {command}'  # expect a lot of environment variables
+        '-mca pml ob1 -mca btl ^openib '
+        '{ssh_port_arg} {tcp_intf_arg} '
+        '{extra_flags} {env} {command}' 
         .format(num_proc=args.np,
                 hosts_arg=hosts_arg,
                 ssh_port_arg=ssh_port_arg,
+                tcp_intf_arg=tcp_intf_arg,
+                extra_flags=extra_flags,
                 env=' '.join('-x %s' % key for key in env.keys() if env_util.is_exportable(key)),
                 command=' '.join(shlex.quote(par) for par in args.command))
     )
