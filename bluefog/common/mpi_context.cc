@@ -111,24 +111,34 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   // certain components, e.g. OpenIB BTL in OpenMPI gets disabled if
   // MPI_THREAD_MULTIPLE is requested.
   //
-  // By default, we will ask for multiple threads, so other libraries like
-  // mpi4py can be used together with bluefog if multi-threaded MPI is
-  // installed.
-  int required = MPI_THREAD_MULTIPLE;
+  // By default, we will ask for MPI_THREAD_FUNNELED -- The process may be 
+  // multi-threaded, but only the main thread will make MPI calls (all MPI calls 
+  // are funneled to the main thread). The main reason we use this level is MPI win 
+  // ops doesn't have good support for multiple processes on multiple hosts unless 
+  // running under a system with an RDMA  capable network such as Infiniband.
+  int required_thread_level = MPI_THREAD_FUNNELED;
+  const char* BLUEFOG_MPI_THREAD_LEVEL =
+      std::getenv("BLUEFOG_MPI_THREAD_LEVEL");
+  if (BLUEFOG_MPI_THREAD_LEVEL != nullptr) {
+    if (*BLUEFOG_MPI_THREAD_LEVEL != '0' && *BLUEFOG_MPI_THREAD_LEVEL != '1' &&
+        *BLUEFOG_MPI_THREAD_LEVEL != '2' && *BLUEFOG_MPI_THREAD_LEVEL != '3')
+      BFLOG(FATAL)
+          << "The environment variable BLUEFOG_MPI_THREAD_LEVEL has to "
+          << "be one of the values 0, 1, 2, or 3 --- corresponding to MPI_THREAD_SINGLE, "
+          << "MPI_THREAD_FUNNELED, MPI_THREAD_SERIALIZED, or "
+             "MPI_THREAD_MULTIPLE";
+    required_thread_level = atoi(BLUEFOG_MPI_THREAD_LEVEL);
+  }
   int is_mpi_initialized = 0;
   MPI_Initialized(&is_mpi_initialized);
   if (is_mpi_initialized) {
     int provided;
     MPI_Query_thread(&provided);
-    if (provided < MPI_THREAD_MULTIPLE) {
-      BFLOG(WARNING)
-          << "MPI has already been initialized without "
-             "multi-threading support (MPI_THREAD_MULTIPLE). This will "
-             "likely cause a segmentation fault.";
-    }
+    BFLOG(TRACE) << "MPI has already been initialized with "
+                 << "MPI_THREAD support level " << provided;
   } else {
     // MPI environment has not been created, using manager to initialize.
-    ctx_manager.EnvInitialize(required);
+    ctx_manager.EnvInitialize(required_thread_level);
     should_finalize = true;
   }
 
