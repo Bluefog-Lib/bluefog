@@ -37,6 +37,16 @@ y = y.double()
 y = 2*y - 1
 rho = 1e-2
 
+
+def logistic_loss_step(x_, tensor_name):
+    """Calculate gradient of logistic loss via pytorch autograd."""
+    with bf.timeline_context(tensor_name=tensor_name,
+                             activity_name="computation"):
+        loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
+            0.5*rho*torch.norm(x_, p=2)
+        loss_.backward()
+    return loss_
+
 # ================== Distributed gradient descent ================================
 # Calculate the solution with distributed gradient descent:
 # x^{k+1} = x^k - alpha * allreduce(local_grad)
@@ -47,10 +57,7 @@ maxite = 2000
 alpha = 1e-1
 for i in range(maxite):
     # calculate gradient via pytorch autograd
-    with bf.timeline_context(tensor_name='allreduce.gradient', activity_name="computation"):
-        loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w_opt)))
-                          ) + 0.5*rho*torch.norm(w_opt, p=2)
-        loss.backward()
+    logistic_loss_step(w_opt, tensor_name='allreduce.gradient')
     grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
 
     # distributed gradient descent
@@ -95,11 +102,7 @@ alpha_ed = 1e-1  # step-size for exact diffusion
 mse = []
 for i in range(maxite):
     # calculate loccal gradient via pytorch autograd
-    with bf.timeline_context(tensor_name='neighbor.allreduce.local variable', 
-                             activity_name="computation"):
-        loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))
-                          ) + 0.5*rho*torch.norm(w, p=2)
-        loss.backward()
+    logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable')
 
     # exact diffusion
     psi = w - alpha_ed * w.grad.data
@@ -169,11 +172,7 @@ for i in range(maxite):
         w.data, name='local variable w') - alpha_gt * q
 
     # calculate local gradient
-    with bf.timeline_context(tensor_name='neighbor.allreduce.local variable w',
-                             activity_name="computation"):
-        loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))
-                          ) + 0.5*rho*torch.norm(w, p=2)
-        loss.backward()
+    logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable w')
     grad = w.grad.data.clone()    # local gradient at w^{k+1}
     w.grad.data.zero_()
 
@@ -216,11 +215,6 @@ if bf.rank() == 0:
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
 
-# In this example, we let A be the data, b be the label
-# and x be the solution
-A = X.clone()
-b = y.clone()
-
 bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
 outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
@@ -229,9 +223,7 @@ indegree = len(bf.in_neighbor_ranks())
 w = torch.zeros(2*n+1, 1).to(torch.double)
 x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 
-loss = torch.mean(torch.log(1 + torch.exp(-b*A.mm(x)))) + \
-    0.5*rho*torch.norm(x, p=2)
-loss.backward()
+logistic_loss_step(x, tensor_name='w_buff')
 grad = x.grad.data.clone()
 w[n:2*n] = grad
 x.grad.data.zero_()
@@ -257,12 +249,7 @@ for i in range(maxite):
     w = bf.win_sync_then_collect(name="w_buff")
 
     x.data = w[:n]/w[-1]
-
-    with bf.timeline_context(tensor_name='w_buff',
-                             activity_name="computation"):
-        loss = torch.mean(torch.log(1 + torch.exp(-b*A.mm(x)))) + \
-            0.5*rho*torch.norm(x, p=2)
-        loss.backward()
+    logistic_loss_step(x, tensor_name='w_buff')
     grad = x.grad.data.clone()
     x.grad.data.zero_()
 
@@ -276,9 +263,7 @@ w = bf.win_sync_then_collect(name="w_buff")
 x.data = w[:n]/w[-1]
 
 # calculate local and global gradient
-loss = torch.mean(torch.log(1 + torch.exp(-b*A.mm(x)))) + \
-    0.5*rho*torch.norm(x, p=2)
-loss.backward()
+logistic_loss_step(x, tensor_name="w_buff")
 grad = bf.allreduce(x.grad.data, name='gradient')  # global gradient
 
 # evaluate the convergence of gradient tracking for logistic regression
