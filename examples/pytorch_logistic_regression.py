@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import torch
-from torch.autograd import Variable
 import matplotlib.pyplot as plt
 
 import bluefog.torch as bf
@@ -43,7 +42,7 @@ rho = 1e-2
 # x^{k+1} = x^k - alpha * allreduce(local_grad)
 # it will be used to verify the solution of various decentralized algorithms.
 # ================================================================================
-w_opt = Variable(torch.zeros(n, 1).to(torch.double), requires_grad=True)
+w_opt = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 maxite = 2000
 alpha = 1e-1
 for i in range(maxite):
@@ -90,13 +89,14 @@ print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm)
 # [R2] Z. Li, W. Shi and M. Yan, ``A Decentralized Proximal-gradient Method with
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
-w = Variable(torch.zeros(n, 1).to(torch.double), requires_grad=True)
+w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
 alpha_ed = 1e-1  # step-size for exact diffusion
 mse = []
 for i in range(maxite):
     # calculate loccal gradient via pytorch autograd
-    with bf.timeline_context(tensor_name='neighbor.allreduce.local variable', activity_name="computation"):
+    with bf.timeline_context(tensor_name='neighbor.allreduce.local variable', 
+                             activity_name="computation"):
         loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))
                           ) + 0.5*rho*torch.norm(w, p=2)
         loss.backward()
@@ -153,7 +153,7 @@ if bf.rank() == 0:
 # [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'',
 # 2016
 # ================================================================================
-w = Variable(torch.zeros(n, 1).to(torch.double), requires_grad=True)
+w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
     0.5*rho*torch.norm(w, p=2)
 loss.backward()
@@ -169,7 +169,7 @@ for i in range(maxite):
         w.data, name='local variable w') - alpha_gt * q
 
     # calculate local gradient
-    with bf.timeline_context(tensor_name='neighbor.allreduce.local variable w', 
+    with bf.timeline_context(tensor_name='neighbor.allreduce.local variable w',
                              activity_name="computation"):
         loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))
                           ) + 0.5*rho*torch.norm(w, p=2)
@@ -227,7 +227,7 @@ indegree = len(bf.in_neighbor_ranks())
 
 # u, y, v = w[:n], w[n:2*n], w[2n]
 w = torch.zeros(2*n+1, 1).to(torch.double)
-x = Variable(torch.zeros(n, 1).to(torch.double), requires_grad=True)
+x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 
 loss = torch.mean(torch.log(1 + torch.exp(-b*A.mm(x)))) + \
     0.5*rho*torch.norm(x, p=2)
@@ -258,7 +258,7 @@ for i in range(maxite):
 
     x.data = w[:n]/w[-1]
 
-    with bf.timeline_context(tensor_name='w_buff', 
+    with bf.timeline_context(tensor_name='w_buff',
                              activity_name="computation"):
         loss = torch.mean(torch.log(1 + torch.exp(-b*A.mm(x)))) + \
             0.5*rho*torch.norm(x, p=2)

@@ -42,6 +42,7 @@ class BlueFogBasics(object):
         self._topology = None
         self._MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
         self._is_topo_weighted = False
+        self.warn_timeline = False
 
     def init(self, topology: networkx.DiGraph = None,
              is_weighted: bool = False):
@@ -286,16 +287,20 @@ class BlueFogBasics(object):
             >>> ...
             >>> bf.timeline_end_activity(tensor_name)
         """
+        if self.warn_timeline:
+            # We know timeline didn't turn on. No need to repeat it.
+            return False
         self._MPI_LIB_CTYPES.bluefog_timeline.argtypes = (
             [ctypes.c_bool, ctypes.c_char_p, ctypes.c_char_p]
         )
         ret = self._MPI_LIB_CTYPES.bluefog_timeline(
             True, tensor_name.encode("utf-8"), activity_name.encode('utf-8'))
-        if ret != 1:
+        if ret != 1 and not self.warn_timeline:
             logger.error("Cannot start activity in the timeline. "
                          "Most common reason is you didn't turn on the timeline function. "
                          "Use bfrun --timeline-filename file_name ... or "
                          "setting the ENV variable BLUEFOG_TIMELINE = file_name")
+            self.warn_timeline = True
             return False
         return True
 
@@ -304,16 +309,20 @@ class BlueFogBasics(object):
 
         Please check comments in timeline_start_activity for more explanation.
         """
+        if self.warn_timeline:
+            # We know timeline didn't turn on. No need to repeat it.
+            return False
         self._MPI_LIB_CTYPES.bluefog_timeline.argtypes = (
             [ctypes.c_bool, ctypes.c_char_p, ctypes.c_char_p]
         )
         ret = self._MPI_LIB_CTYPES.bluefog_timeline(
             False, tensor_name.encode("utf-8"), "".encode('utf-8'))
-        if ret != 1:
+        if ret != 1 and not self.warn_timeline:
             logger.error("Cannot end activity in the timeline. Check "
                          "Most common reason is you didn't turn on the timeline function. "
                          "Use bfrun --timeline-filename file_name ... or "
                          "setting the ENV variable BLUEFOG_TIMELINE = file_name")
+            self.warn_timeline = True
             return False
         return True
 

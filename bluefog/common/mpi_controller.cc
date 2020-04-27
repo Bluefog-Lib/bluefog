@@ -529,11 +529,12 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  
   int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     float weight = kv.second;
+
+    BFLOG(TRACE, rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
