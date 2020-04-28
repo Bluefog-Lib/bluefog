@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>The Structure of Codebase &mdash; Bluefog 0.1 documentation</title>
+  <title>Running Bluefog Through bfrun &mdash; Bluefog 0.1 documentation</title>
   
 
   
@@ -35,8 +35,8 @@
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="BlueFog Development Guide" href="devel_guide.html" />
-    <link rel="prev" title="The Spectrum of Distributed Machine Learning Algorithm" href="alg_spectrum.html" /> 
+    <link rel="next" title="Performance" href="performance.html" />
+    <link rel="prev" title="Bluefog Operations Explanation" href="bluefog_ops.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -93,12 +93,15 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Lauching Application Through bfrun</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#failures-due-to-ssh-issues">Failures due to SSH issues</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
 <li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
 </ul>
 
@@ -145,13 +148,13 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>The Structure of Codebase</li>
+      <li>Running Bluefog Through bfrun</li>
     
     
       <li class="wy-breadcrumbs-aside">
         
             
-            <a href="_sources/code_structure.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/running.rst.txt" rel="nofollow"> View page source</a>
           
         
       </li>
@@ -164,23 +167,38 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="the-structure-of-codebase">
-<h1>The Structure of Codebase<a class="headerlink" href="#the-structure-of-codebase" title="Permalink to this headline">¶</a></h1>
-<p>One the top level, the structure of this codebase looks like:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>├── bluefog
-├── docs
-├── examples
-├── <span class="nb">test</span>
-├── setup.py
-└── ...
+  <div class="section" id="running-bluefog-through-bfrun">
+<h1>Running Bluefog Through bfrun<a class="headerlink" href="#running-bluefog-through-bfrun" title="Permalink to this headline">¶</a></h1>
+<p>The usage of <code class="docutils literal notranslate"><span class="pre">bfrun</span></code> is almost same as using <code class="docutils literal notranslate"><span class="pre">mpirun</span></code> since <code class="docutils literal notranslate"><span class="pre">bfrun</span></code> is just a thin wrapper over
+<code class="docutils literal notranslate"><span class="pre">mpirun</span></code> for your convenience.
+Check your MPI documentation for arguments to the <cite>mpirun</cite>
+command on your system or you can type <code class="docutils literal notranslate"><span class="pre">bfrun</span> <span class="pre">-h</span></code> to check all flags it supports.</p>
+<p>Typically one GPU will be allocated per process, so if a server has 4 GPUs, you would run 4 processes. In <cite>bfrun</cite>,
+the number of processes is specified with the <cite>-np</cite> flag.</p>
+<ol class="arabic simple">
+<li><p>To run on a machine with 4 GPUs:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> python train.py
 </pre></div>
 </div>
-<p>Main project code is under <code class="docutils literal notranslate"><span class="pre">bluefog</span></code> folder, <code class="docutils literal notranslate"><span class="pre">examples</span></code> folder
-contains the usage code for users, (served as e2e test as well) and
-<code class="docutils literal notranslate"><span class="pre">test</span></code> folder for test of course. <code class="docutils literal notranslate"><span class="pre">docs</span></code> folder contains the
-document including API, docker usagem, algorithm explaination, development etc.
-Overall, our repository shares a very similar organization like
-<a class="reference external" href="https://github.com/horovod/horovod">horovod</a> repository.</p>
+<ol class="arabic simple" start="2">
+<li><p>To run on 4 machines with 4 GPUs each:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">16</span> -H server1:4,server2:4,server3:4,server4:4 python train.py
+</pre></div>
+</div>
+<div class="section" id="failures-due-to-ssh-issues">
+<h2>Failures due to SSH issues<a class="headerlink" href="#failures-due-to-ssh-issues" title="Permalink to this headline">¶</a></h2>
+<p>The host where <cite>bfrun</cite> is executed must be able to SSH to all other hosts without any prompts.</p>
+<p>If <cite>bfrun</cite> fails with permission error, verify that you can ssh to every other server without entering a password or
+answering questions like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>The authenticity of host &#39;&lt;hostname&gt; (&lt;ip address&gt;)&#39; can&#39;t be established.
+RSA key fingerprint is xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx.
+Are you sure you want to continue connecting (yes/no)?
+</pre></div>
+</div>
+<p>To learn more about setting up passwordless authentication, see <a class="reference external" href="http://www.linuxproblem.org/art_9.html">this page</a>.</p>
+</div>
 </div>
 
 
@@ -191,10 +209,10 @@ Overall, our repository shares a very similar organization like
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="devel_guide.html" class="btn btn-neutral float-right" title="BlueFog Development Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="performance.html" class="btn btn-neutral float-right" title="Performance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="alg_spectrum.html" class="btn btn-neutral float-left" title="The Spectrum of Distributed Machine Learning Algorithm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="bluefog_ops.html" class="btn btn-neutral float-left" title="Bluefog Operations Explanation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   

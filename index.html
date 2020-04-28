@@ -92,6 +92,7 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
@@ -169,6 +170,17 @@
 on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
 fault-tolerant, friendly to heterogeneuous environment, and easy to use.</p>
+<p>The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as
+DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
+that we introduce the virtual topology into the multiple processes and local averaging will converge to the global average
+as iteration keep going, where local averaging is defined based on the connection in the virtual topology.</p>
+<p>Leveraging the <em>One-sided Communication Ops</em> (i.e. remote-memory access) of MPI, Bluefog is not only distributed
+but also decentralized training framework with high performance.</p>
+<ul class="simple">
+<li><p>Unlike the <em>ring-allreduce</em> based Bulk Synchronous Parallel algorithm, each process in bluefog is highly decoupled so that we can maximize the power of asynchronous algorithm.</p></li>
+<li><p>Unlike the <em>parameter-server</em> (PS) based architecture, there is no central node to collect and distribute information so that we can avoid the bottleneck problem existing in the PS.</p></li>
+</ul>
+<p>The cost of those advantages is the inconsistence between models. Please check our papers to see the theoratical guarantee.</p>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
 <p>Although the most torch-based APIs perform well, this repository is still
@@ -267,30 +279,14 @@ algorithm, please read our <a class="reference internal" href="bluefog_ops.html#
 <div class="toctree-wrapper compound">
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="bluefog_ops.html#collective-ops">Collective Ops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="bluefog_ops.html#neighbor-colletive-ops">Neighbor Colletive Ops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="bluefog_ops.html#one-sided-communication-ops">One-sided Communication Ops</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
-<li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="timeline.html#usage">Usage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="timeline.html#an-example">An Example</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
-<li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="devel_guide.html#check-your-development-environment">0. Check your development environment.</a></li>
-<li class="toctree-l2"><a class="reference internal" href="devel_guide.html#install-the-package-locally">1. Install the package locally</a></li>
-<li class="toctree-l2"><a class="reference internal" href="devel_guide.html#build-customer-c-extension">2. Build customer C extension</a></li>
-<li class="toctree-l2"><a class="reference internal" href="devel_guide.html#run-unit-test">3. Run Unit Test</a></li>
-<li class="toctree-l2"><a class="reference internal" href="devel_guide.html#continuous-integration-and-end-to-end-test">4. Continuous integration and End-to-End test</a></li>
-<li class="toctree-l2"><a class="reference internal" href="devel_guide.html#code-style-and-lint">5. Code Style And Lint</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
 </ul>
 </div>
 </div>
