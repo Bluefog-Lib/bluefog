@@ -50,31 +50,17 @@ outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
 # we append the p at the last of data.
-x = torch.Tensor([bf.rank()] * 3 + [1.0])
-x2 = torch.Tensor([bf.rank()] * 10000 + [1.0])
-
+x = torch.Tensor([bf.rank()] * 100 + [1.0])
 bf.win_create(x, name="x_buff", zero_init=True)
-bf.win_create(x2, name="x2_buff", zero_init=True)
 
 for i in range(100):
-    handle1 = bf.win_accumulate_async(
+    bf.win_accumulate(
         x, name="x_buff",
         dst_weights={rank: 1.0 / (outdegree + 1)
                      for rank in bf.out_neighbor_ranks()},
         require_mutex=True)
-    handle2 = bf.win_accumulate_async(
-        x2, name="x2_buff",
-        dst_weights={rank: 1.0 / (outdegree + 1)
-                     for rank in bf.out_neighbor_ranks()},
-        require_mutex=True)
-    bf.win_wait(handle1)
-    bf.win_wait(handle2)
-
     x.div_(1+outdegree)
-    x2.div_(1+outdegree)
-
     bf.win_sync_then_collect(name="x_buff")
-    bf.win_sync_then_collect(name="x2_buff")
 
 bf.barrier()
 # Do not forget to sync at last!
