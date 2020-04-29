@@ -369,7 +369,8 @@ int DoWinFree(const std::string& name) {
 }
 
 int DoWinPut(::torch::Tensor tensor, const std::string& name,
-             const std::unordered_map<int, float>& dst_weights) {
+             const std::unordered_map<int, float>& dst_weights,
+             const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
 
   Timeline* timeline_ptr;
@@ -393,7 +394,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowPut(
-      bf_tensor, name, dst_weights, device, 
+      bf_tensor, name, dst_weights, device, require_mutex,
       [handle, name, timeline_ptr, tid](const Status& status) {
         win_handle_manager.MarkDone(handle, status);
         timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
@@ -439,7 +440,8 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinGet(const std::string& name,
-             const std::unordered_map<int, float>& src_weights) {
+             const std::unordered_map<int, float>& src_weights,
+             const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
 
   Timeline* timeline_ptr;
@@ -451,7 +453,7 @@ int DoWinGet(const std::string& name,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowGet(
-      name, src_weights,
+      name, src_weights, require_mutex,
       [handle, name, src_weights, timeline_ptr,
        tid](const Status& status) mutable {
         std::shared_ptr<TorchTensor> bf_neighbor_tensor;

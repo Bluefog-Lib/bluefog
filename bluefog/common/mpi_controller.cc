@@ -527,6 +527,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
 
+  std::vector<int> mutex_ranks = {};  // used in mutex only.
+
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   int target_disp = 0;  // offset in win buffer
@@ -535,6 +537,15 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     float weight = kv.second;
 
     BFLOG(TRACE, rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
+
+    if (entry.require_mutex) {
+      mutex_ranks.clear();
+      mutex_ranks.push_back(target_rank);
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(mutex_ranks);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
+
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
@@ -548,6 +559,10 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityEnd(entry.tensor_name);
+
+    if (entry.require_mutex) {
+      WinMutexRelease(mutex_ranks);
+    }
   }
   BFLOG(TRACE, rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
 
@@ -586,7 +601,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
       WinMutexAcquire(mutex_ranks);
       timeline_ptr->ActivityEnd(entry.tensor_name);
-    };
+    }
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
 
@@ -626,6 +641,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   int target_disp = 0;  // offset in win buffer
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
@@ -633,6 +649,14 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     int target_rank = kv.first;
     // avoid getting the tensor for itself.
     if (target_rank == rank_) continue;
+
+    if (entry.require_mutex) {
+      mutex_ranks.clear();
+      mutex_ranks.push_back(target_rank);
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(mutex_ranks);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
 
     auto tensor = win_mananger->GetAssociateTensorByRank(target_rank);
     void* recvbuf = (void*)tensor->data();
@@ -651,6 +675,10 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+
+    if (entry.require_mutex) {
+      WinMutexRelease(mutex_ranks);
+    }
   }
 
   BFLOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";

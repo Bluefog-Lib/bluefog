@@ -616,7 +616,8 @@ def _win_put_function_factory(tensor):
 
 
 def win_put_async(tensor: torch.Tensor, name: str,
-                  dst_weights: Dict[int, float] = None) -> int:
+                  dst_weights: Dict[int, float] = None, 
+                  require_mutex: bool = False) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
     win_put operation is really finished.
@@ -629,6 +630,8 @@ def win_put_async(tensor: torch.Tensor, name: str,
             If not provided, dst_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.
             Note dst_weights should only contain the ranks that belong to out-neighbors.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A handle to the win_put operation that can be used with `win_poll()` or
@@ -641,13 +644,14 @@ def win_put_async(tensor: torch.Tensor, name: str,
         raise ValueError(
             "The key of dst_weights should only containranks that "
             " belong to out-neighbors (self-rank is not allowed).")
-    handle = getattr(mpi_lib, function)(tensor, name, dst_weights)
+    handle = getattr(mpi_lib, function)(tensor, name, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_put(tensor: torch.Tensor, name: str,
-            dst_weights: Dict[int, float] = None) -> bool:
+            dst_weights: Dict[int, float] = None,
+            require_mutex: bool = False) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
     is finished.
@@ -660,15 +664,18 @@ def win_put(tensor: torch.Tensor, name: str,
             If not provided, dst_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.
             Note dst_weights should only contain the ranks that belong to out-neighbors.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put_async(tensor, name, dst_weights)
+    handle = win_put_async(tensor, name, dst_weights, require_mutex)
     return win_wait(handle)
 
 
-def win_get_async(name: str, src_weights: Dict[int, float] = None) -> int:
+def win_get_async(name: str, src_weights: Dict[int, float] = None,
+                  require_mutex: bool = False) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_sync function is responsible for fetching that memeory.
@@ -682,6 +689,8 @@ def win_get_async(name: str, src_weights: Dict[int, float] = None) -> int:
             If not provided, src_weights will be set as all neighbor ranks defined by
             virtual topology with weight 1.0.
             Note src_weights should only contain the in-neighbors only.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A handle to the win_get operation that can be used with `poll()` or
@@ -694,12 +703,13 @@ def win_get_async(name: str, src_weights: Dict[int, float] = None) -> int:
         raise ValueError(
             "The key of src_weights should only containranks that "
             " belong to in-neighbors.")
-    handle = getattr(mpi_lib, function)(name, src_weights)
+    handle = getattr(mpi_lib, function)(name, src_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
-def win_get(name: str, src_weights: Dict[int, float] = None) -> bool:
+def win_get(name: str, src_weights: Dict[int, float] = None,
+            require_mutex: bool = False) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_sync function is responsible for fetching that memeory.
@@ -716,12 +726,14 @@ def win_get(name: str, src_weights: Dict[int, float] = None) -> bool:
             virtual topology with weight 1.0 / (neighbor_size+1).
             Note src_weights should only contain the ranks that either
             belong to int-neighbors or self.
+        require_mutex: If set to be true, out-neighbor process's window mutex will be
+            acquired.
 
     Returns:
         A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
         processes (or all neighbor processes).
     """
-    handle = win_get_async(name, src_weights)
+    handle = win_get_async(name, src_weights, require_mutex)
     return win_wait(handle)
 
 

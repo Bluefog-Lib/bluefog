@@ -433,9 +433,11 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 }
 
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
-                             const std::string& name,
-                             const std::unordered_map<int, float>& dst_weights,
-                             const int device, StatusCallback callback) {
+                              const std::string& name,
+                              const std::unordered_map<int, float>& dst_weights,
+                              const int device, 
+                              const bool require_mutex, 
+                              StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -443,6 +445,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
   e.dst_weights = dst_weights;
+  e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -451,13 +454,10 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-
-Status EnqueueTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
-                             const std::string& name,
-                             const std::unordered_map<int, float>& dst_weights,
-                             const int device, 
-                             const bool require_mutex, 
-                             StatusCallback callback) {
+Status EnqueueTensorWindowAccumulate(
+    std::shared_ptr<Tensor> tensor, const std::string& name,
+    const std::unordered_map<int, float>& dst_weights, const int device,
+    const bool require_mutex, StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -475,13 +475,15 @@ Status EnqueueTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
 }
 
 Status EnqueueTensorWindowGet(const std::string& name,
-                             const std::unordered_map<int, float>& src_weights,
-                             StatusCallback callback) {
+                              const std::unordered_map<int, float>& src_weights,
+                              const bool require_mutex,
+                              StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
   e.src_weights = src_weights;
+  e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;

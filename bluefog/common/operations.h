@@ -123,19 +123,20 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       StatusCallback callback);
 
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
-                             const std::string& name, 
-                             const std::unordered_map<int, float>& dst_ranks,
-                             const int device,
-                             StatusCallback callback);
+                              const std::string& name,
+                              const std::unordered_map<int, float>& dst_ranks,
+                              const int device, const bool require_mutex,
+                              StatusCallback callback);
 
 Status EnqueueTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
     const std::unordered_map<int, float>& dst_ranks, const int device,
     const bool require_mutex, StatusCallback callback);
 
-Status EnqueueTensorWindowGet(const std::string& name, 
-                             const std::unordered_map<int, float>& src_ranks,
-                             StatusCallback callback);
+Status EnqueueTensorWindowGet(const std::string& name,
+                              const std::unordered_map<int, float>& src_ranks,
+                              const bool require_mutex,
+                              StatusCallback callback);
 
 Status Barrier(StatusCallback callback);
 
