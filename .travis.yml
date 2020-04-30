@@ -29,7 +29,7 @@ addons:
 before_install:
     - ./scripts/install_mpi.sh $MPI
     - pip$PY install torch==1.4.0 tensorflow==2.1.0
-    - pip$PY install # For the plot in doc
+    - pip$PY install matplotlib  # For the plot in doc
     - python$PY --version
     - python$PY -c "import torch; print(torch.__version__)"
     - python$PY -c "import tensorflow as tf; print(tf.__version__)"
