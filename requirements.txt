@@ -1,5 +1,6 @@
 cloudpickle
 networkx>=2.0
+matplotlib
 psutil
 pytest>=5.0
 six

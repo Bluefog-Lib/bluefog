@@ -353,13 +353,14 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
-        for connect_direction in [False, True]:
+        for connect_direction in [1, 2]:
             is_set = bf.set_topology(
                 topology_util.RingGraph(size, connect_direction))
             assert is_set, "Topology set failed."
 
             num_indegree = 1
-            sum_value = rank+(rank+(1 if connect_direction else -1)) % size
+            sum_value = rank + \
+                (rank+(1 if connect_direction == 1 else -1)) % size
 
             dims = [1, 2, 3]
             for dtype, dim in itertools.product(dtypes, dims):
