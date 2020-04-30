@@ -175,16 +175,26 @@ the adjacenty matrix is the same only.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.common.topology_util.GetWeights">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights dictionary.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.common.topology_util.PowerTwoRingGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">PowerTwoRingGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.PowerTwoRingGraph" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate graph topology such that each points only
 connected to a point such that the index difference is power of 2.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt id="bluefog.common.topology_util.FullyConnectedGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">FullyConnectedGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.FullyConnectedGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate fully connected structure of graph.</p>
+<p>Example: A PowerTwoRingGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">PowerTwoRingGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/topo_api-1.png" src="_images/topo_api-1.png" />
+</div>
 </dd></dl>
 
 <dl class="py function">
@@ -197,6 +207,16 @@ when shape is not provided, nrow and ncol will be the two closest factors of siz
 We assume  nrow will be equal to or smaller than ncol.
 If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology
 into a linear one.</p>
+<p>Example: A MeshGrid2DGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">MeshGrid2DGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_spring</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/topo_api-2.png" src="_images/topo_api-2.png" />
+</div>
 </dd></dl>
 
 <dl class="py function">
@@ -206,24 +226,52 @@ into a linear one.</p>
 <p>All other ranks are connected to the center_rank. The connection is
 bidirection, i.e. if the weight from node i to node j is non-zero, so
 is the weight from node j to node i.</p>
+<p>Example: A StarGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">StarGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_spring</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/topo_api-3.png" src="_images/topo_api-3.png" />
+</div>
 </dd></dl>
 
 <dl class="py function">
 <dt id="bluefog.common.topology_util.RingGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">RingGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">left_connect</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.RingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate ring structure of graph (uniliteral).</p>
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">RingGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">connect_style</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">0</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.RingGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate ring structure of graph (uniliteral).
+Argument connect_style should be an integer between 0 and 2, where
+0 represents the bi-connection, 1 represents the left-connection,
+and 2 represents the right-connection.</p>
+<p>Example: A RingGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/topo_api-4.png" src="_images/topo_api-4.png" />
+</div>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.BiRingGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">BiRingGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.BiRingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate ring structure of graph (bidirection).</p>
-</dd></dl>
-
-<dl class="py function">
-<dt id="bluefog.common.topology_util.GetWeights">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return a Tuple of self_weight and neighbor_weights dictionary.</p>
+<dt id="bluefog.common.topology_util.FullyConnectedGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">FullyConnectedGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.FullyConnectedGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate fully connected structure of graph.
+For example, a FullyConnectedGraph with 16 nodes:</p>
+<p>Example: A FullyConnectedGraph 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">FullyConnectedGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_spring</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/topo_api-5.png" src="_images/topo_api-5.png" />
+</div>
 </dd></dl>
 
 </div>
