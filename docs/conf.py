@@ -32,8 +32,15 @@ release = '0.1'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon'
+    'sphinx.ext.napoleon',
+    'matplotlib.sphinxext.plot_directive',
 ]
+
+# Include the example source for plots in API docs
+plot_include_source = True
+plot_formats = [("png", 70)]
+plot_html_show_formats = False
+plot_html_show_source_link = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

@@ -97,7 +97,7 @@ else:
 bf.init()
 
 if args.bluefog:
-    bf.set_topology(topology=topology_util.BiRingGraph(bf.size()))
+    bf.set_topology(topology=topology_util.RingGraph(bf.size()))
 
 torch.manual_seed(args.seed)
 

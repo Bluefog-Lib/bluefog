@@ -28,7 +28,7 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
-from bluefog.common.topology_util import PowerTwoRingGraph, BiRingGraph, RingGraph
+from bluefog.common.topology_util import PowerTwoRingGraph, RingGraph, RingGraph
 from bluefog.common.topology_util import IsTopologyEquivalent
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -128,7 +128,7 @@ class BasicsTests(unittest.TestCase):
         bf.init()
         rank = bf.rank()
         size = bf.size()
-        bf.set_topology(BiRingGraph(size))
+        bf.set_topology(RingGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 

@@ -315,7 +315,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
-        is_set = bf.set_topology(topology_util.BiRingGraph(size))
+        is_set = bf.set_topology(topology_util.RingGraph(size))
         assert is_set, "Topology set failed."
 
         if size > 2:

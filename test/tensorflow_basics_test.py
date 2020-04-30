@@ -26,7 +26,7 @@ import tensorflow as tf
 
 from common import mpi_env_rank_and_size
 import bluefog.tensorflow as bf
-from bluefog.common.topology_util import PowerTwoRingGraph, BiRingGraph
+from bluefog.common.topology_util import PowerTwoRingGraph, RingGraph
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -92,7 +92,7 @@ class BasicsTests(tf.test.TestCase):
     def test_in_out_neighbors_biring(self):
         rank, size = mpi_env_rank_and_size()
         bf.init()
-        bf.set_topology(BiRingGraph(size))
+        bf.set_topology(RingGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 

@@ -199,7 +199,7 @@ class BlueFogBasics(object):
             >>> import bluefog.torch as bf
             >>> from bluefog.common import topology_util
             >>> bf.init()
-            >>> bf.set_topology(topology_util.BiRingGraph(bf.size()))
+            >>> bf.set_topology(topology_util.RingGraph(bf.size()))
         """
         if topology is None:
             topology = topology_util.PowerTwoRingGraph(size=self.size())
