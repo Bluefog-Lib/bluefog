@@ -288,7 +288,7 @@ def build_tf_extension(build_ext, global_options):
 
     tf_compile_flags = tf.sysconfig.get_compile_flags()
     tf_link_flags = tf.sysconfig.get_link_flags()
-    have_cuda = tf.test.is_built_with_cuda()
+    have_cuda = tf.test.is_built_with_cuda() and tf.test.is_gpu_available()
     updated_macros = set_macro(
         options['MACROS'], 'HAVE_CUDA', str(int(have_cuda)))
     print(tf_compile_flags, tf_link_flags, have_cuda)
