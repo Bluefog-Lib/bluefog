@@ -50,7 +50,7 @@ static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
 static const char* BLUEFOG_WIN_ON_GPU = std::getenv("BLUEFOG_WIN_ON_GPU");
-static const bool WIN_ON_CPU = ~((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
+static const bool WIN_ON_CPU = !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
 
 // A map store {name -> gpu_tensor}. Used only when BLUEFOG_WIN_ON_CPU is turned on.
 static std::unordered_map<std::string, ::torch::Tensor> win_gpu_tensor_map;
@@ -202,7 +202,6 @@ bool WinTorchStorageManager::AvgWithNeighbor(
 
   auto neighbor_map = it->second;
   for(auto& kv: neighbor_weights) {
-    int rank = kv.first;
     float weight = kv.second;
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul(weight));

@@ -139,8 +139,8 @@ class WinMutexGuard {
   WinMutexGuard& operator=(const WinMutexGuard&) = delete;
 
  private:
-  std::vector<int> acquire_ranks_;
   MPIController* const mpi_controller_;
+  std::vector<int> acquire_ranks_;
 };
 
 }  // namespace common
