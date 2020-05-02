@@ -111,12 +111,12 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   // certain components, e.g. OpenIB BTL in OpenMPI gets disabled if
   // MPI_THREAD_MULTIPLE is requested.
   //
-  // By default, we will ask for MPI_THREAD_FUNNELED -- The process may be 
+  // By default, we will ask for MPI_THREAD_SERIALIZED -- The process may be 
   // multi-threaded, but only the main thread will make MPI calls (all MPI calls 
   // are funneled to the main thread). The main reason we use this level is MPI win 
   // ops doesn't have good support for multiple processes on multiple hosts unless 
   // running under a system with an RDMA  capable network such as Infiniband.
-  int required_thread_level = MPI_THREAD_FUNNELED;
+  int required_thread_level = MPI_THREAD_SERIALIZED;
   const char* BLUEFOG_MPI_THREAD_LEVEL =
       std::getenv("BLUEFOG_MPI_THREAD_LEVEL");
   if (BLUEFOG_MPI_THREAD_LEVEL != nullptr) {

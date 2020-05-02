@@ -492,6 +492,18 @@ Status EnqueueTensorWindowGet(const std::string& name,
   return status;
 }
 
+Status EnqueueBarrier(StatusCallback callback) {
+  TensorTableEntry e;
+  e.callback = callback;
+  e.mpi_ops_type = MPIOpsType::BARRIER;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  return status;
+}
+
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, const int device) {
@@ -546,18 +558,6 @@ Status WindowFence(const std::string& name) {
     BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
   }
-  return status;
-}
-
-Status Barrier(StatusCallback callback) {
-  TensorTableEntry e;
-  e.callback = callback;
-  e.mpi_ops_type = MPIOpsType::BARRIER;
-
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
   return status;
 }
 

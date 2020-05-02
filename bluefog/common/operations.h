@@ -138,7 +138,7 @@ Status EnqueueTensorWindowGet(const std::string& name,
                               const bool require_mutex,
                               StatusCallback callback);
 
-Status Barrier(StatusCallback callback);
+Status EnqueueBarrier(StatusCallback callback);
 
 // Note all following ops are not proccessed through the communication thread.
 // it is executed throug the main thread. It may cause some mismatch.
