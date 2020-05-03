@@ -353,9 +353,6 @@ def _neighbor_allreduce_function_factory(tensor):
 
 def _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
-    assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor,
-                               torch.cuda.FloatTensor, torch.cuda.DoubleTensor)), \
-           "If average is set in allreduce, only float or double tensor is allowed."
     if self_weight is None and neighbor_weights is None:
         if is_topo_weighted():
             topology = load_topology()
@@ -368,13 +365,16 @@ def _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, nam
             avg_computation = True
     elif self_weight is not None and neighbor_weights is not None:
         avg_computation = False
+    else:
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+                         "the same time")
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         avg_computation, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
-def neighbor_allreduce(tensor: torch.Tensor, 
+def neighbor_allreduce(tensor: torch.Tensor,
                        self_weight: float = None, neighbor_weights: Dict[int, float] = None,
                        name: str = None) -> torch.Tensor:
     """
@@ -402,7 +402,7 @@ def neighbor_allreduce(tensor: torch.Tensor,
     Returns:
         A tensor of the same shape and type as `tensor`,  across all processes.
 
-    Note: self_weight and neighbor_weights are bind, and must be presented at the same time.
+    Note: self_weight and neighbor_weights must be presented at the same time.
     """
     if (self_weight is None and neighbor_weights is not None) or \
        (self_weight is not None and neighbor_weights is None):
@@ -416,7 +416,7 @@ def neighbor_allreduce_async(tensor: torch.Tensor,
                              self_weight: float = None, neighbor_weights: Dict[int, float] = None,
                              name: str = None) -> int:
     """
-    A function that asynchronously performs weighted averaging of the input tensor over the 
+    A function that asynchronously performs weighted averaging of the input tensor over the
     negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.
 
     The input tensor is not modified.
@@ -441,7 +441,7 @@ def neighbor_allreduce_async(tensor: torch.Tensor,
         A handle to the neighbor_allreduce operation that can be used with `poll()` or
         `synchronize()`.
 
-    Note: self_weight and neighbor_weights are bind, and must be presented at the same time.
+    Note: self_weight and neighbor_weights must be presented at the same time.
     """
     if (self_weight is None and neighbor_weights is not None) or \
        (self_weight is not None and neighbor_weights is None):
@@ -599,8 +599,7 @@ def win_sync(name: str,
 
     Note2: If reset is True, mutex for self is acquired.
 
-    Note3: self_weight and neighbor_weights are bind together, and must be presented at the same
-    time.
+    Note3: self_weight and neighbor_weights must be presented at the same time.
     """
     tensor = _win_map[name]
     if clone:
@@ -653,7 +652,7 @@ def _win_put_function_factory(tensor):
 
 
 def win_put_async(tensor: torch.Tensor, name: str,
-                  dst_weights: Dict[int, float] = None, 
+                  dst_weights: Dict[int, float] = None,
                   require_mutex: bool = False) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
