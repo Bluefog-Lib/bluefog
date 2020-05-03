@@ -255,7 +255,7 @@ class _DistributedConsensusOptimizer(torch.optim.Optimizer):
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
-        handle = bf.neighbor_allreduce_async(p.data, average=True, name=name)
+        handle = bf.neighbor_allreduce_async(p.data, name=name)
         return handle
 
     def synchronize(self):
