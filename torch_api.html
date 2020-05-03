@@ -317,12 +317,12 @@ on a node, their local ranks will be zero through six, inclusive.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>Topo</strong> – A networkx. DiGraph object to decide the topology. If not provided
+<li><p><strong>Topo</strong> – A networkx.DiGraph object to decide the topology. If not provided
 a default power_two_ring structure is used.</p></li>
-<li><p><strong>is_weighted</strong> – If set to true, the neighbor ops win_sync and neighbor_allreduce will
-execute the weighted average instead, where the weights are the value used in
-topology matrix (including self weights). Note win_get/win_put/win_accumulate do
-not use this weight due to ambiguity.</p></li>
+<li><p><strong>is_weighted</strong> – If set to true, the win_sync and neighbor_allreduce will execute the
+weighted average instead, where the weights are the value used in topology matrix
+(including self weight). Note win_get/win_put/win_accumulate do not use this weight
+since win_sync already uses these weights.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -632,12 +632,10 @@ different processes must have the same rank and shape.</p>
 
 <dl class="py function">
 <dt id="bluefog.torch.neighbor_allreduce">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">average</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that performs averaging or summation of the input tensor
-over the negihbors in the Bluefog processes, where neighbors always include the itself.
-The input tensor is not modified. If the topology setup is weighted, i.e. is_weighted in
-initialization or SetTopology is True, the average step will execute the weighted average
-instead of (uniformly) average.</p>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs weighted averaging of the input tensor over the negihbors and itself
+in the Bluefog processes. The default behavior is (uniformly) average.</p>
+<p>The input tensor is not modified.</p>
 <p>The reduction operation is keyed by the name. If name is not provided, an incremented
 auto-generated name is used. The tensor type and shape must be the same on all
 Bluefog processes for a given name. The reduction will not start until all processes
@@ -645,25 +643,30 @@ are ready to send and receive the tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tensor</strong> – A tensor to average and sum.</p></li>
-<li><p><strong>average</strong> – A flag indicating whether to compute average or summation,
-defaults to average.</p></li>
+<li><p><strong>tensor</strong> – A tensor to weighted average.</p></li>
+<li><p><strong>self_weight</strong> – the weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – the weights for neighbor nodes, used with self weight.
+If neighbor_weights is presented, the return tensor will return the weighted average
+defined by these weights and the self_weight. If not, the return tensor will return
+the weighted average defined by the topology weights is provided or uniformly average.
+The data structure of weights should be {rank : weight} and rank has to belong to the
+(in-)neighbors.</p></li>
 <li><p><strong>name</strong> – A name of the reduction operation.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>, averaged or summed across all
-processes.</p>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>,  across all processes.</p>
 </dd>
 </dl>
+<p>Note: self_weight and neighbor_weights must be presented at the same time.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt id="bluefog.torch.neighbor_allreduce_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">average</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allreduce_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that asynchronously averaging or summation of the input tensor
-over the negihbors in the Bluefog processes, where neighbors always include the itself.
-The input tensor is not modified.</p>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allreduce_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that asynchronously performs weighted averaging of the input tensor over the
+negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.</p>
+<p>The input tensor is not modified.</p>
 <p>The reduction operation is keyed by the name. If name is not provided, an incremented
 auto-generated name is used. The tensor type and shape must be the same on all
 Bluefog processes for a given name. The reduction will not start until all processes
@@ -672,6 +675,13 @@ are ready to send and receive the tensor.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to neighbor_allreduce.</p></li>
+<li><p><strong>self_weight</strong> – the weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – the weights for neighbor nodes, used with self weight.
+If neighbor_weights is presented, the return tensor will return the weighted average
+defined by these weights and the self_weight. If not, the return tensor will return
+the weighted average defined by the topology weights is provided or uniformly average.
+The data structure of weights should be {rank : weight} and rank has to belong to the
+(in-)neighbors.</p></li>
 <li><p><strong>name</strong> – A name of the neighbor_allreduce operation.</p></li>
 </ul>
 </dd>
@@ -680,6 +690,7 @@ are ready to send and receive the tensor.</p>
 <cite>synchronize()</cite>.</p>
 </dd>
 </dl>
+<p>Note: self_weight and neighbor_weights must be presented at the same time.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -809,8 +820,7 @@ in-place change.</p></li>
 change with the iterations. If static weight need, then setting the weights through the
 bf.set_topology(.., is_weighted=True) is a better choice.</p>
 <p>Note2: If reset is True, mutex for self is acquired.</p>
-<p>Note3: self_weight and neighbor_weights are bind together, and must be presented at the same
-time.</p>
+<p>Note3: self_weight and neighbor_weights must be presented at the same time.</p>
 </dd></dl>
 
 <dl class="py function">
