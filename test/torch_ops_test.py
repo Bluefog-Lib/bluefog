@@ -436,8 +436,9 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
+            nw = {i: 1.0 for i in neighbor_ranks}
             reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
-                                                   neighbor_weights={i:1.0 for i in neighbor_ranks})
+                                                   neighbor_weights=nw)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (sum) produces incorrect reduced shape"

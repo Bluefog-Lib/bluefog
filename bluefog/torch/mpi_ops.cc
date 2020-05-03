@@ -331,8 +331,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                 destinations_ptr);
 
-          // if avg_computation is set to be True, average computation will be taken place.
-          if (!avg_computation) {
+          // if avg_computation is set to be False, sum computation will be taken place.
+          if (avg_computation) {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
               float weight = 0.0;
@@ -400,7 +400,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                 destinations_ptr);
           // if avg_computation is set to be True, average computation will be taken place.
-          if (!avg_computation) {
+          if (avg_computation) {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
               float weight = 0.0;

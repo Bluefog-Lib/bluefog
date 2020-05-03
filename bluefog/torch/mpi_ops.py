@@ -357,14 +357,22 @@ def _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, nam
         if is_topo_weighted():
             topology = load_topology()
             self_weight, neighbor_weights = GetWeights(topology, rank())
-            avg_computation = False
+            avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
             self_weight = weight
             neighbor_weights = {r:weight for r in in_neighbor_ranks()}
-            avg_computation = True
+            avg_computation = False
     elif self_weight is not None and neighbor_weights is not None:
-        avg_computation = False
+        if not isinstance(neighbor_weights, dict):
+            raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
+                             "(in-)neighbor rank to the weights.")
+        if not isinstance(self_weight, float):
+            raise ValueError("Argument self_weight has to be a float for self rank.")
+        if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
+            raise ValueError("The key of weights should only contain the ranks that belong to "
+                             " in-neighbors and self rank.")
+        avg_computation = True
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
