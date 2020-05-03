@@ -278,7 +278,8 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 }
 
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
-                        int average, const std::string& name) {
+                        float self_weight, const std::unordered_map<int, float>& neighbor_weights,
+                        bool avg_computation, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
@@ -301,8 +302,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, op_name, device,
-        [handle, average, cpu_output, tensor, output, device, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
+        [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
+         output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
           output.resize_(cpu_output.sizes());
           output.copy_(cpu_output);
@@ -330,18 +331,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                 destinations_ptr);
 
-          float self_weight = 1.0;
-          const std::unordered_map<int, float>* neighbor_weights_ptr;
-          int is_weighted = bluefog_load_topology_weights(self_weight, neighbor_weights_ptr);
-          // No matter the topology is weighted or not, if we do not need
-          // average for the neighbor allreduce result, the weights will not be
-          // used.
-          if (average && (is_weighted == 1)) {
+          // if avg_computation is set to be True, average computation will be taken place.
+          if (!avg_computation) {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
               float weight = 0.0;
-              auto it = neighbor_weights_ptr->find(*(sources_ptr + i));
-              if (it != neighbor_weights_ptr->end()) {
+              auto it = neighbor_weights.find(*(sources_ptr + i));
+              if (it != neighbor_weights.end()) {
                 weight = it->second;
               }
 
@@ -364,9 +360,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             output.resize_(shape_vector);
             // Include self data as well.
             output.add_(tensor);
-            if (average) {
-              output.div_(bluefog_neighbor_size() + 1);
-            }
+            output.div_(bluefog_neighbor_size() + 1);
           }
 
           handle_manager.MarkDone(handle, status);
@@ -381,8 +375,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, op_name, device,
-        [handle, average, tensor, output, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
+        [handle, self_weight, neighbor_weights, avg_computation,
+         tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
           int first_dim = output.size(0) / bluefog_neighbor_size();
           std::vector<int64_t> shape_vector;
           shape_vector.push_back(first_dim);
@@ -405,19 +399,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           int* destinations_ptr = nullptr;
           bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                 destinations_ptr);
-
-          float self_weight = 1.0;
-          const std::unordered_map<int, float>* neighbor_weights_ptr;
-          int is_weighted = bluefog_load_topology_weights(self_weight, neighbor_weights_ptr);
-          // No matter the topology is weighted or not, if we do not need
-          // average for the neighbor allreduce result, the weights will not be
-          // used.
-          if (average && (is_weighted == 1)) {
+          // if avg_computation is set to be True, average computation will be taken place.
+          if (!avg_computation) {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
               float weight = 0.0;
-              auto it = neighbor_weights_ptr->find(*(sources_ptr + i));
-              if (it != neighbor_weights_ptr->end()) {
+              auto it = neighbor_weights.find(*(sources_ptr + i));
+              if (it != neighbor_weights.end()) {
                 weight = it->second;
               }
 
@@ -440,9 +428,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             output.resize_(shape_vector);
             // Include self data as well.
             output.add_(tensor);
-            if (average) {
-              output.div_(bluefog_neighbor_size() + 1);
-            }
+            output.div_(bluefog_neighbor_size() + 1);
           }
 
           handle_manager.MarkDone(handle, status);
