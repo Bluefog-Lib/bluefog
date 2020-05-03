@@ -19,6 +19,7 @@ import timeit
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data.distributed
@@ -72,7 +73,28 @@ if args.cuda:
 cudnn.benchmark = True
 
 # Set up standard model.
-model = getattr(models, args.model)(num_classes=args.num_classes)
+if args.model == "lenet":
+    # lenet for cpu test only.
+    class LeNet(nn.Module):
+        def __init__(self):
+            super(LeNet, self).__init__()
+            self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+            self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+            self.conv2_drop = nn.Dropout2d()
+            self.fc1 = nn.Linear(320, 50)
+            self.fc2 = nn.Linear(50, 10)
+
+        def forward(self, x):
+            x = F.relu(F.max_pool2d(self.conv1(x), 2))
+            x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+            x = x.view(-1, 320)
+            x = F.relu(self.fc1(x))
+            x = F.dropout(x, training=self.training)
+            x = self.fc2(x)
+            return F.log_softmax(x, dim=0)
+    model = LeNet()
+else:
+    model = getattr(models, args.model)(num_classes=args.num_classes)
 
 if args.cuda:
     # Move model to GPU.
@@ -105,8 +127,12 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 # Set up fake data
 datasets = []
 for _ in range(100):
-    data = torch.rand(args.batch_size, 3, 224, 224)
-    target = torch.LongTensor(args.batch_size).random_() % 1000
+    if args.model == "lenet":
+        data = torch.rand(args.batch_size, 1, 28, 28)
+        target = torch.LongTensor(args.batch_size).random_() % 10
+    else:
+        data = torch.rand(args.batch_size, 3, 224, 224)
+        target = torch.LongTensor(args.batch_size).random_() % 1000
     if args.cuda:
         data, target = data.cuda(), target.cuda()
     datasets.append(data)
