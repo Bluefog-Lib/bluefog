@@ -254,7 +254,7 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, average=True, name=name)
+            reduced_tensor = bf.neighbor_allreduce(tensor, name=name)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -291,7 +291,7 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            reduced_tensor = bf.neighbor_allreduce(tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -329,7 +329,7 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            reduced_tensor = bf.neighbor_allreduce(tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -366,7 +366,7 @@ class OpsTests(unittest.TestCase):
             for dtype, dim in itertools.product(dtypes, dims):
                 tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
                 tensor = self.cast_and_place(tensor, dtype)
-                reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+                reduced_tensor = bf.neighbor_allreduce(tensor)
                 assert (
                     list(reduced_tensor.shape) == [23] * dim
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -406,7 +406,7 @@ class OpsTests(unittest.TestCase):
             for dtype, dim in itertools.product(dtypes, dims):
                 tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
                 tensor = self.cast_and_place(tensor, dtype)
-                reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+                reduced_tensor = bf.neighbor_allreduce(tensor)
                 assert (
                     list(reduced_tensor.shape) == [23] * dim
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -423,8 +423,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor,
-                  torch.IntTensor, torch.LongTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
 
@@ -437,7 +436,8 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, average=False)
+            reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
+                                                   neighbor_weights={i:1.0 for i in neighbor_ranks})
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (sum) produces incorrect reduced shape"
@@ -470,7 +470,7 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, average=True)
+            reduced_tensor = bf.neighbor_allreduce(tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced shape"

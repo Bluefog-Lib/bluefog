@@ -351,26 +351,37 @@ def _neighbor_allreduce_function_factory(tensor):
     return 'bluefog_torch_neighbor_allreduce_async_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allreduce_async(tensor, output, average, name):
+def _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
-    if average:
-        assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor,
-                                   torch.cuda.FloatTensor, torch.cuda.DoubleTensor)), \
-            "If average is set in allreduce, only float or double tensor is allowed."
-    handle = getattr(mpi_lib, function)(tensor, output, average,
-                                        name.encode() if name is not None else "")
+    assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor,
+                               torch.cuda.FloatTensor, torch.cuda.DoubleTensor)), \
+           "If average is set in allreduce, only float or double tensor is allowed."
+    if self_weight is None and neighbor_weights is None:
+        if is_topo_weighted():
+            topology = load_topology()
+            self_weight, neighbor_weights = GetWeights(topology, rank())
+            avg_computation = False
+        else:
+            weight = 1.0/(len(in_neighbor_ranks())+1)
+            self_weight = weight
+            neighbor_weights = {r:weight for r in in_neighbor_ranks()}
+            avg_computation = True
+    elif self_weight is not None and neighbor_weights is not None:
+        avg_computation = False
+    handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
+                                        avg_computation, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
-def neighbor_allreduce(tensor: torch.Tensor, average: bool = True,
+def neighbor_allreduce(tensor: torch.Tensor, 
+                       self_weight: float = None, neighbor_weights: Dict[int, float] = None,
                        name: str = None) -> torch.Tensor:
     """
-    A function that performs averaging or summation of the input tensor
-    over the negihbors in the Bluefog processes, where neighbors always include the itself.
-    The input tensor is not modified. If the topology setup is weighted, i.e. is_weighted in
-    initialization or SetTopology is True, the average step will execute the weighted average
-    instead of (uniformly) average.
+    A function that performs weighted averaging of the input tensor over the negihbors and itself
+    in the Bluefog processes. The default behavior is (uniformly) average.
+
+    The input tensor is not modified.
 
     The reduction operation is keyed by the name. If name is not provided, an incremented
     auto-generated name is used. The tensor type and shape must be the same on all
@@ -378,23 +389,36 @@ def neighbor_allreduce(tensor: torch.Tensor, average: bool = True,
     are ready to send and receive the tensor.
 
     Arguments:
-        tensor: A tensor to average and sum.
-        average: A flag indicating whether to compute average or summation,
-                 defaults to average.
+        tensor: A tensor to weighted average.
+        self_weight: the weight for self node, used with neighbor_weights.
+        neighbor_weights: the weights for neighbor nodes, used with self weight.
+            If neighbor_weights is presented, the return tensor will return the weighted average
+            defined by these weights and the self_weight. If not, the return tensor will return
+            the weighted average defined by the topology weights is provided or uniformly average.
+            The data structure of weights should be {rank : weight} and rank has to belong to the
+            (in-)neighbors.
         name: A name of the reduction operation.
 
     Returns:
-        A tensor of the same shape and type as `tensor`, averaged or summed across all
-        processes.
+        A tensor of the same shape and type as `tensor`,  across all processes.
+
+    Note: self_weight and neighbor_weights are bind, and must be presented at the same time.
     """
-    handle = neighbor_allreduce_async(tensor, average, name)
+    if (self_weight is None and neighbor_weights is not None) or \
+       (self_weight is not None and neighbor_weights is None):
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+                         "the same time")
+    handle = neighbor_allreduce_async(tensor, self_weight, neighbor_weights, name)
     return synchronize(handle)
 
 
-def neighbor_allreduce_async(tensor: torch.Tensor, average: bool = True, name: str = None) -> int:
+def neighbor_allreduce_async(tensor: torch.Tensor,
+                             self_weight: float = None, neighbor_weights: Dict[int, float] = None,
+                             name: str = None) -> int:
     """
-    A function that asynchronously averaging or summation of the input tensor
-    over the negihbors in the Bluefog processes, where neighbors always include the itself.
+    A function that asynchronously performs weighted averaging of the input tensor over the 
+    negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.
+
     The input tensor is not modified.
 
     The reduction operation is keyed by the name. If name is not provided, an incremented
@@ -404,14 +428,27 @@ def neighbor_allreduce_async(tensor: torch.Tensor, average: bool = True, name: s
 
     Arguments:
         tensor: A tensor to neighbor_allreduce.
+        self_weight: the weight for self node, used with neighbor_weights.
+        neighbor_weights: the weights for neighbor nodes, used with self weight.
+            If neighbor_weights is presented, the return tensor will return the weighted average
+            defined by these weights and the self_weight. If not, the return tensor will return
+            the weighted average defined by the topology weights is provided or uniformly average.
+            The data structure of weights should be {rank : weight} and rank has to belong to the
+            (in-)neighbors.
         name: A name of the neighbor_allreduce operation.
 
     Returns:
         A handle to the neighbor_allreduce operation that can be used with `poll()` or
         `synchronize()`.
+
+    Note: self_weight and neighbor_weights are bind, and must be presented at the same time.
     """
+    if (self_weight is None and neighbor_weights is not None) or \
+       (self_weight is not None and neighbor_weights is None):
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+                         "the same time")
     output = tensor.new(tensor.shape)
-    return _neighbor_allreduce_async(tensor, output, average, name)
+    return _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, name)
 
 
 def poll(handle: int) -> bool:
