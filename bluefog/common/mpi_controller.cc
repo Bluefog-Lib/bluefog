@@ -31,6 +31,11 @@
 namespace bluefog {
 namespace common {
 
+// Due to unclear reason that mpi_put/get/accumlate under the
+// mpi_lock epoch cannot send too long vector in one time, we
+// define this number as the maximum size of win_ops can send.
+constexpr int MAX_WIN_SENT = 2000;
+
 // MPIController
 void MPIController::Initialize() {
   // Check if multi-thread is supported.
@@ -531,7 +536,6 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     float weight = kv.second;
@@ -552,10 +556,19 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     void* sendbuf = (void*)tensor->data();
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
-    int ret_code = MPI_Put(sendbuf, num_elements, data_type, target_rank,
-                           target_disp, num_elements, data_type, mpi_win);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error("MPI_Put failed, see MPI output for details.");
+    int target_disp = 0;  // offset in win buffer
+    int sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
+    while (sent_size != 0) {
+      void* sendbuf_start =
+          (void*)(static_cast<char*>(sendbuf) +
+                  target_disp * mpi_ctx_.GetMPITypeSize(tensor->dtype()));
+      int ret_code = MPI_Put(sendbuf_start, sent_size, data_type, target_rank,
+                             target_disp, sent_size, data_type, mpi_win);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Put failed, see MPI output for details.");
+      }
+      target_disp += sent_size;
+      sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     }
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityEnd(entry.tensor_name);
@@ -588,7 +601,6 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
-  int target_disp = 0;  // offset in win buffer
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     float weight = kv.second;
@@ -606,16 +618,27 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     void* sendbuf = (void*)tensor->data();
 
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
-    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
-    int ret_code =
-        MPI_Accumulate(sendbuf, num_elements, data_type, target_rank,
-                       target_disp, num_elements, data_type, MPI_SUM, mpi_win);
-    if (ret_code != MPI_SUCCESS) {
-      if (entry.require_mutex) WinMutexRelease(mutex_ranks);
-      throw std::runtime_error(
-          "MPI_Accumulate failed, see MPI output for details.");
+
+    MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
+    int target_disp = 0;  // offset in win buffer
+    int sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
+    while (sent_size != 0) {
+      void* sendbuf_start =
+          (void*)(static_cast<char*>(sendbuf) +
+                  target_disp * mpi_ctx_.GetMPITypeSize(tensor->dtype()));
+      int ret_code =
+          MPI_Accumulate(sendbuf_start, sent_size, data_type, target_rank,
+                         target_disp, sent_size, data_type, MPI_SUM, mpi_win);
+      if (ret_code != MPI_SUCCESS) {
+        if (entry.require_mutex) WinMutexRelease(mutex_ranks);
+        throw std::runtime_error(
+            "MPI_Accumulate failed, see MPI output for details.");
+      }
+      target_disp += sent_size;
+      sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     }
     MPI_Win_unlock(target_rank, mpi_win);
+
     timeline_ptr->ActivityEnd(entry.tensor_name);
     if (entry.require_mutex) {
       WinMutexRelease(mutex_ranks);
@@ -643,7 +666,6 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
-  int target_disp = 0;  // offset in win buffer
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
   for (auto kv : entry.src_weights) {
     int target_rank = kv.first;
@@ -668,10 +690,19 @@ void MPIController::WinGet(TensorTableEntry& entry) {
 
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
-    int ret_code = MPI_Get(recvbuf, num_elements, data_type, target_rank,
-                           target_disp, num_elements, data_type, mpi_win);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error("MPI_Get failed, see MPI output for details.");
+    int target_disp = 0;  // offset in win buffer
+    int recv_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
+    while (recv_size != 0) {
+      void* recvbuf_start =
+          (void*)(static_cast<char*>(recvbuf) +
+                  target_disp * mpi_ctx_.GetMPITypeSize(tensor->dtype()));
+      int ret_code = MPI_Get(recvbuf_start, recv_size, data_type, target_rank,
+                             target_disp, recv_size, data_type, mpi_win);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Get failed, see MPI output for details.");
+      }
+      target_disp += recv_size;
+      recv_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     }
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
