@@ -244,7 +244,7 @@ class WinOpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
@@ -252,7 +252,7 @@ class WinOpsTests(unittest.TestCase):
             bf.win_put(tensor, window_name)
             bf.barrier()
             sync_result = bf.win_sync(window_name)
-            assert (list(sync_result.shape) == [3] * dim), (
+            assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync after win_put produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_sync after win_put produces wrong tensor value " +
@@ -284,14 +284,14 @@ class WinOpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_put(tensor, window_name, dst_weights={(rank+1) % size: 1.23})
             bf.barrier()
             sync_result = bf.win_sync(window_name)
-            assert (list(sync_result.shape) == [3] * dim), (
+            assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync after win_put given destination produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_sync after win_put given destination produces wrong tensor value " +
@@ -324,7 +324,7 @@ class WinOpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
@@ -333,7 +333,7 @@ class WinOpsTests(unittest.TestCase):
             bf.barrier()
             sync_result = bf.win_sync(window_name)
 
-            assert (list(sync_result.shape) == [3] * dim), (
+            assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync after win_accmulate produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_sync after win_accmulate produces wrong tensor value " +
@@ -356,7 +356,7 @@ class WinOpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_accumulate_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
@@ -368,7 +368,7 @@ class WinOpsTests(unittest.TestCase):
                                       self_weight=0.5,
                                       neighbor_weights={(rank-1) % size: 0.5})
 
-            assert (list(sync_result.shape) == [3] * dim), (
+            assert (list(sync_result.shape) == [23] * dim), (
                 "bf.win_sync after win_accmulate given destination produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_sync after win_accmulate given destination produces wrong tensor value " +
@@ -395,7 +395,7 @@ class WinOpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
@@ -403,7 +403,7 @@ class WinOpsTests(unittest.TestCase):
             bf.barrier()
             recv_tensor = bf.win_sync(window_name, clone=True)
 
-            assert (list(tensor.shape) == [3] * dim), (
+            assert (list(tensor.shape) == [23] * dim), (
                 "bf.win_get produce wrong shape tensor.")
             assert (recv_tensor.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_get produce wrong tensor value " +
@@ -427,7 +427,7 @@ class WinOpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
@@ -439,7 +439,7 @@ class WinOpsTests(unittest.TestCase):
                                       neighbor_weights={(rank-1) % size: 0.5},
                                       clone=True)
 
-            assert (list(recv_tensor.shape) == [3] * dim), (
+            assert (list(recv_tensor.shape) == [23] * dim), (
                 "bf.win_get with given sources produces wrong shape tensor.")
             assert (recv_tensor.data - avg_value).abs().max() < EPSILON, (
                 "bf.win_get with given sources produces wrong tensor value " +
