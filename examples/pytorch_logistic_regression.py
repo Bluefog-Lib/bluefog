@@ -242,10 +242,10 @@ for i in range(maxite):
     w[:n] = w[:n] - alpha_pd*w[n:2*n]
     bf.win_accumulate(
         w, name="w_buff",
-        dst_weights={rank: 1.0 / (outdegree + 1)
+        dst_weights={rank: 0.5 / (outdegree)
                      for rank in bf.out_neighbor_ranks()},
         require_mutex=True)
-    w.div_(1+outdegree)
+    w.div_(2)
     w = bf.win_sync_then_collect(name="w_buff")
 
     x.data = w[:n]/w[-1]
