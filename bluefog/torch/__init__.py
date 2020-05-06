@@ -23,7 +23,7 @@ import os
 import torch
 from bluefog.common.util import check_extension
 from bluefog.torch.optimizers import (
-    DistributedAllreduceOptimizer, DistributedConsensusOptimizer, DistributedBluefogOptimizer)
+    DistributedAllreduceOptimizer, DistributedNeighborAllreduceOptimizer, DistributedBluefogOptimizer)
 
 check_extension('bluefog.torch', __file__, 'mpi_lib')
 
