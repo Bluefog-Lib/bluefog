@@ -174,7 +174,7 @@
 <dl class="py function">
 <dt id="bluefog.torch.DistributedAllreduceOptimizer">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>An optimizer that wraps another torch.optim.Optimizer.</p>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -187,9 +187,10 @@ allreduce operations. Typically just <code class="docutils literal notranslate">
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.DistributedConsensusOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedConsensusOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedConsensusOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>An consensus optimizer that wraps another torch.optim.Optimizer.</p>
+<dt id="bluefog.torch.DistributedNeighborAllreduceOptimizer">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
+neighbor_allreduce ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -204,7 +205,8 @@ allreduce operations. Typically just <code class="docutils literal notranslate">
 <dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>An distributed optimizer based on one-sided ops that wraps another torch.optim.Optimizer.</p>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
+mpi_win_put ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -326,10 +328,7 @@ since win_sync already uses these weights.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Whether topology is set correctly or not.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>bool</p>
+<dd class="field-even"><p>A boolean value that whether topology is set correctly or not.</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -350,9 +349,6 @@ Notice: No matter self-loop is presented or not, self rank will not be included.
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>in_neighbor_ranks</p>
 </dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>List[int]</p>
-</dd>
 </dl>
 </dd></dl>
 
@@ -364,9 +360,6 @@ Notice: No matter self-loop is presented or not, self rank will not be included.
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>out_neighbor_ranks</p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>List[int]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1071,10 +1064,7 @@ bfrun –timeline-filename {file_name} …</p>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Whether timeline is executed correctly or not.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>bool</p>
+<dd class="field-even"><p>A boolean value that whether timeline is executed correctly or not.</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
