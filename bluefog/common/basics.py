@@ -68,7 +68,7 @@ class BlueFogBasics(object):
         """A function that returns the number of BlueFog processes.
 
         Returns:
-          An integer scalar containing the number of BlueFog processes.
+            An integer scalar containing the number of BlueFog processes.
         """
         size = self._MPI_LIB_CTYPES.bluefog_size()
         if size == -1:
@@ -80,7 +80,7 @@ class BlueFogBasics(object):
         node the current process is running on.
 
         Returns:
-          An integer scalar containing the number of local BlueFog processes.
+            An integer scalar containing the number of local BlueFog processes.
         """
         local_size = self._MPI_LIB_CTYPES.bluefog_local_size()
         if local_size == -1:
@@ -91,7 +91,7 @@ class BlueFogBasics(object):
         """A function that returns the BlueFog rank of the calling process.
 
         Returns:
-          An integer scalar with the BlueFog rank of the calling process.
+            An integer scalar with the BlueFog rank of the calling process.
         """
         rank = self._MPI_LIB_CTYPES.bluefog_rank()
         if rank == -1:
@@ -104,7 +104,7 @@ class BlueFogBasics(object):
         on a node, their local ranks will be zero through six, inclusive.
 
         Returns:
-          An integer scalar with the local BlueFog rank of the calling process.
+            An integer scalar with the local BlueFog rank of the calling process.
         """
         local_rank = self._MPI_LIB_CTYPES.bluefog_local_rank()
         if local_rank == -1:
@@ -128,7 +128,7 @@ class BlueFogBasics(object):
         MPI libraries, such as `mpi4py`.
 
         Returns:
-          A boolean value indicating whether MPI multi-threading is supported.
+            A boolean value indicating whether MPI multi-threading is supported.
         """
         mpi_threads_supported = self._MPI_LIB_CTYPES.bluefog_mpi_threads_supported()
         if mpi_threads_supported == -1:
@@ -157,7 +157,7 @@ class BlueFogBasics(object):
         Notice: No matter self-loop is presented or not, self rank will not be included.
 
         Returns:
-            List[int]: in_neighbor_ranks
+            in_neighbor_ranks
         """
         if self._topology is None:
             return []
@@ -171,7 +171,7 @@ class BlueFogBasics(object):
         Notice: No matter self-loop is presented or not, self rank will not be included.
 
         Returns:
-            List[int]: out_neighbor_ranks
+            out_neighbor_ranks
         """
         if self._topology is None:
             return []
@@ -193,7 +193,7 @@ class BlueFogBasics(object):
             since win_sync already uses these weights.
 
         Returns:
-            bool: Whether topology is set correctly or not.
+            A boolean value that whether topology is set correctly or not.
 
         Example:
             >>> import bluefog.torch as bf
@@ -276,7 +276,7 @@ class BlueFogBasics(object):
             activity_name (str): The activity type.
 
         Returns:
-            bool: Whether timeline is executed correctly or not.
+            A boolean value that whether timeline is executed correctly or not.
 
         Example:
             >>> import bluefog.torch as bf

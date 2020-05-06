@@ -171,7 +171,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).zero_grad()
 
 
-class _DistributedConsensusOptimizer(torch.optim.Optimizer):
+class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
     """ A distributed optimizer wrapper over torch optimizer.
 
     Note: Unlike the _DistributedOptimizer class that registers hook for each named parameters,
@@ -459,7 +459,8 @@ def _MakeTimelineHook(model):
 
 
 def DistributedBluefogOptimizer(optimizer, named_parameters=None):
-    """An distributed optimizer based on one-sided ops that wraps another torch.optim.Optimizer.
+    """An distributed optimizer that wraps another torch.optim.Optimizer through
+    mpi_win_put ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
@@ -485,9 +486,10 @@ def DistributedBluefogOptimizer(optimizer, named_parameters=None):
     return cls(optimizer.param_groups, named_parameters)
 
 
-def DistributedConsensusOptimizer(optimizer, named_parameters=None):
+def DistributedNeighborAllreduceOptimizer(optimizer, named_parameters=None):
     """
-    An consensus optimizer that wraps another torch.optim.Optimizer.
+    An distributed optimizer that wraps another torch.optim.Optimizer through
+    neighbor_allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
@@ -499,14 +501,14 @@ def DistributedConsensusOptimizer(optimizer, named_parameters=None):
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
-        dict(_DistributedConsensusOptimizer.__dict__),
+        dict(_DistributedNeighborAllreduceOptimizer.__dict__),
     )
     return cls(optimizer.param_groups, named_parameters)
 
 
 def DistributedAllreduceOptimizer(optimizer, named_parameters=None):
     """
-    An optimizer that wraps another torch.optim.Optimizer.
+    An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.

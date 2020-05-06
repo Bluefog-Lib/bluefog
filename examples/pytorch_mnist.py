@@ -184,7 +184,7 @@ if args.bluefog:
     # )
     if args.no_rma:
         print("Use neighbor collective")
-        optimizer = bf.DistributedConsensusOptimizer(
+        optimizer = bf.DistributedNeighborAllreduceOptimizer(
             optimizer, named_parameters=model.named_parameters()
         )
     else:
