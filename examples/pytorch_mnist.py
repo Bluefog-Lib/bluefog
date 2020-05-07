@@ -264,8 +264,11 @@ def test():
                 test_loss, 100.0 * test_accuracy
             )
         )
+    return test_loss, 100.0 * test_accuracy
 
-
+record = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
-    test()
+    record.append(test())
+if bf.rank() == 0:
+    print(record)
