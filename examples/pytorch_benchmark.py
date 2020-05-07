@@ -182,6 +182,9 @@ with torch.autograd.profiler.profile(enable_profiling, True) as prof:
 # Results
 img_sec_mean = np.mean(img_secs)
 img_sec_conf = 1.96 * np.std(img_secs)
-log('Img/sec per %s: %.1f +-%.1f' % (device, img_sec_mean, img_sec_conf))
+img_secs_sum = bf.allreduce(torch.from_numpy(np.array(img_secs)), average=False)
+img_sec_mean_all = np.mean(img_secs_sum.numpy())
+img_sec_conf_all = 1.96 * np.std(img_secs_sum.numpy())
+print('[%d] Img/sec per %s: %.1f +-%.1f' % (bf.rank(), device, img_sec_mean, img_sec_conf))
 log('Total img/sec on %d %s(s): %.1f +-%.1f' %
-    (bf.size(), device, bf.size() * img_sec_mean, bf.size() * img_sec_conf))
+    (bf.size(), device, img_sec_mean_all, img_sec_conf_all))
