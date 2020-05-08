@@ -103,12 +103,46 @@ class _DistributedOptimizer(torch.optim.Optimizer):
 
     def _allreduce_grad_async(self, p):
         name = self._parameter_names.get(p)
-
+        if self._use_timeline:
+            bf.timeline_end_activity(name)
         handle = bf.allreduce_async(
             p.grad, average=True, name=name
         )
         return handle
 
+    def turn_on_timeline(self, model):
+        assert isinstance(
+            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
+
+        def _timeline_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_start_activity(
+                    name, activity_name="GRADIENT COMPT.")
+        model.register_backward_hook(_timeline_hook)
+
+        def _timeline_forward_pre_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_start_activity(name, activity_name="FORWARD")
+
+        def _timeline_forward_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_end_activity(name)
+
+        model.register_forward_pre_hook(_timeline_forward_pre_hook)
+        model.register_forward_hook(_timeline_forward_hook)
+        self._use_timeline = True
+
+    def turn_off_timeline(self, model):
+        assert isinstance(
+            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
+
+        def _empty_hook(model, *unused):
+            pass
+        model.register_backward_hook(_empty_hook)
+        model.register_forward_pre_hook(_empty_hook)
+        model.register_forward_hook(_empty_hook)
+        self._use_timeline = False
+        
     def synchronize(self):
         missing_p = self._requires_update - set(self._handles.keys())
         for p in missing_p:
@@ -255,8 +289,43 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
+        if self._use_timeline:
+            bf.timeline_end_activity(name)
         handle = bf.neighbor_allreduce_async(p.data, name=name)
         return handle
+
+    def turn_on_timeline(self, model):
+        assert isinstance(
+            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
+
+        def _timeline_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_start_activity(
+                    name, activity_name="GRADIENT COMPT.")
+        model.register_backward_hook(_timeline_hook)
+
+        def _timeline_forward_pre_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_start_activity(name, activity_name="FORWARD")
+
+        def _timeline_forward_hook(model, *unused):
+            for name, _ in model.named_parameters():
+                bf.timeline_end_activity(name)
+
+        model.register_forward_pre_hook(_timeline_forward_pre_hook)
+        model.register_forward_hook(_timeline_forward_hook)
+        self._use_timeline = True
+
+    def turn_off_timeline(self, model):
+        assert isinstance(
+            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
+
+        def _empty_hook(model, *unused):
+            pass
+        model.register_backward_hook(_empty_hook)
+        model.register_forward_pre_hook(_empty_hook)
+        model.register_forward_hook(_empty_hook)
+        self._use_timeline = False
 
     def synchronize(self):
         missing_p = self._requires_update - set(self._handles.keys())
@@ -450,12 +519,6 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         return super(self.__class__, self).step(closure)
 
-
-def _MakeTimelineHook(model):
-    def hook(*unused):
-        for name, _ in model.named_parameters():
-            bf.timeline_start_activity(name, activity_name="GRADIENT COMPT.")
-    return hook
 
 
 def DistributedBluefogOptimizer(optimizer, named_parameters=None):
