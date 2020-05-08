@@ -15,9 +15,20 @@
 
 import torch
 import matplotlib.pyplot as plt
+import argparse
 
 import bluefog.torch as bf
 from bluefog.common import topology_util
+
+# Parser
+parser = argparse.ArgumentParser(
+    description="PyTorch ImageNet Example",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
+parser.add_argument(
+    "--method", type=int, default=0, help="0:exact diffusion. 1:gradient tracking. 2:push-DIGing"
+)
+args = parser.parse_args()
 
 bf.init()
 
@@ -37,23 +48,22 @@ y = y.double()
 y = 2*y - 1
 rho = 1e-2
 
-
 def logistic_loss_step(x_, tensor_name):
     """Calculate gradient of logistic loss via pytorch autograd."""
     with bf.timeline_context(tensor_name=tensor_name,
-                             activity_name="computation"):
+                             activity_name="gradient computation"):
         loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
             0.5*rho*torch.norm(x_, p=2)
         loss_.backward()
     return loss_
 
-# ================== Distributed gradient descent ================================
-# Calculate the solution with distributed gradient descent:
-# x^{k+1} = x^k - alpha * allreduce(local_grad)
-# it will be used to verify the solution of various decentralized algorithms.
-# ================================================================================
+# # ================== Distributed gradient descent ================================
+# # Calculate the solution with distributed gradient descent:
+# # x^{k+1} = x^k - alpha * allreduce(local_grad)
+# # it will be used to verify the solution of various decentralized algorithms.
+# # ================================================================================
 w_opt = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-maxite = 2000
+maxite = 5000
 alpha = 1e-1
 for i in range(maxite):
     # calculate gradient via pytorch autograd
@@ -96,45 +106,62 @@ print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm)
 # [R2] Z. Li, W. Shi and M. Yan, ``A Decentralized Proximal-gradient Method with
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
-w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
-alpha_ed = 1e-1  # step-size for exact diffusion
-mse = []
-for i in range(maxite):
-    # calculate loccal gradient via pytorch autograd
-    logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable')
+if args.method == 0:
+    maxite = 2000
+    w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
+    phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
+    alpha_ed = 1e-1  # step-size for exact diffusion
+    mse = []
 
-    # exact diffusion
-    psi = w - alpha_ed * w.grad.data
-    phi = psi + w.data - psi_prev
-    w.data = bf.neighbor_allreduce(phi, name='local variable')
-    psi_prev = psi
+    # construct A_bar
+    # topology = bf.load_topology()
+    # self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+    # self_weight = (self_weight+1)/2
+    # for k, v in neighbor_weights.items():
+    #     neighbor_weights[k] = v/2
+
+    # if bf.rank() == 0:
+    #     print('line 123:', self_weight)
+    #     for k, v in neighbor_weights.items():
+    #         print('line 125:', neighbor_weights[k])
+
+    for i in range(maxite):
+        # calculate loccal gradient via pytorch autograd
+        logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable')
+
+        # exact diffusion
+        psi = w - alpha_ed * w.grad.data
+        phi = psi + w.data - psi_prev
+        # w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
+        w.data = bf.neighbor_allreduce(phi, name='local variable')
+        psi_prev = psi.clone()
+        w.grad.data.zero_()
+
+        # record convergence
+        if bf.rank() == 0:
+            mse.append(torch.norm(w.data - w_opt.data, p=2))
+
+    loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
+        0.5*rho*torch.norm(w, p=2)
+    loss.backward()
+    grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
+
+    # evaluate the convergence of exact diffuion logistic regression
+    # the norm of global gradient is expected to be 0 (optimality condition)
+    global_grad_norm = torch.norm(grad, p=2)
+    print("[ED] Rank {}: global gradient norm: {}".format(
+        bf.rank(), global_grad_norm))
+
+    # the norm of local gradient is expected not be be close to 0
+    # this is because each rank converges to global solution, not local solution
+    local_grad_norm = torch.norm(w.grad.data, p=2)
+    print("[ED] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
     w.grad.data.zero_()
 
-    # record convergence
     if bf.rank() == 0:
-        mse.append(torch.norm(w.data - w_opt.data, p=2))
-
-loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
-    0.5*rho*torch.norm(w, p=2)
-loss.backward()
-grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
-
-# evaluate the convergence of exact diffuion logistic regression
-# the norm of global gradient is expected to be 0 (optimality condition)
-global_grad_norm = torch.norm(grad, p=2)
-print("[ED] Rank {}: global gradient norm: {}".format(
-    bf.rank(), global_grad_norm))
-
-# the norm of local gradient is expected not be be close to 0
-# this is because each rank converges to global solution, not local solution
-local_grad_norm = torch.norm(w.grad.data, p=2)
-print("[ED] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
-w.grad.data.zero_()
-
-if bf.rank() == 0:
-    plt.semilogy(mse)
-    plt.show()
+        # print(mse[0:maxite:10])
+        plt.semilogy(mse)
+        plt.show()
 
 # ======================= gradient tracking =====================================
 # Calculate the true solution with gradient tracking (GT for short):
@@ -156,55 +183,56 @@ if bf.rank() == 0:
 # [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'',
 # 2016
 # ================================================================================
-w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
-    0.5*rho*torch.norm(w, p=2)
-loss.backward()
-q = w.grad.data  # q^0 = grad(w^0)
-w.grad.data.zero_()
-
-grad_prev = q.clone()
-alpha_gt = 1e-1  # step-size for GT
-mse_gt = []
-for i in range(maxite):
-    # w^{k+1} = neighbor_allreduce(w^k) - alpha*q^k
-    w.data = bf.neighbor_allreduce(
-        w.data, name='local variable w') - alpha_gt * q
-
-    # calculate local gradient
-    logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable w')
-    grad = w.grad.data.clone()    # local gradient at w^{k+1}
+if args.method == 1:
+    w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
+    loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
+        0.5*rho*torch.norm(w, p=2)
+    loss.backward()
+    q = w.grad.data  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
-    # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
-    q = bf.neighbor_allreduce(q, name='local variable q') + grad - grad_prev
-    grad_prev = grad
+    grad_prev = q.clone()
+    alpha_gt = 1e-1  # step-size for GT
+    mse_gt = []
+    for i in range(maxite):
+        # w^{k+1} = neighbor_allreduce(w^k) - alpha*q^k
+        w.data = bf.neighbor_allreduce(
+            w.data, name='local variable w') - alpha_gt * q
 
-    # record convergence
+        # calculate local gradient
+        logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable w')
+        grad = w.grad.data.clone()    # local gradient at w^{k+1}
+        w.grad.data.zero_()
+
+        # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
+        q = bf.neighbor_allreduce(q, name='local variable q') + grad - grad_prev
+        grad_prev = grad
+
+        # record convergence
+        if bf.rank() == 0:
+            mse_gt.append(torch.norm(w.data - w_opt.data, p=2))
+
+    # calculate local and global gradient
+    loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
+        0.5*rho*torch.norm(w, p=2)
+    loss.backward()
+    grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
+
+    # evaluate the convergence of gradient tracking for logistic regression
+    # the norm of global gradient is expected to be 0 (optimality condition)
+    global_grad_norm = torch.norm(grad, p=2)
+    print("[GT] Rank {}: global gradient norm: {}".format(
+        bf.rank(), global_grad_norm))
+
+    # the norm of local gradient is expected not be be close to 0
+    # this is because each rank converges to global solution, not local solution
+    local_grad_norm = torch.norm(w.grad.data, p=2)
+    print("[GT] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    w.grad.data.zero_()
+
     if bf.rank() == 0:
-        mse_gt.append(torch.norm(w.data - w_opt.data, p=2))
-
-# calculate local and global gradient
-loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
-    0.5*rho*torch.norm(w, p=2)
-loss.backward()
-grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
-
-# evaluate the convergence of gradient tracking for logistic regression
-# the norm of global gradient is expected to be 0 (optimality condition)
-global_grad_norm = torch.norm(grad, p=2)
-print("[GT] Rank {}: global gradient norm: {}".format(
-    bf.rank(), global_grad_norm))
-
-# the norm of local gradient is expected not be be close to 0
-# this is because each rank converges to global solution, not local solution
-local_grad_norm = torch.norm(w.grad.data, p=2)
-print("[GT] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
-w.grad.data.zero_()
-
-if bf.rank() == 0:
-    plt.semilogy(mse_gt)
-    plt.show()
+        plt.semilogy(mse_gt)
+        plt.show()
 
 # ======================= Push-DIGing for directed graph =======================
 # Calculate the true solution with Push-DIGing:
@@ -214,70 +242,70 @@ if bf.rank() == 0:
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
+if args.method == 2:
+    bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+    outdegree = len(bf.out_neighbor_ranks())
+    indegree = len(bf.in_neighbor_ranks())
 
-bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
-outdegree = len(bf.out_neighbor_ranks())
-indegree = len(bf.in_neighbor_ranks())
+    # u, y, v = w[:n], w[n:2*n], w[2n]
+    w = torch.zeros(2*n+1, 1).to(torch.double)
+    x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 
-# u, y, v = w[:n], w[n:2*n], w[2n]
-w = torch.zeros(2*n+1, 1).to(torch.double)
-x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-
-logistic_loss_step(x, tensor_name='w_buff')
-grad = x.grad.data.clone()
-w[n:2*n] = grad
-x.grad.data.zero_()
-
-w[-1] = 1.0
-grad_prev = w[n:2*n].clone()
-
-bf.win_create(w, name="w_buff", zero_init=True)
-
-alpha_pd = 1e-1  # step-size for Push-DIGing
-mse_pd = []
-for i in range(maxite):
-    if i % 10 == 0:
-        bf.barrier()
-
-    w[:n] = w[:n] - alpha_pd*w[n:2*n]
-    bf.win_accumulate(
-        w, name="w_buff",
-        dst_weights={rank: 0.5 / (outdegree)
-                     for rank in bf.out_neighbor_ranks()},
-        require_mutex=True)
-    w.div_(2)
-    w = bf.win_sync_then_collect(name="w_buff")
-
-    x.data = w[:n]/w[-1]
     logistic_loss_step(x, tensor_name='w_buff')
     grad = x.grad.data.clone()
+    w[n:2*n] = grad
     x.grad.data.zero_()
 
-    w[n:2*n] += grad - grad_prev
-    grad_prev = grad
+    w[-1] = 1.0
+    grad_prev = w[n:2*n].clone()
+
+    bf.win_create(w, name="w_buff", zero_init=True)
+
+    alpha_pd = 1e-1  # step-size for Push-DIGing
+    mse_pd = []
+    for i in range(maxite):
+        if i % 10 == 0:
+            bf.barrier()
+
+        w[:n] = w[:n] - alpha_pd*w[n:2*n]
+        bf.win_accumulate(
+            w, name="w_buff",
+            dst_weights={rank: 0.5 / (outdegree)
+                        for rank in bf.out_neighbor_ranks()},
+            require_mutex=True)
+        w.div_(2)
+        w = bf.win_sync_then_collect(name="w_buff")
+
+        x.data = w[:n]/w[-1]
+        logistic_loss_step(x, tensor_name='w_buff')
+        grad = x.grad.data.clone()
+        x.grad.data.zero_()
+
+        w[n:2*n] += grad - grad_prev
+        grad_prev = grad
+        if bf.rank() == 0:
+            mse_pd.append(torch.norm(x.data - w_opt, p=2))
+
+    bf.barrier()
+    w = bf.win_sync_then_collect(name="w_buff")
+    x.data = w[:n]/w[-1]
+
+    # calculate local and global gradient
+    logistic_loss_step(x, tensor_name="w_buff")
+    grad = bf.allreduce(x.grad.data, name='gradient')  # global gradient
+
+    # evaluate the convergence of gradient tracking for logistic regression
+    # the norm of global gradient is expected to be 0 (optimality condition)
+    global_grad_norm = torch.norm(grad, p=2)
+    print("[PD] Rank {}: global gradient norm: {}".format(
+        bf.rank(), global_grad_norm))
+
+    # the norm of local gradient is expected not be be close to 0
+    # this is because each rank converges to global solution, not local solution
+    local_grad_norm = torch.norm(x.grad.data, p=2)
+    print("[PD] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    x.grad.data.zero_()
+
     if bf.rank() == 0:
-        mse_pd.append(torch.norm(x.data - w_opt, p=2))
-
-bf.barrier()
-w = bf.win_sync_then_collect(name="w_buff")
-x.data = w[:n]/w[-1]
-
-# calculate local and global gradient
-logistic_loss_step(x, tensor_name="w_buff")
-grad = bf.allreduce(x.grad.data, name='gradient')  # global gradient
-
-# evaluate the convergence of gradient tracking for logistic regression
-# the norm of global gradient is expected to be 0 (optimality condition)
-global_grad_norm = torch.norm(grad, p=2)
-print("[PD] Rank {}: global gradient norm: {}".format(
-    bf.rank(), global_grad_norm))
-
-# the norm of local gradient is expected not be be close to 0
-# this is because each rank converges to global solution, not local solution
-local_grad_norm = torch.norm(x.grad.data, p=2)
-print("[PD] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
-x.grad.data.zero_()
-
-if bf.rank() == 0:
-    plt.semilogy(mse_pd)
-    plt.show()
+        plt.semilogy(mse_pd)
+        plt.show()
