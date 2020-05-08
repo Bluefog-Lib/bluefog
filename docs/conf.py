@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'Bluefog'
 copyright = '2019, Bicheng Ying'
 author = 'Bicheng Ying'
+master_doc = 'index'
 
 # The full version, including alpha/beta/rc tags
 release = '0.1'

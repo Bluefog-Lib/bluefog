@@ -32,10 +32,60 @@ a different agent. You can then load the timeline file into the
 is not set, the timeline function will be deactivated by default.
 
 
-
-An Example
+Example I: Logistic regression with neighbor_allreduce
 --------------------------
-To be added
+In the first example, we show the timeline when running decentralized SGD for 
+logistic regression, see the figure below. In this example, each rank is connected
+via an undirected power-2 topology. We exploit the 
+primitive ``neighbor_allreduce`` to perform the neighbor averaging.
+
+.. image:: ./_static/bf_timeline_example1.png
+   :width: 800
+   :align: center
+
+There are two active threads in the timeline: thread 1 that is mainly for gradient 
+**computation** and thread 2 for **communication**. There is a phase ``MPI_NEIGHBOR_ALLREDUCE``
+in thread 2 when neighbor allreduce actually happens. It is further divided into multiple 
+sub-phases:
+
+   + ``ALLOCATE_OUTPUT``:
+
+   + ``COMMUNICATE`` indicates time taken to perform the actual communication operation.
+
+   + ``COMPUTE_AVERAGE`` indicates time taken to compuate the average of variables received from neighbors. It is basically a reduce operation.
+
+Another notable feature of this neighbor_allreduce timeline is that threads 1 and 2 are **synchronized**.
+Each time when thread 1 enqueues a task for thread 2 to conduct communication, it will be blocked until
+thread 2 finish communication. As a result, it is observed that the end of opeartion ``ENQUEUE_NEIGHBOR_ALLREDUCE``
+in thread 1 aligns with the end of opeartion ``MPI_NEIGHBOR_ALLREDUCE`` in thread 2.
+
+Example II: Logistic regression with win_accumulate
+--------------------------
+In this example, we still show the timeline when running decentralized SGD for 
+logistic regression. Different from Example I, we employ the one-sided communication 
+primitives ``win_accumulate`` to exchange information between neighboring ranks.
+
+.. image:: ./_static/bf_timeline_example2.png
+   :width: 800
+   :align: center
+
+Different from Example I, it is observed that the computation thread (thread 1) and 
+the communication thread (thread 2) were running independently. Thread 1 will not 
+be blocked after enqueuing the ``WIN_ACCUMULATE`` task to thread 2 (``ENQUEUE_WIN_ACCUMULATE`` in
+thread 1 and ``MPI_WIN_ACCUMULATE`` in thread 2 are not aligned). In other words,
+the one-sided communication primitive enables nonblocking operation and will significantly
+improve the training efficiency in real practice.
+
+Example III: Resnet training with one-sided communication
+--------------------------
+In this example, we show the timeline for a real experiment when decentralized SGD is used to 
+train Resnet with CIFAR10 dataset. We exploit the one-sided communicaton primitive ``win_put'' 
+to exchange information between ranks. It is observed that each phase during the training
+is clearly illustrated in the timeline.
+
+.. image:: ./_static/bf_timeline_example3.png
+   :width: 800
+   :align: center
 
 .. _Horovod timeline:  https://github.com/horovod/horovod/blob/master/docs/timeline.rst
 .. _chrome://tracing:  chrome://tracing/
