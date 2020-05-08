@@ -98,7 +98,9 @@
 <li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Timeline</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#an-example">An Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-i-logistic-regression-with-neighbor-allreduce">Example I: Logistic regression with neighbor_allreduce</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-ii-logistic-regression-with-win-accumulate">Example II: Logistic regression with win_accumulate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-iii-resnet-training-with-one-sided-communication">Example III: Resnet training with one-sided communication</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
@@ -197,9 +199,49 @@ a different agent. You can then load the timeline file into the
 <a class="reference external" href="chrome://tracing/">chrome://tracing</a> facility of the Chrome browser. If the operation <code class="docutils literal notranslate"><span class="pre">--timeline-filename</span></code>
 is not set, the timeline function will be deactivated by default.</p>
 </div>
-<div class="section" id="an-example">
-<h2>An Example<a class="headerlink" href="#an-example" title="Permalink to this headline">¶</a></h2>
-<p>To be added</p>
+<div class="section" id="example-i-logistic-regression-with-neighbor-allreduce">
+<h2>Example I: Logistic regression with neighbor_allreduce<a class="headerlink" href="#example-i-logistic-regression-with-neighbor-allreduce" title="Permalink to this headline">¶</a></h2>
+<p>In the first example, we show the timeline when running decentralized SGD for
+logistic regression, see the figure below. In this example, each rank is connected
+via an undirected power-2 topology. We exploit the
+primitive <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code> to perform the neighbor averaging.</p>
+<a class="reference internal image-reference" href="_images/bf_timeline_example1.png"><img alt="_images/bf_timeline_example1.png" class="align-center" src="_images/bf_timeline_example1.png" style="width: 800px;" /></a>
+<p>There are two active threads in the timeline: thread 1 that is mainly for gradient
+<strong>computation</strong> and thread 2 for <strong>communication</strong>. There is a phase <code class="docutils literal notranslate"><span class="pre">MPI_NEIGHBOR_ALLREDUCE</span></code>
+in thread 2 when neighbor allreduce actually happens. It is further divided into multiple
+sub-phases:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ALLOCATE_OUTPUT</span></code>:</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">COMMUNICATE</span></code> indicates time taken to perform the actual communication operation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">COMPUTE_AVERAGE</span></code> indicates time taken to compuate the average of variables received from neighbors. It is basically a reduce operation.</p></li>
+</ul>
+</div></blockquote>
+<p>Another notable feature of this neighbor_allreduce timeline is that threads 1 and 2 are <strong>synchronized</strong>.
+Each time when thread 1 enqueues a task for thread 2 to conduct communication, it will be blocked until
+thread 2 finish communication. As a result, it is observed that the end of opeartion <code class="docutils literal notranslate"><span class="pre">ENQUEUE_NEIGHBOR_ALLREDUCE</span></code>
+in thread 1 aligns with the end of opeartion <code class="docutils literal notranslate"><span class="pre">MPI_NEIGHBOR_ALLREDUCE</span></code> in thread 2.</p>
+</div>
+<div class="section" id="example-ii-logistic-regression-with-win-accumulate">
+<h2>Example II: Logistic regression with win_accumulate<a class="headerlink" href="#example-ii-logistic-regression-with-win-accumulate" title="Permalink to this headline">¶</a></h2>
+<p>In this example, we still show the timeline when running decentralized SGD for
+logistic regression. Different from Example I, we employ the one-sided communication
+primitives <code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code> to exchange information between neighboring ranks.</p>
+<a class="reference internal image-reference" href="_images/bf_timeline_example2.png"><img alt="_images/bf_timeline_example2.png" class="align-center" src="_images/bf_timeline_example2.png" style="width: 800px;" /></a>
+<p>Different from Example I, it is observed that the computation thread (thread 1) and
+the communication thread (thread 2) were running independently. Thread 1 will not
+be blocked after enqueuing the <code class="docutils literal notranslate"><span class="pre">WIN_ACCUMULATE</span></code> task to thread 2 (<code class="docutils literal notranslate"><span class="pre">ENQUEUE_WIN_ACCUMULATE</span></code> in
+thread 1 and <code class="docutils literal notranslate"><span class="pre">MPI_WIN_ACCUMULATE</span></code> in thread 2 are not aligned). In other words,
+the one-sided communication primitive enables nonblocking operation and will significantly
+improve the training efficiency in real practice.</p>
+</div>
+<div class="section" id="example-iii-resnet-training-with-one-sided-communication">
+<h2>Example III: Resnet training with one-sided communication<a class="headerlink" href="#example-iii-resnet-training-with-one-sided-communication" title="Permalink to this headline">¶</a></h2>
+<p>In this example, we show the timeline for a real experiment when decentralized SGD is used to
+train Resnet with CIFAR10 dataset. We exploit the one-sided communicaton primitive <a href="#id1"><span class="problematic" id="id2">``</span></a>win_put’’
+to exchange information between ranks. It is observed that each phase during the training
+is clearly illustrated in the timeline.</p>
+<a class="reference internal image-reference" href="_images/bf_timeline_example3.png"><img alt="_images/bf_timeline_example3.png" class="align-center" src="_images/bf_timeline_example3.png" style="width: 800px;" /></a>
 </div>
 </div>
 
