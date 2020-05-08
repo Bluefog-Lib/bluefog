@@ -187,6 +187,9 @@ if args.bluefog:
         optimizer = bf.DistributedNeighborAllreduceOptimizer(
             optimizer, named_parameters=model.named_parameters()
         )
+        if os.environ.get("BLUEFOG_TIMELINE"):
+            print("Timeline for optimizer is enabled")
+            optimizer.turn_on_timeline(model)
     else:
         print("Use win_put ops.")
         optimizer = bf.DistributedBluefogOptimizer(
@@ -264,8 +267,11 @@ def test():
                 test_loss, 100.0 * test_accuracy
             )
         )
+    return test_loss, 100.0 * test_accuracy
 
-
+record = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
-    test()
+    record.append(test())
+if bf.rank() == 0:
+    print(record)

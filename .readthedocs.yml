@@ -1,0 +1,15 @@
+version: 2
+
+# Sphinx configuration
+sphinx:
+  configuration: docs/conf.py
+  fail_on_warning: true
+
+# Don't build any extra formats
+formats: []
+
+# Requirements for building docs
+python:
+  version: 3.7
+  install:
+    - requirements: docs/requirements.txt

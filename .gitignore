@@ -126,6 +126,7 @@ dmypy.json
 # Extra datafold to ignore
 data/
 **/checkpoint/
+experimental/
 
 # VSCode
 .vscode/

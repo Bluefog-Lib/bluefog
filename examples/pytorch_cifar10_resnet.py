@@ -202,6 +202,9 @@ if args.bluefog:
         optimizer = bf.DistributedNeighborAllreduceOptimizer(
             optimizer, named_parameters=model.named_parameters()
         )
+        if os.environ.get("BLUEFOG_TIMELINE"):
+            print("Timeline for optimizer is enabled")
+            optimizer.turn_on_timeline(model)
     else:
         # This distributed optimizer uses one-sided communication
         print("Use win_put ops.")
