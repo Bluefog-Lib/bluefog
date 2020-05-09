@@ -212,9 +212,9 @@ in thread 2 when neighbor allreduce actually happens. It is further divided into
 sub-phases:</p>
 <blockquote>
 <div><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">ALLOCATE_OUTPUT</span></code>:</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">COMMUNICATE</span></code> indicates time taken to perform the actual communication operation.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">COMPUTE_AVERAGE</span></code> indicates time taken to compuate the average of variables received from neighbors. It is basically a reduce operation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ALLOCATE_OUTPUT</span></code>: indicates the time taken to allocate the temporary memory for neighbor’s tensor.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">COMMUNICATE</span></code> indicates the time taken to perform the actual communication operation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">COMPUTE_AVERAGE</span></code> indicates the time taken to compuate the average of variables received from neighbors. It is basically a reduce operation.</p></li>
 </ul>
 </div></blockquote>
 <p>Another notable feature of this neighbor_allreduce timeline is that threads 1 and 2 are <strong>synchronized</strong>.
