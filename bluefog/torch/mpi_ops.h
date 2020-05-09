@@ -104,8 +104,8 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 
 #define NEIGHBOR_ALLREDUCE_H(torch_Tensor, THTensor)                           \
   extern "C" int bluefog_torch_neighbor_allreduce_async_##torch_Tensor(        \
-      THTensor* tensor, THTensor* output, float self_weight,                   \
-      const std::unordered_map<int, float>& neighbor_weights,                  \
+      THTensor* tensor, THTensor* output, double self_weight,                  \
+      const std::unordered_map<int, double>& neighbor_weights,                 \
       bool avg_computation, char* name);
 
 NEIGHBOR_ALLREDUCE_H(torch_FloatTensor, THFloatTensor)

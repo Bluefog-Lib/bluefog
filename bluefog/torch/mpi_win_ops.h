@@ -64,11 +64,6 @@ class WinTorchStorageManager {
   // Sum the local tensor with all neighbor tensors.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
   
-  // Average the local tensor with neighbor tensors
-  // If the weights is set in the mpi_context class, then weighted average will
-  // be executed.
-  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
-
   // Weighted Average the local tensor with neighbor tensors according to weights map.
   // Weights map { rank: weights }. Rank has to be (in-)neighbor ranks. self_weight
   // specifies the weight for self rank.
@@ -77,8 +72,8 @@ class WinTorchStorageManager {
   // the argument will override it.
   bool AvgWithNeighbor(
       const std::string& name, ::torch::Tensor local_tensor,
-      float self_weight,
-      const std::unordered_map<int, float>& neighbor_weights);
+      double self_weight,
+      const std::unordered_map<int, double>& neighbor_weights);
 
   
   // This is just utility functions and never used the weights defined in the
@@ -130,8 +125,8 @@ WIN_CREATE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #define WIN_SYNC_H(torch_Tensor, THTensor)                     \
   extern "C" int bluefog_torch_win_sync_##torch_Tensor(        \
       THTensor* tensor, char* name,                            \
-      float self_weight,                                       \
-      const std::unordered_map<int, float>& neighbor_weights,  \
+      double self_weight,                                      \
+      const std::unordered_map<int, double>& neighbor_weights, \
       bool reset, bool internal_avg);
 
 WIN_SYNC_H(torch_IntTensor, THIntTensor)

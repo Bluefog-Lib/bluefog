@@ -278,7 +278,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 }
 
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
-                        float self_weight, const std::unordered_map<int, float>& neighbor_weights,
+                        double self_weight, const std::unordered_map<int, double>& neighbor_weights,
                         bool avg_computation, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
@@ -335,7 +335,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           if (avg_computation) {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
-              float weight = 0.0;
+              double weight = 0.0;
               auto it = neighbor_weights.find(*(sources_ptr + i));
               if (it != neighbor_weights.end()) {
                 weight = it->second;
@@ -403,7 +403,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           if (avg_computation) {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 0; i < indgree; i++) {
-              float weight = 0.0;
+              double weight = 0.0;
               auto it = neighbor_weights.find(*(sources_ptr + i));
               if (it != neighbor_weights.end()) {
                 weight = it->second;

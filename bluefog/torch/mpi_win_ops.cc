@@ -171,28 +171,10 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
   return true;
 }
 
-bool WinTorchStorageManager::AvgWithNeighbor(const std::string& name,
-                                             ::torch::Tensor local_tensor) {
-  float self_weight;
-  const std::unordered_map<int, float>* neighbor_weights_ptr;
-  int is_weighted = bluefog_load_topology_weights(self_weight, neighbor_weights_ptr);
-  if (is_weighted == 1) {
-    return AvgWithNeighbor(name, local_tensor, self_weight, *neighbor_weights_ptr);
-  } else {
-    // By default we use the (uniform) average.
-    if (!SumWithNeighbor(name, local_tensor)) {
-      return false;
-    }
-    // +1 here because in neighbor degree doesn't include self rank.
-    local_tensor.div_(static_cast<float>(in_neighbor_degree_) + 1.0);
-    return true;
-  }
-}
-
 bool WinTorchStorageManager::AvgWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor,
-    float self_weight,
-    const std::unordered_map<int, float>& neighbor_weights) {
+    double self_weight,
+    const std::unordered_map<int, double>& neighbor_weights) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
     return false;
@@ -202,7 +184,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(
 
   auto neighbor_map = it->second;
   for(auto& kv: neighbor_weights) {
-    float weight = kv.second;
+    double weight = kv.second;
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul(weight));
   }
@@ -230,7 +212,7 @@ bool WinTorchStorageManager::AvgWithNeighbor(
     return false;
   }
   // +1 here because source_ranks doesn't include self rank.
-  local_tensor.div_(static_cast<float>(source_ranks.size()) + 1.0);
+  local_tensor.div_(static_cast<double>(source_ranks.size()) + 1.0);
   return true;
 }
 
@@ -265,7 +247,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
 namespace {
 
 int ResetNeighborTensor(const std::string& name,
-        const std::unordered_map<int, float>& neighbor_map) {
+        const std::unordered_map<int, double>& neighbor_map) {
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
   for (auto& kv : neighbor_map) {
     int rank = kv.first;
@@ -283,8 +265,8 @@ int ResetNeighborTensor(const std::string& name,
 }  // namespace
 
 int DoWinSync(::torch::Tensor tensor, const std::string& name,
-              float self_weight,
-              const std::unordered_map<int, float>& neighbor_weights,
+              double self_weight,
+              const std::unordered_map<int, double>& neighbor_weights,
               bool reset, bool internal_avg) {
   ThrowIfError(common::CheckInitialized());
 
@@ -323,7 +305,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
-    float neighbor_size = neighbor_weights.size()+1.0;
+    double neighbor_size = neighbor_weights.size()+1.0;
     cpu_buffer.div_(neighbor_size);
   }
 
