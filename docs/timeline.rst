@@ -39,7 +39,7 @@ logistic regression, see the figure below. In this example, each rank is connect
 via an undirected power-2 topology. We exploit the 
 primitive ``neighbor_allreduce`` to perform the neighbor averaging.
 
-.. image:: ./_static/bf_timeline_example1.png
+.. image:: ./_static/bf_timeline_example1a.png
    :width: 800
    :align: center
 
