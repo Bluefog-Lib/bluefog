@@ -350,7 +350,7 @@ int DoWinFree(const std::string& name) {
 }
 
 int DoWinPut(::torch::Tensor tensor, const std::string& name,
-             const std::unordered_map<int, float>& dst_weights,
+             const std::unordered_map<int, double>& dst_weights,
              const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
 
@@ -386,7 +386,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
-                    const std::unordered_map<int, float>& dst_weights,
+                    const std::unordered_map<int, double>& dst_weights,
                     const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
 
@@ -421,7 +421,7 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinGet(const std::string& name,
-             const std::unordered_map<int, float>& src_weights,
+             const std::unordered_map<int, double>& src_weights,
              const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
 

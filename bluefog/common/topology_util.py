@@ -53,7 +53,7 @@ def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     """Generate graph topology such that each points only
     connected to a point such that the index difference is power of 2.
 
-    Example: A PowerTwoRingGraph with 16 nodes:
+    Example: A PowerTwoRingGraph with 12 nodes:
 
     .. plot::
         :context: close-figs

@@ -283,7 +283,7 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
 
 int bluefog_set_topology_with_weights(int indegree, const int* sources,
                                       int outdegree, const int* destinations,
-                                      float self_weight, const float* neighbor_weights) {
+                                      double self_weight, const double* neighbor_weights) {
   int ret = bluefog_set_topology(indegree, sources, outdegree, destinations);
   if (ret != 1) {
     return ret;
@@ -302,8 +302,8 @@ int bluefog_load_topology(int* indegree, int*& sources, int* outdegree,
 }
 
 int bluefog_load_topology_weights(
-    float& self_weight_,
-    const std::unordered_map<int, float>*& neighbor_weights_) {
+    double& self_weight_,
+    const std::unordered_map<int, double>*& neighbor_weights_) {
   if (!bluefog_global.initialization_done) {
     return -1;
   }
@@ -434,7 +434,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const std::string& name,
-                              const std::unordered_map<int, float>& dst_weights,
+                              const std::unordered_map<int, double>& dst_weights,
                               const int device, 
                               const bool require_mutex, 
                               StatusCallback callback) {
@@ -456,7 +456,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
 
 Status EnqueueTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
-    const std::unordered_map<int, float>& dst_weights, const int device,
+    const std::unordered_map<int, double>& dst_weights, const int device,
     const bool require_mutex, StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
@@ -475,7 +475,7 @@ Status EnqueueTensorWindowAccumulate(
 }
 
 Status EnqueueTensorWindowGet(const std::string& name,
-                              const std::unordered_map<int, float>& src_weights,
+                              const std::unordered_map<int, double>& src_weights,
                               const bool require_mutex,
                               StatusCallback callback) {
   TensorTableEntry e;

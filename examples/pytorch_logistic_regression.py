@@ -277,13 +277,10 @@ if args.method == 2:
     alpha_pd = 1e-1  # step-size for Push-DIGing
     mse_pd = []
     for i in range(maxite):
-        if i % 10 == 0:
-            bf.barrier()
-
         w[:n] = w[:n] - alpha_pd*w[n:2*n]
         bf.win_accumulate(
             w, name="w_buff",
-            dst_weights={rank: 0.5 / (outdegree)
+            dst_weights={rank: 1.0 / (outdegree*2)
                         for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(2)
@@ -296,6 +293,8 @@ if args.method == 2:
 
         w[n:2*n] += grad - grad_prev
         grad_prev = grad
+        if i % 10 == 0:
+            bf.barrier()
         if bf.rank() == 0:
             mse_pd.append(torch.norm(x.data - w_opt, p=2))
 

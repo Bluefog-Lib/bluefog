@@ -257,7 +257,7 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
 }
 
 int MPIController::SetTopologyWeights(int indegree, const int* sources,
-                                      float self_weight, const float* neighbor_weights) {
+                                      double self_weight, const double* neighbor_weights) {
   // We assume when this function is called, the base topology has already
   // been set. Here the neighbor_weights specifies the weights from the sources.
   if (!mpi_ctx_.IsTopoSetup()) {
@@ -281,8 +281,8 @@ int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
 }
 
 int MPIController::LoadTopologyWeights(
-    float& self_weight,
-    const std::unordered_map<int, float>*& neighbor_weights) {
+    double& self_weight,
+    const std::unordered_map<int, double>*& neighbor_weights) {
   if (!mpi_ctx_.IsWeighted()) {
     return 0;
   }
@@ -538,7 +538,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
-    float weight = kv.second;
+    double weight = kv.second;
 
     BFLOG(TRACE, rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
 
@@ -603,7 +603,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
 
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
-    float weight = kv.second;
+    double weight = kv.second;
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == rank_) continue;
 

@@ -233,8 +233,8 @@ struct TensorTableEntry {
   int device = CPU_DEVICE_ID;
   // Source and destination of ranks used in win ops.
   // It maps the src(dst) rank to the weight.
-  std::unordered_map<int, float> dst_weights = {};
-  std::unordered_map<int, float> src_weights = {};
+  std::unordered_map<int, double> dst_weights = {};
+  std::unordered_map<int, double> src_weights = {};
 
   // The ops requires the mutex.
   bool require_mutex = false;

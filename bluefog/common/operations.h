@@ -75,7 +75,7 @@ int bluefog_set_topology(int indegree, const int* sources,
 // Bluefog is not initialized or failed.
 int bluefog_set_topology_with_weights(int indegree, const int* sources,
                                       int outdegree, const int* destinations,
-                                      float self_weight, const float* neighbor_weights);
+                                      double self_weight, const double* neighbor_weights);
 
 // C interface to load the virtual topology for MPI graph communicator.
 // Self-rank is never included no matter self-loop is presented in setup or not.
@@ -85,8 +85,8 @@ int bluefog_load_topology(int* indegree, int*& sources,
 
 // Load the weights for neighbors. 
 // TODO(ybc) Make it as C compatible interface.
-int bluefog_load_topology_weights(float& self_weight, 
-                                  const std::unordered_map<int, float>*& neighbor_weights);
+int bluefog_load_topology_weights(double& self_weight, 
+                                  const std::unordered_map<int, double>*& neighbor_weights);
 
 
 // C interface to allow python to call timeline.
@@ -124,17 +124,17 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const std::string& name,
-                              const std::unordered_map<int, float>& dst_ranks,
+                              const std::unordered_map<int, double>& dst_ranks,
                               const int device, const bool require_mutex,
                               StatusCallback callback);
 
 Status EnqueueTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
-    const std::unordered_map<int, float>& dst_ranks, const int device,
+    const std::unordered_map<int, double>& dst_ranks, const int device,
     const bool require_mutex, StatusCallback callback);
 
 Status EnqueueTensorWindowGet(const std::string& name,
-                              const std::unordered_map<int, float>& src_ranks,
+                              const std::unordered_map<int, double>& src_ranks,
                               const bool require_mutex,
                               StatusCallback callback);
 
