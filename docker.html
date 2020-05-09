@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>The Structure of Codebase &mdash; Bluefog 0.1 documentation</title>
+  <title>Bluefog Docker Usage &mdash; Bluefog 0.1 documentation</title>
   
 
   
@@ -35,8 +35,8 @@
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="BlueFog Development Guide" href="devel_guide.html" />
-    <link rel="prev" title="The Spectrum of Distributed Machine Learning Algorithm" href="alg_spectrum.html" /> 
+    <link rel="next" title="Performance" href="performance.html" />
+    <link rel="prev" title="Running Bluefog Through bfrun" href="running.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -94,12 +94,12 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
-<li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Docker Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
 <li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
 </ul>
 
@@ -146,13 +146,13 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>The Structure of Codebase</li>
+      <li>Bluefog Docker Usage</li>
     
     
       <li class="wy-breadcrumbs-aside">
         
             
-            <a href="_sources/code_structure.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/docker.rst.txt" rel="nofollow"> View page source</a>
           
         
       </li>
@@ -165,23 +165,56 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="the-structure-of-codebase">
-<h1>The Structure of Codebase<a class="headerlink" href="#the-structure-of-codebase" title="Permalink to this headline">¶</a></h1>
-<p>One the top level, the structure of this codebase looks like:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>├── bluefog
-├── docs
-├── examples
-├── <span class="nb">test</span>
-├── setup.py
-└── ...
+  <div class="section" id="bluefog-docker-usage">
+<h1>Bluefog Docker Usage<a class="headerlink" href="#bluefog-docker-usage" title="Permalink to this headline">¶</a></h1>
+<ol class="arabic simple">
+<li><p>Build docker image with CUDA support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_gpu . -f dockerfile.gpu
 </pre></div>
 </div>
-<p>Main project code is under <code class="docutils literal notranslate"><span class="pre">bluefog</span></code> folder, <code class="docutils literal notranslate"><span class="pre">examples</span></code> folder
-contains the usage code for users, (served as e2e test as well) and
-<code class="docutils literal notranslate"><span class="pre">test</span></code> folder for test of course. <code class="docutils literal notranslate"><span class="pre">docs</span></code> folder contains the
-document including API, docker usagem, algorithm explaination, development etc.
-Overall, our repository shares a very similar organization like
-<a class="reference external" href="https://github.com/horovod/horovod">horovod</a> repository.</p>
+<ol class="arabic simple" start="2">
+<li><p>Build docker image with only CPU support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_cpu . -f dockerfile.cpu
+</pre></div>
+</div>
+<ol class="arabic simple">
+<li><p>Run docker container with CUDA support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --network<span class="o">=</span>host -v /mnt/share/ssh:/root/.ssh bluefog_gpu:latest
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Run docker container with only CPU support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker run --privileged -it --name bluefog_cpu_deploy --network<span class="o">=</span>host -v /mnt/share/ssh:/root/.ssh bluefog_cpu:latest
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Close docker container with CUDA support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker container rm bluefog_gpu_deploy
+</pre></div>
+</div>
+<ol class="arabic simple" start="4">
+<li><p>Close docker container with only CPU support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker container rm bluefog_cpu_deploy
+</pre></div>
+</div>
+<ol class="arabic simple">
+<li><p>UnitTest in docker container</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> pytest -s torch_ops_test.py
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Examples in docker container</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> python pytorch_average_consensus.py
+</pre></div>
+</div>
 </div>
 
 
@@ -192,10 +225,10 @@ Overall, our repository shares a very similar organization like
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="devel_guide.html" class="btn btn-neutral float-right" title="BlueFog Development Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="performance.html" class="btn btn-neutral float-right" title="Performance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="alg_spectrum.html" class="btn btn-neutral float-left" title="The Spectrum of Distributed Machine Learning Algorithm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="running.html" class="btn btn-neutral float-left" title="Running Bluefog Through bfrun" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   

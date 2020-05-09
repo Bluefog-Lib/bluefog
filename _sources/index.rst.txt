@@ -139,6 +139,7 @@ algorithm, please read our :ref:`Ops Explanation` page.
 
    Bluefog Ops Explanation <bluefog_ops>
    Lauching Application Through bfrun <running>
+   Bluefog Docker Usage <docker>
    Bluefog Perform Comparison <performance>
    Bluefog Rationale <rationale>
    Bluefog Timeline <timeline>
