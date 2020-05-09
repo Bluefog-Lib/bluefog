@@ -134,6 +134,7 @@ experimental/
 .DS_Store
 examples/checkpoint/*
 examples/logs/*
+examples/*.png
 examples/.profile/*
 
 # timeline log file
