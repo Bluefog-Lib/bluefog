@@ -18,7 +18,7 @@ For example, Bluefog timeline will tell how your computation is in parallel with
 communication.
 
 Usage
---------------------------
+-----
 To record a Bluefog timeline, set ``--timeline-filename`` command line argument to the 
 location of the timeline file to be created. This will generate a timeline record file
 for each agent. For example, the following command ::
@@ -33,7 +33,7 @@ is not set, the timeline function will be deactivated by default.
 
 
 Example I: Logistic regression with neighbor_allreduce
---------------------------
+------------------------------------------------------
 In the first example, we show the timeline when running decentralized SGD for 
 logistic regression, see the figure below. In this example, each rank is connected
 via an undirected power-2 topology. We exploit the 
@@ -48,11 +48,11 @@ There are two active threads in the timeline: thread 1 that is mainly for gradie
 in thread 2 when neighbor allreduce actually happens. It is further divided into multiple 
 sub-phases:
 
-   + ``ALLOCATE_OUTPUT``:
+   + ``ALLOCATE_OUTPUT``: indicates the time taken to allocate the temporary memory for neighbor's tensor.
 
-   + ``COMMUNICATE`` indicates time taken to perform the actual communication operation.
+   + ``COMMUNICATE`` indicates the time taken to perform the actual communication operation.
 
-   + ``COMPUTE_AVERAGE`` indicates time taken to compuate the average of variables received from neighbors. It is basically a reduce operation.
+   + ``COMPUTE_AVERAGE`` indicates the time taken to compuate the average of variables received from neighbors. It is basically a reduce operation.
 
 Another notable feature of this neighbor_allreduce timeline is that threads 1 and 2 are **synchronized**.
 Each time when thread 1 enqueues a task for thread 2 to conduct communication, it will be blocked until
@@ -60,7 +60,7 @@ thread 2 finish communication. As a result, it is observed that the end of opear
 in thread 1 aligns with the end of opeartion ``MPI_NEIGHBOR_ALLREDUCE`` in thread 2.
 
 Example II: Logistic regression with win_accumulate
---------------------------
+---------------------------------------------------
 In this example, we still show the timeline when running decentralized SGD for 
 logistic regression. Different from Example I, we employ the one-sided communication 
 primitives ``win_accumulate`` to exchange information between neighboring ranks.
@@ -77,7 +77,7 @@ the one-sided communication primitive enables nonblocking operation and will sig
 improve the training efficiency in real practice.
 
 Example III: Resnet training with one-sided communication
---------------------------
+---------------------------------------------------------
 In this example, we show the timeline for a real experiment when decentralized SGD is used to 
 train Resnet with CIFAR10 dataset. We exploit the one-sided communicaton primitive ``win_put'' 
 to exchange information between ranks. It is observed that each phase during the training
