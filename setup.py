@@ -37,7 +37,7 @@ DESCRIPTION = "A distributed training framework for diffusion or consensus-type 
 EMAIL = "bichengying@gmail.com"
 AUTHOR = "Bicheng Ying"
 REQUIRES_PYTHON = ">=3.7.0"
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 
 EXTRAS = {}
 
