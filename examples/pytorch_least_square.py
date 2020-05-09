@@ -25,9 +25,21 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 parser.add_argument(
+    "--save-plot-file", default='plot.png', help="Saving the plot in the file."
+)
+parser.add_argument(
+    "--plot-interactive", action='store_true', help="Use plt.show() to present the plot."
+)
+parser.add_argument(
     "--method", type=int, default=0, help="0:exact diffusion. 1:gradient tracking. 2:push-DIGing"
 )
 args = parser.parse_args()
+
+def finalize_plot():
+    plt.savefig(args.save_plot_file)
+    if args.plot_interactive:
+        plt.show()
+    plt.close()
 
 bf.init()
 
@@ -109,7 +121,7 @@ if args.method == 0:
 
     if bf.rank() == 0:
         plt.semilogy(mse)
-        plt.show()
+        finalize_plot()
 
 # ======================= gradient tracking =====================================
 # Calculate the true solution with gradient tracking (GT for short):
@@ -158,7 +170,7 @@ if args.method == 1:
 
     if bf.rank() == 0:
         plt.semilogy(mse_gt)
-        plt.show()
+        finalize_plot()
 
 # ======================= Push-DIGing for directed graph =======================
 # Calculate the true solution with Push-DIGing:
@@ -223,4 +235,4 @@ if args.method == 2:
 
     if bf.rank() == 0:
         plt.semilogy(mse_pd)
-        plt.show()
+        finalize_plot()
