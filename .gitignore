@@ -134,8 +134,10 @@ experimental/
 .DS_Store
 examples/checkpoint/*
 examples/logs/*
-examples/*.png
 examples/.profile/*
+
+# Matplotlib plot file
+*.png
 
 # timeline log file
 .log/*
