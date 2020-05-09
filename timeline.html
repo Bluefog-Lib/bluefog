@@ -205,7 +205,7 @@ is not set, the timeline function will be deactivated by default.</p>
 logistic regression, see the figure below. In this example, each rank is connected
 via an undirected power-2 topology. We exploit the
 primitive <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code> to perform the neighbor averaging.</p>
-<a class="reference internal image-reference" href="_images/bf_timeline_example1.png"><img alt="_images/bf_timeline_example1.png" class="align-center" src="_images/bf_timeline_example1.png" style="width: 800px;" /></a>
+<a class="reference internal image-reference" href="_images/bf_timeline_example1a.png"><img alt="_images/bf_timeline_example1a.png" class="align-center" src="_images/bf_timeline_example1a.png" style="width: 800px;" /></a>
 <p>There are two active threads in the timeline: thread 1 that is mainly for gradient
 <strong>computation</strong> and thread 2 for <strong>communication</strong>. There is a phase <code class="docutils literal notranslate"><span class="pre">MPI_NEIGHBOR_ALLREDUCE</span></code>
 in thread 2 when neighbor allreduce actually happens. It is further divided into multiple
