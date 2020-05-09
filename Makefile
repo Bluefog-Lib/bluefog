@@ -14,7 +14,7 @@ MPICH_NOT_EXIST = $(shell which mpichversion)
 build:
 	python setup.py build_ext -i
 
-test: test_torch test_timeline
+test: test_torch
 test_torch: test_torch_basic test_torch_ops test_torch_win_ops
 test_tensorflow: test_tensorflow_basic test_tensorflow_ops
 test_all: test_torch test_tensorflow
