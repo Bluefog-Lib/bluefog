@@ -29,7 +29,7 @@ from distutils.version import LooseVersion
 
 from setuptools import find_packages, setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
-
+from bluefog import __version__
 
 # Package meta-data.
 NAME = "bluefog"
@@ -37,7 +37,7 @@ DESCRIPTION = "A distributed training framework for diffusion or consensus-type 
 EMAIL = "bichengying@gmail.com"
 AUTHOR = "Bicheng Ying"
 REQUIRES_PYTHON = ">=3.7.0"
-VERSION = "0.2.0"
+VERSION = __version__
 
 EXTRAS = {}
 

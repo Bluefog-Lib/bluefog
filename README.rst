@@ -1,8 +1,8 @@
 Bluefog
 =======
 
-.. image:: https://travis-ci.com/ybc1991/bluefog.svg?token=me5bQ3zp2qcSz5D3yVNC&branch=master
-    :target: https://travis-ci.com/ybc1991/bluefog
+.. image:: https://travis-ci.com/Bluefog-Lib/bluefog.svg?branch=master
+    :target: https://travis-ci.com/Bluefog-Lib/bluefog
 
 .. image:: https://img.shields.io/badge/License-Apache%202.0-blue.svg
     :target: https://img.shields.io/badge/License-Apache%202.0-blue.svg
