@@ -64,7 +64,7 @@ maxite = 1000
 alpha = 1e-2
 for i in range(maxite):
     grad = A.T.mm(A.mm(x_opt) - b)                  # local gradient
-    grad = bf.allreduce(grad, name='gradient')  # global gradient
+    grad = bf.allreduce(grad, name='gradient')      # global gradient
     x_opt = x_opt - alpha*grad
 
 # evaluate the convergence of distributed least-squares
