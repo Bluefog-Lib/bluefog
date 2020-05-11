@@ -209,17 +209,17 @@ if args.method == 1:
     mse_gt = []
     for i in range(maxite):
         # w^{k+1} = neighbor_allreduce(w^k) - alpha*q^k
-        w.data = bf.neighbor_allreduce(
-            w.data, name='local variable w') - alpha_gt * q
-
-        # calculate local gradient
-        logistic_loss_step(w, tensor_name='neighbor.allreduce.local variable w')
-        grad = w.grad.data.clone()    # local gradient at w^{k+1}
-        w.grad.data.zero_()
-
         # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
-        q = bf.neighbor_allreduce(q, name='local variable q') + grad - grad_prev
+        # Notice the communication of neighbor_allreduce can overlap with gradient computation.
+        w_handle = bf.neighbor_allreduce_async(w.data, name='Grad.Tracking.w') 
+        q_handle = bf.neighbor_allreduce_async(q, name='Grad.Tracking.q')
+        w.data = bf.synchronize(w_handle) - alpha_gt * q
+        # calculate local gradient
+        logistic_loss_step(w, tensor_name='neighbor.allreduce.Grad.Tracking.w')
+        grad = w.grad.data.clone()
+        q = bf.synchronize(q_handle) + grad - grad_prev
         grad_prev = grad
+        w.grad.data.zero_()
 
         # record convergence
         if bf.rank() == 0:

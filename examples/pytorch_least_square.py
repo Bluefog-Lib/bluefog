@@ -101,7 +101,7 @@ if args.method == 0:
     mse = []
     for i in range(maxite):
         grad = A.T.mm(A.mm(x)-b)    # local gradient
-        psi = x - alpha * grad
+        psi = x - alpha_ed * grad
         phi = psi + x - psi_prev
         x = bf.neighbor_allreduce(phi, name='local variable')
         psi_prev = psi
@@ -150,9 +150,11 @@ if args.method == 1:
     alpha_gt = 5e-3  # step-size for GT (should be smaller than exact diffusion)
     mse_gt = []
     for i in range(maxite):
-        x = bf.neighbor_allreduce(x, name='local variable x') - alpha_gt * y
-        grad = A.T.mm(A.mm(x)-b)    # local gradient at x^{k+1}
-        y = bf.neighbor_allreduce(y, name='local variable y') + grad - grad_prev
+        x_handle = bf.neighbor_allreduce_async(x, name='Grad.Tracking.x') 
+        y_handle = bf.neighbor_allreduce_async(y, name='Grad.Tracking.y')
+        x = bf.synchronize(x_handle) - alpha_gt * y
+        grad = A.T.mm(A.mm(x)-b)    # local gradient at x^{k+1} 
+        y = bf.synchronize(y_handle) + grad - grad_prev  # use async to overlap computation and communication
         grad_prev = grad
         if bf.rank() == 0:
             mse_gt.append(torch.norm(x - x_opt, p=2))
