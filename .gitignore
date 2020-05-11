@@ -136,8 +136,5 @@ examples/checkpoint/*
 examples/logs/*
 examples/.profile/*
 
-# Matplotlib plot file
-*.png
-
 # timeline log file
 .log/*
