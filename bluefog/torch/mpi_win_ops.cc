@@ -416,7 +416,6 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
       });
 
   ThrowIfError(enqueue_result);
-  timeline_ptr->ActivityEnd(name);  // ENQUEUE
   return handle;
 }
 
