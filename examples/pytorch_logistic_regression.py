@@ -36,11 +36,13 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+
 def finalize_plot():
     plt.savefig(args.save_plot_file)
     if args.plot_interactive:
         plt.show()
     plt.close()
+
 
 bf.init()
 
@@ -61,6 +63,7 @@ y = y.double()
 y = 2*y - 1
 rho = 1e-2
 
+
 def logistic_loss_step(x_, tensor_name):
     """Calculate gradient of logistic loss via pytorch autograd."""
     with bf.timeline_context(tensor_name=tensor_name,
@@ -69,6 +72,7 @@ def logistic_loss_step(x_, tensor_name):
             0.5*rho*torch.norm(x_, p=2)
         loss_.backward()
     return loss_
+
 
 # # ================== Distributed gradient descent ================================
 # # Calculate the solution with distributed gradient descent:
@@ -168,7 +172,8 @@ if args.method == 0:
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(w.grad.data, p=2)
-    print("[ED] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[ED] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
     w.grad.data.zero_()
 
     if bf.rank() == 0:
@@ -211,7 +216,7 @@ if args.method == 1:
         # w^{k+1} = neighbor_allreduce(w^k) - alpha*q^k
         # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
         # Notice the communication of neighbor_allreduce can overlap with gradient computation.
-        w_handle = bf.neighbor_allreduce_async(w.data, name='Grad.Tracking.w') 
+        w_handle = bf.neighbor_allreduce_async(w.data, name='Grad.Tracking.w')
         q_handle = bf.neighbor_allreduce_async(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha_gt * q
         # calculate local gradient
@@ -240,7 +245,8 @@ if args.method == 1:
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(w.grad.data, p=2)
-    print("[GT] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[GT] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
     w.grad.data.zero_()
 
     if bf.rank() == 0:
@@ -281,7 +287,7 @@ if args.method == 2:
         bf.win_accumulate(
             w, name="w_buff",
             dst_weights={rank: 1.0 / (outdegree*2)
-                        for rank in bf.out_neighbor_ranks()},
+                         for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(2)
         w = bf.win_sync_then_collect(name="w_buff")
@@ -315,7 +321,8 @@ if args.method == 2:
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(x.grad.data, p=2)
-    print("[PD] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[PD] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
     x.grad.data.zero_()
 
     if bf.rank() == 0:

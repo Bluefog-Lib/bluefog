@@ -51,6 +51,7 @@ loss = tf.losses.SparseCategoricalCrossentropy()
 # Bluefog: adjust learning rate based on number of GPUs.
 opt = tf.optimizers.SGD(0.01 * bf.size())
 
+
 @tf.function
 def training_step(imgs, labels_, is_fisrt_batch):
     with tf.GradientTape() as tape:
@@ -75,6 +76,7 @@ def training_step(imgs, labels_, is_fisrt_batch):
         tf.print("broadcast is Done!")
 
     return _loss_value
+
 
 tf.config.experimental_run_functions_eagerly(False)
 

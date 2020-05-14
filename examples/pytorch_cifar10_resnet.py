@@ -30,7 +30,8 @@ from torchvision import datasets, transforms, models
 import tensorboardX
 from tqdm import tqdm
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")))
 
 cwd_folder_loc = os.path.dirname(os.path.abspath(__file__))
 # Training settings
@@ -66,7 +67,8 @@ parser.add_argument(
 parser.add_argument(
     "--val-batch-size", type=int, default=32, help="input batch size for validation"
 )
-parser.add_argument("--epochs", type=int, default=50, help="number of epochs to train")
+parser.add_argument("--epochs", type=int, default=50,
+                    help="number of epochs to train")
 parser.add_argument(
     "--base-lr", type=float, default=0.0125, help="learning rate for a single GPU"
 )
@@ -136,7 +138,8 @@ resume_from_epoch = bf.broadcast(
 verbose = 1 if bf.rank() == 0 else 0
 
 # Bluefog: write TensorBoard logs on first worker.
-log_writer = tensorboardX.SummaryWriter(args.log_dir) if bf.rank() == 0 else None
+log_writer = tensorboardX.SummaryWriter(
+    args.log_dir) if bf.rank() == 0 else None
 
 
 kwargs = {"num_workers": 4, "pin_memory": True} if args.cuda else {}
@@ -147,7 +150,8 @@ train_dataset = datasets.CIFAR10(
     transform=transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+                                 0.229, 0.224, 0.225]),
         ]
     ),
 )
@@ -167,7 +171,8 @@ val_dataset = datasets.CIFAR10(
     transform=transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+                                 0.229, 0.224, 0.225]),
         ]
     ),
 )
@@ -249,8 +254,8 @@ def train(epoch):
             optimizer.zero_grad()
             # Split data into sub-batches of size batch_size
             for i in range(0, len(data), args.batch_size):
-                data_batch = data[i : i + args.batch_size]
-                target_batch = target[i : i + args.batch_size]
+                data_batch = data[i: i + args.batch_size]
+                target_batch = target[i: i + args.batch_size]
                 output = model(data_batch)
                 train_accuracy.update(accuracy(output, target_batch))
                 loss = F.cross_entropy(output, target_batch)
@@ -335,7 +340,8 @@ def save_checkpoint(epoch):
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
             os.makedirs(dirpath)
-        state = {"model": model.state_dict(), "optimizer": optimizer.state_dict()}
+        state = {"model": model.state_dict(
+        ), "optimizer": optimizer.state_dict()}
         torch.save(state, filepath)
 
 
@@ -359,4 +365,3 @@ for epoch in range(resume_from_epoch, args.epochs):
     train(epoch)
     validate(epoch)
     save_checkpoint(epoch)
-

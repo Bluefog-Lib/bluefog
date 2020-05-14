@@ -269,6 +269,7 @@ def test():
         )
     return test_loss, 100.0 * test_accuracy
 
+
 record = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)

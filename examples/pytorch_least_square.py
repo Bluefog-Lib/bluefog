@@ -35,11 +35,13 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+
 def finalize_plot():
     plt.savefig(args.save_plot_file)
     if args.plot_interactive:
         plt.show()
     plt.close()
+
 
 bf.init()
 
@@ -117,7 +119,8 @@ if args.method == 0:
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(A.T.mm(A.mm(x) - b), p=2)
-    print("[ED] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[ED] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
 
     if bf.rank() == 0:
         plt.semilogy(mse)
@@ -147,14 +150,16 @@ if args.method == 1:
     x = torch.zeros(n, 1).to(torch.double)
     y = A.T.mm(A.mm(x)-b)
     grad_prev = y.clone()
-    alpha_gt = 5e-3  # step-size for GT (should be smaller than exact diffusion)
+    # step-size for GT (should be smaller than exact diffusion)
+    alpha_gt = 5e-3
     mse_gt = []
     for i in range(maxite):
-        x_handle = bf.neighbor_allreduce_async(x, name='Grad.Tracking.x') 
+        x_handle = bf.neighbor_allreduce_async(x, name='Grad.Tracking.x')
         y_handle = bf.neighbor_allreduce_async(y, name='Grad.Tracking.y')
         x = bf.synchronize(x_handle) - alpha_gt * y
-        grad = A.T.mm(A.mm(x)-b)    # local gradient at x^{k+1} 
-        y = bf.synchronize(y_handle) + grad - grad_prev  # use async to overlap computation and communication
+        grad = A.T.mm(A.mm(x)-b)    # local gradient at x^{k+1}
+        # use async to overlap computation and communication
+        y = bf.synchronize(y_handle) + grad - grad_prev
         grad_prev = grad
         if bf.rank() == 0:
             mse_gt.append(torch.norm(x - x_opt, p=2))
@@ -168,7 +173,8 @@ if args.method == 1:
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(A.T.mm(A.mm(x) - b), p=2)
-    print("[GT] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[GT] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
 
     if bf.rank() == 0:
         plt.semilogy(mse_gt)
@@ -208,7 +214,7 @@ if args.method == 2:
         bf.win_accumulate(
             w, name="w_buff",
             dst_weights={rank: 1.0 / (outdegree + 1)
-                        for rank in bf.out_neighbor_ranks()},
+                         for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(1+outdegree)
         w = bf.win_sync_then_collect(name="w_buff")
@@ -233,7 +239,8 @@ if args.method == 2:
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(A.T.mm(A.mm(x) - b), p=2)
-    print("[PD] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[PD] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
 
     if bf.rank() == 0:
         plt.semilogy(mse_pd)

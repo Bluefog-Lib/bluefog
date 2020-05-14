@@ -71,6 +71,13 @@ autodoc_default_options = {
 #
 html_theme = 'sphinx_rtd_theme'
 
+html_theme_config = {
+    'analytics_id': 'UA-166722495-1',
+    'display_version': True,
+    'prev_next_buttons_location': 'bottom',
+    'style_external_links': False,
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
