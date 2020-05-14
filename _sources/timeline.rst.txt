@@ -79,7 +79,7 @@ improve the training efficiency in real practice.
 Example III: Resnet training with one-sided communication
 ---------------------------------------------------------
 In this example, we show the timeline for a real experiment when decentralized SGD is used to 
-train Resnet with CIFAR10 dataset. We exploit the one-sided communicaton primitive ``win_put'' 
+train Resnet with CIFAR10 dataset. We exploit the one-sided communicaton primitive ``win_put`` 
 to exchange information between ranks. It is observed that each phase during the training
 is clearly illustrated in the timeline.
 
