@@ -78,9 +78,9 @@ RUN pip install "Pillow<7.0" --no-deps
 RUN pip install bluefog
 
 RUN mkdir /bluefog
-COPY ./examples/pytorch_*.py /bluefog/examples/
-COPY ./test/torch_*.py /bluefog/test/
-COPY ./test/common.py /bluefog/test/
-COPY ./test/timeline_test.py /bluefog/test/
+RUN cd /bluefog && \
+    wget https://github.com/Bluefog-Lib/bluefog/releases/download/v0.2.0/examples_v0.2.0.tar.gz && \
+    tar -zxv -f examples_v0.2.0.tar.gz && \
+    rm examples_v0.2.0.tar.gz
 
 WORKDIR "bluefog"
