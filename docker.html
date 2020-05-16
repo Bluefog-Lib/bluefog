@@ -98,7 +98,19 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Docker Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Docker Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#installing-docker-image">Installing Docker Image</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#building-your-own-docker-image">Building Your Own Docker Image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#downloading-docker-image-from-docker-hub">Downloading Docker Image From Docker Hub</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#running-docker-container">Running Docker Container</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#nvidia-container-runtime">Nvidia Container Runtime</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#running-examples-in-docker-containers">Running Examples in Docker Containers</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
@@ -171,6 +183,18 @@
             
   <div class="section" id="bluefog-docker-usage">
 <h1>Bluefog Docker Usage<a class="headerlink" href="#bluefog-docker-usage" title="Permalink to this headline">¶</a></h1>
+<p>Bluefog provides dockers with all necessary dependency for system environment isolation.
+Therefore two types of dockerfiles inside the project.
+<code class="docutils literal notranslate"><span class="pre">dockerfile.cpu</span></code> and <code class="docutils literal notranslate"><span class="pre">dockerfile.gpu</span></code> are two files used for actual deployment,
+and <code class="docutils literal notranslate"><span class="pre">dockerfile.cpu.test</span></code> and <code class="docutils literal notranslate"><span class="pre">dockerfile.gpu.test</span></code> are used for internal development.
+This document will focus on the usage of <code class="docutils literal notranslate"><span class="pre">dockerfile.cpu</span></code> and <code class="docutils literal notranslate"><span class="pre">dockerfile.gpu</span></code>.
+For the dockerfiles for development, the readers can check the Github Wiki for more details.</p>
+<div class="section" id="installing-docker-image">
+<h2>Installing Docker Image<a class="headerlink" href="#installing-docker-image" title="Permalink to this headline">¶</a></h2>
+<p>The docker images can be built from scratch or be obtained from
+<a class="reference external" href="https://hub.docker.com/r/bluefoglib/bluefog">Docker Hub</a>.</p>
+<div class="section" id="building-your-own-docker-image">
+<h3>Building Your Own Docker Image<a class="headerlink" href="#building-your-own-docker-image" title="Permalink to this headline">¶</a></h3>
 <ol class="arabic simple">
 <li><p>Build docker image with CUDA support:</p></li>
 </ol>
@@ -183,6 +207,28 @@
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_cpu . -f dockerfile.cpu
 </pre></div>
 </div>
+</div>
+<div class="section" id="downloading-docker-image-from-docker-hub">
+<h3>Downloading Docker Image From Docker Hub<a class="headerlink" href="#downloading-docker-image-from-docker-hub" title="Permalink to this headline">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Download docker image with CUDA support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:gpu
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Download docker image with only CPU support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:cpu
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="running-docker-container">
+<h2>Running Docker Container<a class="headerlink" href="#running-docker-container" title="Permalink to this headline">¶</a></h2>
+<p>Here we used the docker images built from scratch as examples.
+Please make sure you used the correct docker image name in the following commands,
+if you download the docker image from <a class="reference external" href="https://hub.docker.com/r/bluefoglib/bluefog">Docker Hub</a>.</p>
 <ol class="arabic simple">
 <li><p>Run docker container with CUDA support:</p></li>
 </ol>
@@ -196,28 +242,50 @@
 </pre></div>
 </div>
 <ol class="arabic simple" start="3">
-<li><p>Close docker container with CUDA support:</p></li>
+<li><p>Clean up docker system after running:</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker container rm bluefog_gpu_deploy
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker system prune
 </pre></div>
 </div>
-<ol class="arabic simple" start="4">
-<li><p>Close docker container with only CPU support:</p></li>
-</ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker container rm bluefog_cpu_deploy
+<div class="section" id="nvidia-container-runtime">
+<h3>Nvidia Container Runtime<a class="headerlink" href="#nvidia-container-runtime" title="Permalink to this headline">¶</a></h3>
+<p>The following error may pop up when running a docker container with GPUs.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker: Error response from daemon: could not <span class="k">select</span> device driver <span class="s2">&quot;&quot;</span> with capabilities: <span class="o">[[</span>gpu<span class="o">]]</span>.
 </pre></div>
 </div>
+<p>In order to properly run docker with GPUs,
+Nvidia container runtime needs to be installed using following commands for Ubuntu.
+Furthermore, the GPU driver is also required.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl -s -L https://nvidia.github.io/nvidia-container-runtime/gpgkey <span class="p">|</span> <span class="se">\</span>
+    sudo apt-key add -
+<span class="nv">distribution</span><span class="o">=</span><span class="k">$(</span>. /etc/os-release<span class="p">;</span><span class="nb">echo</span> <span class="nv">$ID$VERSION_ID</span><span class="k">)</span>
+curl -s -L https://nvidia.github.io/nvidia-container-runtime/<span class="nv">$distribution</span>/nvidia-container-runtime.list <span class="p">|</span> <span class="se">\</span>
+    sudo tee /etc/apt/sources.list.d/nvidia-container-runtime.list
+sudo apt-get update
+sudo apt-get install nvidia-container-runtime
+sudo service docker restart
+</pre></div>
+</div>
+<p>More details can be found on
+<a class="reference external" href="https://github.com/NVIDIA/nvidia-container-runtime">https://github.com/NVIDIA/nvidia-container-runtime</a>
+and <a class="reference external" href="https://nvidia.github.io/nvidia-container-runtime">https://nvidia.github.io/nvidia-container-runtime</a>.</p>
+</div>
+</div>
+<div class="section" id="running-examples-in-docker-containers">
+<h2>Running Examples in Docker Containers<a class="headerlink" href="#running-examples-in-docker-containers" title="Permalink to this headline">¶</a></h2>
+<p>The docker images have already included a few examples for the Bluefog library and some unittests for users.</p>
 <ol class="arabic simple">
 <li><p>UnitTest in docker container</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> pytest -s torch_ops_test.py
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./run_unittest.sh
 </pre></div>
 </div>
 <ol class="arabic simple" start="2">
 <li><p>Examples in docker container</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> python pytorch_average_consensus.py
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> python examples/pytorch_average_consensus.py
 </pre></div>
+</div>
 </div>
 </div>
 
