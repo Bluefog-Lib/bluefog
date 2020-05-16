@@ -61,18 +61,17 @@ in thread 1 aligns with the end of opeartion ``MPI_NEIGHBOR_ALLREDUCE`` in threa
 
 Example II: Logistic regression with win_accumulate
 ---------------------------------------------------
-In this example, we still show the timeline when running decentralized SGD for 
-logistic regression. Different from Example I, we employ the one-sided communication 
+In this example, we show the timeline when running gradient tracking (another well-known decentralized 
+algorithm) for logistic regression. Different from Example I, we employ the one-sided communication 
 primitives ``win_accumulate`` to exchange information between neighboring ranks.
 
-.. image:: ./_static/bf_timeline_example2.png
+.. image:: ./_static/bf_timeline_example2a.png
    :width: 800
    :align: center
 
-Different from Example I, it is observed that the computation thread (thread 1) and 
-the communication thread (thread 2) were running independently. Thread 1 will not 
-be blocked after enqueuing the ``WIN_ACCUMULATE`` task to thread 2 (``ENQUEUE_WIN_ACCUMULATE`` in
-thread 1 and ``MPI_WIN_ACCUMULATE`` in thread 2 are not aligned). In other words,
+Different from Example I, it is observed that the computation and 
+the communication were running independently. In the above figure, the gradient computation for
+variable w (pid 2) is overlapping with the communication of the variable q (pid 3). In other words,
 the one-sided communication primitive enables nonblocking operation and will significantly
 improve the training efficiency in real practice.
 
@@ -80,12 +79,27 @@ Example III: Resnet training with one-sided communication
 ---------------------------------------------------------
 In this example, we show the timeline for a real experiment when decentralized SGD is used to 
 train Resnet with CIFAR10 dataset. We exploit the one-sided communicaton primitive ``win_put`` 
-to exchange information between ranks. It is observed that each phase during the training
-is clearly illustrated in the timeline.
+to exchange information between ranks. 
 
-.. image:: ./_static/bf_timeline_example3.png
+.. image:: ./_static/bf_timeline_example3a.png
    :width: 800
    :align: center
+
+In the above figure, the left-side arrow indicates the layers in the backward direction. For
+example, pid 63 indicates the bias of the fully connected layer, pid 62 indicates the weigt matrix
+of the fully connected layer, and pid 61 indicates the bias of the batch normalization layer. 
+
+With the backpropagation algorithm, the back layers will finish the gradient computation earlier
+than front layers. To increase the efficiency, there is no need to wait to communicate until the full gradient is computed (i.e., 
+the whole backpropagation is finished). Instead, BlueFog enables communication 
+layer by layer and overlaps the communication of the back layers with the gradient computation 
+of the front layers. 
+
+As illustrated in the above figure, the communication of the bias in the
+fully-connected layer (i.e. pid 63) overlaps with the gradient computation of the wieght in the 
+fully-connected layer (i.e., pid 62). Similarly, communication of the wieght in the 
+fully-connected layer (i.e., pid 62) overlaps with the gradient computation of the bias in the batch normalization
+layer (i.e., pid 61).
 
 .. _Horovod timeline:  https://github.com/horovod/horovod/blob/master/docs/timeline.rst
 .. _chrome://tracing:  chrome://tracing/
