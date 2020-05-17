@@ -100,8 +100,8 @@
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Docker Usage</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#installing-docker-image">Installing Docker Image</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#building-your-own-docker-image">Building Your Own Docker Image</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#downloading-docker-image-from-docker-hub">Downloading Docker Image From Docker Hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#building-your-own-docker-image">Building Your Own Docker Image</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#running-docker-container">Running Docker Container</a><ul>
@@ -193,21 +193,6 @@ For the dockerfiles for development, the readers can check the Github Wiki for m
 <h2>Installing Docker Image<a class="headerlink" href="#installing-docker-image" title="Permalink to this headline">¶</a></h2>
 <p>The docker images can be built from scratch or be obtained from
 <a class="reference external" href="https://hub.docker.com/r/bluefoglib/bluefog">Docker Hub</a>.</p>
-<div class="section" id="building-your-own-docker-image">
-<h3>Building Your Own Docker Image<a class="headerlink" href="#building-your-own-docker-image" title="Permalink to this headline">¶</a></h3>
-<ol class="arabic simple">
-<li><p>Build docker image with CUDA support:</p></li>
-</ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_gpu . -f dockerfile.gpu
-</pre></div>
-</div>
-<ol class="arabic simple" start="2">
-<li><p>Build docker image with only CPU support:</p></li>
-</ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_cpu . -f dockerfile.cpu
-</pre></div>
-</div>
-</div>
 <div class="section" id="downloading-docker-image-from-docker-hub">
 <h3>Downloading Docker Image From Docker Hub<a class="headerlink" href="#downloading-docker-image-from-docker-hub" title="Permalink to this headline">¶</a></h3>
 <ol class="arabic simple">
@@ -220,6 +205,21 @@ For the dockerfiles for development, the readers can check the Github Wiki for m
 <li><p>Download docker image with only CPU support:</p></li>
 </ol>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:cpu
+</pre></div>
+</div>
+</div>
+<div class="section" id="building-your-own-docker-image">
+<h3>Building Your Own Docker Image<a class="headerlink" href="#building-your-own-docker-image" title="Permalink to this headline">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Build docker image with CUDA support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_gpu . -f dockerfile.gpu
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Build docker image with only CPU support:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker build -t bluefog_cpu . -f dockerfile.cpu
 </pre></div>
 </div>
 </div>

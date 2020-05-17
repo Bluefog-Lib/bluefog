@@ -14,21 +14,6 @@ Installing Docker Image
 The docker images can be built from scratch or be obtained from
 `Docker Hub <https://hub.docker.com/r/bluefoglib/bluefog>`_.
 
-Building Your Own Docker Image
-##############################
-
-1. Build docker image with CUDA support:
-
-.. code-block:: bash
-
-    sudo docker build -t bluefog_gpu . -f dockerfile.gpu
-
-2. Build docker image with only CPU support:
-
-.. code-block:: bash
-
-    sudo docker build -t bluefog_cpu . -f dockerfile.cpu
-
 Downloading Docker Image From Docker Hub
 ########################################
 
@@ -43,6 +28,21 @@ Downloading Docker Image From Docker Hub
 .. code-block:: bash
 
     sudo docker pull bluefoglib/bluefog:cpu
+
+Building Your Own Docker Image
+##############################
+
+1. Build docker image with CUDA support:
+
+.. code-block:: bash
+
+    sudo docker build -t bluefog_gpu . -f dockerfile.gpu
+
+2. Build docker image with only CPU support:
+
+.. code-block:: bash
+
+    sudo docker build -t bluefog_cpu . -f dockerfile.cpu
 
 Running Docker Container
 ------------------------
