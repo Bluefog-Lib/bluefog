@@ -422,7 +422,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for param_group in self.param_groups:
-            for p in param_group["params"]:  # Is hook function blocking or not?
+            for p in param_group["params"]:
                 if p.requires_grad:
                     p.register_hook(self._make_hook(p))
 
