@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <cassert>
 #include <thread>
-#include <stdio.h>
 
 #include "cuda_util.h"
 #include "operations.h"
@@ -35,11 +34,7 @@ namespace common {
 // Due to unclear reason that mpi_put/get/accumlate under the
 // mpi_lock epoch cannot send too long vector in one time, we
 // define this number as the maximum size of win_ops can send.
-static const char* BLUEFOG_MAX_WIN_SENT = std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
-static const int MAX_WIN_SENT =
-    BLUEFOG_MAX_WIN_SENT == nullptr
-        ? 2000
-        : std::strtol(BLUEFOG_MAX_WIN_SENT, nullptr, 10);
+constexpr int MAX_WIN_SENT = 2000;
 
 // MPIController
 void MPIController::Initialize() {

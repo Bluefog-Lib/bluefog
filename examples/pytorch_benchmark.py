@@ -25,7 +25,6 @@ import torch.optim as optim
 import torch.utils.data.distributed
 from torchvision import models
 import bluefog.torch as bf
-from bluefog.common import topology_util
 
 
 # Benchmark settings
@@ -108,14 +107,12 @@ if args.bluefog:
     if args.no_rma:
         print("Use neighbor collective")
         # This distributed optimizer uses neighbor communication.
-        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
         optimizer = bf.DistributedNeighborAllreduceOptimizer(
             optimizer, named_parameters=model.named_parameters()
         )
     else:
         # This distributed optimizer uses one-sided communication
         print("Use win_put ops.")
-        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
         optimizer = bf.DistributedBluefogOptimizer(
             optimizer, named_parameters=model.named_parameters()
         )
