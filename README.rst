@@ -13,7 +13,7 @@ Bluefog
     
 .. raw:: html
 
-    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/79828058-c3947780-8354-11ea-847c-ef97cecc9a62.png" alt="Logo" width="450"/></p>
+    <p align="center"><img src="https://user-images.githubusercontent.com/65107588/82258821-62d66b80-990f-11ea-9393-bf5456af67e6.png" alt="Logo" width="450"/></p>
 
 Overview
 --------
