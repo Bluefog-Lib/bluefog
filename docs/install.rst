@@ -61,7 +61,7 @@ following command under the root folder of bluefog repository:
 Use Bluefog through Docker
 --------------------------
 The docker image for Bluefog can be accessed through `Docker Hub <https://hub.docker.com/r/bluefoglib/bluefog>`_.
-For more details, check `Bluefog Docker Usage <https://bluefog-lib.github.io/bluefog/docker.html>`_.
+For more details, check :ref:`Docker Usage` page.
 
 1. Download docker image with CUDA support:
 

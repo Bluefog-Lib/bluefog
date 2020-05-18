@@ -1,3 +1,5 @@
+.. _Docker Usage:
+
 Bluefog Docker Usage
 =============================
 
