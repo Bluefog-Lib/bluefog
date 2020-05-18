@@ -69,6 +69,8 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
+        self._timeline_hook_handles = []
+        self._use_timeline = False
         if bf.size() > 1:
             self._register_hooks()
 
@@ -118,7 +120,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_start_activity(
                     name, activity_name="GRADIENT COMPT.")
-        model.register_backward_hook(_timeline_hook)
+        backward_hook_handle = model.register_backward_hook(_timeline_hook)
 
         def _timeline_forward_pre_hook(model, *unused):
             for name, _ in model.named_parameters():
@@ -128,19 +130,19 @@ class _DistributedOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_end_activity(name)
 
-        model.register_forward_pre_hook(_timeline_forward_pre_hook)
-        model.register_forward_hook(_timeline_forward_hook)
+        pre_forward_hook_handle = model.register_forward_pre_hook(
+            _timeline_forward_pre_hook)
+        forward_hook_handle = model.register_forward_hook(
+            _timeline_forward_hook)
+        self._timeline_hook_handles.extend([backward_hook_handle,
+                                            pre_forward_hook_handle,
+                                            forward_hook_handle])
         self._use_timeline = True
 
-    def turn_off_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _empty_hook(model, *unused):
-            pass
-        model.register_backward_hook(_empty_hook)
-        model.register_forward_pre_hook(_empty_hook)
-        model.register_forward_hook(_empty_hook)
+    def turn_off_timeline(self):
+        for hooks in self._timeline_hook_handles:
+            hooks.remove()
+        self._timeline_hook_handles.clear()
         self._use_timeline = False
         
     def synchronize(self):
@@ -270,6 +272,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
+        self._timeline_hook_handles = []
+        self._use_timeline = False
         if bf.size() > 1:
             self._register_hooks()
 
@@ -302,7 +306,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_start_activity(
                     name, activity_name="GRADIENT COMPT.")
-        model.register_backward_hook(_timeline_hook)
+        backward_hook_handle = model.register_backward_hook(_timeline_hook)
 
         def _timeline_forward_pre_hook(model, *unused):
             for name, _ in model.named_parameters():
@@ -312,19 +316,19 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_end_activity(name)
 
-        model.register_forward_pre_hook(_timeline_forward_pre_hook)
-        model.register_forward_hook(_timeline_forward_hook)
+        pre_forward_hook_handle = model.register_forward_pre_hook(
+            _timeline_forward_pre_hook)
+        forward_hook_handle = model.register_forward_hook(
+            _timeline_forward_hook)
+        self._timeline_hook_handles.extend([backward_hook_handle,
+                                            pre_forward_hook_handle,
+                                            forward_hook_handle])
         self._use_timeline = True
 
-    def turn_off_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _empty_hook(model, *unused):
-            pass
-        model.register_backward_hook(_empty_hook)
-        model.register_forward_pre_hook(_empty_hook)
-        model.register_forward_hook(_empty_hook)
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
         self._use_timeline = False
 
     def synchronize(self):
@@ -411,6 +415,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._timeline_hook_handles = []
         if bf.size() > 1:
             self._register_window()
             self._register_hooks()
@@ -478,7 +483,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_start_activity(
                     name, activity_name="GRADIENT COMPT.")
-        model.register_backward_hook(_timeline_hook)
+        backward_hook_handle = model.register_backward_hook(_timeline_hook)
 
         def _timeline_forward_pre_hook(model, *unused):
             for name, _ in model.named_parameters():
@@ -488,19 +493,19 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_end_activity(name)
 
-        model.register_forward_pre_hook(_timeline_forward_pre_hook)
-        model.register_forward_hook(_timeline_forward_hook)
+        pre_forward_hook_handle = model.register_forward_pre_hook(
+            _timeline_forward_pre_hook)
+        forward_hook_handle = model.register_forward_hook(
+            _timeline_forward_hook)
+        self._timeline_hook_handles.extend([backward_hook_handle,
+                                            pre_forward_hook_handle,
+                                            forward_hook_handle])
         self._use_timeline = True
 
-    def turn_off_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _empty_hook(model, *unused):
-            pass
-        model.register_backward_hook(_empty_hook)
-        model.register_forward_pre_hook(_empty_hook)
-        model.register_forward_hook(_empty_hook)
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
         self._use_timeline = False
 
     def step(self, closure=None):
