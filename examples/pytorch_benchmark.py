@@ -114,7 +114,7 @@ if args.bluefog:
         # This distributed optimizer uses one-sided communication
         print("Use win_put ops.")
         optimizer = bf.DistributedBluefogOptimizer(
-            optimizer, named_parameters=model.named_parameters()
+            optimizer, model=model
         )
 else:
     optimizer = bf.DistributedOptimizer(

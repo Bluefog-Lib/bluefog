@@ -214,7 +214,7 @@ if args.bluefog:
         # This distributed optimizer uses one-sided communication
         print("Use win_put ops.")
         optimizer = bf.DistributedBluefogOptimizer(
-            optimizer, named_parameters=model.named_parameters()
+            optimizer, model=model
         )
         if os.environ.get("BLUEFOG_TIMELINE"):
             print("Timeline for optimizer is enabled")
