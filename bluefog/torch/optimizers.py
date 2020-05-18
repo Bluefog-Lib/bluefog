@@ -409,6 +409,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
     def _make_hook(self):
         def hook(model, *unused):
             for name, p in model.named_parameters():
+                if self._use_timeline:
+                    bf.timeline_end_activity(name) # End forward computation timeline
                 if p.requires_grad:
                     handle = bf.win_put_async(tensor=p.data, name=name)
                     self._handles[p] = handle
@@ -462,17 +464,10 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             for name, _ in model.named_parameters():
                 bf.timeline_start_activity(name, activity_name="FORWARD")
 
-        def _timeline_forward_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_end_activity(name)
-
         pre_forward_hook_handle = self._model.register_forward_pre_hook(
             _timeline_forward_pre_hook)
-        forward_hook_handle = self._model.register_forward_hook(
-            _timeline_forward_hook)
         self._timeline_hook_handles.extend([backward_hook_handle,
-                                            pre_forward_hook_handle,
-                                            forward_hook_handle])
+                                            pre_forward_hook_handle])
         self._use_timeline = True
 
     def turn_off_timeline(self):
