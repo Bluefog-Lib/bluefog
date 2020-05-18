@@ -774,8 +774,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None,
             acquired.
 
     Returns:
-        A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
-        processes (or all neighbor processes).
+        A bool value to indicate the get succeeded or not.
     """
     handle = win_get_async(name, src_weights, require_mutex)
     return win_wait(handle)
@@ -841,8 +840,7 @@ def win_accumulate(tensor: torch.Tensor, name: str,
             acquired.
 
     Returns:
-        A handle to the win_accmulate operation that can be used with `win_poll()` or
-        `win_wait()`.
+        A bool value to indicate the accumulate succeeded or not.
     """
     handle = win_accumulate_async(tensor, name, dst_weights, require_mutex)
     return win_wait(handle)
