@@ -106,7 +106,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
     def _allreduce_grad_async(self, p):
         name = self._parameter_names.get(p)
         if self._use_timeline:
-            bf.timeline_end_activity(name)
+            bf.timeline_end_activity("allreduce." + name)
         handle = bf.allreduce_async(
             p.grad, average=True, name=name
         )
@@ -119,16 +119,16 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         def _timeline_hook(model, *unused):
             for name, _ in model.named_parameters():
                 bf.timeline_start_activity(
-                    name, activity_name="GRADIENT COMPT.")
+                    "allreduce." + name, activity_name="GRADIENT COMPT.")
         backward_hook_handle = model.register_backward_hook(_timeline_hook)
 
         def _timeline_forward_pre_hook(model, *unused):
             for name, _ in model.named_parameters():
-                bf.timeline_start_activity(name, activity_name="FORWARD")
+                bf.timeline_start_activity("allreduce." + name, activity_name="FORWARD")
 
         def _timeline_forward_hook(model, *unused):
             for name, _ in model.named_parameters():
-                bf.timeline_end_activity(name)
+                bf.timeline_end_activity("allreduce." + name)
 
         pre_forward_hook_handle = model.register_forward_pre_hook(
             _timeline_forward_pre_hook)
@@ -144,7 +144,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
             hooks.remove()
         self._timeline_hook_handles.clear()
         self._use_timeline = False
-        
+
     def synchronize(self):
         missing_p = self._requires_update - set(self._handles.keys())
         for p in missing_p:
@@ -227,17 +227,10 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         w_{i+1, k} = Neighbor_Average( w_{i, k} - lr * local_grad(w_{i, k}) )
     """
 
-    def __init__(self, params, named_parameters):
+    def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
 
-        if named_parameters is not None:
-            named_parameters = list(named_parameters)
-        else:
-            named_parameters = [
-                ("allreduce.noname.%s" % i, v)
-                for param_group in self.param_groups
-                for i, v in enumerate(param_group["params"])
-            ]
+        named_parameters = list(model.named_parameters())
 
         # make sure that named_parameters are tuples
         if any([not isinstance(p, tuple) for p in named_parameters]):
@@ -267,6 +260,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
                 "%s" % ", ".join(str(id) for id in unnamed_param_ids)
             )
 
+        self._model = model
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
         self._requires_update = set()
@@ -278,58 +272,57 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
             self._register_hooks()
 
     def _register_hooks(self):
-        for param_group in self.param_groups:
-            for p in param_group["params"]:
-                if p.requires_grad:
-                    p.register_hook(self._make_hook(p))
+        self._model.register_forward_hook(self._make_hook())
 
-    def _make_hook(self, p):
+    def _make_hook(self):
         def hook(*ignore):
-            assert not p.grad.requires_grad
-            handle = self._neighbor_allreduce_data_async(p)
-            self._handles[p] = handle
+            for param_group in self.param_groups:
+                for p in param_group["params"]:
+                    if p.requires_grad:
+                        self._requires_update.add(p)
+                        handle = self._neighbor_allreduce_data_async(p)
+                        self._handles[p] = handle
 
         return hook
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
         if self._use_timeline:
-            bf.timeline_end_activity(name)
+            # End forward computation timeline
+            bf.timeline_end_activity("neighbor.allreduce." + name)
         handle = bf.neighbor_allreduce_async(p.data, name=name)
         return handle
 
-    def turn_on_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
+    def turn_on_timeline(self):
         def _timeline_hook(model, *unused):
             for name, _ in model.named_parameters():
                 bf.timeline_start_activity(
-                    name, activity_name="GRADIENT COMPT.")
-        backward_hook_handle = model.register_backward_hook(_timeline_hook)
+                    "neighbor.allreduce." + name, activity_name="GRADIENT COMPT.")
+        backward_hook_handle = self._model.register_backward_hook(
+            _timeline_hook)
+
+        def _make_backward_end_timeline_hook(name):
+            def hook(*ignore):
+                if self._use_timeline:
+                    bf.timeline_end_activity("neighbor.allreduce." + name)
+            return hook
+
+        for param_group in self.param_groups:
+            for p in param_group["params"]:
+                if p.requires_grad:
+                    name = self._parameter_names.get(p)
+                    p.register_hook(_make_backward_end_timeline_hook(name))
 
         def _timeline_forward_pre_hook(model, *unused):
             for name, _ in model.named_parameters():
-                bf.timeline_start_activity(name, activity_name="FORWARD")
+                bf.timeline_start_activity(
+                    "neighbor.allreduce." + name, activity_name="FORWARD")
 
-        def _timeline_forward_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_end_activity(name)
-
-        pre_forward_hook_handle = model.register_forward_pre_hook(
+        pre_forward_hook_handle = self._model.register_forward_pre_hook(
             _timeline_forward_pre_hook)
-        forward_hook_handle = model.register_forward_hook(
-            _timeline_forward_hook)
         self._timeline_hook_handles.extend([backward_hook_handle,
-                                            pre_forward_hook_handle,
-                                            forward_hook_handle])
+                                            pre_forward_hook_handle])
         self._use_timeline = True
-
-    def turn_off_timeline(self):
-        for hook in self._timeline_hook_handles:
-            hook.remove()
-        self._timeline_hook_handles.clear()
-        self._use_timeline = False
 
     def synchronize(self):
         missing_p = self._requires_update - set(self._handles.keys())
@@ -397,7 +390,6 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._model = model
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}  # store parameter -> handle
-        self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
@@ -519,15 +511,14 @@ def DistributedBluefogOptimizer(optimizer, model):
     return cls(optimizer.param_groups, model)
 
 
-def DistributedNeighborAllreduceOptimizer(optimizer, named_parameters=None):
+def DistributedNeighborAllreduceOptimizer(optimizer, model):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        named_parameters: A mapping between parameter names and values. Used for naming of
-                          allreduce operations. Typically just ``model.named_parameters()``
+        model: The model you want to train with. (Sorry, we only support single model)
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with neighbor_allreduce implementation.
@@ -536,7 +527,7 @@ def DistributedNeighborAllreduceOptimizer(optimizer, named_parameters=None):
         (optimizer.__class__,),
         dict(_DistributedNeighborAllreduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, named_parameters)
+    return cls(optimizer.param_groups, model)
 
 
 def DistributedAllreduceOptimizer(optimizer, named_parameters=None):

@@ -185,11 +185,11 @@ if args.bluefog:
     if args.no_rma:
         print("Use neighbor collective")
         optimizer = bf.DistributedNeighborAllreduceOptimizer(
-            optimizer, named_parameters=model.named_parameters()
+            optimizer, model=model
         )
         if os.environ.get("BLUEFOG_TIMELINE"):
             print("Timeline for optimizer is enabled")
-            optimizer.turn_on_timeline(model)
+            optimizer.turn_on_timeline()
     else:
         print("Use win_put ops.")
         optimizer = bf.DistributedBluefogOptimizer(

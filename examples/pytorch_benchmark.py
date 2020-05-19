@@ -108,7 +108,7 @@ if args.bluefog:
         print("Use neighbor collective")
         # This distributed optimizer uses neighbor communication.
         optimizer = bf.DistributedNeighborAllreduceOptimizer(
-            optimizer, named_parameters=model.named_parameters()
+            optimizer, model=model
         )
     else:
         # This distributed optimizer uses one-sided communication
