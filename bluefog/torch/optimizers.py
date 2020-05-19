@@ -269,21 +269,22 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles = []
         self._use_timeline = False
         if bf.size() > 1:
-            self._register_hook()
+            self._register_hooks()
 
-    def _register_hook(self):
+    def _register_hooks(self):
         for parent_name, layer in self._model._modules.items():
             layer.register_forward_hook(self._make_hook(parent_name))
 
-    def _make_hook(self):
-        def hook(*ignore):
-            for param_group in self.param_groups:
-                for p in param_group["params"]:
-                    if p.requires_grad:
-                        self._requires_update.add(p)
-                        handle = self._neighbor_allreduce_data_async(p)
-                        self._handles[p] = handle
-
+    def _make_hook(self, parent_name):
+        def hook(model, *unused):
+            for name, p in model.named_parameters():
+                if self._use_timeline:
+                    # End forward computation timeline
+                    bf.timeline_end_activity(parent_name+'.'+name)
+                if p.requires_grad:
+                    self._requires_update.add(p)
+                    handle = self._neighbor_allreduce_data_async(p)
+                    self._handles[p] = handle
         return hook
 
     def _neighbor_allreduce_data_async(self, p):
@@ -397,9 +398,9 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles = []
         if bf.size() > 1:
             self._register_window()
-            self._register_hook()
+            self._register_hooks()
 
-    def _register_hook(self):
+    def _register_hooks(self):
         for parent_name, layer in self._model._modules.items():
             layer.register_forward_hook(self._make_hook(parent_name))
 
