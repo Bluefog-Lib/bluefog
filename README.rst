@@ -66,7 +66,7 @@ then run it through ``bfrun``. That is it!
    bf.init()
    optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
    optimizer = bf.DistributedBluefogOptimizer(
-      optimizer, named_parameters=model.named_parameters()
+      optimizer, named_parameters=model
    )
    ...
 
