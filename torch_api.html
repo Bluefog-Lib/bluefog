@@ -195,15 +195,14 @@ allreduce operations. Typically just <code class="docutils literal notranslate">
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedNeighborAllreduceOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
 neighbor_allreduce ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
-<li><p><strong>named_parameters</strong> – A mapping between parameter names and values. Used for naming of
-allreduce operations. Typically just <code class="docutils literal notranslate"><span class="pre">model.named_parameters()</span></code></p></li>
+<li><p><strong>model</strong> – The model you want to train with. (Sorry, we only support single model)</p></li>
 </ul>
 </dd>
 </dl>
@@ -211,15 +210,14 @@ allreduce operations. Typically just <code class="docutils literal notranslate">
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
-mpi_win_put ops.</p>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
+pull model average through bf.win_put ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
-<li><p><strong>named_parameters</strong> – A mapping between parameter names and values. Used for naming of
-window operations. Typically just <code class="docutils literal notranslate"><span class="pre">model.named_parameters()</span></code></p></li>
+<li><p><strong>model</strong> – The model you want to train with. (Sorry, we only support single model)</p></li>
 </ul>
 </dd>
 </dl>
@@ -228,9 +226,7 @@ window operations. Typically just <code class="docutils literal notranslate"><sp
 <span class="gp">&gt;&gt;&gt; </span><span class="o">...</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">lr</span> <span class="o">*</span> <span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedBluefogOptimizer</span><span class="p">(</span>
-<span class="gp">... </span>   <span class="n">optimizer</span><span class="p">,</span> <span class="n">named_parameters</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">()</span>
-<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedBluefogOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>
