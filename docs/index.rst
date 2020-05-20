@@ -14,7 +14,7 @@ Bluefog
 Bluefog is a distributed training framework for PyTorch based
 on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
-fault-tolerant, friendly to heterogeneuous environment, and easy to use.
+fault-tolerant, friendly to heterogeneous environment, and easy to use.
 
 The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
 DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
