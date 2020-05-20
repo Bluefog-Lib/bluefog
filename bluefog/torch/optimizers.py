@@ -20,6 +20,16 @@ import warnings
 import torch
 import bluefog.torch as bf
 
+
+def named_leaf_module(module, parent_name=None):
+    """Yield an iterator over all leaf modules."""
+    if len(list(module.named_children())) == 0:
+        yield (parent_name, module)
+    for name, ch_module in module.named_children():
+        full_name = (parent_name + '.' + name if parent_name else name)
+        yield from named_leaf_module(ch_module, full_name)
+
+
 # TODO(ybc) Use interface to refactor the code.
 #pylint: disable=unused-argument
 class _DistributedOptimizer(torch.optim.Optimizer):
@@ -272,7 +282,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
             self._register_hooks()
 
     def _register_hooks(self):
-        for parent_name, layer in self._model._modules.items():
+        for parent_name, layer in named_leaf_module(self._model):
             layer.register_forward_hook(self._make_hook(parent_name))
 
     def _make_hook(self, parent_name):
@@ -401,7 +411,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             self._register_hooks()
 
     def _register_hooks(self):
-        for parent_name, layer in self._model._modules.items():
+        for parent_name, layer in named_leaf_module(self._model):
             layer.register_forward_hook(self._make_hook(parent_name))
 
     def _make_hook(self, parent_name):
