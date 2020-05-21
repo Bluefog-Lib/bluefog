@@ -34,7 +34,11 @@ namespace common {
 // Due to unclear reason that mpi_put/get/accumlate under the
 // mpi_lock epoch cannot send too long vector in one time, we
 // define this number as the maximum size of win_ops can send.
-constexpr int MAX_WIN_SENT = 2000;
+static const char* BLUEFOG_MAX_WIN_SENT = std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
+static const int MAX_WIN_SENT =
+    BLUEFOG_MAX_WIN_SENT == nullptr
+        ? 2000
+        : std::strtol(BLUEFOG_MAX_WIN_SENT, nullptr, 10);
 
 // MPIController
 void MPIController::Initialize() {
@@ -519,6 +523,28 @@ Status MPIController::WinFence(const std::string& name) {
   return Status::OK();
 }
 
+// Reshuffle the order of destination to avoid the collision of network.
+std::vector<std::pair<int, double>> GetSortedDstWeights(
+    const int self_rank, const int size, const std::unordered_map<int, double> dst_weights) {
+  std::vector<std::pair<int, double>> sorted_dst_weights;
+  for (auto kv : dst_weights) {
+    int target_rank = kv.first;
+    double weight = kv.second;
+    sorted_dst_weights.push_back(std::make_pair(target_rank, weight));
+  }
+
+  std::sort(
+      sorted_dst_weights.begin(), sorted_dst_weights.end(),
+      [self_rank, size](std::pair<int, double> a, std::pair<int, double> b) {
+        int distance1 = a.first - self_rank;
+        int distance2 = b.first - self_rank;
+        if (a.first < self_rank) distance1 += size;
+        if (b.first < self_rank) distance2 += size;
+        return distance1 < distance2;
+      });
+  return sorted_dst_weights;
+}
+
 void MPIController::WinPut(TensorTableEntry& entry) {
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
@@ -536,7 +562,11 @@ void MPIController::WinPut(TensorTableEntry& entry) {
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  for (auto kv : entry.dst_weights) {
+
+  std::vector<std::pair<int, double>> sorted_dst_weights =
+      GetSortedDstWeights(rank_, size_, entry.dst_weights);
+
+  for (auto kv : sorted_dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
 
@@ -601,7 +631,10 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
-  for (auto kv : entry.dst_weights) {
+  std::vector<std::pair<int, double>> sorted_dst_weights =
+      GetSortedDstWeights(rank_, size_, entry.dst_weights);
+
+  for (auto kv : sorted_dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
     // avoid putting the tensor for itself (NOT valid).

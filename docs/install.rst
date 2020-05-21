@@ -60,7 +60,20 @@ following command under the root folder of bluefog repository:
 
 Use Bluefog through Docker
 --------------------------
-To be added.
+The docker image for Bluefog can be accessed through `Docker Hub <https://hub.docker.com/r/bluefoglib/bluefog>`_.
+For more details, check :ref:`Docker Usage` page.
+
+1. Download docker image with CUDA support:
+
+.. code-block:: bash
+
+    sudo docker pull bluefoglib/bluefog:gpu
+
+2. Download docker image with only CPU support:
+
+.. code-block:: bash
+
+    sudo docker pull bluefoglib/bluefog:cpu
 
 .. _conda: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 .. _download link: https://www.open-mpi.org/software/ompi/v4.0/

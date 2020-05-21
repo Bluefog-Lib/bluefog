@@ -14,7 +14,7 @@ Bluefog
 Bluefog is a distributed training framework for PyTorch based
 on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
-fault-tolerant, friendly to heterogeneuous environment, and easy to use.
+fault-tolerant, friendly to heterogeneous environment, and easy to use.
 
 The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
 DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
@@ -58,7 +58,7 @@ then run it through ``bfrun``. That is it!
    bf.init()
    optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
    optimizer = bf.DistributedBluefogOptimizer(
-      optimizer, named_parameters=model.named_parameters()
+      optimizer, model
    )
    ...
 
@@ -105,11 +105,11 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
                       for rank in bf.out_neighbor_ranks()},
          require_mutex=True)
       x.div_(1+outdegree)
-      bf.win_sync_then_collect(name="x_buff")
+      bf.win_update_then_collect(name="x_buff")
 
    bf.barrier()
    # Do not forget to sync at last!
-   bf.win_sync_then_collect(name="x_buff")
+   bf.win_update_then_collect(name="x_buff")
    print(f"{bf.rank()}: Average value of all ranks is {x[0]/x[-1]}")
 
 Please explore our `examples`_ folder to see more about

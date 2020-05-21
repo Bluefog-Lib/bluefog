@@ -20,55 +20,95 @@ import warnings
 import torch
 import bluefog.torch as bf
 
-# TODO(ybc) Use interface to refactor the code.
 #pylint: disable=unused-argument
+def _named_leaf_module(module, parent_name=None):
+    """Yield an iterator over all leaf modules."""
+    if not list(module.named_children()):
+        yield (parent_name, module)
+    for name, ch_module in module.named_children():
+        full_name = (parent_name + '.' + name if parent_name else name)
+        yield from _named_leaf_module(ch_module, full_name)
+
+def _check_named_parameters(optimizer, model):
+    named_parameters = list(model.named_parameters())
+
+    # make sure that named_parameters are tuples
+    if any([not isinstance(p, tuple) for p in named_parameters]):
+        raise ValueError(
+            "named_parameters should be a sequence of "
+            "tuples (name, parameter), usually produced by "
+            "model.named_parameters()."
+        )
+
+    dups = _DistributedOptimizer.find_duplicates(
+        [k for k, _ in named_parameters])
+    if dups:
+        raise ValueError(
+            "Parameter names in named_parameters must be unique. "
+            "Found duplicates: %s" % ", ".join(dups)
+        )
+
+    all_param_ids = {
+        id(v) for param_group in optimizer.param_groups for v in param_group["params"]
+    }
+    named_param_ids = {id(v) for k, v in named_parameters}
+    unnamed_param_ids = all_param_ids - named_param_ids
+    if unnamed_param_ids:
+        raise ValueError(
+            "named_parameters was specified, but one or more model "
+            "parameters were not named. Python object ids: "
+            "%s" % ", ".join(str(id) for id in unnamed_param_ids)
+        )
+    return named_parameters
+
+
+def _register_timeline(optimizer, model, parameter_names, parent_name=None):
+    def _timeline_hook(module, *unused):
+        for name, _ in module.named_parameters():
+            full_name = parent_name+'.'+name if parent_name else name
+            bf.timeline_start_activity(
+                full_name, activity_name="GRADIENT COMPT.")
+    backward_hook_handle = model.register_backward_hook(
+        _timeline_hook)
+
+    def _make_backward_end_timeline_hook(name):
+        def hook(*ignore):
+            bf.timeline_end_activity(name)
+        return hook
+
+    backward_end_hook_handles = []
+    for param_group in optimizer.param_groups:
+        for p in param_group["params"]:
+            if p.requires_grad:
+                name = parameter_names.get(p)
+                full_name = parent_name+'.'+name if parent_name else name
+                h = p.register_hook(_make_backward_end_timeline_hook(full_name))
+                backward_end_hook_handles.append(h)
+
+    def _timeline_forward_pre_hook(module, *unused):
+        for name, _ in module.named_parameters():
+            full_name = parent_name+'.'+name if parent_name else name
+            bf.timeline_start_activity(full_name, activity_name="FORWARD")
+
+    pre_forward_hook_handle = model.register_forward_pre_hook(
+        _timeline_forward_pre_hook)
+
+    return [backward_hook_handle, pre_forward_hook_handle, *backward_end_hook_handles]
+
 class _DistributedOptimizer(torch.optim.Optimizer):
-    def __init__(self, params, named_parameters):
+    def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
+        named_parameters = _check_named_parameters(self, model)
 
-        if named_parameters is not None:
-            named_parameters = list(named_parameters)
-        else:
-            named_parameters = [
-                ("allreduce.noname.%s" % i, v)
-                for param_group in self.param_groups
-                for i, v in enumerate(param_group["params"])
-            ]
-
-        # make sure that named_parameters are tuples
-        if any([not isinstance(p, tuple) for p in named_parameters]):
-            raise ValueError(
-                "named_parameters should be a sequence of "
-                "tuples (name, parameter), usually produced by "
-                "model.named_parameters()."
-            )
-
-        dups = _DistributedOptimizer.find_duplicates(
-            [k for k, _ in named_parameters])
-        if dups:
-            raise ValueError(
-                "Parameter names in named_parameters must be unique. "
-                "Found duplicates: %s" % ", ".join(dups)
-            )
-
-        all_param_ids = {
-            id(v) for param_group in self.param_groups for v in param_group["params"]
-        }
-        named_param_ids = {id(v) for k, v in named_parameters}
-        unnamed_param_ids = all_param_ids - named_param_ids
-        if unnamed_param_ids:
-            raise ValueError(
-                "named_parameters was specified, but one or more model "
-                "parameters were not named. Python object ids: "
-                "%s" % ", ".join(str(id) for id in unnamed_param_ids)
-            )
-
+        self._model = model
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
         self._grad_accs = []
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
+        self._timeline_hook_handles = []
+        self._use_timeline = False
         if bf.size() > 1:
             self._register_hooks()
 
@@ -104,45 +144,24 @@ class _DistributedOptimizer(torch.optim.Optimizer):
     def _allreduce_grad_async(self, p):
         name = self._parameter_names.get(p)
         if self._use_timeline:
-            bf.timeline_end_activity(name)
+            bf.timeline_end_activity("allreduce." + name)
         handle = bf.allreduce_async(
             p.grad, average=True, name=name
         )
         return handle
 
-    def turn_on_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _timeline_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_start_activity(
-                    name, activity_name="GRADIENT COMPT.")
-        model.register_backward_hook(_timeline_hook)
-
-        def _timeline_forward_pre_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_start_activity(name, activity_name="FORWARD")
-
-        def _timeline_forward_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_end_activity(name)
-
-        model.register_forward_pre_hook(_timeline_forward_pre_hook)
-        model.register_forward_hook(_timeline_forward_hook)
+    def turn_on_timeline(self):
+        handles = _register_timeline(
+            self, self._model, self._parameter_names, 'allreduce')
+        self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
-    def turn_off_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _empty_hook(model, *unused):
-            pass
-        model.register_backward_hook(_empty_hook)
-        model.register_forward_pre_hook(_empty_hook)
-        model.register_forward_hook(_empty_hook)
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
         self._use_timeline = False
-        
+
     def synchronize(self):
         missing_p = self._requires_update - set(self._handles.keys())
         for p in missing_p:
@@ -225,106 +244,55 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         w_{i+1, k} = Neighbor_Average( w_{i, k} - lr * local_grad(w_{i, k}) )
     """
 
-    def __init__(self, params, named_parameters):
+    def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
 
-        if named_parameters is not None:
-            named_parameters = list(named_parameters)
-        else:
-            named_parameters = [
-                ("allreduce.noname.%s" % i, v)
-                for param_group in self.param_groups
-                for i, v in enumerate(param_group["params"])
-            ]
-
-        # make sure that named_parameters are tuples
-        if any([not isinstance(p, tuple) for p in named_parameters]):
-            raise ValueError(
-                "named_parameters should be a sequence of "
-                "tuples (name, parameter), usually produced by "
-                "model.named_parameters()."
-            )
-
-        dups = _DistributedOptimizer.find_duplicates(
-            [k for k, _ in named_parameters])
-        if dups:
-            raise ValueError(
-                "Parameter names in named_parameters must be unique. "
-                "Found duplicates: %s" % ", ".join(dups)
-            )
-
-        all_param_ids = {
-            id(v) for param_group in self.param_groups for v in param_group["params"]
-        }
-        named_param_ids = {id(v) for k, v in named_parameters}
-        unnamed_param_ids = all_param_ids - named_param_ids
-        if unnamed_param_ids:
-            raise ValueError(
-                "named_parameters was specified, but one or more model "
-                "parameters were not named. Python object ids: "
-                "%s" % ", ".join(str(id) for id in unnamed_param_ids)
-            )
-
+        named_parameters = _check_named_parameters(self, model)
+        self._model = model
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
         self._requires_update = set()
         self._synchronized = False
         self._should_synchronize = True
+        self._timeline_hook_handles = []
+        self._use_timeline = False
         if bf.size() > 1:
             self._register_hooks()
 
     def _register_hooks(self):
-        for param_group in self.param_groups:
-            for p in param_group["params"]:
+        for parent_name, layer in _named_leaf_module(self._model):
+            layer.register_forward_hook(self._make_hook(parent_name))
+
+    def _make_hook(self, parent_name):
+        def hook(model, *unused):
+            for name, p in model.named_parameters():
+                if self._use_timeline:
+                    # End forward computation timeline
+                    bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    p.register_hook(self._make_hook(p))
-
-    def _make_hook(self, p):
-        def hook(*ignore):
-            assert not p.grad.requires_grad
-            handle = self._neighbor_allreduce_data_async(p)
-            self._handles[p] = handle
-
+                    self._requires_update.add(p)
+                    handle = self._neighbor_allreduce_data_async(p)
+                    self._handles[p] = handle
         return hook
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
         if self._use_timeline:
-            bf.timeline_end_activity(name)
+            # End forward computation timeline
+            bf.timeline_end_activity("neighbor.allreduce." + name)
         handle = bf.neighbor_allreduce_async(p.data, name=name)
         return handle
 
-    def turn_on_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _timeline_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_start_activity(
-                    name, activity_name="GRADIENT COMPT.")
-        model.register_backward_hook(_timeline_hook)
-
-        def _timeline_forward_pre_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_start_activity(name, activity_name="FORWARD")
-
-        def _timeline_forward_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_end_activity(name)
-
-        model.register_forward_pre_hook(_timeline_forward_pre_hook)
-        model.register_forward_hook(_timeline_forward_hook)
+    def turn_on_timeline(self):
+        handles = _register_timeline(
+            self, self._model, self._parameter_names, 'neighbor.allreduce')
+        self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
-    def turn_off_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _empty_hook(model, *unused):
-            pass
-        model.register_backward_hook(_empty_hook)
-        model.register_forward_pre_hook(_empty_hook)
-        model.register_forward_hook(_empty_hook)
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
         self._use_timeline = False
 
     def synchronize(self):
@@ -365,61 +333,37 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
 class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
-    def __init__(self, params, named_parameters):
+    def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
 
-        if named_parameters is not None:
-            named_parameters = list(named_parameters)
-        else:
-            named_parameters = [
-                ("win.put.noname.%s" % i, v)
-                for param_group in self.param_groups
-                for i, v in enumerate(param_group["params"])
-            ]
+        named_parameters = _check_named_parameters(self, model)
 
-        # make sure that named_parameters are tuples
-        if any([not isinstance(p, tuple) for p in named_parameters]):
-            raise ValueError(
-                "named_parameters should be a sequence of "
-                "tuples (name, parameter), usually produced by "
-                "model.named_parameters()."
-            )
-
-        dups = _DistributedOptimizer.find_duplicates(
-            [k for k, _ in named_parameters])
-        if dups:
-            raise ValueError(
-                "Parameter names in named_parameters must be unique. "
-                "Found duplicates: %s" % ", ".join(dups)
-            )
-
-        all_param_ids = {
-            id(v) for param_group in self.param_groups for v in param_group["params"]
-        }
-        named_param_ids = {id(v) for k, v in named_parameters}
-        unnamed_param_ids = all_param_ids - named_param_ids
-        if unnamed_param_ids:
-            raise ValueError(
-                "named_parameters was specified, but one or more model "
-                "parameters were not named. Python object ids: "
-                "%s" % ", ".join(str(id) for id in unnamed_param_ids)
-            )
-
+        self._model = model
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
-        self._handles = {}
-        self._requires_update = set()
+        self._handles = {}  # store parameter -> handle
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._timeline_hook_handles = []
         if bf.size() > 1:
             self._register_window()
             self._register_hooks()
 
     def _register_hooks(self):
-        for param_group in self.param_groups:
-            for p in param_group["params"]:  # Is hook function blocking or not?
+        for parent_name, layer in _named_leaf_module(self._model):
+            layer.register_forward_hook(self._make_hook(parent_name))
+
+    def _make_hook(self, parent_name):
+        def hook(model, *unused):
+            for name, p in model.named_parameters():
+                if self._use_timeline:
+                    # End forward computation timeline
+                    bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    p.register_hook(self._make_hook(p))
+                    handle = bf.win_put_async(
+                        tensor=p.data, name=parent_name+'.'+name)
+                    self._handles[p] = handle
+        return hook
 
     def _register_window(self):
         for param_group in self.param_groups:
@@ -432,32 +376,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                     raise ValueError(
                         "Cannot allocate MPI window for the parameter {}".format(name))
 
-    def _make_hook(self, p):
-        def hook(*ignore):
-            assert not p.grad.requires_grad
-            name = self._parameter_names.get(p)
-            if self._use_timeline:
-                bf.timeline_end_activity(name)
-            handle = bf.win_put_async(tensor=p.data, name=name)
-            self._handles[p] = handle
-        return hook
-
-    def _win_put_async(self, p):
-        name = self._parameter_names.get(p)
-        handle = bf.win_put_async(tensor=p.data, name=name)
-        return handle
-
     def synchronize(self):
-        missing_p = self._requires_update - set(self._handles.keys())
-        for p in missing_p:
-            handle = self._win_put_async(p)
-            self._handles[p] = handle
-
-        for p, handle in self._handles.items():
-            if handle is None:
-                handle = self._win_put_async(p)
-                self._handles[p] = handle
-
         # Here synchronize just to make sure win_put ops is finished
         # in one iteration.
         with torch.no_grad():
@@ -465,42 +384,20 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 _ = bf.win_wait(handle)
                 name = self._parameter_names.get(p)
                 # Update p to the average of neighbors.
-                p.set_(bf.win_sync(name=name))
+                p.set_(bf.win_update(name=name))
 
         self._handles.clear()
         self._synchronized = True
 
-    def turn_on_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _timeline_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_start_activity(
-                    name, activity_name="GRADIENT COMPT.")
-        model.register_backward_hook(_timeline_hook)
-
-        def _timeline_forward_pre_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_start_activity(name, activity_name="FORWARD")
-
-        def _timeline_forward_hook(model, *unused):
-            for name, _ in model.named_parameters():
-                bf.timeline_end_activity(name)
-
-        model.register_forward_pre_hook(_timeline_forward_pre_hook)
-        model.register_forward_hook(_timeline_forward_hook)
+    def turn_on_timeline(self):
+        handles = _register_timeline(self, self._model, self._parameter_names)
+        self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
-    def turn_off_timeline(self, model):
-        assert isinstance(
-            model, torch.nn.Module), "You have to provide nn.model to turn on timeline"
-
-        def _empty_hook(model, *unused):
-            pass
-        model.register_backward_hook(_empty_hook)
-        model.register_forward_pre_hook(_empty_hook)
-        model.register_forward_hook(_empty_hook)
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
         self._use_timeline = False
 
     def step(self, closure=None):
@@ -521,23 +418,20 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
 
 
-def DistributedBluefogOptimizer(optimizer, named_parameters=None):
-    """An distributed optimizer that wraps another torch.optim.Optimizer through
-    mpi_win_put ops.
+def DistributedBluefogOptimizer(optimizer, model):
+    """An distributed optimizer that wraps another torch.optim.Optimizer with
+    pull model average through bf.win_put ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        named_parameters: A mapping between parameter names and values. Used for naming of
-                          window operations. Typically just ``model.named_parameters()``
+        model: The model you want to train with. (Sorry, we only support single model)
 
     Example:
         >>> import bluefog.torch as bf
         >>> ...
         >>> bf.init()
         >>> optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
-        >>> optimizer = bf.DistributedBluefogOptimizer(
-        ...    optimizer, named_parameters=model.named_parameters()
-        ... )
+        >>> optimizer = bf.DistributedBluefogOptimizer(optimizer, model)
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method.
@@ -546,18 +440,17 @@ def DistributedBluefogOptimizer(optimizer, named_parameters=None):
         (optimizer.__class__,),
         dict(_DistributedBluefogOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, named_parameters)
+    return cls(optimizer.param_groups, model)
 
 
-def DistributedNeighborAllreduceOptimizer(optimizer, named_parameters=None):
+def DistributedNeighborAllreduceOptimizer(optimizer, model):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        named_parameters: A mapping between parameter names and values. Used for naming of
-                          allreduce operations. Typically just ``model.named_parameters()``
+        model: The model you want to train with. (Sorry, we only support single model)
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with neighbor_allreduce implementation.
@@ -566,17 +459,16 @@ def DistributedNeighborAllreduceOptimizer(optimizer, named_parameters=None):
         (optimizer.__class__,),
         dict(_DistributedNeighborAllreduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, named_parameters)
+    return cls(optimizer.param_groups, model)
 
 
-def DistributedAllreduceOptimizer(optimizer, named_parameters=None):
+def DistributedAllreduceOptimizer(optimizer, model):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        named_parameters: A mapping between parameter names and values. Used for naming of
-                          allreduce operations. Typically just ``model.named_parameters()``
+        model: The model you want to train with. (Sorry, we only support single model)
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with an allreduce implementation.
@@ -585,4 +477,4 @@ def DistributedAllreduceOptimizer(optimizer, named_parameters=None):
         (optimizer.__class__,),
         dict(_DistributedOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, named_parameters)
+    return cls(optimizer.param_groups, model)

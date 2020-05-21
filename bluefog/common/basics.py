@@ -51,7 +51,7 @@ class BlueFogBasics(object):
         Args:
           topology: A networkx. DiGraph object to decide the topology. If not provided
             a default power_two_ring structure is used.
-          is_weighted: If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
+          is_weighted: If set to true, the neighbor ops like (win_update, neighbor_allreduce) will
             execute the weighted average instead, where the weight is the value used in
             topology matrix (including self).
         """
@@ -187,10 +187,10 @@ class BlueFogBasics(object):
         Args:
           Topo: A networkx.DiGraph object to decide the topology. If not provided
             a default power_two_ring structure is used.
-          is_weighted: If set to true, the win_sync and neighbor_allreduce will execute the
+          is_weighted: If set to true, the win_update and neighbor_allreduce will execute the
             weighted average instead, where the weights are the value used in topology matrix
             (including self weight). Note win_get/win_put/win_accumulate do not use this weight
-            since win_sync already uses these weights.
+            since win_update already uses these weights.
 
         Returns:
             A boolean value that whether topology is set correctly or not.

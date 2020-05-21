@@ -527,7 +527,7 @@ def win_create(tensor: torch.Tensor, name: str, zero_init: bool = False) -> bool
         bool: Indicate the creation succeed or not.
 
     Note: The window with same name across different bluefog processes should associate
-    the tensor with same shape. Otherwise, the rest win_ops like win_sync, win_put will
+    the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put will
     encounter unrecoverable memory segmentation fault.
     """
     function = _check_function(_win_create_function_factory, tensor)
@@ -555,15 +555,15 @@ def win_free(name: str = None) -> bool:
     return getattr(mpi_lib, 'bluefog_torch_win_free')(name)
 
 
-def _win_sync_function_factory(tensor):
+def _win_update_function_factory(tensor):
     return 'bluefog_torch_win_sync_' + tensor.type().replace('.', '_')
 
 
-def win_sync_then_collect(name: str) -> torch.Tensor:
+def win_update_then_collect(name: str) -> torch.Tensor:
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
-    >>> win_sync(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
+    >>> win_update(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
 
     Args:
         name: The unique name to associate the window object.
@@ -572,12 +572,12 @@ def win_sync_then_collect(name: str) -> torch.Tensor:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
     """
     neighbor_weights = {r: 1.0 for r in in_neighbor_ranks()}
-    return win_sync(name, 1.0, neighbor_weights, reset=True)
+    return win_update(name, 1.0, neighbor_weights, reset=True)
 
 
-def win_sync(name: str,
-             self_weight: float = None, neighbor_weights: Dict[int, float] = None,
-             reset: bool = False, clone: bool = False) -> torch.Tensor:
+def win_update(name: str,
+               self_weight: float = None, neighbor_weights: Dict[int, float] = None,
+               reset: bool = False, clone: bool = False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened.
@@ -595,7 +595,7 @@ def win_sync(name: str,
             neighbor_weights will be reset to zero.
             The reset is always happened after the weights computation.
             If neighbor_weights is not presented and reset is True, all the neighbor will be reset.
-        clone: If set up to be true, the win_sync result will return a new tensor instead of
+        clone: If set up to be true, the win_update result will return a new tensor instead of
             in-place change.
 
     Returns:
@@ -612,7 +612,7 @@ def win_sync(name: str,
     tensor = _win_map[name]
     if clone:
         tensor = tensor.clone()
-    function = _check_function(_win_sync_function_factory, tensor)
+    function = _check_function(_win_update_function_factory, tensor)
 
     if neighbor_weights is not None and self_weight is not None:
         # Pre-condition check for weights dictionary.
@@ -642,7 +642,7 @@ def win_sync(name: str,
 
     if not getattr(mpi_lib, function)(tensor, name, self_weight, neighbor_weights,
                                       reset, avg_computation):
-        raise RuntimeError("Cannot apply win_sync on " + name)
+        raise RuntimeError("Cannot apply win_update on " + name)
     return tensor
 
 
@@ -722,7 +722,7 @@ def win_get_async(name: str, src_weights: Dict[int, float] = None,
                   require_mutex: bool = False) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
-    The win_sync function is responsible for fetching that memeory.
+    The win_update function is responsible for fetching that memeory.
     This is a non-blocking function, which will return without waiting the
     win_get operation is really finished.
 
@@ -756,7 +756,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None,
             require_mutex: bool = False) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
-    The win_sync function is responsible for fetching that memeory.
+    The win_update function is responsible for fetching that memeory.
     This is a blocking function, which will return until win_get operation
     is finished.
 
@@ -774,8 +774,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None,
             acquired.
 
     Returns:
-        A tensor of the same shape and type as `tensor`, averaged or summed across src_ranks
-        processes (or all neighbor processes).
+        A bool value to indicate the get succeeded or not.
     """
     handle = win_get_async(name, src_weights, require_mutex)
     return win_wait(handle)
@@ -841,8 +840,7 @@ def win_accumulate(tensor: torch.Tensor, name: str,
             acquired.
 
     Returns:
-        A handle to the win_accmulate operation that can be used with `win_poll()` or
-        `win_wait()`.
+        A bool value to indicate the accumulate succeeded or not.
     """
     handle = win_accumulate_async(tensor, name, dst_weights, require_mutex)
     return win_wait(handle)
@@ -906,7 +904,7 @@ def win_mutex(ranks: List[int] = None):
     Example:
         >>> bf.win_create(tensor, name)
         >>> with win_mutex():
-                tensor = bf.win_sync_then_collect(name)
+                tensor = bf.win_update_then_collect(name)
         >>> win_put(tensor, name)
     """
     _ranks = out_neighbor_ranks() if ranks is None else ranks

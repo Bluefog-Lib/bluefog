@@ -289,7 +289,7 @@ if args.method == 2:
                          for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(1+outdegree)
-        w = bf.win_sync_then_collect(name="w_buff")
+        w = bf.win_update_then_collect(name="w_buff")
 
         x.data = w[:n]/w[-1]
 
@@ -305,7 +305,7 @@ if args.method == 2:
             mse_pd.append(torch.norm(x.data - w_opt, p=2))
 
     bf.barrier()
-    w = bf.win_sync_then_collect(name="w_buff")
+    w = bf.win_update_then_collect(name="w_buff")
     x.data = w[:n]/w[-1]
 
     # calculate local and global gradient

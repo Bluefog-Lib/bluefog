@@ -77,6 +77,7 @@ html_theme_config = {
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
 }
+html_favicon = 'favicon.png'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

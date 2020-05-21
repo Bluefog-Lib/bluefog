@@ -44,7 +44,7 @@ EXTRAS = {}
 readme = '''Bluefog is a distributed training framework for PyTorch based on
 diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
-fault-tolerant, friendly to heterogeneuous environment, and easy to use.
+fault-tolerant, friendly to heterogeneous environment, and easy to use.
 '''
 
 with open('LICENSE') as f:

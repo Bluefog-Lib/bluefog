@@ -13,7 +13,7 @@ Bluefog
     
 .. raw:: html
 
-    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/79828058-c3947780-8354-11ea-847c-ef97cecc9a62.png" alt="Logo" width="450"/></p>
+    <p align="center"><img src="https://user-images.githubusercontent.com/65107588/82258821-62d66b80-990f-11ea-9393-bf5456af67e6.png" alt="Logo" width="450"/></p>
 
 Overview
 --------
@@ -21,7 +21,7 @@ Overview
 Bluefog is a distributed training framework for PyTorch based
 on diffusion/consensus-type algorithm.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
-fault-tolerant, friendly to heterogeneuous environment, and easy to use.
+fault-tolerant, friendly to heterogeneous environment, and easy to use.
 
 The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
 DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
@@ -66,7 +66,7 @@ then run it through ``bfrun``. That is it!
    bf.init()
    optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
    optimizer = bf.DistributedBluefogOptimizer(
-      optimizer, named_parameters=model.named_parameters()
+      optimizer, named_parameters=model
    )
    ...
 
@@ -113,11 +113,11 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
                       for rank in bf.out_neighbor_ranks()},
          require_mutex=True)
       x.div_(1+outdegree)
-      bf.win_sync_then_collect(name="x_buff")
+      bf.win_update_then_collect(name="x_buff")
 
    bf.barrier()
    # Do not forget to sync at last!
-   bf.win_sync_then_collect(name="x_buff")
+   bf.win_update_then_collect(name="x_buff")
    print(f"{bf.rank()}: Average value of all ranks is {x[0]/x[-1]}")
 
 Please explore our *examples* folder to see more about

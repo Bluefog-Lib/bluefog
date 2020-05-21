@@ -17,6 +17,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from bluefog.common import topology_util
+import bluefog.torch as bf
+import torch
+import numpy as np
 import inspect
 import itertools
 import time
@@ -24,15 +28,10 @@ import unittest
 import warnings
 warnings.simplefilter("ignore")
 
-import numpy as np
-import torch
-
-import bluefog.torch as bf
-from bluefog.common import topology_util
-
 
 EPSILON = 1e-5
 TEST_ON_GPU = torch.cuda.is_available()
+
 
 class WinOpsTests(unittest.TestCase):
     """
@@ -80,14 +79,14 @@ class WinOpsTests(unittest.TestCase):
             is_created = bf.win_create(tensor, window_name)
             assert is_created, "bf.win_create do not create window object successfully."
 
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync produce wrong shape tensor.")
+                "bf.win_update produce wrong shape tensor.")
             assert (sync_result.data.min() == rank), (
-                "bf.win_sync produces wrong tensor value " +
+                "bf.win_update produces wrong tensor value " +
                 "{0}!={1} at rank {1}.".format(sync_result.data.min(), rank))
             assert (sync_result.data.max() == rank), (
-                "bf.win_sync produces wrong tensor value " +
+                "bf.win_update produces wrong tensor value " +
                 "{0}!={1} at rank {1}.".format(sync_result.data.max(), rank))
 
         for dtype, dim in itertools.product(dtypes, dims):
@@ -116,7 +115,7 @@ class WinOpsTests(unittest.TestCase):
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
 
-    def test_win_sync_with_given_weights(self):
+    def test_win_update_with_given_weights(self):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -137,18 +136,19 @@ class WinOpsTests(unittest.TestCase):
 
             # Test simple average rule.
             weight = 1.0/(len(bf.in_neighbor_ranks())+1)
-            sync_result = bf.win_sync(window_name,
-                                      self_weight=weight,
-                                      neighbor_weights={x: weight for x in bf.in_neighbor_ranks()}
-                                      )
+            sync_result = bf.win_update(window_name,
+                                        self_weight=weight,
+                                        neighbor_weights={
+                                            x: weight for x in bf.in_neighbor_ranks()}
+                                        )
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync (weighted) produces wrong shape tensor.")
+                "bf.win_update (weighted) produces wrong shape tensor.")
             assert (sync_result.data - rank).abs().max() < EPSILON, (
-                "bf.win_sync (weighted) produces wrong tensor value " +
+                "bf.win_update (weighted) produces wrong tensor value " +
                 "[{0}-{1}]!={2} at rank {2}.".format(sync_result.min(),
                                                      sync_result.max(), rank))
 
-    def test_win_sync_with_default_weights(self):
+    def test_win_update_with_default_weights(self):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -176,16 +176,16 @@ class WinOpsTests(unittest.TestCase):
             else:
                 expected_result = rank / size + rank * 2 * (1-1/size)
 
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync (weighted) produces wrong shape tensor.")
+                "bf.win_update (weighted) produces wrong shape tensor.")
             assert (sync_result.data - expected_result).abs().max() < EPSILON, (
-                "bf.win_sync (weighted) produces wrong tensor value " +
+                "bf.win_update (weighted) produces wrong tensor value " +
                 "[{0}-{1}]!={2} at rank {2}.".format(sync_result.min(),
                                                      sync_result.max(), rank))
         assert bf.win_free()
 
-    def test_win_sync_then_collect(self):
+    def test_win_update_then_collect(self):
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -203,19 +203,19 @@ class WinOpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            window_name = "win_sync_collect_{}_{}".format(dim, dtype)
+            window_name = "win_update_collect_{}_{}".format(dim, dtype)
 
             bf.win_create(tensor, window_name)
 
             # After the collect ops, the neighbro tensor will become zero.
-            # So second win_sync_then_collect should produce the same value.
+            # So second win_update_then_collect should produce the same value.
             for _ in range(2):
-                collect_tensor = bf.win_sync_then_collect(window_name)
+                collect_tensor = bf.win_update_then_collect(window_name)
 
                 assert (list(collect_tensor.shape) == [23] * dim), (
-                    "bf.win_sync_then_collect produces wrong shape tensor.")
+                    "bf.win_update_then_collect produces wrong shape tensor.")
                 assert (collect_tensor.data - expected_result).abs().max() < EPSILON, (
-                    "bf.win_sync_then_collect produces wrong tensor value " +
+                    "bf.win_update_then_collect produces wrong tensor value " +
                     "[{0}-{1}]!={2} at rank {2}.".format(collect_tensor.min(),
                                                          collect_tensor.max(), rank))
 
@@ -246,11 +246,11 @@ class WinOpsTests(unittest.TestCase):
 
             bf.win_put(tensor, window_name)
             bf.barrier()
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync after win_put produces wrong shape tensor.")
+                "bf.win_update after win_put produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_put produces wrong tensor value " +
+                "bf.win_update after win_put produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
@@ -290,11 +290,11 @@ class WinOpsTests(unittest.TestCase):
 
             bf.win_put(tensor, window_name)
             bf.barrier()
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync after win_put produces wrong shape tensor.")
+                "bf.win_update after win_put produces wrong shape tensor.")
             assert ((sync_result-base_tensor).data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_put produces wrong tensor value " +
+                "bf.win_update after win_put produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format((sync_result-base_tensor).min(),
                                                  (sync_result-base_tensor).max(), avg_value, rank))
 
@@ -319,7 +319,8 @@ class WinOpsTests(unittest.TestCase):
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         # We use given destination to form a (right-)ring.
-        avg_value = (rank*indegree + 1.23*((rank-1) % size)) / float(indegree+1)
+        avg_value = (rank*indegree + 1.23*((rank-1) %
+                                           size)) / float(indegree+1)
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -327,13 +328,14 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_put(tensor, window_name, dst_weights={(rank+1) % size: 1.23})
+            bf.win_put(tensor, window_name, dst_weights={
+                       (rank+1) % size: 1.23})
             bf.barrier()
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync after win_put given destination produces wrong shape tensor.")
+                "bf.win_update after win_put given destination produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_put given destination produces wrong tensor value " +
+                "bf.win_update after win_put given destination produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
@@ -370,12 +372,12 @@ class WinOpsTests(unittest.TestCase):
             bf.win_accumulate(tensor, window_name)
 
             bf.barrier()
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
 
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync after win_accmulate produces wrong shape tensor.")
+                "bf.win_update after win_accmulate produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_accmulate produces wrong tensor value " +
+                "bf.win_update after win_accmulate produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
@@ -409,15 +411,16 @@ class WinOpsTests(unittest.TestCase):
             bf.win_accumulate(tensor, window_name)
 
             bf.barrier()
-            sync_result = bf.win_sync(window_name)
+            sync_result = bf.win_update(window_name)
             sync_base_tensor = base_tensor*(1+outdegree/(outdegree+1))
 
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync after win_accmulate produces wrong shape tensor.")
+                "bf.win_update after win_accmulate produces wrong shape tensor.")
             assert ((sync_result-sync_base_tensor).data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_accmulate produces wrong tensor value " +
+                "bf.win_update after win_accmulate produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format((sync_result-sync_base_tensor).min(),
-                                                 (sync_result-sync_base_tensor).max(),
+                                                 (sync_result -
+                                                  sync_base_tensor).max(),
                                                  avg_value, rank))
 
     def test_win_accumulate_with_given_destination(self):
@@ -444,14 +447,14 @@ class WinOpsTests(unittest.TestCase):
                               dst_weights={(rank+1) % size: 1.23})
 
             bf.barrier()
-            sync_result = bf.win_sync(window_name, 
-                                      self_weight=0.5,
-                                      neighbor_weights={(rank-1) % size: 0.5})
+            sync_result = bf.win_update(window_name,
+                                        self_weight=0.5,
+                                        neighbor_weights={(rank-1) % size: 0.5})
 
             assert (list(sync_result.shape) == [23] * dim), (
-                "bf.win_sync after win_accmulate given destination produces wrong shape tensor.")
+                "bf.win_update after win_accmulate given destination produces wrong shape tensor.")
             assert (sync_result.data - avg_value).abs().max() < EPSILON, (
-                "bf.win_sync after win_accmulate given destination produces wrong tensor value " +
+                "bf.win_update after win_accmulate given destination produces wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(sync_result.min(),
                                                  sync_result.max(), avg_value, rank))
 
@@ -481,7 +484,7 @@ class WinOpsTests(unittest.TestCase):
             bf.win_create(tensor, window_name)
             bf.win_get(window_name)
             bf.barrier()
-            recv_tensor = bf.win_sync(window_name, clone=True)
+            recv_tensor = bf.win_update(window_name, clone=True)
 
             assert (list(recv_tensor.shape) == [23] * dim), (
                 "bf.win_get produce wrong shape tensor.")
@@ -519,7 +522,7 @@ class WinOpsTests(unittest.TestCase):
             bf.win_create(tensor, window_name)
             bf.win_get(window_name)
             bf.barrier()
-            recv_tensor = bf.win_sync(window_name, clone=True)
+            recv_tensor = bf.win_update(window_name, clone=True)
 
             assert (list(recv_tensor.shape) == [23] * dim), (
                 "bf.win_get produce wrong shape tensor.")
@@ -550,12 +553,13 @@ class WinOpsTests(unittest.TestCase):
             window_name = "win_get_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
             bf.win_get(window_name, src_weights={
-                                (rank-1) % size: 1.23})
+                (rank-1) % size: 1.23})
             bf.barrier()
-            recv_tensor = bf.win_sync(window_name,
-                                      self_weight=0.5,
-                                      neighbor_weights={(rank-1) % size: 0.5},
-                                      clone=True)
+            recv_tensor = bf.win_update(window_name,
+                                        self_weight=0.5,
+                                        neighbor_weights={
+                                            (rank-1) % size: 0.5},
+                                        clone=True)
 
             assert (list(recv_tensor.shape) == [23] * dim), (
                 "bf.win_get with given sources produces wrong shape tensor.")
