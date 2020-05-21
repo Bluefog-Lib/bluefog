@@ -14,7 +14,9 @@
 # limitations under the License.
 # ==============================================================================
 
+from typing import Union, List
 from contextlib import contextmanager
+import itertools
 import warnings
 
 import torch
@@ -30,7 +32,15 @@ def _named_leaf_module(module, parent_name=None):
         yield from _named_leaf_module(ch_module, full_name)
 
 def _check_named_parameters(optimizer, model):
-    named_parameters = list(model.named_parameters())
+    if isinstance(model, torch.nn.Module):
+        _models = [model]
+    if isinstance(model, list):
+        for m in model:
+            assert isinstance(m, torch.nn.Module)
+        _models = model
+
+    named_parameters = list(itertools.chain(
+        *[m.named_parameters() for m in _models]))
 
     # make sure that named_parameters are tuples
     if any([not isinstance(p, tuple) for p in named_parameters]):
@@ -55,21 +65,23 @@ def _check_named_parameters(optimizer, model):
     unnamed_param_ids = all_param_ids - named_param_ids
     if unnamed_param_ids:
         raise ValueError(
-            "named_parameters was specified, but one or more model "
-            "parameters were not named. Python object ids: "
+            "Named parameters provided by model are mismatch with the parameters"
+            "handled by optimizer. Python object ids: "
             "%s" % ", ".join(str(id) for id in unnamed_param_ids)
         )
-    return named_parameters
+    return named_parameters, _models
 
 
-def _register_timeline(optimizer, model, parameter_names, parent_name=None):
+def _register_timeline(optimizer, models, parameter_names, parent_name=None):
     def _timeline_hook(module, *unused):
         for name, _ in module.named_parameters():
             full_name = parent_name+'.'+name if parent_name else name
             bf.timeline_start_activity(
                 full_name, activity_name="GRADIENT COMPT.")
-    backward_hook_handle = model.register_backward_hook(
-        _timeline_hook)
+    backward_hook_handles = []
+    for model in models:
+        backward_hook_handles.append(
+            model.register_backward_hook(_timeline_hook))
 
     def _make_backward_end_timeline_hook(name):
         def hook(*ignore):
@@ -90,17 +102,20 @@ def _register_timeline(optimizer, model, parameter_names, parent_name=None):
             full_name = parent_name+'.'+name if parent_name else name
             bf.timeline_start_activity(full_name, activity_name="FORWARD")
 
-    pre_forward_hook_handle = model.register_forward_pre_hook(
-        _timeline_forward_pre_hook)
+    pre_forward_hook_handles = []
+    for model in models:
+        pre_forward_hook_handles.append(model.register_forward_pre_hook(
+            _timeline_forward_pre_hook))
 
-    return [backward_hook_handle, pre_forward_hook_handle, *backward_end_hook_handles]
+    return [*backward_hook_handles, *pre_forward_hook_handles, *backward_end_hook_handles]
+
 
 class _DistributedOptimizer(torch.optim.Optimizer):
     def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
-        named_parameters = _check_named_parameters(self, model)
 
-        self._model = model
+        named_parameters, models = _check_named_parameters(self, model)
+        self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
         self._grad_accs = []
@@ -152,7 +167,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
 
     def turn_on_timeline(self):
         handles = _register_timeline(
-            self, self._model, self._parameter_names, 'allreduce')
+            self, self._models, self._parameter_names, 'allreduce')
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
@@ -247,8 +262,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
     def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
 
-        named_parameters = _check_named_parameters(self, model)
-        self._model = model
+        named_parameters, models = _check_named_parameters(self, model)
+        self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
         self._requires_update = set()
@@ -260,12 +275,13 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
             self._register_hooks()
 
     def _register_hooks(self):
-        for parent_name, layer in _named_leaf_module(self._model):
-            layer.register_forward_hook(self._make_hook(parent_name))
+        for model in self._models:
+            for parent_name, layer in _named_leaf_module(model):
+                layer.register_forward_hook(self._make_hook(parent_name))
 
     def _make_hook(self, parent_name):
-        def hook(model, *unused):
-            for name, p in model.named_parameters():
+        def hook(module, *unused):
+            for name, p in module.named_parameters():
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
@@ -285,7 +301,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
     def turn_on_timeline(self):
         handles = _register_timeline(
-            self, self._model, self._parameter_names, 'neighbor.allreduce')
+            self, self._models, self._parameter_names, 'neighbor.allreduce')
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
@@ -336,9 +352,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
     def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
 
-        named_parameters = _check_named_parameters(self, model)
-
-        self._model = model
+        named_parameters, models = _check_named_parameters(self, model)
+        self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}  # store parameter -> handle
         self._synchronized = False
@@ -350,12 +365,13 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             self._register_hooks()
 
     def _register_hooks(self):
-        for parent_name, layer in _named_leaf_module(self._model):
-            layer.register_forward_hook(self._make_hook(parent_name))
+        for model in self._models:
+            for parent_name, layer in _named_leaf_module(model):
+                layer.register_forward_hook(self._make_hook(parent_name))
 
     def _make_hook(self, parent_name):
-        def hook(model, *unused):
-            for name, p in model.named_parameters():
+        def hook(module, *unused):
+            for name, p in module.named_parameters():
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
@@ -390,7 +406,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._synchronized = True
 
     def turn_on_timeline(self):
-        handles = _register_timeline(self, self._model, self._parameter_names)
+        handles = _register_timeline(self, self._models, self._parameter_names)
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
@@ -417,14 +433,16 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
-
-def DistributedBluefogOptimizer(optimizer, model):
+def DistributedBluefogOptimizer(
+    optimizer: torch.optim.Optimizer,
+    model: Union[torch.nn.Module, List[torch.nn.Module]]
+) -> torch.optim.Optimizer:
     """An distributed optimizer that wraps another torch.optim.Optimizer with
     pull model average through bf.win_put ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        model: The model you want to train with. (Sorry, we only support single model)
+        model: The model or a list of models you want to train with.
 
     Example:
         >>> import bluefog.torch as bf
@@ -443,14 +461,17 @@ def DistributedBluefogOptimizer(optimizer, model):
     return cls(optimizer.param_groups, model)
 
 
-def DistributedNeighborAllreduceOptimizer(optimizer, model):
+def DistributedNeighborAllreduceOptimizer(
+    optimizer: torch.optim.Optimizer,
+    model: Union[torch.nn.Module, List[torch.nn.Module]]
+) -> torch.optim.Optimizer:
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        model: The model you want to train with. (Sorry, we only support single model)
+        model: The model or a list of models you want to train with.
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with neighbor_allreduce implementation.
@@ -462,13 +483,16 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model):
     return cls(optimizer.param_groups, model)
 
 
-def DistributedAllreduceOptimizer(optimizer, model):
+def DistributedAllreduceOptimizer(
+    optimizer: torch.optim.Optimizer,
+    model: Union[torch.nn.Module, List[torch.nn.Module]]
+) -> torch.optim.Optimizer:
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
-        model: The model you want to train with. (Sorry, we only support single model)
+        model: The model or a list of models you want to train with.
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with an allreduce implementation.
