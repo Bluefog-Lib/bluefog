@@ -217,7 +217,7 @@ if args.method == 2:
                          for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(1+outdegree)
-        w = bf.win_sync_then_collect(name="w_buff")
+        w = bf.win_update_then_collect(name="w_buff")
 
         x = w[:n]/w[-1]
         grad = A.T.mm(A.mm(x)-b)
@@ -227,7 +227,7 @@ if args.method == 2:
             mse_pd.append(torch.norm(x - x_opt, p=2))
 
     bf.barrier()
-    w = bf.win_sync_then_collect(name="w_buff")
+    w = bf.win_update_then_collect(name="w_buff")
     x = w[:n]/w[-1]
 
     # evaluate the convergence of gradient tracking for least-squares

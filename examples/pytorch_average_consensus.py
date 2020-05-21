@@ -60,11 +60,11 @@ for i in range(100):
                      for rank in bf.out_neighbor_ranks()},
         require_mutex=True)
     x.div_(1+outdegree)
-    bf.win_sync_then_collect(name="x_buff")
+    bf.win_update_then_collect(name="x_buff")
 
 bf.barrier()
 # Do not forget to sync at last!
-x = bf.win_sync_then_collect(name="x_buff")
+x = bf.win_update_then_collect(name="x_buff")
 
 print("Rank {}: consensus with win ops p: {}, x: {}, x/p: {}".format(
     bf.rank(), x[-1], x[0], x[0] / x[-1]))

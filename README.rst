@@ -113,11 +113,11 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
                       for rank in bf.out_neighbor_ranks()},
          require_mutex=True)
       x.div_(1+outdegree)
-      bf.win_sync_then_collect(name="x_buff")
+      bf.win_update_then_collect(name="x_buff")
 
    bf.barrier()
    # Do not forget to sync at last!
-   bf.win_sync_then_collect(name="x_buff")
+   bf.win_update_then_collect(name="x_buff")
    print(f"{bf.rank()}: Average value of all ranks is {x[0]/x[-1]}")
 
 Please explore our *examples* folder to see more about

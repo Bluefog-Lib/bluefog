@@ -23,7 +23,9 @@ import os
 import torch
 from bluefog.common.util import check_extension
 from bluefog.torch.optimizers import (
-    DistributedAllreduceOptimizer, DistributedNeighborAllreduceOptimizer, DistributedBluefogOptimizer)
+    DistributedAllreduceOptimizer,
+    DistributedNeighborAllreduceOptimizer,
+    DistributedBluefogOptimizer)
 
 check_extension('bluefog.torch', __file__, 'mpi_lib')
 
@@ -43,7 +45,7 @@ from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_async
 from bluefog.torch.mpi_ops import poll, synchronize, barrier
 
 from bluefog.torch.mpi_ops import win_create, win_free
-from bluefog.torch.mpi_ops import win_sync, win_sync_then_collect
+from bluefog.torch.mpi_ops import win_update, win_update_then_collect
 from bluefog.torch.mpi_ops import win_put_async, win_put
 from bluefog.torch.mpi_ops import win_get_async, win_get
 from bluefog.torch.mpi_ops import win_accumulate_async, win_accumulate

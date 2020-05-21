@@ -113,7 +113,7 @@ class TimelineTests(unittest.TestCase):
 
         # Remember we do not create buffer with 0.
         bf.win_create(x, name="x_buff")
-        x = bf.win_sync_then_collect(name="x_buff")
+        x = bf.win_update_then_collect(name="x_buff")
 
         for _ in range(10):
             bf.win_accumulate(
@@ -122,11 +122,11 @@ class TimelineTests(unittest.TestCase):
                              for rank in bf.out_neighbor_ranks()},
                 require_mutex=True)
             x.div_(1+outdegree)
-            x = bf.win_sync_then_collect(name="x_buff")
+            x = bf.win_update_then_collect(name="x_buff")
 
         bf.barrier()
         # Do not forget to sync at last!
-        x = bf.win_sync_then_collect(name="x_buff")
+        x = bf.win_update_then_collect(name="x_buff")
 
         file_name = f"{self.temp_file}{bf.rank()}.json"
         with open(file_name, 'r') as tf:

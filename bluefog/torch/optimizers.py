@@ -445,7 +445,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 _ = bf.win_wait(handle)
                 name = self._parameter_names.get(p)
                 # Update p to the average of neighbors.
-                p.set_(bf.win_sync(name=name))
+                p.set_(bf.win_update(name=name))
 
         self._handles.clear()
         self._synchronized = True
