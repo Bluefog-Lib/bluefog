@@ -180,14 +180,13 @@
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedAllreduceOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">named_parameters</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
-<li><p><strong>named_parameters</strong> – A mapping between parameter names and values. Used for naming of
-allreduce operations. Typically just <code class="docutils literal notranslate"><span class="pre">model.named_parameters()</span></code></p></li>
+<li><p><strong>model</strong> – The model you want to train with. (Sorry, we only support single model)</p></li>
 </ul>
 </dd>
 </dl>
@@ -1110,6 +1109,21 @@ bfrun –timeline-filename {file_name} …</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.broadcast_optimizer_state">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_optimizer_state</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">root_rank</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.broadcast_optimizer_state" title="Permalink to this definition">¶</a></dt>
+<dd><p>Broadcasts an optimizer state from root rank to all other processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – An optimizer.</p></li>
+<li><p><strong>root_rank</strong> – The rank of the process from which the optimizer will be
+broadcasted to all other processes.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.broadcast_parameters">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_parameters</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">params</span></em>, <em class="sig-param"><span class="n">root_rank</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.broadcast_parameters" title="Permalink to this definition">¶</a></dt>
 <dd><p>Broadcasts the parameters from root rank to all other processes.
@@ -1122,21 +1136,6 @@ Typical usage is to broadcast the <code class="docutils literal notranslate"><sp
 - list of parameters to broadcast
 - dict of parameters to broadcast</p></li>
 <li><p><strong>root_rank</strong> – The rank of the process from which parameters will be
-broadcasted to all other processes.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="bluefog.torch.broadcast_optimizer_state">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_optimizer_state</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">root_rank</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.broadcast_optimizer_state" title="Permalink to this definition">¶</a></dt>
-<dd><p>Broadcasts an optimizer state from root rank to all other processes.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>optimizer</strong> – An optimizer.</p></li>
-<li><p><strong>root_rank</strong> – The rank of the process from which the optimizer will be
 broadcasted to all other processes.</p></li>
 </ul>
 </dd>
