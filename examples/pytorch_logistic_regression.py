@@ -32,7 +32,8 @@ parser.add_argument(
     "--plot-interactive", action='store_true', help="Use plt.show() to present the plot."
 )
 parser.add_argument(
-    "--method", type=int, default=0, help="0:exact diffusion. 1:gradient tracking. 2:push-DIGing"
+    "--method", help="this example supports exact_diffusion, grad_tracking, and push_diging",
+    default='exact_diffusion'
 )
 args = parser.parse_args()
 
@@ -42,7 +43,6 @@ def finalize_plot():
     if args.plot_interactive:
         plt.show()
     plt.close()
-
 
 bf.init()
 
@@ -123,7 +123,7 @@ print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm)
 # [R2] Z. Li, W. Shi and M. Yan, ``A Decentralized Proximal-gradient Method with
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
-if args.method == 0:
+if args.method == 'exact_diffusion':
     maxite = 2000
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
@@ -131,16 +131,15 @@ if args.method == 0:
     mse = []
 
     # construct A_bar
-    # topology = bf.load_topology()
-    # self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
-    # self_weight = (self_weight+1)/2
-    # for k, v in neighbor_weights.items():
-    #     neighbor_weights[k] = v/2
+    topology = bf.load_topology()
+    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+    self_weight = (self_weight+1)/2
+    for k, v in neighbor_weights.items():
+        neighbor_weights[k] = v/2
 
-    # if bf.rank() == 0:
-    #     print('line 123:', self_weight)
-    #     for k, v in neighbor_weights.items():
-    #         print('line 125:', neighbor_weights[k])
+    if bf.rank() == 0:
+        for k, v in neighbor_weights.items():
+            print(neighbor_weights[k])
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
@@ -149,8 +148,8 @@ if args.method == 0:
         # exact diffusion
         psi = w - alpha_ed * w.grad.data
         phi = psi + w.data - psi_prev
-        # w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
-        w.data = bf.neighbor_allreduce(phi, name='local variable')
+        w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
+        # w.data = bf.neighbor_allreduce(phi, name='local variable')
         psi_prev = psi.clone()
         w.grad.data.zero_()
 
@@ -177,7 +176,6 @@ if args.method == 0:
     w.grad.data.zero_()
 
     if bf.rank() == 0:
-        # print(mse[0:maxite:10])
         plt.semilogy(mse)
         finalize_plot()
 
@@ -201,7 +199,7 @@ if args.method == 0:
 # [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'',
 # 2016
 # ================================================================================
-if args.method == 1:
+if args.method == 'grad_tracking':
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     loss = torch.mean(torch.log(1 + torch.exp(-y*X.mm(w)))) + \
         0.5*rho*torch.norm(w, p=2)
@@ -261,7 +259,7 @@ if args.method == 1:
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
-if args.method == 2:
+if args.method == 'push_diging':
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())
@@ -318,7 +316,7 @@ if args.method == 2:
     print("[PD] Rank {}: global gradient norm: {}".format(
         bf.rank(), global_grad_norm))
 
-    # the norm of local gradient is expected not be be close to 0
+    # the norm of local gradient is expected not to be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(x.grad.data, p=2)
     print("[PD] Rank {}: local gradient norm: {}".format(
@@ -328,3 +326,9 @@ if args.method == 2:
     if bf.rank() == 0:
         plt.semilogy(mse_pd)
         finalize_plot()
+
+# report warning if method is not supported
+if args.method not in ['exact_diffusion', 'grad_tracking', 'push_diging']:
+    if bf.rank() == 0:
+        print('Algorithm not support. This example only supports' \
+               + ' exact_diffusion, grad_tracking, and push_diging')
