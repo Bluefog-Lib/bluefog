@@ -263,6 +263,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
+        self.neighbor_weights = None
+        self.self_weight = None
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
@@ -296,7 +298,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         if self._use_timeline:
             # End forward computation timeline
             bf.timeline_end_activity("neighbor.allreduce." + name)
-        handle = bf.neighbor_allreduce_async(p.data, name=name)
+        handle = bf.neighbor_allreduce_async(p.data, name=name, self_weight=self.self_weight,
+                                             neighbor_weights=self.neighbor_weights)
         return handle
 
     def turn_on_timeline(self):
@@ -352,6 +355,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
     def __init__(self, params, model):
         super(self.__class__, self).__init__(params)
 
+        self.dst_weights = None # use to control the behavior of win_put dynamically.
+
         named_parameters, models = _check_named_parameters(self, model)
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
@@ -377,7 +382,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
                     handle = bf.win_put_async(
-                        tensor=p.data, name=parent_name+'.'+name)
+                        tensor=p.data, name=parent_name+'.'+name,
+                        dst_weights=self.dst_weights)
                     self._handles[p] = handle
         return hook
 
