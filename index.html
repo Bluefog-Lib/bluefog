@@ -256,11 +256,11 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.</
                    <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="n">bf</span><span class="o">.</span><span class="n">out_neighbor_ranks</span><span class="p">()},</span>
       <span class="n">require_mutex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
    <span class="n">x</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="n">outdegree</span><span class="p">)</span>
-   <span class="n">bf</span><span class="o">.</span><span class="n">win_sync_then_collect</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
+   <span class="n">bf</span><span class="o">.</span><span class="n">win_update_then_collect</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
 
 <span class="n">bf</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
 <span class="c1"># Do not forget to sync at last!</span>
-<span class="n">bf</span><span class="o">.</span><span class="n">win_sync_then_collect</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
+<span class="n">bf</span><span class="o">.</span><span class="n">win_update_then_collect</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;x_buff&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span><span class="si">}</span><span class="s2">: Average value of all ranks is </span><span class="si">{</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="n">x</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>

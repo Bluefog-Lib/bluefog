@@ -116,8 +116,8 @@
 <li class="toctree-l3"><a class="reference internal" href="#win-put">win_put</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#win-get">win_get</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#win-accumulate">win_accumulate</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#win-sync">win_sync</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#win-sync-then-collect">win_sync_then_collect</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-update">win_update</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#win-update-then-collect">win_update_then_collect</a></li>
 </ul>
 </li>
 </ul>
@@ -204,7 +204,7 @@ are highly associated with the virtual topology of network.</p>
 <ol class="arabic simple">
 <li><p>Collective Ops: <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">allgather</span></code>.</p></li>
 <li><p>Neighbor Colletive Ops: <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_allgather</span></code>.</p></li>
-<li><p>One-sided Communication Ops: <code class="docutils literal notranslate"><span class="pre">win_create</span></code>, <code class="docutils literal notranslate"><span class="pre">win_free</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>, <code class="docutils literal notranslate"><span class="pre">win_get</span></code>, <code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code>, <code class="docutils literal notranslate"><span class="pre">win_sync</span></code>, <code class="docutils literal notranslate"><span class="pre">win_sync_then_collect</span></code>.</p></li>
+<li><p>One-sided Communication Ops: <code class="docutils literal notranslate"><span class="pre">win_create</span></code>, <code class="docutils literal notranslate"><span class="pre">win_free</span></code>, <code class="docutils literal notranslate"><span class="pre">win_put</span></code>, <code class="docutils literal notranslate"><span class="pre">win_get</span></code>, <code class="docutils literal notranslate"><span class="pre">win_accumulate</span></code>, <code class="docutils literal notranslate"><span class="pre">win_update</span></code>, <code class="docutils literal notranslate"><span class="pre">win_update_then_collect</span></code>.</p></li>
 </ol>
 <p>We use figure to illustrate all those ops with
 similar style as in <a class="reference external" href="https://mpitutorial.com/tutorials/">MPI tutorials blog</a>.
@@ -266,7 +266,7 @@ is slightly different from MPI standard.</p>
 each process will allocate the number of incoming neighbor’s windows as buffer, which is illustrated
 in the figure as red square. Each buffer is dedicated to one neighbor. You don’t need to know
 which one is dedicated to which neighbor because these buffers are invisible to the python frontend.
-The only way to interact with them is through the win_sync.</p>
+The only way to interact with them is through the win_update.</p>
 <a class="reference internal image-reference" href="_images/bf_win_create.png"><img alt="BluefogWinCreateExplanation" src="_images/bf_win_create.png" style="width: 650px;" /></a>
 </div>
 <div class="section" id="win-free">
@@ -300,17 +300,17 @@ By default, it will <em>accumulate</em> its own tensor value into all <em>outgoi
 Note it doesn’t need the receiver to do anything.</p>
 <a class="reference internal image-reference" href="_images/bf_win_accum.png"><img alt="BluefogWinAccumExplanation" src="_images/bf_win_accum.png" style="width: 650px;" /></a>
 </div>
-<div class="section" id="win-sync">
-<h3>win_sync<a class="headerlink" href="#win-sync" title="Permalink to this headline">¶</a></h3>
-<p>Win_sync is the bridge to connect the value of buffers (corresponding to the neighbor value)
+<div class="section" id="win-update">
+<h3>win_update<a class="headerlink" href="#win-update" title="Permalink to this headline">¶</a></h3>
+<p>win_update is the bridge to connect the value of buffers (corresponding to the neighbor value)
 with the local value. It has two functionalities. One is to update the buffer to make sure that the
 neighbor value, which may be changed through win_put, win_get, and/or win_accumulate, is synchronized
 and visible to local memory. Another is it updates the local value to the average of self and neighbor’s value.</p>
-<a class="reference internal image-reference" href="_images/bf_win_sync.png"><img alt="BluefogWinSyncExplanation" src="_images/bf_win_sync.png" style="width: 650px;" /></a>
+<a class="reference internal image-reference" href="_static/bf_win_update.png"><img alt="BluefogWinSyncExplanation" src="_static/bf_win_update.png" style="width: 650px;" /></a>
 </div>
-<div class="section" id="win-sync-then-collect">
-<h3>win_sync_then_collect<a class="headerlink" href="#win-sync-then-collect" title="Permalink to this headline">¶</a></h3>
-<a class="reference internal image-reference" href="_images/bf_win_sync_collect.png"><img alt="BluefogWinSyncThenCollectExplanation" src="_images/bf_win_sync_collect.png" style="width: 675px;" /></a>
+<div class="section" id="win-update-then-collect">
+<h3>win_update_then_collect<a class="headerlink" href="#win-update-then-collect" title="Permalink to this headline">¶</a></h3>
+<a class="reference internal image-reference" href="_static/bf_win_update_collect.png"><img alt="BluefogWinSyncThenCollectExplanation" src="_static/bf_win_update_collect.png" style="width: 675px;" /></a>
 </div>
 </div>
 </div>

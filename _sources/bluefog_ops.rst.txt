@@ -12,7 +12,7 @@ The communication ops that bluefog supported can be catogorized into three types
 
 1. Collective Ops: ``broadcast``, ``allreduce``, ``allgather``.
 2. Neighbor Colletive Ops: ``neighbor_allreduce``, ``neighbor_allgather``.
-3. One-sided Communication Ops: ``win_create``, ``win_free``, ``win_put``, ``win_get``, ``win_accumulate``, ``win_sync``, ``win_sync_then_collect``.
+3. One-sided Communication Ops: ``win_create``, ``win_free``, ``win_put``, ``win_get``, ``win_accumulate``, ``win_update``, ``win_update_then_collect``.
 
 We use figure to illustrate all those ops with 
 similar style as in `MPI tutorials blog`_. 
@@ -92,7 +92,7 @@ Win create is always the first step to use the one-sided communication. After th
 each process will allocate the number of incoming neighbor's windows as buffer, which is illustrated
 in the figure as red square. Each buffer is dedicated to one neighbor. You don't need to know
 which one is dedicated to which neighbor because these buffers are invisible to the python frontend.
-The only way to interact with them is through the win_sync.
+The only way to interact with them is through the win_update.
 
 .. image:: _static/bf_win_create.png
     :alt: BluefogWinCreateExplanation
@@ -139,20 +139,20 @@ Note it doesn't need the receiver to do anything.
     :alt: BluefogWinAccumExplanation
     :width: 650
 
-win_sync
+win_update
 ########
-Win_sync is the bridge to connect the value of buffers (corresponding to the neighbor value)
+win_update is the bridge to connect the value of buffers (corresponding to the neighbor value)
 with the local value. It has two functionalities. One is to update the buffer to make sure that the
 neighbor value, which may be changed through win_put, win_get, and/or win_accumulate, is synchronized
 and visible to local memory. Another is it updates the local value to the average of self and neighbor's value.
 
-.. image:: _static/bf_win_sync.png
+.. image:: _static/bf_win_update.png
     :alt: BluefogWinSyncExplanation
     :width: 650
 
-win_sync_then_collect
+win_update_then_collect
 #####################
-.. image:: _static/bf_win_sync_collect.png
+.. image:: _static/bf_win_update_collect.png
     :alt: BluefogWinSyncThenCollectExplanation
     :width: 675
 

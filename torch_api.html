@@ -240,7 +240,7 @@ pull model average through bf.win_put ops.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>topology</strong> – A networkx. DiGraph object to decide the topology. If not provided
 a default power_two_ring structure is used.</p></li>
-<li><p><strong>is_weighted</strong> – If set to true, the neighbor ops like (win_sync, neighbor_allreduce) will
+<li><p><strong>is_weighted</strong> – If set to true, the neighbor ops like (win_update, neighbor_allreduce) will
 execute the weighted average instead, where the weight is the value used in
 topology matrix (including self).</p></li>
 </ul>
@@ -324,10 +324,10 @@ on a node, their local ranks will be zero through six, inclusive.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>Topo</strong> – A networkx.DiGraph object to decide the topology. If not provided
 a default power_two_ring structure is used.</p></li>
-<li><p><strong>is_weighted</strong> – If set to true, the win_sync and neighbor_allreduce will execute the
+<li><p><strong>is_weighted</strong> – If set to true, the win_update and neighbor_allreduce will execute the
 weighted average instead, where the weights are the value used in topology matrix
 (including self weight). Note win_get/win_put/win_accumulate do not use this weight
-since win_sync already uses these weights.</p></li>
+since win_update already uses these weights.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -758,7 +758,7 @@ the value of tensor.</p></li>
 </dd>
 </dl>
 <p>Note: The window with same name across different bluefog processes should associate
-the tensor with same shape. Otherwise, the rest win_ops like win_sync, win_put will
+the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put will
 encounter unrecoverable memory segmentation fault.</p>
 </dd></dl>
 
@@ -781,8 +781,8 @@ If name is none, free all the window objects.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.win_sync">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_sync</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">reset</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em>, <em class="sig-param"><span class="n">clone</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.win_sync" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.torch.win_update">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_update</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">reset</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em>, <em class="sig-param"><span class="n">clone</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.win_update" title="Permalink to this definition">¶</a></dt>
 <dd><p>Locally synchronized the window objects and returned the reduced neighbor tensor.
 Note the returned tensor is the same tensor used in win_create and in-place modification
 is happened.</p>
@@ -801,7 +801,7 @@ the (in-)neighbors.</p></li>
 neighbor_weights will be reset to zero.
 The reset is always happened after the weights computation.
 If neighbor_weights is not presented and reset is True, all the neighbor will be reset.</p></li>
-<li><p><strong>clone</strong> – If set up to be true, the win_sync result will return a new tensor instead of
+<li><p><strong>clone</strong> – If set up to be true, the win_update result will return a new tensor instead of
 in-place change.</p></li>
 </ul>
 </dd>
@@ -820,12 +820,12 @@ bf.set_topology(.., is_weighted=True) is a better choice.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.win_sync_then_collect">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_sync_then_collect</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.win_sync_then_collect" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.torch.win_update_then_collect">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_update_then_collect</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.win_update_then_collect" title="Permalink to this definition">¶</a></dt>
 <dd><p>A utility function to sync the neighbor buffers then accumulate all
 neighbor buffers’ tensors into self tensor and clear the buffer.
 It is equivalent to
-&gt;&gt;&gt; win_sync(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)</p>
+&gt;&gt;&gt; win_update(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>name</strong> – The unique name to associate the window object.</p>
@@ -897,7 +897,7 @@ acquired.</p></li>
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_get_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">src_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_get_async" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively get the tensor(s) from neighbors’ shared window memory into
 local shared memory, which cannot be accessed in python directly.
-The win_sync function is responsible for fetching that memeory.
+The win_update function is responsible for fetching that memeory.
 This is a non-blocking function, which will return without waiting the
 win_get operation is really finished.</p>
 <dl class="field-list simple">
@@ -925,7 +925,7 @@ acquired.</p></li>
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_get</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">src_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_get" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively get the tensor(s) from neighbors’ shared window memory into
 local shared memory, which cannot be accessed in python directly.
-The win_sync function is responsible for fetching that memeory.
+The win_update function is responsible for fetching that memeory.
 This is a blocking function, which will return until win_get operation
 is finished.</p>
 <dl class="field-list simple">
@@ -1044,7 +1044,7 @@ If not presented, out_neighbor ranks will be used.</p>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">win_create</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">win_mutex</span><span class="p">():</span>
-<span class="go">        tensor = bf.win_sync_then_collect(name)</span>
+<span class="go">        tensor = bf.win_update_then_collect(name)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">win_put</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 </pre></div>
 </div>
