@@ -140,7 +140,7 @@ Note it doesn't need the receiver to do anything.
     :width: 650
 
 win_update
-########
+##########
 win_update is the bridge to connect the value of buffers (corresponding to the neighbor value)
 with the local value. It has two functionalities. One is to update the buffer to make sure that the
 neighbor value, which may be changed through win_put, win_get, and/or win_accumulate, is synchronized
@@ -151,7 +151,7 @@ and visible to local memory. Another is it updates the local value to the averag
     :width: 650
 
 win_update_then_collect
-#####################
+#######################
 .. image:: _static/bf_win_update_collect.png
     :alt: BluefogWinSyncThenCollectExplanation
     :width: 675

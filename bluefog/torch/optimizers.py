@@ -31,6 +31,17 @@ def _named_leaf_module(module, parent_name=None):
         full_name = (parent_name + '.' + name if parent_name else name)
         yield from _named_leaf_module(ch_module, full_name)
 
+
+def _find_duplicates(lst):
+    seen = set()
+    dups = set()
+    for el in lst:
+        if el in seen:
+            dups.add(el)
+        seen.add(el)
+    return dups
+
+
 def _check_named_parameters(optimizer, model):
     if isinstance(model, torch.nn.Module):
         _models = [model]
@@ -50,8 +61,7 @@ def _check_named_parameters(optimizer, model):
             "model.named_parameters()."
         )
 
-    dups = _DistributedOptimizer.find_duplicates(
-        [k for k, _ in named_parameters])
+    dups = _find_duplicates([k for k, _ in named_parameters])
     if dups:
         raise ValueError(
             "Parameter names in named_parameters must be unique. "
@@ -126,16 +136,6 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._use_timeline = False
         if bf.size() > 1:
             self._register_hooks()
-
-    @staticmethod
-    def find_duplicates(lst):
-        seen = set()
-        dups = set()
-        for el in lst:
-            if el in seen:
-                dups.add(el)
-            seen.add(el)
-        return dups
 
     def _register_hooks(self):
         for param_group in self.param_groups:
