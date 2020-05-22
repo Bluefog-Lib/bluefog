@@ -356,6 +356,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         super(self.__class__, self).__init__(params)
 
         self.dst_weights = None # use to control the behavior of win_put dynamically.
+        self.force_barrier = False
 
         named_parameters, models = _check_named_parameters(self, model)
         self._models = models
@@ -422,8 +423,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles.clear()
         self._use_timeline = False
 
-    def step(self, closure=None, force_barrier=False):
-        if force_barrier:
+    def step(self, closure=None):
+        if self.force_barrier:
             bf.barrier()
         # some validation here?
         if self._should_synchronize:
@@ -452,6 +453,11 @@ def DistributedBluefogOptimizer(
         optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
 
+    Returned optimizer has two extra parameters `dst_weights` and `force_barrier`.
+    Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
+    win_put over dynamic graph behavior. If force_barrier is True, a barrier function
+    will put at `step()` to synchronous processes.
+
     Example:
         >>> import bluefog.torch as bf
         >>> ...
@@ -476,6 +482,10 @@ def DistributedNeighborAllreduceOptimizer(
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops.
+
+    Returned optimizer has two extra parameters `self_weight` and `neighbor_weights`.
+    Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
+    per iteration to achieve win_put over dynamic graph behavior.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.

@@ -335,6 +335,10 @@ def dynamic_topology_update(epoch, batch_idx):
     num_out_neighbors = len(bf.out_neighbor_ranks())
     sent_neighbors = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
     optimizer.dst_weights = {sent_neighbors: 1.0}
+    if batch_idx % 10 == 0:
+        optimizer.force_barrier = True
+    else:
+        optimizer.force_barrier = False
 
 
 def accuracy(output, target):
