@@ -55,6 +55,9 @@ parser.add_argument("--no-bluefog", action="store_true",
                     default=False, help="disables bluefog library")
 parser.add_argument("--no-rma", action="store_true",
                     default=False, help="Do no use remote memory access(no window ops).")
+parser.add_argument("--enable-dynamic-topology", action="store_true",
+                    default=False, help=("Enable each iteration to transmit one neighbor " +
+                                         "per iteration dynamically."))
 
 
 args = parser.parse_args()
@@ -139,9 +142,17 @@ for _ in range(100):
 data_index = 0
 
 
+def dynamic_topology_update(batch_idx):
+    num_out_neighbors = len(bf.out_neighbor_ranks())
+    sent_neighbors = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+    optimizer.dst_weights = {sent_neighbors: 1.0}
+
+
 def benchmark_step():
     global data_index
 
+    if args.enable_dynamic_topology:
+        dynamic_topology_update(data_index)
     data = datasets[data_index % len(datasets)]
     data_index += 1
     optimizer.zero_grad()
