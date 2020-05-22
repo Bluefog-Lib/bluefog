@@ -197,6 +197,9 @@
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
 neighbor_allreduce ops.</p>
+<p>Returned optimizer has two extra parameters <cite>self_weight</cite> and <cite>neighbor_weights</cite>.
+Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
+per iteration to achieve win_put over dynamic graph behavior.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -220,6 +223,10 @@ pull model average through bf.win_put ops.</p>
 </ul>
 </dd>
 </dl>
+<p>Returned optimizer has two extra parameters <cite>dst_weights</cite> and <cite>force_barrier</cite>.
+Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
+win_put over dynamic graph behavior. If force_barrier is True, a barrier function
+will put at <cite>step()</cite> to synchronous processes.</p>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="o">...</span>
