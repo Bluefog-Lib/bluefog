@@ -209,7 +209,7 @@ if args.bluefog:
         )
         if os.environ.get("BLUEFOG_TIMELINE"):
             print("Timeline for optimizer is enabled")
-            optimizer.turn_on_timeline(model)
+            optimizer.turn_on_timeline()
     else:
         # This distributed optimizer uses one-sided communication
         print("Use win_put ops.")
@@ -218,7 +218,7 @@ if args.bluefog:
         )
         if os.environ.get("BLUEFOG_TIMELINE"):
             print("Timeline for optimizer is enabled")
-            optimizer.turn_on_timeline(model)
+            optimizer.turn_on_timeline()
 else:
     optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
@@ -248,6 +248,7 @@ def train(epoch):
               disable=not verbose,) as t:
         for batch_idx, (data, target) in enumerate(train_loader):
             adjust_learning_rate(epoch, batch_idx)
+            dynamic_topology_update(epoch, batch_idx)
 
             if args.cuda:
                 data, target = data.cuda(), target.cuda()
@@ -326,6 +327,14 @@ def adjust_learning_rate(epoch, batch_idx):
         param_group["lr"] = (
             args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj
         )
+
+
+def dynamic_topology_update(epoch, batch_idx):
+    if epoch < 3:
+        return
+    num_out_neighbors = len(bf.out_neighbor_ranks())
+    sent_neighbors = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+    optimizer.dst_weights = {sent_neighbors: 1.0}
 
 
 def accuracy(output, target):
