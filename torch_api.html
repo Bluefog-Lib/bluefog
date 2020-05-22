@@ -211,6 +211,24 @@ per iteration to achieve win_put over dynamic graph behavior.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.DistributedPushSumOptimizer">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPushSumOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedPushSumOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
+win_accumulate ops to implement the gradient push algorithm.</p>
+<p>Returned optimizer has two extra parameters <cite>self_weight</cite> and <cite>neighbor_weights</cite>.
+Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
+per iteration to achieve win_put over dynamic graph behavior.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
