@@ -14,7 +14,6 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import Union, List
 from contextlib import contextmanager
 import itertools
 import warnings
@@ -562,10 +561,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
-def DistributedPushSumOptimizer(
-    optimizer: torch.optim.Optimizer,
-    model: Union[torch.nn.Module, List[torch.nn.Module]]
-) -> torch.optim.Optimizer:
+def DistributedPushSumOptimizer(optimizer, model):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     win_accumulate ops to implement the gradient push algorithm.
@@ -586,10 +582,7 @@ def DistributedPushSumOptimizer(
     return cls(optimizer.param_groups, model)
 
 
-def DistributedBluefogOptimizer(
-    optimizer: torch.optim.Optimizer,
-    model: Union[torch.nn.Module, List[torch.nn.Module]]
-) -> torch.optim.Optimizer:
+def DistributedBluefogOptimizer(optimizer, model):
     """An distributed optimizer that wraps another torch.optim.Optimizer with
     pull model average through bf.win_put ops.
 
@@ -619,10 +612,7 @@ def DistributedBluefogOptimizer(
     return cls(optimizer.param_groups, model)
 
 
-def DistributedNeighborAllreduceOptimizer(
-    optimizer: torch.optim.Optimizer,
-    model: Union[torch.nn.Module, List[torch.nn.Module]]
-) -> torch.optim.Optimizer:
+def DistributedNeighborAllreduceOptimizer(optimizer, model):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops.
@@ -645,10 +635,7 @@ def DistributedNeighborAllreduceOptimizer(
     return cls(optimizer.param_groups, model)
 
 
-def DistributedAllreduceOptimizer(
-    optimizer: torch.optim.Optimizer,
-    model: Union[torch.nn.Module, List[torch.nn.Module]]
-) -> torch.optim.Optimizer:
+def DistributedAllreduceOptimizer(optimizer, model):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
 
