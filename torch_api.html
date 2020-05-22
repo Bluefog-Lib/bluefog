@@ -180,7 +180,7 @@
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedAllreduceOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -194,7 +194,7 @@
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedNeighborAllreduceOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
 neighbor_allreduce ops.</p>
 <p>Returned optimizer has two extra parameters <cite>self_weight</cite> and <cite>neighbor_weights</cite>.
@@ -212,7 +212,7 @@ per iteration to achieve win_put over dynamic graph behavior.</p>
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedPushSumOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPushSumOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedPushSumOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPushSumOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedPushSumOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
 win_accumulate ops to implement the gradient push algorithm.</p>
 <p>Returned optimizer has two extra parameters <cite>self_weight</cite> and <cite>neighbor_weights</cite>.
@@ -230,7 +230,7 @@ per iteration to achieve win_put over dynamic graph behavior.</p>
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span><span class="p">:</span> <span class="n">torch.optim.optimizer.Optimizer</span></em>, <em class="sig-param"><span class="n">model</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>torch.nn.modules.module.Module<span class="p">, </span>List<span class="p">[</span>torch.nn.modules.module.Module<span class="p">]</span><span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.optim.optimizer.Optimizer<a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
 pull model average through bf.win_put ops.</p>
 <dl class="field-list simple">
