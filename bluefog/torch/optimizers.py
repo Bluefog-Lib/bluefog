@@ -422,7 +422,9 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles.clear()
         self._use_timeline = False
 
-    def step(self, closure=None):
+    def step(self, closure=None, force_barrier=False):
+        if force_barrier:
+            bf.barrier()
         # some validation here?
         if self._should_synchronize:
             if self._synchronized:
