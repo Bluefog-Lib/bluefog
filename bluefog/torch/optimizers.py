@@ -442,6 +442,150 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
+class _DistributedPushSumOptimizer(torch.optim.Optimizer):
+
+    def __init__(self, params, model):
+        super(self.__class__, self).__init__(params)
+
+        # use to control the behavior of win_accumulate dynamically.
+        outdegree = len(bf.out_neighbor_ranks())
+        self.dst_weights = {rank: 1.0 / (outdegree + 1)
+                            for rank in bf.out_neighbor_ranks()}
+        self.self_weight = 1.0 / (outdegree + 1)
+        self.force_barrier = True
+
+        named_parameters, models = _check_named_parameters(self, model)
+        self._models = models
+        self._parameter_names = {v: k for k, v in sorted(named_parameters)}
+        self._handles = {}  # store parameter -> handle
+        self._named_ps_weights = {}
+        self._named_extension_parameters = {}
+        self._synchronized = False
+        self._should_synchronize = True
+        self._use_timeline = False
+        self._timeline_hook_handles = []
+        if bf.size() > 1:
+            self._register_window()
+            self._register_hooks()
+
+    @torch.no_grad()
+    def _register_window(self):
+        for param_group in self.param_groups:
+            for p in param_group["params"]:
+                name = self._parameter_names.get(p)
+                if name is None:
+                    raise KeyError(
+                        "Cannot find parameter {} in the _parameter_names dictionary".format(name))
+
+                ps_weights = torch.Tensor([1.0]).to(p.data.dtype)
+                self._named_ps_weights[name] = ps_weights
+                # If do not modify in the C level, it is inevitable to copy
+                # the parameter once in the cat ops.
+                extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
+                self._named_extension_parameters[name] = extended_parameter
+                if not bf.win_create(extended_parameter, name, zero_init=True):
+                    raise ValueError(
+                        "Cannot allocate MPI window for the parameter {}".format(name))
+
+    def _register_hooks(self):
+        for model in self._models:
+            for parent_name, layer in _named_leaf_module(model):
+                layer.register_forward_hook(self._make_hook(parent_name))
+
+    def _make_hook(self, parent_name):
+        def hook(module, *unused):
+            for name, p in module.named_parameters():
+                full_name = parent_name+'.'+name
+                if self._use_timeline:
+                    # End forward computation timeline
+                    bf.timeline_end_activity(full_name)
+                if p.requires_grad:
+                    ps_weights = self._named_ps_weights[full_name]
+                    extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
+                    self._named_extension_parameters[name] = extended_parameter
+                    handle = bf.win_accumulate_async(
+                        tensor=extended_parameter, name=full_name,
+                        dst_weights=self.dst_weights,
+                        require_mutex=True)
+
+                    self._handles[p] = handle
+        return hook
+
+
+    def synchronize(self):
+        # Here synchronize just to make sure win_put ops is finished
+        # in one iteration.
+        with torch.no_grad():
+            for p, handle in self._handles.items():
+                _ = bf.win_wait(handle)
+                name = self._parameter_names.get(p)
+                extended_parameter = self._named_extension_parameters[name]
+                extended_parameter.mul_(self.self_weight)
+                # Last dimension is the push_sum weights and we want parameter / weight
+                extended_parameter = bf.win_update_then_collect(name=name)
+                corrected_parameter = (
+                    extended_parameter[:-1] / extended_parameter[-1]).reshape(p.shape)
+                # Update p to the average of neighbors.
+                p.set_(corrected_parameter)
+
+        self._handles.clear()
+        self._synchronized = True
+
+    def turn_on_timeline(self):
+        handles = _register_timeline(self, self._models, self._parameter_names)
+        self._timeline_hook_handles.extend(handles)
+        self._use_timeline = True
+
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
+        self._use_timeline = False
+
+    def step(self, closure=None):
+        if self.force_barrier:
+            bf.barrier()
+        # some validation here?
+        if self._should_synchronize:
+            if self._synchronized:
+                warnings.warn(
+                    "optimizer.step() called without "
+                    "optimizer.skip_synchronize() context after "
+                    "optimizer.synchronize(). This can cause training "
+                    "slowdown. You may want to consider using "
+                    "optimizer.skip_synchronize() context if you use "
+                    "optimizer.synchronize() in your code."
+                )
+            self.synchronize()
+
+        self._synchronized = False
+        return super(self.__class__, self).step(closure)
+
+
+def DistributedPushSumOptimizer(
+    optimizer: torch.optim.Optimizer,
+    model: Union[torch.nn.Module, List[torch.nn.Module]]
+) -> torch.optim.Optimizer:
+    """
+    An distributed optimizer that wraps another torch.optim.Optimizer through
+    win_accumulate ops to implement the gradient push algorithm.
+
+    Returned optimizer has two extra parameters `self_weight` and `neighbor_weights`.
+    Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
+    per iteration to achieve win_put over dynamic graph behavior.
+
+    Arguments:
+        optimizer: Optimizer to use for computing gradients and applying updates.
+        model: The model or a list of models you want to train with.
+    """
+    cls = type(
+        optimizer.__class__.__name__,
+        (optimizer.__class__,),
+        dict(_DistributedPushSumOptimizer.__dict__),
+    )
+    return cls(optimizer.param_groups, model)
+
+
 def DistributedBluefogOptimizer(
     optimizer: torch.optim.Optimizer,
     model: Union[torch.nn.Module, List[torch.nn.Module]]
