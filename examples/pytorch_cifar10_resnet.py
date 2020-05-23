@@ -20,6 +20,8 @@ import argparse
 import os
 import sys
 import math
+import warnings
+warnings.simplefilter('ignore')
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -59,6 +61,8 @@ parser.add_argument(
     "executing allreduce across workers; it multiplies "
     "total batch size.",
 )
+parser.add_argument('--model', type=str, default='resnet50',
+                    help='model to benchmark')
 
 # Default settings from https://arxiv.org/abs/1706.02677.
 parser.add_argument(
@@ -183,8 +187,7 @@ val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=args.val_batch_size, sampler=val_sampler, **kwargs
 )
 
-# Set up standard ResNet-18 model.
-model = models.resnet18()
+model = getattr(models, args.model)()
 
 if args.cuda:
     # Move model to GPU.

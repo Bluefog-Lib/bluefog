@@ -19,6 +19,8 @@ from __future__ import print_function
 import argparse
 import os
 import sys
+import warnings
+warnings.simplefilter('ignore')
 
 import torch.nn as nn
 import torch.nn.functional as F
