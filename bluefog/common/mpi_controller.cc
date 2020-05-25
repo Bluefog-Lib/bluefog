@@ -566,6 +566,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   std::vector<std::pair<int, double>> sorted_dst_weights =
       GetSortedDstWeights(rank_, size_, entry.dst_weights);
 
+  MPI_Win_lock_all(MPI_MODE_NOCHECK, mpi_win);
   for (auto kv : sorted_dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
@@ -584,8 +585,6 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     if (target_rank == rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
-    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
-    MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     int target_disp = 0;  // offset in win buffer
     int sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     while (sent_size != 0) {
@@ -600,13 +599,16 @@ void MPIController::WinPut(TensorTableEntry& entry) {
       target_disp += sent_size;
       sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     }
-    MPI_Win_unlock(target_rank, mpi_win);
-    timeline_ptr->ActivityEnd(entry.tensor_name);
 
     if (entry.require_mutex) {
       WinMutexRelease(mutex_ranks);
     }
   }
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  MPI_Win_unlock_all(mpi_win);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
+
   BFLOG(TRACE, rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
 
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
