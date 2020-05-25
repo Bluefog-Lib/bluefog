@@ -25,8 +25,8 @@ warnings.simplefilter('ignore')
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torchvision import datasets, transforms
 import torch.utils.data.distributed
+from torchvision import datasets, transforms
 
 sys.path.insert(0, os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")))
@@ -139,10 +139,12 @@ test_dataset = datasets.MNIST(
         [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     ),
 )
-# Bluefog: use DistributedSampler to partition the test data.
-test_sampler = torch.utils.data.distributed.DistributedSampler(
-    test_dataset, num_replicas=bf.size(), rank=bf.rank()
-)
+test_sampler = None
+if args.average_test_result:
+    # Bluefog: use DistributedSampler to partition the test data.
+    test_sampler = torch.utils.data.distributed.DistributedSampler(
+        test_dataset, num_replicas=bf.size(), rank=bf.rank()
+    )
 test_loader = torch.utils.data.DataLoader(
     test_dataset, batch_size=args.test_batch_size, sampler=test_sampler, **kwargs
 )
@@ -260,8 +262,8 @@ def test():
 
     # Bluefog: use test_sampler to determine the number of examples in
     # this worker's partition.
-    test_loss /= len(test_sampler)
-    test_accuracy /= len(test_sampler)
+    test_loss /= len(test_sampler) if test_sampler else len(test_dataset)
+    test_accuracy /= len(test_sampler) if test_sampler else len(test_dataset)
 
     # Bluefog: average metric values across workers.
     if args.average_test_result:

@@ -61,7 +61,7 @@ parser.add_argument(
     "executing allreduce across workers; it multiplies "
     "total batch size.",
 )
-parser.add_argument('--model', type=str, default='resnet50',
+parser.add_argument('--model', type=str, default='resnet18',
                     help='model to benchmark')
 
 # Default settings from https://arxiv.org/abs/1706.02677.
@@ -71,7 +71,7 @@ parser.add_argument(
 parser.add_argument(
     "--val-batch-size", type=int, default=32, help="input batch size for validation"
 )
-parser.add_argument("--epochs", type=int, default=50,
+parser.add_argument("--epochs", type=int, default=90,
                     help="number of epochs to train")
 parser.add_argument(
     "--base-lr", type=float, default=0.0125, help="learning rate for a single GPU"
@@ -90,6 +90,13 @@ parser.add_argument("--no-bluefog", action="store_true",
                     default=False, help="disables bluefog library")
 parser.add_argument("--no-rma", action="store_true",
                     default=False, help="Do no use remote memory access(no window ops).")
+parser.add_argument("--average-test-result", action="store_true",
+                    default=False,
+                    help=("Allreduce called to average test result. Warning this will " +
+                          "force the algorithm to sync every end of epoch."))
+parser.add_argument("--enable-dynamic-topology", action="store_true",
+                    default=False, help=("Enable each iteration to transmit one neighbor " +
+                                         "per iteration dynamically."))
 
 args = parser.parse_args()
 args.cuda = (not args.no_cuda) and (torch.cuda.is_available())
@@ -180,9 +187,13 @@ val_dataset = datasets.CIFAR10(
         ]
     ),
 )
-val_sampler = torch.utils.data.distributed.DistributedSampler(
-    val_dataset, num_replicas=bf.size(), rank=bf.rank()
-)
+if args.average_test_result:
+    val_sampler = torch.utils.data.distributed.DistributedSampler(
+        val_dataset, num_replicas=bf.size(), rank=bf.rank()
+    )
+else:
+    val_sampler = None
+
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=args.val_batch_size, sampler=val_sampler, **kwargs
 )
@@ -251,7 +262,8 @@ def train(epoch):
               disable=not verbose,) as t:
         for batch_idx, (data, target) in enumerate(train_loader):
             adjust_learning_rate(epoch, batch_idx)
-            dynamic_topology_update(epoch, batch_idx)
+            if args.enable_dynamic_topology:
+                dynamic_topology_update(epoch, batch_idx)
 
             if args.cuda:
                 data, target = data.cuda(), target.cuda()
@@ -369,7 +381,10 @@ class Metric(object):
         self.n = torch.tensor(0.0)  # pylint: disable=not-callable
 
     def update(self, val):
-        self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
+        if args.average_test_result:
+            self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
+        else:
+            self.sum += val.detach().cpu()
         self.n += 1
 
     @property
@@ -379,5 +394,6 @@ class Metric(object):
 
 for epoch in range(resume_from_epoch, args.epochs):
     train(epoch)
-    validate(epoch)
+    if epoch % 3 == 0:
+        validate(epoch)
     save_checkpoint(epoch)

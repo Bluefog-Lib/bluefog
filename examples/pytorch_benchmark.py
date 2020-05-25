@@ -130,8 +130,12 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 # Set up fake data
 datasets = []
 for _ in range(100):
+    # First two should be CPU usage only.
     if args.model == "lenet":
-        data = torch.rand(args.batch_size, 1, 28, 28)
+        data = torch.rand(args.batch_size, 1, 28, 28)  # mnist size
+        target = torch.LongTensor(args.batch_size).random_() % 10
+    elif args.model == 'resnet18':
+        data = torch.rand(args.batch_size, 3, 32, 32)  # CIFAR10 size
         target = torch.LongTensor(args.batch_size).random_() % 10
     else:
         data = torch.rand(args.batch_size, 3, 224, 224)
