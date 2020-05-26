@@ -75,6 +75,9 @@ parser.add_argument("--average-test-result", action="store_true",
                     default=False,
                     help=("Allreduce called to average test result. Warning this will " +
                           "force the algorithm to sync every end of epoch."))
+parser.add_argument("--enable-dynamic-topology", action="store_true",
+                    default=False, help=("Enable each iteration to transmit one neighbor " +
+                                         "per iteration dynamically."))
 
 parser.add_argument(
     "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
@@ -212,11 +215,21 @@ else:
     )
 
 
+def dynamic_topology_update(epoch, batch_idx):
+    if epoch < 3:
+        return
+    num_out_neighbors = len(bf.out_neighbor_ranks())
+    sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+    optimizer.dst_weights = {sent_neighbor: 1.0}
+
+
 def train(epoch):
     model.train()
     # Bluefog: set epoch to sampler for shuffling.
     train_sampler.set_epoch(epoch)
     for batch_idx, (data, target) in enumerate(train_loader):
+        if args.enable_dynamic_topology:
+            dynamic_topology_update(epoch, batch_idx)
         if args.cuda:
             data, target = data.cuda(), target.cuda()
         optimizer.zero_grad()

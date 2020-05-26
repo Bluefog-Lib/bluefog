@@ -242,7 +242,7 @@ def main():
         '-bind-to none -map-by slot '
         '-mca pml ob1 -mca btl ^openib '
         '{ssh_port_arg} {tcp_intf_arg} '
-        '{extra_flags} {env} {command}' 
+        '{extra_flags} {env} {command}'
         .format(num_proc=args.np,
                 hosts_arg=hosts_arg,
                 ssh_port_arg=ssh_port_arg,
