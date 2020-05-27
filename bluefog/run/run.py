@@ -240,7 +240,7 @@ def main():
         'mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
-        '-mca pml ob1 -mca btl ^openib '
+        '-mca pml ob1 '
         '{ssh_port_arg} {tcp_intf_arg} '
         '{extra_flags} {env} {command}'
         .format(num_proc=args.np,
