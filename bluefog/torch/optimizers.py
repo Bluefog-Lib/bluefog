@@ -476,7 +476,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                     raise KeyError(
                         "Cannot find parameter {} in the _parameter_names dictionary".format(name))
 
-                ps_weights = torch.Tensor([1.0]).to(p.data.dtype)
+                ps_weights = torch.Tensor([1.0]).to(p.data.dtype).to(p.data.device)
                 self._named_ps_weights[name] = ps_weights
                 # If do not modify in the C level, it is inevitable to copy
                 # the parameter once in the cat ops.
