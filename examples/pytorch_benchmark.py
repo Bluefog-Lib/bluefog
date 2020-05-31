@@ -51,20 +51,18 @@ parser.add_argument('--profiler', action='store_true', default=False,
                     help='disables profiler')
 parser.add_argument('--partition', type=int, default=None,
                     help='partition size')
-parser.add_argument("--no-bluefog", action="store_true",
-                    default=False, help="disables bluefog library")
-parser.add_argument("--no-rma", action="store_true",
-                    default=False, help="Do no use remote memory access(no window ops).")
-parser.add_argument("--enable-dynamic-topology", action="store_true",
-                    default=False, help=("Enable each iteration to transmit one neighbor " +
-                                         "per iteration dynamically."))
+parser.add_argument('--dist-optimizer', type=str, default='win_put',
+                    help='The type of distributed optimizer. Supporting options are '+
+                    '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
+parser.add_argument('--enable-dynamic-topology', action='store_true',
+                    default=False, help=('Enable each iteration to transmit one neighbor ' +
+                                         'per iteration dynamically.'))
 
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
-args.bluefog = not args.no_bluefog
 
-if not args.bluefog:
+if args.dist_optimizer == 'horovod':
     print("importing horovod")
     import horovod.torch as bf
 
@@ -106,23 +104,24 @@ if args.cuda:
 optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
-if args.bluefog:
-    if args.no_rma:
-        print("Use neighbor collective")
-        # This distributed optimizer uses neighbor communication.
-        optimizer = bf.DistributedNeighborAllreduceOptimizer(
-            optimizer, model=model
-        )
-    else:
-        # This distributed optimizer uses one-sided communication
-        print("Use win_put ops.")
-        optimizer = bf.DistributedBluefogOptimizer(
-            optimizer, model=model
-        )
-else:
-    optimizer = bf.DistributedOptimizer(
+if args.dist_optimizer == 'win_put':
+    optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
+elif args.dist_optimizer == 'neighbor_allreduce':
+    optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
+        optimizer, model=model)
+elif args.dist_optimizer == 'allreduce':
+    optimizer = optimizer = bf.DistributedAllreduceOptimizer(
+        optimizer, model=model)
+elif args.dist_optimizer == 'push_sum':
+    optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
+elif args.dist_optimizer == 'horovod':
+    optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
+else:
+    raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
+                     'Please set the argument to be one of ' +
+                     '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
 
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
 bf.broadcast_optimizer_state(optimizer, root_rank=0)

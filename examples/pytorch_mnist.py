@@ -16,6 +16,8 @@
 
 from __future__ import print_function
 
+from bluefog.common import topology_util
+import bluefog.torch as bf
 import argparse
 import os
 import sys
@@ -67,10 +69,9 @@ parser.add_argument(
 parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
 )
-parser.add_argument("--no-bluefog", action="store_true",
-                    default=False, help="disables bluefog library. Use horovod instead.")
-parser.add_argument("--no-rma", action="store_true",
-                    default=False, help="Do no use remote memory access(no window ops).")
+parser.add_argument('--dist-optimizer', type=str, default='win_put',
+                    help='The type of distributed optimizer. Supporting options are '+
+                    '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
 parser.add_argument("--average-test-result", action="store_true",
                     default=False,
                     help=("Allreduce called to average test result. Warning this will " +
@@ -92,23 +93,14 @@ parser.add_argument(
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
-args.bluefog = not args.no_bluefog
+torch.manual_seed(args.seed)
 
-# Bluefog: initialize library.
-if args.bluefog:
-    print("importing bluefog")
-    import bluefog.torch as bf
-    from bluefog.common import topology_util
-else:
+if args.dist_optimizer == 'horovod':
     print("importing horovod")
     import horovod.torch as bf
 
 bf.init()
 
-if args.bluefog:
-    bf.set_topology(topology=topology_util.RingGraph(bf.size()))
-
-torch.manual_seed(args.seed)
 
 if args.cuda:
     # Bluefog: pin GPU to local rank.
@@ -189,30 +181,24 @@ bf.broadcast_parameters(model.state_dict(), root_rank=0)
 bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
-if args.bluefog:
-    # optimizer = bf.DistributedAllreduceOptimizer(
-    #     optimizer, named_parameters=model.named_parameters()
-    # )
-    if args.no_rma:
-        print("Use neighbor collective")
-        optimizer = bf.DistributedNeighborAllreduceOptimizer(
-            optimizer, model=model
-        )
-        if os.environ.get("BLUEFOG_TIMELINE"):
-            print("Timeline for optimizer is enabled")
-            optimizer.turn_on_timeline()
-    else:
-        print("Use win_put ops.")
-        optimizer = bf.DistributedBluefogOptimizer(
-            optimizer, model=model
-        )
-        if os.environ.get("BLUEFOG_TIMELINE"):
-            print("Timeline for optimizer is enabled")
-            optimizer.turn_on_timeline()
-else:
-    optimizer = bf.DistributedOptimizer(
+if args.dist_optimizer == 'win_put':
+    optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
+elif args.dist_optimizer == 'neighbor_allreduce':
+    optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
+        optimizer, model=model)
+elif args.dist_optimizer == 'allreduce':
+    optimizer = optimizer = bf.DistributedAllreduceOptimizer(
+        optimizer, model=model)
+elif args.dist_optimizer == 'push_sum':
+    optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
+elif args.dist_optimizer == 'horovod':
+    optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
+else:
+    raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
+                     'Please set the argument to be one of ' +
+                     '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
 
 
 def dynamic_topology_update(epoch, batch_idx):
