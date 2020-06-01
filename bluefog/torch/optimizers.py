@@ -332,6 +332,26 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
         self._synchronized = True
 
+    @contextmanager
+    def skip_synchronize(self):
+        """
+        A context manager used to specify that optimizer.step() should
+        not perform synchronization.
+
+        It's typically used in a following pattern:
+
+        .. code-block:: python
+
+            optimizer.synchronize()
+            with optimizer.skip_synchronize():
+                optimizer.step()
+        """
+        self._should_synchronize = False
+        try:
+            yield
+        finally:
+            self._should_synchronize = True
+
     def step(self, closure=None):
         # consensus style is the easist way to implement it.
         if self._should_synchronize:
@@ -398,6 +418,37 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                     raise ValueError(
                         "Cannot allocate MPI window for the parameter {}".format(name))
 
+    def turn_on_timeline(self):
+        handles = _register_timeline(self, self._models, self._parameter_names)
+        self._timeline_hook_handles.extend(handles)
+        self._use_timeline = True
+
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
+        self._use_timeline = False
+
+    @contextmanager
+    def skip_synchronize(self):
+        """
+        A context manager used to specify that optimizer.step() should
+        not perform synchronization.
+
+        It's typically used in a following pattern:
+
+        .. code-block:: python
+
+            optimizer.synchronize()
+            with optimizer.skip_synchronize():
+                optimizer.step()
+        """
+        self._should_synchronize = False
+        try:
+            yield
+        finally:
+            self._should_synchronize = True
+
     def synchronize(self):
         # Here synchronize just to make sure win_put ops is finished
         # in one iteration.
@@ -410,17 +461,6 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
         self._handles.clear()
         self._synchronized = True
-
-    def turn_on_timeline(self):
-        handles = _register_timeline(self, self._models, self._parameter_names)
-        self._timeline_hook_handles.extend(handles)
-        self._use_timeline = True
-
-    def turn_off_timeline(self):
-        for hook in self._timeline_hook_handles:
-            hook.remove()
-        self._timeline_hook_handles.clear()
-        self._use_timeline = False
 
     def step(self, closure=None):
         if self.force_barrier:
@@ -510,6 +550,36 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                     self._handles[p] = handle
         return hook
 
+    def turn_on_timeline(self):
+        handles = _register_timeline(self, self._models, self._parameter_names)
+        self._timeline_hook_handles.extend(handles)
+        self._use_timeline = True
+
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
+        self._use_timeline = False
+
+    @contextmanager
+    def skip_synchronize(self):
+        """
+        A context manager used to specify that optimizer.step() should
+        not perform synchronization.
+
+        It's typically used in a following pattern:
+
+        .. code-block:: python
+
+            optimizer.synchronize()
+            with optimizer.skip_synchronize():
+                optimizer.step()
+        """
+        self._should_synchronize = False
+        try:
+            yield
+        finally:
+            self._should_synchronize = True
 
     def synchronize(self):
         # Here synchronize just to make sure win_put ops is finished
@@ -529,17 +599,6 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
 
         self._handles.clear()
         self._synchronized = True
-
-    def turn_on_timeline(self):
-        handles = _register_timeline(self, self._models, self._parameter_names)
-        self._timeline_hook_handles.extend(handles)
-        self._use_timeline = True
-
-    def turn_off_timeline(self):
-        for hook in self._timeline_hook_handles:
-            hook.remove()
-        self._timeline_hook_handles.clear()
-        self._use_timeline = False
 
     def step(self, closure=None):
         if self.force_barrier:
