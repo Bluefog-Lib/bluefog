@@ -43,7 +43,7 @@ def finalize_plot():
         plt.show()
     plt.close()
 
-def logistic_loss_step(x_, tensor_name, rho):
+def logistic_loss_step(x_, rho, tensor_name):
     """Calculate gradient of logistic loss via pytorch autograd."""
     with bf.timeline_context(tensor_name=tensor_name,
                              activity_name="gradient computation"):
@@ -62,14 +62,14 @@ def distributed_grad_descent(maxite = 5000, alpha = 1e-1):
     
     for i in range(maxite):
         # calculate gradient via pytorch autograd
-        logistic_loss_step(w_opt, tensor_name='allreduce.gradient', rho)
+        logistic_loss_step(w_opt, rho, tensor_name='allreduce.gradient')
         grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
 
         # distributed gradient descent
         w_opt.data = w_opt.data - alpha*grad
         w_opt.grad.data.zero_()
 
-    logistic_loss_step(w_opt, tensor_name='allreduce.gradient', rho)
+    logistic_loss_step(w_opt, rho, tensor_name='allreduce.gradient')
     grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
 
     # evaluate the convergence of distributed logistic regression
@@ -102,7 +102,7 @@ def distributed_grad_descent(maxite = 5000, alpha = 1e-1):
 # [R2] Z. Li, W. Shi and M. Yan, ``A Decentralized Proximal-gradient Method with
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
-def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-1, use_Abar=False):
+def exact_diffusion(w_opt, rho, maxite=2000, alpha_ed=1e-1, use_Abar=False):
     
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
@@ -123,7 +123,7 @@ def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-1, use_Abar=False):
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
-        logistic_loss_step(w, tensor_name='neighbor.allreduce.local_variable', rho)
+        logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.local_variable')
 
         # exact diffusion
         psi = w - alpha_ed * w.grad.data
@@ -158,9 +158,9 @@ def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-1, use_Abar=False):
 # [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'',
 # 2016
 # ================================================================================
-def gradient_tracking(w_opt, maxite=2000, alpha_gt=1e-1):
+def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    logistic_loss_step(w, tensor_name='neighbor.allreduce.Grad.Tracking.w', rho)
+    logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
     q = w.grad.data  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
@@ -177,7 +177,7 @@ def gradient_tracking(w_opt, maxite=2000, alpha_gt=1e-1):
         q_handle = bf.neighbor_allreduce_async(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha_gt * q
         # calculate local gradient
-        logistic_loss_step(w, tensor_name='neighbor.allreduce.Grad.Tracking.w', rho)
+        logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
         grad = w.grad.data.clone()
         q = bf.synchronize(q_handle) + grad - grad_prev
         grad_prev = grad
@@ -197,7 +197,7 @@ def gradient_tracking(w_opt, maxite=2000, alpha_gt=1e-1):
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
-def push_diging(w_opt, maxite=2000, alpha_pd = 1e-1):
+def push_diging(w_opt, rho, maxite=2000, alpha_pd = 1e-1):
 
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
     outdegree = len(bf.out_neighbor_ranks())
@@ -207,7 +207,7 @@ def push_diging(w_opt, maxite=2000, alpha_pd = 1e-1):
     w = torch.zeros(2*n+1, 1).to(torch.double)
     x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 
-    logistic_loss_step(x, tensor_name='w_buff', rho)
+    logistic_loss_step(x, rho, tensor_name='w_buff')
     grad = x.grad.data.clone()
     w[n:2*n] = grad
     x.grad.data.zero_()
@@ -229,7 +229,7 @@ def push_diging(w_opt, maxite=2000, alpha_pd = 1e-1):
         w = bf.win_update_then_collect(name="w_buff")
 
         x.data = w[:n]/w[-1]
-        logistic_loss_step(x, tensor_name='w_buff', rho)
+        logistic_loss_step(x, rho, tensor_name='w_buff')
         grad = x.grad.data.clone()
         x.grad.data.zero_()
 
@@ -270,11 +270,11 @@ w_opt = distributed_grad_descent()
 
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'exact_diffusion':
-    w, mse = exact_diffusion(w_opt)
+    w, mse = exact_diffusion(w_opt, rho)
 elif args.method == 'gradient_tracking':
-    w, mse = gradient_tracking(w_opt)
+    w, mse = gradient_tracking(w_opt, rho)
 elif args.method == 'push_diging':
-    w, mse = push_diging(w_opt)
+    w, mse = push_diging(w_opt, rho)
 
 # plot and print result
 try:
@@ -283,7 +283,7 @@ try:
         finalize_plot()
 
     # calculate local and global gradient
-    logistic_loss_step(w, tensor_name="w_buff", rho)
+    logistic_loss_step(w, rho, tensor_name="w_buff")
     grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
 
     # evaluate the convergence of gradient tracking for logistic regression
