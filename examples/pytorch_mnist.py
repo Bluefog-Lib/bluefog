@@ -244,7 +244,7 @@ def metric_average(val, name):
     return avg_tensor.item()
 
 
-def test():
+def test(record):
     model.eval()
     test_loss = 0.0
     test_accuracy = 0.0
@@ -276,12 +276,10 @@ def test():
                 test_loss, 100.0 * test_accuracy
             )
         )
-    return test_loss, 100.0 * test_accuracy
+    record.append((test_loss, 100.0 * test_accuracy))
 
-
-record = []
+test_record = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
-    record.append(test())
-
-print(f"[{bf.rank()}]: ", record)
+test(test_record)
+print(f"[{bf.rank()}]: ", test_record)
