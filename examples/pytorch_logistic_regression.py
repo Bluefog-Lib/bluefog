@@ -57,7 +57,7 @@ def logistic_loss_step(x_, rho, tensor_name):
 # # x^{k+1} = x^k - alpha * allreduce(local_grad)
 # # it will be used to verify the solution of various decentralized algorithms.
 # # ================================================================================
-def distributed_grad_descent(maxite = 5000, alpha = 1e-1):
+def distributed_grad_descent(rho, maxite = 5000, alpha = 1e-1):
     w_opt = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     
     for i in range(maxite):
@@ -266,7 +266,7 @@ y = 2*y - 1
 rho = 1e-2
 
 # calculate the global solution w_opt via distributed gradient descent
-w_opt = distributed_grad_descent()
+w_opt = distributed_grad_descent(rho)
 
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'exact_diffusion':
