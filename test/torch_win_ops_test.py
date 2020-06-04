@@ -328,8 +328,8 @@ class WinOpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             window_name = "win_put_given_{}_{}".format(dim, dtype)
             bf.win_create(tensor, window_name)
-            bf.win_put(tensor, window_name, dst_weights={
-                       (rank+1) % size: 1.23})
+            bf.win_put(tensor, window_name,
+                       dst_weights={(rank+1) % size: 1.23})
             bf.barrier()
             sync_result = bf.win_update(window_name)
             assert (list(sync_result.shape) == [23] * dim), (
@@ -580,7 +580,7 @@ class WinOpsTests(unittest.TestCase):
         if rank == 0:
             with bf.win_mutex():
                 bf.barrier()
-                time.sleep(2.0)
+                time.sleep(2.01)
         else:
             bf.barrier()
             t_start = time.time()
@@ -604,7 +604,7 @@ class WinOpsTests(unittest.TestCase):
         if rank == 0:
             with bf.win_mutex([0]):
                 bf.barrier()
-                time.sleep(2.0)
+                time.sleep(2.01)
         elif rank == 1:
             bf.barrier()
             t_start = time.time()
