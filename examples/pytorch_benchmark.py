@@ -53,7 +53,7 @@ parser.add_argument('--partition', type=int, default=None,
                     help='partition size')
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
                     help='The type of distributed optimizer. Supporting options are '+
-                    '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
+                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
 parser.add_argument('--enable-dynamic-topology', action='store_true',
                     default=False, help=('Enable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
@@ -70,8 +70,7 @@ bf.init()
 
 if args.cuda:
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
-
-cudnn.benchmark = True
+    cudnn.benchmark = True
 
 # Set up standard model.
 if args.model == "lenet":
@@ -118,6 +117,8 @@ elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
+elif args.dist_optimizer == 'pull_get':
+    optimizer = bf.DistributedPullGetOptimizer(optimizer, model=model)
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
