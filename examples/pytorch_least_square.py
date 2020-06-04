@@ -37,6 +37,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+
 def finalize_plot():
     plt.savefig(args.save_plot_file)
     if args.plot_interactive:
@@ -48,7 +49,7 @@ def finalize_plot():
 # # x^{k+1} = x^k - alpha * \sum_i A_i.T(A_i x - b_i)
 # # it will be used to verify the solution of exact diffusion.
 # # ================================================================================
-def distributed_grad_descent(maxite = 5000, alpha = 1e-2):
+def distributed_grad_descent(maxite=5000, alpha=1e-2):
     x_opt = torch.zeros(n, 1).to(torch.double)
     maxite = 1000
     alpha = 1e-2
@@ -66,7 +67,8 @@ def distributed_grad_descent(maxite = 5000, alpha = 1e-2):
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(A.T.mm(A.mm(x_opt) - b), p=2)
-    print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[DG] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
 
     return x_opt
 
@@ -88,14 +90,15 @@ def distributed_grad_descent(maxite = 5000, alpha = 1e-2):
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
 def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-2, use_Abar=False):
-    
+
     x = torch.zeros(n, 1).to(torch.double)
     phi, psi, psi_prev = x.clone(), x.clone(), x.clone()
     mse = []
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
-    
+    self_weight, neighbor_weights = topology_util.GetWeights(
+        topology, bf.rank())
+
     # construct A_bar
     if use_Abar:
         self_weight = (self_weight+1)/2
@@ -106,7 +109,8 @@ def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-2, use_Abar=False):
         grad = A.T.mm(A.mm(x)-b)    # local gradient
         psi = x - alpha_ed * grad
         phi = psi + x - psi_prev
-        x = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
+        x = bf.neighbor_allreduce(
+            phi, self_weight, neighbor_weights, name='local variable')
         psi_prev = psi
         if bf.rank() == 0:
             mse.append(torch.norm(x - w_opt, p=2))
@@ -159,7 +163,7 @@ def gradient_tracking(w_opt, maxite=2000, alpha_gt=1e-2):
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
-def push_diging(w_opt, maxite=2000, alpha_pd = 1e-2):
+def push_diging(w_opt, maxite=2000, alpha_pd=1e-2):
 
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
     outdegree = len(bf.out_neighbor_ranks())
@@ -201,6 +205,7 @@ def push_diging(w_opt, maxite=2000, alpha_pd = 1e-2):
 
     return x, mse_pd
 
+
 # ======================= Code starts here =======================
 bf.init()
 
@@ -232,7 +237,8 @@ try:
         finalize_plot()
 
     # calculate local and global gradient
-    grad = torch.norm(bf.allreduce(A.T.mm(A.mm(w) - b)), p=2)  # global gradient
+    grad = torch.norm(bf.allreduce(A.T.mm(A.mm(w) - b)),
+                      p=2)  # global gradient
 
     # evaluate the convergence of gradient tracking for logistic regression
     # the norm of global gradient is expected to be 0 (optimality condition)
@@ -248,5 +254,5 @@ try:
 
 except NameError:
     if bf.rank() == 0:
-        print('Algorithm not support. This example only supports' \
-               + ' exact_diffusion, gradient_tracking, and push_diging')
+        print('Algorithm not support. This example only supports'
+              + ' exact_diffusion, gradient_tracking, and push_diging')
