@@ -167,8 +167,6 @@ def exact_diffusion(w_opt, rho, maxite=2000, alpha_ed=1e-1, use_Abar=False):
 # [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'',
 # 2016
 # ================================================================================
-
-
 def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     logistic_loss_step(
@@ -210,10 +208,7 @@ def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
-
-
 def push_diging(w_opt, rho, maxite=2000, alpha_pd=1e-1):
-
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())

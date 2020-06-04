@@ -51,8 +51,6 @@ def finalize_plot():
 # # ================================================================================
 def distributed_grad_descent(maxite=5000, alpha=1e-2):
     x_opt = torch.zeros(n, 1).to(torch.double)
-    maxite = 1000
-    alpha = 1e-2
     for i in range(maxite):
         grad = A.T.mm(A.mm(x_opt) - b)                  # local gradient
         grad = bf.allreduce(grad, name='gradient')      # global gradient
@@ -90,7 +88,6 @@ def distributed_grad_descent(maxite=5000, alpha=1e-2):
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
 def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-2, use_Abar=False):
-
     x = torch.zeros(n, 1).to(torch.double)
     phi, psi, psi_prev = x.clone(), x.clone(), x.clone()
     mse = []
@@ -164,7 +161,6 @@ def gradient_tracking(w_opt, maxite=2000, alpha_gt=1e-2):
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
 def push_diging(w_opt, maxite=2000, alpha_pd=1e-2):
-
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())

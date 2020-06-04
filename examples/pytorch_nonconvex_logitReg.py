@@ -107,7 +107,6 @@ def distributed_grad_descent(rho, beta, maxite=5000, alpha=1e-1):
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
 def exact_diffusion(w_opt, rho, beta, maxite=2000, alpha_ed=1e-1, use_Abar=False):
-
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
     mse = []
@@ -207,7 +206,6 @@ def gradient_tracking(w_opt, rho, beta, maxite=2000, alpha_gt=1e-1):
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
 def push_diging(w_opt, rho, beta, maxite=2000, alpha_pd=1e-1):
-
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())
