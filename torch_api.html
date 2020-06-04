@@ -229,6 +229,25 @@ per iteration to achieve win_put over dynamic graph behavior.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.DistributedPullGetOptimizer">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPullGetOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedPullGetOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
+pull model average through bf.win_get ops.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returned optimizer has two extra parameters <cite>src_weights</cite> and <cite>force_barrier</cite>.
+Set src_weights dictionary as {rank: scaling} differently per iteration to achieve
+win_get over dynamic graph behavior. If force_barrier is True, a barrier function
+will put at <cite>step()</cite> to synchronous processes.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
