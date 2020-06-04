@@ -580,7 +580,7 @@ def win_update(name: str,
                reset: bool = False, clone: bool = False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
-    is happened.
+    is happened. During the update, a mutex for local variable is acquired.
 
     Args:
         name: The unique name to associate the window object.
@@ -605,9 +605,7 @@ def win_update(name: str,
     change with the iterations. If static weight need, then setting the weights through the
     bf.set_topology(.., is_weighted=True) is a better choice.
 
-    Note2: If reset is True, mutex for self is acquired.
-
-    Note3: self_weight and neighbor_weights must be presented at the same time.
+    Note2: self_weight and neighbor_weights must be presented at the same time.
     """
     tensor = _win_map[name]
     if clone:

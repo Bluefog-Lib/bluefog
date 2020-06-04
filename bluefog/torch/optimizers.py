@@ -411,7 +411,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 if p.requires_grad:
                     handle = bf.win_put_async(
                         tensor=p.data, name=parent_name+'.'+name,
-                        dst_weights=self.dst_weights)
+                        dst_weights=self.dst_weights, require_mutex=True)
                     self._handles[p] = handle
         return hook
 
@@ -423,7 +423,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
                     handle = bf.win_get_async(
-                        name=parent_name+'.'+name, src_weights=self.src_weights)
+                        name=parent_name+'.'+name, src_weights=self.src_weights,
+                        require_mutex=True)
                     self._handles[p] = handle
         return hook
 

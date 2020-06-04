@@ -274,12 +274,13 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
 
-  // We need to lock self avoid updating and win_put/win_accumulate happen at simultaneous time.
+  // We need to lock self avoid updating and win_put/win_accumulate happen at
+  // simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
-  if (reset && !neighbor_weights.empty()) common::WindowMutexAcquire(self_rank);
+  common::WindowMutexAcquire(self_rank);
 
   int device = CPU_DEVICE_ID;
-  if(!win_storage_manager.GetDeviceByName(name, &device)) {
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
     BFLOG(ERROR) << "Cannot get device of win " << name;
     return 0;
   }
@@ -288,30 +289,37 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 
   ::torch::Tensor cpu_buffer = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    cpu_buffer = tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    cpu_buffer =
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
-  // internal_avg specifies the detailed flow for weighted reduction operation for the neighbors
-  // which may lead to efficiency and precision difference.
-  // but when internal_avg is false, the results are only correct when all weights are
-  // 1/(neighbor size+1).
+  // internal_avg specifies the detailed flow for weighted reduction operation
+  // for the neighbors which may lead to efficiency and precision difference.
+  // but when internal_avg is false, the results are only correct when all
+  // weights are 1/(neighbor size+1).
   if (internal_avg) {
     // Weighted averaging with neighbors' tensors happens in-place.
-    if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight, neighbor_weights))
+    if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight,
+                                             neighbor_weights)) {
+      common::WindowMutexRelease(self_rank);
       return 0;
+    }
   } else {
     // Sum over neighbors' tensors happens in-place.
     if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer)) {
+      common::WindowMutexRelease(self_rank);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
-    double neighbor_size = neighbor_weights.size()+1.0;
+    double neighbor_size = neighbor_weights.size() + 1.0;
     cpu_buffer.div_(neighbor_size);
   }
 
-  if (reset && !ResetNeighborTensor(name, neighbor_weights)) return 0;
-
-  if (reset && !neighbor_weights.empty()) common::WindowMutexRelease(self_rank);
+  if (reset && !ResetNeighborTensor(name, neighbor_weights)) {
+    common::WindowMutexRelease(self_rank);
+    return 0;
+  }
+  common::WindowMutexRelease(self_rank);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
