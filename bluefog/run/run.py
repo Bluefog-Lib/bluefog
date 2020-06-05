@@ -226,9 +226,9 @@ def main():
         ssh_port_arg = ""
 
     if args.use_infiniband:
-        ib_arg = "--mca btl openib,self"
+        ib_arg = "-mca btl openib,self"
     else:
-        ib_arg = "--mca btl ^openib"
+        ib_arg = "-mca btl ^openib"
 
     if not _is_open_mpi_installed():
         raise Exception(
