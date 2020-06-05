@@ -157,9 +157,9 @@ Status WindowLock(const std::string& name);
 
 Status WindowUnlock(const std::string& name);
 
-Status WindowMutexAcquire(const std::vector<int>& acquire_ranks);
+Status WindowMutexAcquire(const std::vector<int>& acquire_ranks, bool is_sync);
 
-Status WindowMutexRelease(const std::vector<int>& release_ranks);
+Status WindowMutexRelease(const std::vector<int>& release_ranks, bool is_sync);
 
 Status GetBluefogTimeline(Timeline*& timeline);
 

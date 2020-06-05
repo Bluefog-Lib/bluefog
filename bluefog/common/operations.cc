@@ -587,11 +587,11 @@ Status WindowUnlock(const std::string& name) {
   return status;
 }
 
-Status WindowMutexAcquire(const std::vector<int>& acquire_ranks) {
+Status WindowMutexAcquire(const std::vector<int>& acquire_ranks, bool is_sync) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinMutexAcquire(acquire_ranks);
+  Status status = bluefog_global.controller->WinMutexAcquire(acquire_ranks, is_sync);
 
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot acquire window mutex";
@@ -600,11 +600,11 @@ Status WindowMutexAcquire(const std::vector<int>& acquire_ranks) {
   return status;
 }
 
-Status WindowMutexRelease(const std::vector<int>& release_ranks) {
+Status WindowMutexRelease(const std::vector<int>& release_ranks, bool is_sync) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinMutexRelease(release_ranks);
+  Status status = bluefog_global.controller->WinMutexRelease(release_ranks, is_sync);
 
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot release window mutex"; 

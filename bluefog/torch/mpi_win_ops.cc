@@ -277,7 +277,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   // We need to lock self avoid updating and win_put/win_accumulate happen at
   // simultaneous time.
   const std::vector<int> self_rank = {common::bluefog_rank()};
-  common::WindowMutexAcquire(self_rank);
+  common::WindowMutexAcquire(self_rank, /*is_sync=*/true);
 
   int device = CPU_DEVICE_ID;
   if (!win_storage_manager.GetDeviceByName(name, &device)) {
@@ -301,13 +301,13 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     // Weighted averaging with neighbors' tensors happens in-place.
     if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight,
                                              neighbor_weights)) {
-      common::WindowMutexRelease(self_rank);
+      common::WindowMutexRelease(self_rank, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
     if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer)) {
-      common::WindowMutexRelease(self_rank);
+      common::WindowMutexRelease(self_rank, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
@@ -316,10 +316,10 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   }
 
   if (reset && !ResetNeighborTensor(name, neighbor_weights)) {
-    common::WindowMutexRelease(self_rank);
+    common::WindowMutexRelease(self_rank, /*is_sync=*/true);
     return 0;
   }
-  common::WindowMutexRelease(self_rank);
+  common::WindowMutexRelease(self_rank, /*is_sync=*/true);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
@@ -495,13 +495,14 @@ void DoWinUnlock(const std::string& name) {
 
 void DoWinMutexAcquire(const std::vector<int>& ranks) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::WindowMutexAcquire(ranks);
+  // Expose the is_sync=true for most restrictive usage.
+  Status status = common::WindowMutexAcquire(ranks, /*is_sync=*/true);
   ThrowIfError(status);
 }
 
 void DoWinMutexRelease(const std::vector<int>& ranks) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::WindowMutexRelease(ranks);
+  Status status = common::WindowMutexRelease(ranks, /*is_sync=*/true);
   ThrowIfError(status);
 }
 
