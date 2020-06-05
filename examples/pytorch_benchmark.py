@@ -147,9 +147,16 @@ data_index = 0
 
 
 def dynamic_topology_update(batch_idx):
-    num_out_neighbors = len(bf.out_neighbor_ranks())
-    sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
-    optimizer.dst_weights = {sent_neighbor: 1.0}
+    if args.dist_optimizer == 'win_put':
+        num_out_neighbors = len(bf.out_neighbor_ranks())
+        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+        optimizer.dst_weights = {sent_neighbor: 1.0}
+    elif args.dist_optimizer == 'pull_get':
+        num_in_neighbors = len(bf.in_neighbor_ranks())
+        recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
+        optimizer.src_weights = {recv_neighbor: 1.0}
+    else:
+        pass
 
 
 def benchmark_step():
