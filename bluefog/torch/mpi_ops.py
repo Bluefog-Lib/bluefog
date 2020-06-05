@@ -559,11 +559,12 @@ def _win_update_function_factory(tensor):
     return 'bluefog_torch_win_sync_' + tensor.type().replace('.', '_')
 
 
-def win_update_then_collect(name: str) -> torch.Tensor:
+def win_update_then_collect(name: str, require_mutex=True) -> torch.Tensor:
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
-    >>> win_update(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True)
+    >>> win_update(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True,
+                   require_mutex=require_mutex)
 
     Args:
         name: The unique name to associate the window object.
@@ -572,12 +573,13 @@ def win_update_then_collect(name: str) -> torch.Tensor:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
     """
     neighbor_weights = {r: 1.0 for r in in_neighbor_ranks()}
-    return win_update(name, 1.0, neighbor_weights, reset=True)
+    return win_update(name, 1.0, neighbor_weights, reset=True, require_mutex=require_mutex)
 
 
 def win_update(name: str,
                self_weight: float = None, neighbor_weights: Dict[int, float] = None,
-               reset: bool = False, clone: bool = False) -> torch.Tensor:
+               reset: bool = False, clone: bool = False,
+               require_mutex: bool = False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
     Note the returned tensor is the same tensor used in win_create and in-place modification
     is happened. During the update, a mutex for local variable is acquired.
@@ -597,6 +599,8 @@ def win_update(name: str,
             If neighbor_weights is not presented and reset is True, all the neighbor will be reset.
         clone: If set up to be true, the win_update result will return a new tensor instead of
             in-place change.
+        require_mutex: If set to be true, the window mutex associated with local process will be
+            acquired.
 
     Returns:
         torch.Tensor: The average tensor of all neighbors' cooresponding tensors.
@@ -639,7 +643,7 @@ def win_update(name: str,
                          "the same time")
 
     if not getattr(mpi_lib, function)(tensor, name, self_weight, neighbor_weights,
-                                      reset, avg_computation):
+                                      reset, avg_computation, require_mutex):
         raise RuntimeError("Cannot apply win_update on " + name)
     return tensor
 
@@ -891,13 +895,15 @@ def _win_unlock(name: str):
 
 
 @contextmanager
-def win_mutex(ranks: List[int] = None):
+def win_mutex(ranks: List[int] = None, exclusive=True):
     """ A win object implemented mutex context manager. Note, there are N distributed
     mutex over N corresponding processes.
 
     Args:
         ranks: The mutex associated with the ranks will be acquired.
             If not presented, out_neighbor ranks will be used.
+        exclusive: If not exclusive, multiple processes can hold the mutex for the ranks
+            but it cannot hold with one exclusive one.
 
     Example:
         >>> bf.win_create(tensor, name)
@@ -906,16 +912,16 @@ def win_mutex(ranks: List[int] = None):
         >>> win_put(tensor, name)
     """
     _ranks = out_neighbor_ranks() if ranks is None else ranks
-    _win_mutex_acquire(_ranks)
+    _win_mutex_acquire(_ranks, exclusive)
     try:
         yield
     finally:
-        _win_mutex_release(_ranks)
+        _win_mutex_release(_ranks, exclusive)
 
 
-def _win_mutex_acquire(ranks):
-    mpi_lib.bluefog_torch_win_mutex_acquire(ranks)
+def _win_mutex_acquire(ranks, exclusive):
+    mpi_lib.bluefog_torch_win_mutex_acquire(ranks, exclusive)
 
 
-def _win_mutex_release(ranks):
-    mpi_lib.bluefog_torch_win_mutex_release(ranks)
+def _win_mutex_release(ranks, exclusive):
+    mpi_lib.bluefog_torch_win_mutex_release(ranks, exclusive)

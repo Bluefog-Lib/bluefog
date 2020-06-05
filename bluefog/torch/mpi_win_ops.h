@@ -127,7 +127,7 @@ WIN_CREATE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
       THTensor* tensor, char* name,                            \
       double self_weight,                                      \
       const std::unordered_map<int, double>& neighbor_weights, \
-      bool reset, bool internal_avg);
+      bool reset, bool internal_avg, bool require_mutex);
 
 WIN_SYNC_H(torch_IntTensor, THIntTensor)
 WIN_SYNC_H(torch_LongTensor, THLongTensor)
@@ -189,8 +189,8 @@ extern "C" void bluefog_torch_win_wait(int handle);
 extern "C" void bluefog_torch_win_lock(char* name);
 extern "C" void bluefog_torch_win_unlock(char* name);
 
-extern "C" void bluefog_torch_win_mutex_acquire(const std::vector<int>& ranks);
-extern "C" void bluefog_torch_win_mutex_release(const std::vector<int>& ranks);
+extern "C" void bluefog_torch_win_mutex_acquire(const std::vector<int>& ranks, bool exclusive);
+extern "C" void bluefog_torch_win_mutex_release(const std::vector<int>& ranks, bool exclusive);
 
 }  // namespace torch
 }  // namespace bluefog
