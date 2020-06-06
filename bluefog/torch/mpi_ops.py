@@ -67,10 +67,10 @@ def _check_function(function_factory, tensor, *args):
 
 
 def _allreduce_function_factory(tensor):
-    return 'bluefog_torch_allreduce_async_' + tensor.type().replace('.', '_')
+    return 'bluefog_torch_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _allreduce_async(tensor, output, average, name):
+def _allreduce_nonblocking(tensor, output, average, name):
     function = _check_function(_allreduce_function_factory, tensor)
     if average:
         assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor,
@@ -103,13 +103,13 @@ def allreduce(tensor: torch.Tensor, average: bool = True, name: str = None) -> t
         A tensor of the same shape and type as `tensor`, averaged or summed across all
         processes.
     """
-    handle = allreduce_async(tensor, average, name)
+    handle = allreduce_nonblocking(tensor, average, name)
     return synchronize(handle)
 
 
-def allreduce_async(tensor: torch.Tensor, average: bool = True, name: str = None) -> int:
+def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True, name: str = None) -> int:
     """
-    A function that performs asynchronous averaging or summation of the input tensor
+    A function that performs nonblocking averaging or summation of the input tensor
     over all the Bluefog processes. The input tensor is not modified.
 
     The reduction operation is keyed by the name. If name is not provided, an incremented
@@ -128,14 +128,14 @@ def allreduce_async(tensor: torch.Tensor, average: bool = True, name: str = None
         `synchronize()`.
     """
     output = tensor.new(tensor.shape)
-    return _allreduce_async(tensor, output, average, name)
+    return _allreduce_nonblocking(tensor, output, average, name)
 
 
 def _broadcast_function_factory(tensor):
-    return 'bluefog_torch_broadcast_async_' + tensor.type().replace('.', '_')
+    return 'bluefog_torch_broadcast_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _broadcast_async(tensor, output, root_rank, name):
+def _broadcast_nonblocking(tensor, output, root_rank, name):
     function = _check_function(_broadcast_function_factory, tensor)
     handle = getattr(mpi_lib, function)(tensor, output, root_rank,
                                         name.encode() if name is not None else "")
@@ -166,13 +166,13 @@ def broadcast(tensor: torch.Tensor, root_rank: int, name: str = None) -> torch.T
         A tensor of the same shape and type as `tensor`, with the value broadcasted
         from root rank.
     """
-    handle = broadcast_async(tensor, root_rank, name)
+    handle = broadcast_nonblocking(tensor, root_rank, name)
     return synchronize(handle)
 
 
-def broadcast_async(tensor: torch.Tensor, root_rank: int, name: str = None) -> int:
+def broadcast_nonblocking(tensor: torch.Tensor, root_rank: int, name: str = None) -> int:
     """
-    A function that asynchronously broadcasts the input tensor on root rank to the same
+    A function that nonblockingly broadcasts the input tensor on root rank to the same
     input tensor on all other Bluefog processes. The input tensor is not modified.
 
     The broadcast operation is keyed by the name. If name is not provided, an incremented
@@ -190,7 +190,7 @@ def broadcast_async(tensor: torch.Tensor, root_rank: int, name: str = None) -> i
         `synchronize()`.
     """
     output = tensor.new(tensor.shape)
-    return _broadcast_async(tensor, output, root_rank, name)
+    return _broadcast_nonblocking(tensor, output, root_rank, name)
 
 
 def broadcast_(tensor, root_rank, name=None) -> torch.Tensor:
@@ -212,13 +212,13 @@ def broadcast_(tensor, root_rank, name=None) -> torch.Tensor:
         A tensor of the same shape and type as `tensor`, with the value broadcasted
         from root rank.
     """
-    handle = broadcast_async_(tensor, root_rank, name)
+    handle = broadcast_nonblocking_(tensor, root_rank, name)
     return synchronize(handle)
 
 
-def broadcast_async_(tensor, root_rank, name=None) -> int:
+def broadcast_nonblocking_(tensor, root_rank, name=None) -> int:
     """
-    A function that asynchronously broadcasts the input tensor on root rank to the same
+    A function that nonblockingly broadcasts the input tensor on root rank to the same
     input tensor on all other Bluefog processes. The operation is performed in-place.
 
     The broadcast operation is keyed by the name. If name is not provided, an incremented
@@ -235,14 +235,14 @@ def broadcast_async_(tensor, root_rank, name=None) -> int:
         A handle to the broadcast operation that can be used with `poll()` or
         `synchronize()`.
     """
-    return _broadcast_async(tensor, tensor, root_rank, name)
+    return _broadcast_nonblocking(tensor, tensor, root_rank, name)
 
 
 def _allgather_function_factory(tensor):
-    return 'bluefog_torch_allgather_async_' + tensor.type().replace('.', '_')
+    return 'bluefog_torch_allgather_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _allgather_async(tensor, output, name):
+def _allgather_nonblocking(tensor, output, name):
     function = _check_function(_allgather_function_factory, tensor)
     handle = getattr(mpi_lib, function)(tensor, output,
                                         name.encode() if name is not None else "")
@@ -268,13 +268,13 @@ def allgather(tensor: torch.Tensor, name: str = None) -> torch.Tensor:
         the first dimension, which may be greater and is the sum of all first
         dimensions of the tensors in different Bluefog processes.
     """
-    handle = allgather_async(tensor, name)
+    handle = allgather_nonblocking(tensor, name)
     return synchronize(handle)
 
 
-def allgather_async(tensor: torch.Tensor, name: str = None) -> int:
+def allgather_nonblocking(tensor: torch.Tensor, name: str = None) -> int:
     """
-    A function that asynchronously concatenates the input tensor with the same input
+    A function that nonblockingly concatenates the input tensor with the same input
     tensor on all other Bluefog processes. The input tensor is not modified.
 
     The concatenation is done on the first dimension, so the input tensors on the
@@ -289,14 +289,14 @@ def allgather_async(tensor: torch.Tensor, name: str = None) -> int:
         `synchronize()`.
     """
     output = tensor.new()  # real size will be allocated later.
-    return _allgather_async(tensor, output, name)
+    return _allgather_nonblocking(tensor, output, name)
 
 
 def _neighbor_allgather_function_factory(tensor):
-    return 'bluefog_torch_neighbor_allgather_async_' + tensor.type().replace('.', '_')
+    return 'bluefog_torch_neighbor_allgather_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allgather_async(tensor, output, name):
+def _neighbor_allgather_nonblocking(tensor, output, name):
     function = _check_function(_neighbor_allgather_function_factory, tensor)
     handle = getattr(mpi_lib, function)(tensor, output,
                                         name.encode() if name is not None else "")
@@ -322,13 +322,13 @@ def neighbor_allgather(tensor: torch.Tensor, name: str = None) -> torch.Tensor:
         the first dimension, which may be greater and is the sum of all first
         dimensions of the tensors in neighbor Bluefog processes.
     """
-    handle = neighbor_allgather_async(tensor, name)
+    handle = neighbor_allgather_nonblocking(tensor, name)
     return synchronize(handle)
 
 
-def neighbor_allgather_async(tensor: torch.Tensor, name: str = None) -> int:
+def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: str = None) -> int:
     """
-    A function that asynchronously concatenates the input tensor with the same input
+    A function that nonblockingly concatenates the input tensor with the same input
     tensor on all neighbor Bluefog processes (Not include self).
     The input tensor is not modified.
 
@@ -344,14 +344,14 @@ def neighbor_allgather_async(tensor: torch.Tensor, name: str = None) -> int:
         `synchronize()`.
     """
     output = tensor.new()  # real size will be allocated later.
-    return _neighbor_allgather_async(tensor, output, name)
+    return _neighbor_allgather_nonblocking(tensor, output, name)
 
 
 def _neighbor_allreduce_function_factory(tensor):
-    return 'bluefog_torch_neighbor_allreduce_async_' + tensor.type().replace('.', '_')
+    return 'bluefog_torch_neighbor_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, name):
+def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if self_weight is None and neighbor_weights is None:
         if is_topo_weighted():
@@ -361,14 +361,15 @@ def _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, nam
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
             self_weight = weight
-            neighbor_weights = {r:weight for r in in_neighbor_ranks()}
+            neighbor_weights = {r: weight for r in in_neighbor_ranks()}
             avg_computation = False
     elif self_weight is not None and neighbor_weights is not None:
         if not isinstance(neighbor_weights, dict):
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
                              "(in-)neighbor rank to the weights.")
         if not isinstance(self_weight, float):
-            raise ValueError("Argument self_weight has to be a float for self rank.")
+            raise ValueError(
+                "Argument self_weight has to be a float for self rank.")
         if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
@@ -416,15 +417,17 @@ def neighbor_allreduce(tensor: torch.Tensor,
        (self_weight is not None and neighbor_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    handle = neighbor_allreduce_async(tensor, self_weight, neighbor_weights, name)
+    handle = neighbor_allreduce_nonblocking(
+        tensor, self_weight, neighbor_weights, name)
     return synchronize(handle)
 
 
-def neighbor_allreduce_async(tensor: torch.Tensor,
-                             self_weight: float = None, neighbor_weights: Dict[int, float] = None,
-                             name: str = None) -> int:
+def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
+                                   self_weight: float = None,
+                                   neighbor_weights: Dict[int, float] = None,
+                                   name: str = None) -> int:
     """
-    A function that asynchronously performs weighted averaging of the input tensor over the
+    A function that nonblockingly performs weighted averaging of the input tensor over the
     negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.
 
     The input tensor is not modified.
@@ -456,18 +459,18 @@ def neighbor_allreduce_async(tensor: torch.Tensor,
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     output = tensor.new(tensor.shape)
-    return _neighbor_allreduce_async(tensor, output, self_weight, neighbor_weights, name)
+    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name)
 
 
 def poll(handle: int) -> bool:
     """
     Polls an allreduce, allgather or broadcast handle to determine whether underlying
-    asynchronous operation has completed. After `poll()` returns `True`, `synchronize()`
+    nonblocking operation has completed. After `poll()` returns `True`, `synchronize()`
     will return without blocking.
 
     Arguments:
-        handle: A handle returned by an allreduce, allgather or broadcast asynchronous
-                operation.
+        handle: A handle returned by an allreduce, allgather, broadcast, neighbor_allgather,
+        and neighbro_allreduce nonblocking operation.
 
     Returns:
         A flag indicating whether the operation has completed.
@@ -477,11 +480,11 @@ def poll(handle: int) -> bool:
 
 def synchronize(handle: int) -> torch.Tensor:
     """
-    Synchronizes an asynchronous allreduce, allgather or broadcast operation until
+    Synchronizes an nonblocking allreduce, allgather or broadcast operation until
     it's completed. Returns the result of the operation.
 
     Args:
-        handle: A handle returned by an allreduce, allgather or broadcast asynchronous
+        handle: A handle returned by an allreduce, allgather or broadcast nonblocking
                 operation.
 
     Returns:
@@ -622,7 +625,8 @@ def win_update(name: str,
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
                              "(in-)neighbor rank to the weights.")
         if not isinstance(self_weight, float):
-            raise ValueError("Argument self_weight has to be a float for self rank.")
+            raise ValueError(
+                "Argument self_weight has to be a float for self rank.")
         if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
@@ -636,7 +640,7 @@ def win_update(name: str,
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
             self_weight = weight
-            neighbor_weights = {r:weight for r in in_neighbor_ranks()}
+            neighbor_weights = {r: weight for r in in_neighbor_ranks()}
             avg_computation = False
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
@@ -661,9 +665,9 @@ def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 
 
-def win_put_async(tensor: torch.Tensor, name: str,
-                  dst_weights: Dict[int, float] = None,
-                  require_mutex: bool = False) -> int:
+def win_put_nonblocking(tensor: torch.Tensor, name: str,
+                        dst_weights: Dict[int, float] = None,
+                        require_mutex: bool = False) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
     win_put operation is really finished.
@@ -690,7 +694,8 @@ def win_put_async(tensor: torch.Tensor, name: str,
         raise ValueError(
             "The key of dst_weights should only containranks that "
             " belong to out-neighbors (self-rank is not allowed).")
-    handle = getattr(mpi_lib, function)(tensor, name, dst_weights, require_mutex)
+    handle = getattr(mpi_lib, function)(
+        tensor, name, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
@@ -716,12 +721,12 @@ def win_put(tensor: torch.Tensor, name: str,
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put_async(tensor, name, dst_weights, require_mutex)
+    handle = win_put_nonblocking(tensor, name, dst_weights, require_mutex)
     return win_wait(handle)
 
 
-def win_get_async(name: str, src_weights: Dict[int, float] = None,
-                  require_mutex: bool = False) -> int:
+def win_get_nonblocking(name: str, src_weights: Dict[int, float] = None,
+                        require_mutex: bool = False) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
     The win_update function is responsible for fetching that memeory.
@@ -778,7 +783,7 @@ def win_get(name: str, src_weights: Dict[int, float] = None,
     Returns:
         A bool value to indicate the get succeeded or not.
     """
-    handle = win_get_async(name, src_weights, require_mutex)
+    handle = win_get_nonblocking(name, src_weights, require_mutex)
     return win_wait(handle)
 
 
@@ -786,9 +791,9 @@ def _win_accumulate_function_factory(tensor):
     return 'bluefog_torch_win_accumulate_' + tensor.type().replace('.', '_')
 
 
-def win_accumulate_async(tensor: torch.Tensor, name: str,
-                         dst_weights: Dict[int, float] = None,
-                         require_mutex: bool = False) -> bool:
+def win_accumulate_nonblocking(tensor: torch.Tensor, name: str,
+                               dst_weights: Dict[int, float] = None,
+                               require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
     This is a non-blocking function, which will return without waiting the
@@ -844,7 +849,8 @@ def win_accumulate(tensor: torch.Tensor, name: str,
     Returns:
         A bool value to indicate the accumulate succeeded or not.
     """
-    handle = win_accumulate_async(tensor, name, dst_weights, require_mutex)
+    handle = win_accumulate_nonblocking(
+        tensor, name, dst_weights, require_mutex)
     return win_wait(handle)
 
 

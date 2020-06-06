@@ -180,8 +180,8 @@ def gradient_tracking(w_opt, rho, beta, maxite=2000, alpha_gt=1e-1):
         # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
 
         # Notice the communication of neighbor_allreduce can overlap with gradient computation.
-        w_handle = bf.neighbor_allreduce_async(w.data, name='Grad.Tracking.w')
-        q_handle = bf.neighbor_allreduce_async(q, name='Grad.Tracking.q')
+        w_handle = bf.neighbor_allreduce_nonblocking(w.data, name='Grad.Tracking.w')
+        q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha_gt * q
         # calculate local gradient
         logistic_loss_step(

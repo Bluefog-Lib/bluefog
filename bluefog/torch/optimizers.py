@@ -159,7 +159,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         name = self._parameter_names.get(p)
         if self._use_timeline:
             bf.timeline_end_activity("allreduce." + name)
-        handle = bf.allreduce_async(
+        handle = bf.allreduce_nonblocking(
             p.grad, average=True, name=name
         )
         return handle
@@ -242,7 +242,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
     """ A distributed optimizer wrapper over torch optimizer.
 
     Note: Unlike the _DistributedOptimizer class that registers hook for each named parameters,
-    triggers the allreduce_async after gradient computation is finished, and updates the
+    triggers the allreduce_nonblocking after gradient computation is finished, and updates the
     parameters at last step function. We will trigger the win_put ops that puts the weights
     to its neighbor and compute average of iterates instead of gradient, i.e. combine-then-adapt
     (CTA) strategy. In theory, adapt-then-combine has superior performance, but it is much more
@@ -297,8 +297,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         if self._use_timeline:
             # End forward computation timeline
             bf.timeline_end_activity("neighbor.allreduce." + name)
-        handle = bf.neighbor_allreduce_async(p.data, name=name, self_weight=self.self_weight,
-                                             neighbor_weights=self.neighbor_weights)
+        handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
+                                                   neighbor_weights=self.neighbor_weights)
         return handle
 
     def turn_on_timeline(self):
@@ -409,7 +409,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    handle = bf.win_put_async(
+                    handle = bf.win_put_nonblocking(
                         tensor=p.data, name=parent_name+'.'+name,
                         dst_weights=self.dst_weights, require_mutex=False)
                     self._handles[p] = handle
@@ -422,7 +422,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    handle = bf.win_get_async(
+                    handle = bf.win_get_nonblocking(
                         name=parent_name+'.'+name, src_weights=self.src_weights,
                         require_mutex=True)
                     self._handles[p] = handle
@@ -563,7 +563,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                     ps_weights = self._named_ps_weights[full_name]
                     extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
                     self._named_extension_parameters[name] = extended_parameter
-                    handle = bf.win_accumulate_async(
+                    handle = bf.win_accumulate_nonblocking(
                         tensor=extended_parameter, name=full_name,
                         dst_weights=self.dst_weights,
                         require_mutex=True)

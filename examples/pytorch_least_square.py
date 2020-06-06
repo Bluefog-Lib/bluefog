@@ -140,8 +140,8 @@ def gradient_tracking(w_opt, maxite=2000, alpha_gt=1e-2):
     grad_prev = y.clone()
     mse_gt = []
     for i in range(maxite):
-        x_handle = bf.neighbor_allreduce_async(x, name='Grad.Tracking.x')
-        y_handle = bf.neighbor_allreduce_async(y, name='Grad.Tracking.y')
+        x_handle = bf.neighbor_allreduce_nonblocking(x, name='Grad.Tracking.x')
+        y_handle = bf.neighbor_allreduce_nonblocking(y, name='Grad.Tracking.y')
         x = bf.synchronize(x_handle) - alpha_gt * y
         grad = A.T.mm(A.mm(x)-b)    # local gradient at x^{k+1}
         # use async to overlap computation and communication

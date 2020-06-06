@@ -466,90 +466,90 @@ void AddWinOpsIntoPybind(py::module &);
 
 PYBIND11_MODULE(mpi_lib, m) {
   // allreduce
-  m.def("bluefog_torch_allreduce_async_torch_IntTensor", &DoAllreduce);
-  m.def("bluefog_torch_allreduce_async_torch_LongTensor", &DoAllreduce);
-  m.def("bluefog_torch_allreduce_async_torch_FloatTensor", &DoAllreduce);
-  m.def("bluefog_torch_allreduce_async_torch_DoubleTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_IntTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_LongTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_FloatTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_DoubleTensor", &DoAllreduce);
 #if HAVE_CUDA
-  m.def("bluefog_torch_allreduce_async_torch_cuda_IntTensor", &DoAllreduce);
-  m.def("bluefog_torch_allreduce_async_torch_cuda_LongTensor", &DoAllreduce);
-  m.def("bluefog_torch_allreduce_async_torch_cuda_FloatTensor", &DoAllreduce);
-  m.def("bluefog_torch_allreduce_async_torch_cuda_DoubleTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_IntTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_LongTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_FloatTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_DoubleTensor", &DoAllreduce);
 #endif
 
   // broadcast
-  m.def("bluefog_torch_broadcast_async_torch_ByteTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_CharTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_ShortTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_IntTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_LongTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_FloatTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_DoubleTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_ByteTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_CharTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_ShortTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_IntTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_LongTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_FloatTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_DoubleTensor", &DoBroadcast);
 #if HAVE_CUDA
-  m.def("bluefog_torch_broadcast_async_torch_cuda_IntTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_cuda_LongTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_cuda_FloatTensor", &DoBroadcast);
-  m.def("bluefog_torch_broadcast_async_torch_cuda_DoubleTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_IntTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_LongTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_FloatTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_DoubleTensor", &DoBroadcast);
 #endif
 
   // allgather
-  m.def("bluefog_torch_allgather_async_torch_ByteTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_CharTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_ShortTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_IntTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_LongTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_FloatTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_DoubleTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_ByteTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_CharTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_ShortTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_IntTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_LongTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_FloatTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_DoubleTensor", &DoAllgather);
 #if HAVE_CUDA
-  m.def("bluefog_torch_allgather_async_torch_cuda_IntTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_cuda_LongTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_cuda_FloatTensor", &DoAllgather);
-  m.def("bluefog_torch_allgather_async_torch_cuda_DoubleTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_cuda_IntTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_cuda_LongTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_cuda_FloatTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_cuda_DoubleTensor", &DoAllgather);
 #endif
 
   // neighbor_allgather
-  m.def("bluefog_torch_neighbor_allgather_async_torch_ByteTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_ByteTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_CharTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_CharTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_ShortTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_ShortTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_IntTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_IntTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_LongTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_LongTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_FloatTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_FloatTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_DoubleTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_DoubleTensor",
         &DoNeighborAllgather);
 #if HAVE_CUDA
-  m.def("bluefog_torch_neighbor_allgather_async_torch_cuda_IntTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_IntTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_cuda_LongTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_LongTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_cuda_FloatTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_FloatTensor",
         &DoNeighborAllgather);
-  m.def("bluefog_torch_neighbor_allgather_async_torch_cuda_DoubleTensor",
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_DoubleTensor",
         &DoNeighborAllgather);
 #endif
 
   // neighbor_allreduce
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_IntTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_IntTensor",
         &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_LongTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_LongTensor",
         &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_FloatTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_FloatTensor",
         &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_DoubleTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_DoubleTensor",
         &DoNeighborAllreduce);
 #if HAVE_CUDA
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_cuda_IntTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_IntTensor",
         &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_cuda_LongTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_LongTensor",
         &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_cuda_FloatTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_FloatTensor",
         &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_async_torch_cuda_DoubleTensor",
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_DoubleTensor",
         &DoNeighborAllreduce);
 #endif
 

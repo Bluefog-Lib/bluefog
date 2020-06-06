@@ -27,7 +27,7 @@ def broadcast_parameters(params, root_rank):
     # Run asynchronous broadcasts.
     handles = []
     for name, p in params:
-        handle = bf.broadcast_async_(p, root_rank, name)
+        handle = bf.broadcast_nonblocking_(p, root_rank, name)
         handles.append(handle)
 
     # Wait for completion.
