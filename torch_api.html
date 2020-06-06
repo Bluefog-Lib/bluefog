@@ -457,9 +457,9 @@ processes.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.allreduce_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allreduce_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">average</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.allreduce_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that performs asynchronous averaging or summation of the input tensor
+<dt id="bluefog.torch.allreduce_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allreduce_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">average</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs nonblocking averaging or summation of the input tensor
 over all the Bluefog processes. The input tensor is not modified.</p>
 <p>The reduction operation is keyed by the name. If name is not provided, an incremented
 auto-generated name is used. The tensor type and shape must be the same on all
@@ -505,9 +505,9 @@ dimensions of the tensors in different Bluefog processes.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.allgather_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allgather_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.allgather_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that asynchronously concatenates the input tensor with the same input
+<dt id="bluefog.torch.allgather_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allgather_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.allgather_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly concatenates the input tensor with the same input
 tensor on all other Bluefog processes. The input tensor is not modified.</p>
 <p>The concatenation is done on the first dimension, so the input tensors on the
 different processes must have the same rank and shape.</p>
@@ -553,9 +553,9 @@ from root rank.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.broadcast_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">root_rank</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.broadcast_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that asynchronously broadcasts the input tensor on root rank to the same
+<dt id="bluefog.torch.broadcast_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">root_rank</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.broadcast_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly broadcasts the input tensor on root rank to the same
 input tensor on all other Bluefog processes. The input tensor is not modified.</p>
 <p>The broadcast operation is keyed by the name. If name is not provided, an incremented
 auto-generated name is used. The tensor type and shape must be the same on all
@@ -601,9 +601,9 @@ from root rank.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.broadcast_async_">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_async_</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span></em>, <em class="sig-param"><span class="n">root_rank</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.broadcast_async_" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that asynchronously broadcasts the input tensor on root rank to the same
+<dt id="bluefog.torch.broadcast_nonblocking_">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">broadcast_nonblocking_</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span></em>, <em class="sig-param"><span class="n">root_rank</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.broadcast_nonblocking_" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly broadcasts the input tensor on root rank to the same
 input tensor on all other Bluefog processes. The operation is performed in-place.</p>
 <p>The broadcast operation is keyed by the name. If name is not provided, an incremented
 auto-generated name is used. The tensor type and shape must be the same on all
@@ -648,9 +648,9 @@ dimensions of the tensors in neighbor Bluefog processes.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.neighbor_allgather_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allgather_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allgather_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that asynchronously concatenates the input tensor with the same input
+<dt id="bluefog.torch.neighbor_allgather_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allgather_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allgather_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly concatenates the input tensor with the same input
 tensor on all neighbor Bluefog processes (Not include self).
 The input tensor is not modified.</p>
 <p>The concatenation is done on the first dimension, so the input tensors on the
@@ -701,9 +701,9 @@ The data structure of weights should be {rank : weight} and rank has to belong t
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.neighbor_allreduce_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allreduce_async" title="Permalink to this definition">¶</a></dt>
-<dd><p>A function that asynchronously performs weighted averaging of the input tensor over the
+<dt id="bluefog.torch.neighbor_allreduce_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly performs weighted averaging of the input tensor over the
 negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.</p>
 <p>The input tensor is not modified.</p>
 <p>The reduction operation is keyed by the name. If name is not provided, an incremented
@@ -736,12 +736,14 @@ The data structure of weights should be {rank : weight} and rank has to belong t
 <dt id="bluefog.torch.poll">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">poll</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">handle</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.poll" title="Permalink to this definition">¶</a></dt>
 <dd><p>Polls an allreduce, allgather or broadcast handle to determine whether underlying
-asynchronous operation has completed. After <cite>poll()</cite> returns <cite>True</cite>, <cite>synchronize()</cite>
+nonblocking operation has completed. After <cite>poll()</cite> returns <cite>True</cite>, <cite>synchronize()</cite>
 will return without blocking.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, allgather or broadcast asynchronous
-operation.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>handle</strong> – A handle returned by an allreduce, allgather, broadcast, neighbor_allgather,</p></li>
+<li><p><strong>neighbro_allreduce nonblocking operation.</strong> (<em>and</em>) – </p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A flag indicating whether the operation has completed.</p>
@@ -752,11 +754,11 @@ operation.</p>
 <dl class="py function">
 <dt id="bluefog.torch.synchronize">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">synchronize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">handle</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.synchronize" title="Permalink to this definition">¶</a></dt>
-<dd><p>Synchronizes an asynchronous allreduce, allgather or broadcast operation until
+<dd><p>Synchronizes an nonblocking allreduce, allgather or broadcast operation until
 it’s completed. Returns the result of the operation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, allgather or broadcast asynchronous
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, allgather or broadcast nonblocking
 operation.</p>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -887,8 +889,8 @@ It is equivalent to
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.win_put_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_put_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_put_async" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.torch.win_put_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_put_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_put_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively put the tensor into neighbor’s shared window memory.
 This is a non-blocking function, which will return without waiting the
 win_put operation is really finished.</p>
@@ -940,8 +942,8 @@ acquired.</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.win_get_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_get_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">src_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_get_async" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.torch.win_get_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_get_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">src_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_get_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively get the tensor(s) from neighbors’ shared window memory into
 local shared memory, which cannot be accessed in python directly.
 The win_update function is responsible for fetching that memeory.
@@ -998,8 +1000,8 @@ acquired.</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.win_accumulate_async">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_accumulate_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_accumulate_async" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.torch.win_accumulate_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_accumulate_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_accumulate_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively accmulate the tensor into neighbor’s shared window memory.
 Only SUM ops is supported now.
 This is a non-blocking function, which will return without waiting the
