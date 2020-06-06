@@ -411,7 +411,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 if p.requires_grad:
                     handle = bf.win_put_async(
                         tensor=p.data, name=parent_name+'.'+name,
-                        dst_weights=self.dst_weights, require_mutex=True)
+                        dst_weights=self.dst_weights, require_mutex=False)
                     self._handles[p] = handle
         return hook
 
