@@ -58,6 +58,10 @@ class WinTorchStorageManager {
   bool GetStorageByNameRank(const std::string& name, const int rank,
                             std::shared_ptr<TorchTensor>& tensor);
 
+  // Set the underlying self_tensor_map_ to the tensor.
+  bool SetSelfStorageByName(const std::string& name,
+                            const ::torch::Tensor& tensor);
+
   // Get the device associated with registered name.
   bool GetDeviceByName(const std::string& name, int* device);
 

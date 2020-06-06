@@ -158,6 +158,16 @@ bool WinTorchStorageManager::GetStorageByNameRank(
   return true;
 }
 
+bool WinTorchStorageManager::SetSelfStorageByName(
+    const std::string& name, const ::torch::Tensor& tensor) {
+  auto it = self_tensor_map_.find(name);
+  if (it == self_tensor_map_.end()) {
+    return false;
+  }
+  it->second->GetUnderlyingTensor().copy_(tensor);
+  return true;
+}
+
 bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
                                              ::torch::Tensor local_tensor) {
   auto it = tensors_map_.find(name);
@@ -325,6 +335,8 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     auto device = GetDeviceID(tensor);
     with_device device_guard(device);
     tensor.copy_(cpu_buffer);
+    // TODO(ybc) When pull_get is used in GPU, we need to copy twice here. Optimizer it.
+    // win_storage_manager.SetSelfStorageByName(name, tensor);
   }
   timeline_ptr->ActivityEnd(name);  // WIN_SYNC_COMPUTE_AVERAGE
 
