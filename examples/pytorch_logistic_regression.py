@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import os
 import torch
 import matplotlib.pyplot as plt
 import argparse
@@ -47,8 +48,13 @@ def finalize_plot():
 
 def logistic_loss_step(x_, rho, tensor_name):
     """Calculate gradient of logistic loss via pytorch autograd."""
-    with bf.timeline_context(tensor_name=tensor_name,
-                             activity_name="gradient computation"):
+    if os.getenv('BLUEFOG_TIMELINE'):
+        with bf.timeline_context(tensor_name=tensor_name,
+                                 activity_name="gradient computation"):
+            loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
+                0.5*rho*torch.norm(x_, p=2)
+            loss_.backward()
+    else:
         loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
             0.5*rho*torch.norm(x_, p=2)
         loss_.backward()
