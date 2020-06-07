@@ -215,6 +215,59 @@ def get_cuda_dirs(build_ext, cpp_flags):
     return cuda_include_dirs, cuda_lib_dirs
 
 
+def get_nccl_dirs(build_ext, cuda_include_dirs, cuda_lib_dirs, cpp_flags):
+    nccl_include_dirs = []
+    nccl_lib_dirs = []
+    nccl_libs = []
+
+    nccl_home = os.environ.get('BLUEFOG_NCCL_HOME')
+    if nccl_home:
+        nccl_include_dirs += ['%s/include' % nccl_home]
+        nccl_lib_dirs += ['%s/lib' % nccl_home, '%s/lib64' % nccl_home]
+
+    nccl_include = os.environ.get('BLUEFOG_NCCL_INCLUDE')
+    if nccl_include:
+        nccl_include_dirs += [nccl_include]
+
+    nccl_lib = os.environ.get('BLUEFOG_NCCL_LIB')
+    if nccl_lib:
+        nccl_lib_dirs += [nccl_lib]
+
+    nccl_link_mode = os.environ.get('BLUEFOG_NCCL_LINK', 'SHARED')
+    if nccl_link_mode.upper() == 'SHARED':
+        nccl_libs += ['nccl']
+    else:
+        nccl_libs += ['nccl_static']
+
+    try:
+        test_compile(build_ext, 'test_nccl',
+                     libraries=nccl_libs,
+                     include_dirs=nccl_include_dirs + cuda_include_dirs,
+                     library_dirs=nccl_lib_dirs + cuda_lib_dirs,
+                     extra_compile_preargs=cpp_flags,
+                     code=textwrap.dedent('''\
+            #include <nccl.h>
+            #if NCCL_MAJOR < 2
+            #error BLUEFOG requires NCCL 2.4 or later version, please upgrade.
+            #endif
+            void test() {
+                ncclUniqueId nccl_id;
+                ncclGetUniqueId(&nccl_id);
+            }
+            '''))
+    except (CompileError, LinkError):
+        raise DistutilsPlatformError(
+            'NCCL 2.4 library or its later version was not found (see error above).\n'
+            'Please specify correct NCCL location with the BLUEFOG_NCCL_HOME '
+            'environment variable or combination of BLUEFOG_NCCL_INCLUDE and '
+            'BLUEFOG_NCCL_LIB environment variables.\n\n'
+            'BLUEFOG_NCCL_HOME - path where NCCL include and lib directories can be found\n'
+            'BLUEFOG_NCCL_INCLUDE - path to NCCL include directory\n'
+            'BLUEFOG_NCCL_LIB - path to NCCL lib directory')
+
+    return nccl_include_dirs, nccl_lib_dirs, nccl_libs
+
+
 def get_common_options(build_ext):
     cpp_flags = get_cpp_flags(build_ext)
     link_flags = get_link_flags(build_ext)
@@ -367,10 +420,22 @@ def build_torch_extension(build_ext, global_options):
         options['LIBRARY_DIRS'] += cuda_lib_dirs
         options['LIBRARIES'] += ['cudart']
         print('INFO: Try PyTorch extension with CUDA.')
-
     # Update HAVE_CUDA to mean that PyTorch supports CUDA.
     updated_macros = set_macro(
         options['MACROS'], 'HAVE_CUDA', str(int(have_cuda)))
+
+    have_nccl = os.getenv('BLUEFOG_WITH_NCCL')
+    if have_cuda and have_nccl:
+        nccl_include_dirs, nccl_lib_dirs, nccl_lib = get_nccl_dirs(
+            build_ext, cuda_include_dirs, cuda_lib_dirs,
+            options['COMPILE_FLAGS'])
+        options['INCLUDES'] += nccl_include_dirs
+        options['LIBRARY_DIRS'] += nccl_lib_dirs
+        options['LIBRARIES'] += nccl_lib
+        print('INFO: Try PyTorch extension with NCCL.')
+
+    updated_macros = set_macro(
+        options['MACROS'], 'HAVE_NCCL', str(int(have_nccl)))
 
     # Always set _GLIBCXX_USE_CXX11_ABI, since PyTorch can only detect whether it was set to 1.
     import torch
