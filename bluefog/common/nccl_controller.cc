@@ -93,5 +93,30 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
+void NCCLController::Broadcast(TensorTableEntry& entry) {
+  const int root_rank = entry.root_rank;
+  // On root rank, MPI_Bcast sends data, on other ranks it receives data.
+  const void* sendbuff;
+  void* recvbuff;
+  if (rank_ == root_rank) {
+    sendbuff = entry.tensor->data();
+    recvbuff = nullptr;
+  } else {
+    sendbuff = nullptr;
+    recvbuff = (void*)entry.output->data();
+  }
+  int num_elements = entry.tensor->shape().num_elements();
+
+  int ret_code = ncclBroadcast(sendbuf, buffer_data, num_elements, root_rank,
+                               GetNCCLDataType(entry.tensor),
+                               nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+  if (ret_code != ncclSuccess) {
+    throw std::runtime_error("ncclBroadcast failed, see MPI output for details.");
+  }
+  // completing NCCL operation by synchronizing on the CUDA stream
+  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+  entry.callback(Status::OK());
+}
+
 }  // namespace common
 }  // namespace bluefog

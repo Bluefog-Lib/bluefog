@@ -80,6 +80,7 @@ class NCCLController {
   void Initialize(const int rank, const int size, const int local_rank);
 
   void Allreduce(TensorTableEntry& entries);
+  void Broadcast(TensorTableEntry& entries);
 
  protected:
   // Outside dependencies
