@@ -424,7 +424,8 @@ def build_torch_extension(build_ext, global_options):
     updated_macros = set_macro(
         options['MACROS'], 'HAVE_CUDA', str(int(have_cuda)))
 
-    have_nccl = os.getenv('BLUEFOG_WITH_NCCL')
+    have_nccl = os.getenv('BLUEFOG_WITH_NCCL', '0')
+    assert have_nccl in ['0', '1'], "BLUEFOG_WITH_NCCL has to be either 0 or 1"
     if have_cuda and have_nccl:
         nccl_include_dirs, nccl_lib_dirs, nccl_lib = get_nccl_dirs(
             build_ext, cuda_include_dirs, cuda_lib_dirs,
@@ -435,7 +436,7 @@ def build_torch_extension(build_ext, global_options):
         print('INFO: Try PyTorch extension with NCCL.')
 
     updated_macros = set_macro(
-        options['MACROS'], 'HAVE_NCCL', str(int(have_nccl)))
+        updated_macros, 'HAVE_NCCL', str(int(have_nccl)))
 
     # Always set _GLIBCXX_USE_CXX11_ABI, since PyTorch can only detect whether it was set to 1.
     import torch
