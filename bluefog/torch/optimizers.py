@@ -159,7 +159,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         name = self._parameter_names.get(p)
         if self._use_timeline:
             bf.timeline_end_activity("allreduce." + name)
-        handle = bf.allreduce_async(
+        handle = bf.allreduce_nonblocking(
             p.grad, average=True, name=name
         )
         return handle
@@ -242,7 +242,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
     """ A distributed optimizer wrapper over torch optimizer.
 
     Note: Unlike the _DistributedOptimizer class that registers hook for each named parameters,
-    triggers the allreduce_async after gradient computation is finished, and updates the
+    triggers the allreduce_nonblocking after gradient computation is finished, and updates the
     parameters at last step function. We will trigger the win_put ops that puts the weights
     to its neighbor and compute average of iterates instead of gradient, i.e. combine-then-adapt
     (CTA) strategy. In theory, adapt-then-combine has superior performance, but it is much more
@@ -297,8 +297,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         if self._use_timeline:
             # End forward computation timeline
             bf.timeline_end_activity("neighbor.allreduce." + name)
-        handle = bf.neighbor_allreduce_async(p.data, name=name, self_weight=self.self_weight,
-                                             neighbor_weights=self.neighbor_weights)
+        handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
+                                                   neighbor_weights=self.neighbor_weights)
         return handle
 
     def turn_on_timeline(self):
@@ -371,14 +371,18 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
 class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
-    def __init__(self, params, model):
+    def __init__(self, params, model, pull_style):
         super(self.__class__, self).__init__(params)
 
-        self.dst_weights = None # use to control the behavior of win_put dynamically.
+        if pull_style:
+            self.src_weights = None # use to control the behavior of win_get dynamically.
+        else:
+            self.dst_weights = None # use to control the behavior of win_put dynamically.
         self.force_barrier = False
 
         named_parameters, models = _check_named_parameters(self, model)
         self._models = models
+        self._pull_style = pull_style
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}  # store parameter -> handle
         self._synchronized = False
@@ -392,18 +396,35 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
     def _register_hooks(self):
         for model in self._models:
             for parent_name, layer in _named_leaf_module(model):
-                layer.register_forward_hook(self._make_hook(parent_name))
+                if self._pull_style:
+                    hook = self._make_get_hook(parent_name)
+                else:
+                    hook = self._make_put_hook(parent_name)
+                layer.register_forward_hook(hook)
 
-    def _make_hook(self, parent_name):
+    def _make_put_hook(self, parent_name):
         def hook(module, *unused):
             for name, p in module.named_parameters():
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    handle = bf.win_put_async(
+                    handle = bf.win_put_nonblocking(
                         tensor=p.data, name=parent_name+'.'+name,
-                        dst_weights=self.dst_weights)
+                        dst_weights=self.dst_weights, require_mutex=False)
+                    self._handles[p] = handle
+        return hook
+
+    def _make_get_hook(self, parent_name):
+        def hook(module, *unused):
+            for name, p in module.named_parameters():
+                if self._use_timeline:
+                    # End forward computation timeline
+                    bf.timeline_end_activity(parent_name+'.'+name)
+                if p.requires_grad:
+                    handle = bf.win_get_nonblocking(
+                        name=parent_name+'.'+name, src_weights=self.src_weights,
+                        require_mutex=True)
                     self._handles[p] = handle
         return hook
 
@@ -457,7 +478,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 _ = bf.win_wait(handle)
                 name = self._parameter_names.get(p)
                 # Update p to the average of neighbors.
-                p.set_(bf.win_update(name=name))
+                p.set_(bf.win_update(name=name, require_mutex=True))
 
         self._handles.clear()
         self._synchronized = True
@@ -542,7 +563,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                     ps_weights = self._named_ps_weights[full_name]
                     extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
                     self._named_extension_parameters[name] = extended_parameter
-                    handle = bf.win_accumulate_async(
+                    handle = bf.win_accumulate_nonblocking(
                         tensor=extended_parameter, name=full_name,
                         dst_weights=self.dst_weights,
                         require_mutex=True)
@@ -640,6 +661,27 @@ def DistributedPushSumOptimizer(optimizer, model):
     )
     return cls(optimizer.param_groups, model)
 
+def DistributedPullGetOptimizer(optimizer, model):
+    """
+    An distributed optimizer that wraps another torch.optim.Optimizer with
+    pull model average through bf.win_get ops.
+
+    Arguments:
+        optimizer: Optimizer to use for computing gradients and applying updates.
+        model: The model or a list of models you want to train with.
+
+    Returned optimizer has two extra parameters `src_weights` and `force_barrier`.
+    Set src_weights dictionary as {rank: scaling} differently per iteration to achieve
+    win_get over dynamic graph behavior. If force_barrier is True, a barrier function
+    will put at `step()` to synchronous processes.
+    """
+    cls = type(
+        optimizer.__class__.__name__,
+        (optimizer.__class__,),
+        dict(_DistributedBluefogOptimizer.__dict__),
+    )
+    return cls(optimizer.param_groups, model, pull_style=True)
+
 
 def DistributedBluefogOptimizer(optimizer, model):
     """An distributed optimizer that wraps another torch.optim.Optimizer with
@@ -668,7 +710,7 @@ def DistributedBluefogOptimizer(optimizer, model):
         (optimizer.__class__,),
         dict(_DistributedBluefogOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model)
+    return cls(optimizer.param_groups, model, pull_style=False)
 
 
 def DistributedNeighborAllreduceOptimizer(optimizer, model):

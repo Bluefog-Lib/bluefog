@@ -82,16 +82,15 @@ class MPIController {
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
 
-  // Our mutex definition is different from the parallel computation concept.
+  // Our distributed mutex definition is different from the parallel computation concept.
   // For a world size is N application, N mutex is created.
   // Each process associates with one mutex.
+  // Note we create an independent local copy for neighbor process, so there is no conflict
+  // between the writing process from the neighbors (like win_put and win_accumulate). However,
+  // Win_sync (i.e update setup) will read it, which conflicted with other writting process.
   // When WinMutexAcquire is called, we typically lock for all out-neighbors.
-  // For example: if 1 want to win_put value to neighbor 0, and 2 want to
-  // win_accumulate another value to neighbor 0 simultaneously, then only one rank 
-  // can acquire the mutex to 0, i.e. two ops will be serialized.
-  // It is most common used in win_sync (for self) and win_accumulate (for out-neighbor).
-  Status WinMutexAcquire(const std::vector<int>& acquire_ranks);
-  Status WinMutexRelease(const std::vector<int>& release_ranks);
+  Status WinMutexAcquire(const std::vector<int>& acquire_ranks, bool is_sync);
+  Status WinMutexRelease(const std::vector<int>& release_ranks, bool is_sync);
 
  protected:
   // Outside dependencies
@@ -133,7 +132,8 @@ class MPIController {
 class WinMutexGuard {
  public:
   explicit WinMutexGuard(MPIController* mpi_controller,
-                         const std::vector<int>& acquire_ranks);
+                         const std::vector<int>& acquire_ranks,
+                         bool is_sync);
   virtual ~WinMutexGuard();
   WinMutexGuard(const WinMutexGuard&) = delete;
   WinMutexGuard& operator=(const WinMutexGuard&) = delete;
@@ -141,6 +141,7 @@ class WinMutexGuard {
  private:
   MPIController* const mpi_controller_;
   std::vector<int> acquire_ranks_;
+  bool is_sync_;
 };
 
 }  // namespace common

@@ -30,7 +30,7 @@ namespace bluefog {
 namespace torch {
 
 #define ALLREDUCE_H(torch_Tensor, THTensor)                                    \
-  extern "C" int bluefog_torch_allreduce_async_##torch_Tensor(                 \
+  extern "C" int bluefog_torch_allreduce_nonblocking_##torch_Tensor(           \
       THTensor* tensor, THTensor* output, int average, char* name);
 
 ALLREDUCE_H(torch_IntTensor, THIntTensor)
@@ -45,8 +45,8 @@ ALLREDUCE_H(torch_cuda_FloatTensor, THCudaTensor)
 ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
-#define BROADCAST_H(torch_Tensor, THTensor)                                    \
-  extern "C" int bluefog_torch_broadcast_async_##torch_Tensor(                 \
+#define BROADCAST_H(torch_Tensor, THTensor)                                     \
+  extern "C" int bluefog_torch_broadcast_nonblocking_##torch_Tensor(            \
       THTensor* tensor, THTensor* output, int root_rank, char* name);
 
 BROADCAST_H(torch_ByteTensor, THByteTensor)
@@ -65,7 +65,7 @@ BROADCAST_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
 #define ALLGATHER_H(torch_Tensor, THTensor)                                    \
-  extern "C" int bluefog_torch_allgather_async_##torch_Tensor(                 \
+  extern "C" int bluefog_torch_allgather_nonblocking_##torch_Tensor(           \
       THTensor* tensor, THTensor* output, char* name);
 
 ALLGATHER_H(torch_ByteTensor, THByteTensor)
@@ -83,8 +83,8 @@ ALLGATHER_H(torch_cuda_FloatTensor, THCudaTensor)
 ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
-#define NEIGHBOR_ALLGATHER_H(torch_Tensor, THTensor)                           \
-  extern "C" int bluefog_torch_neighbor_allgather_async_##torch_Tensor(        \
+#define NEIGHBOR_ALLGATHER_H(torch_Tensor, THTensor)                              \
+  extern "C" int bluefog_torch_neighbor_allgather_nonblocking_##torch_Tensor(     \
       THTensor* tensor, THTensor* output, char* name);
 
 NEIGHBOR_ALLGATHER_H(torch_ByteTensor, THByteTensor)
@@ -102,10 +102,10 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_FloatTensor, THCudaTensor)
 NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
-#define NEIGHBOR_ALLREDUCE_H(torch_Tensor, THTensor)                           \
-  extern "C" int bluefog_torch_neighbor_allreduce_async_##torch_Tensor(        \
-      THTensor* tensor, THTensor* output, double self_weight,                  \
-      const std::unordered_map<int, double>& neighbor_weights,                 \
+#define NEIGHBOR_ALLREDUCE_H(torch_Tensor, THTensor)                             \
+  extern "C" int bluefog_torch_neighbor_allreduce_nonblocking_##torch_Tensor(    \
+      THTensor* tensor, THTensor* output, double self_weight,                    \
+      const std::unordered_map<int, double>& neighbor_weights,                   \
       bool avg_computation, char* name);
 
 NEIGHBOR_ALLREDUCE_H(torch_FloatTensor, THFloatTensor)

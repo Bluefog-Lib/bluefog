@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import os
 import torch
 import matplotlib.pyplot as plt
 import argparse
@@ -37,16 +38,23 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+
 def finalize_plot():
     plt.savefig(args.save_plot_file)
     if args.plot_interactive:
         plt.show()
     plt.close()
 
+
 def logistic_loss_step(x_, rho, tensor_name):
     """Calculate gradient of logistic loss via pytorch autograd."""
-    with bf.timeline_context(tensor_name=tensor_name,
-                             activity_name="gradient computation"):
+    if os.getenv('BLUEFOG_TIMELINE'):
+        with bf.timeline_context(tensor_name=tensor_name,
+                                 activity_name="gradient computation"):
+            loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
+                0.5*rho*torch.norm(x_, p=2)
+            loss_.backward()
+    else:
         loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
             0.5*rho*torch.norm(x_, p=2)
         loss_.backward()
@@ -57,13 +65,16 @@ def logistic_loss_step(x_, rho, tensor_name):
 # # x^{k+1} = x^k - alpha * allreduce(local_grad)
 # # it will be used to verify the solution of various decentralized algorithms.
 # # ================================================================================
-def distributed_grad_descent(rho, maxite = 5000, alpha = 1e-1):
+
+
+def distributed_grad_descent(rho, maxite=5000, alpha=1e-1):
     w_opt = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    
+
     for i in range(maxite):
         # calculate gradient via pytorch autograd
         logistic_loss_step(w_opt, rho, tensor_name='allreduce.gradient')
-        grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
+        # global gradient
+        grad = bf.allreduce(w_opt.grad.data, name='gradient')
 
         # distributed gradient descent
         w_opt.data = w_opt.data - alpha*grad
@@ -81,7 +92,8 @@ def distributed_grad_descent(rho, maxite = 5000, alpha = 1e-1):
     # the norm of local gradient is expected not be be close to 0
     # this is because each rank converges to global solution, not local solution
     local_grad_norm = torch.norm(w_opt.grad.data, p=2)
-    print("[DG] Rank {}: local gradient norm: {}".format(bf.rank(), local_grad_norm))
+    print("[DG] Rank {}: local gradient norm: {}".format(
+        bf.rank(), local_grad_norm))
 
     return w_opt
 
@@ -123,12 +135,14 @@ def exact_diffusion(w_opt, rho, maxite=2000, alpha_ed=1e-1, use_Abar=False):
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
-        logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.local_variable')
+        logistic_loss_step(
+            w, rho, tensor_name='neighbor.allreduce.local_variable')
 
         # exact diffusion
         psi = w - alpha_ed * w.grad.data
         phi = psi + w.data - psi_prev
-        w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
+        w.data = bf.neighbor_allreduce(
+            phi, self_weight, neighbor_weights, name='local variable')
         psi_prev = psi.clone()
         w.grad.data.zero_()
 
@@ -168,7 +182,8 @@ def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
             print(k, neighbor_weights[k])
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
+    logistic_loss_step(
+        w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
     q = w.grad.data  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
@@ -181,15 +196,12 @@ def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
         # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
 
         # Notice the communication of neighbor_allreduce can overlap with gradient computation.
-        w_handle = bf.neighbor_allreduce_async(w.data, name='Grad.Tracking.w')
-        q_handle = bf.neighbor_allreduce_async(q, name='Grad.Tracking.q')
-
-        # w_handle = bf.neighbor_allreduce_async(w.data, self_weight, neighbor_weights, name='Grad.Tracking.w')
-        # q_handle = bf.neighbor_allreduce_async(q, self_weight, neighbor_weights, name='Grad.Tracking.q')
-
+        w_handle = bf.neighbor_allreduce_nonblocking(w.data, name='Grad.Tracking.w')
+        q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha_gt * q
         # calculate local gradient
-        logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
+        logistic_loss_step(
+            w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
         grad = w.grad.data.clone()
         q = bf.synchronize(q_handle) + grad - grad_prev
         grad_prev = grad
@@ -258,6 +270,7 @@ def push_diging(w_opt, rho, maxite=2000, alpha_pd = 1e-1):
 
     return x, mse_pd
 
+
 # ======================= Code starts here =======================
 bf.init()
 # bf.set_topology(topology_util.RingGraph(bf.size()))
@@ -313,5 +326,5 @@ try:
 
 except NameError:
     if bf.rank() == 0:
-        print('Algorithm not support. This example only supports' \
-               + ' exact_diffusion, gradient_tracking, and push_diging')
+        print('Algorithm not support. This example only supports'
+              + ' exact_diffusion, gradient_tracking, and push_diging')

@@ -53,7 +53,7 @@ parser.add_argument('--partition', type=int, default=None,
                     help='partition size')
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
                     help='The type of distributed optimizer. Supporting options are '+
-                    '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
+                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
 parser.add_argument('--enable-dynamic-topology', action='store_true',
                     default=False, help=('Enable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
@@ -70,8 +70,7 @@ bf.init()
 
 if args.cuda:
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
-
-cudnn.benchmark = True
+    cudnn.benchmark = True
 
 # Set up standard model.
 if args.model == "lenet":
@@ -118,6 +117,8 @@ elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
+elif args.dist_optimizer == 'pull_get':
+    optimizer = bf.DistributedPullGetOptimizer(optimizer, model=model)
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
@@ -146,9 +147,16 @@ data_index = 0
 
 
 def dynamic_topology_update(batch_idx):
-    num_out_neighbors = len(bf.out_neighbor_ranks())
-    sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
-    optimizer.dst_weights = {sent_neighbor: 1.0}
+    if args.dist_optimizer == 'win_put':
+        num_out_neighbors = len(bf.out_neighbor_ranks())
+        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+        optimizer.dst_weights = {sent_neighbor: 1.0}
+    elif args.dist_optimizer == 'pull_get':
+        num_in_neighbors = len(bf.in_neighbor_ranks())
+        recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
+        optimizer.src_weights = {recv_neighbor: 1.0}
+    else:
+        pass
 
 
 def benchmark_step():

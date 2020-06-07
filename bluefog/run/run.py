@@ -123,6 +123,8 @@ def parse_args():
                              help='Path to a host file containing the list of host names and '
                                   'the number of available slots. Each line of the file must be '
                                   'of the form: <hostname> slots=<slots>')
+    parser.add_argument('--use-infiniband', action="store_true", dest="use_infiniband",
+                        help='If set, use inifiniband to communication instead of TCP.')
 
     parser.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
                         help='Extra mpi flages you want to pass for mpirun.')
@@ -223,6 +225,11 @@ def main():
     else:
         ssh_port_arg = ""
 
+    if args.use_infiniband:
+        ib_arg = "-mca btl openib,self"
+    else:
+        ib_arg = "-mca btl ^openib"
+
     if not _is_open_mpi_installed():
         raise Exception(
             'bfrun convenience script currently only supports Open MPI.\n\n'
@@ -240,11 +247,12 @@ def main():
         'mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
-        '-mca pml ob1 '
+        '-mca pml ob1 {ib_arg}'
         '{ssh_port_arg} {tcp_intf_arg} '
         '{extra_flags} {env} {command}'
         .format(num_proc=args.np,
                 hosts_arg=hosts_arg,
+                ib_arg=ib_arg,
                 ssh_port_arg=ssh_port_arg,
                 tcp_intf_arg=tcp_intf_arg,
                 extra_flags=extra_flags,

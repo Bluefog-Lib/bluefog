@@ -71,7 +71,7 @@ parser.add_argument(
 )
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
                     help='The type of distributed optimizer. Supporting options are '+
-                    '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
+                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
 parser.add_argument("--average-test-result", action="store_true",
                     default=False,
                     help=("Allreduce called to average test result. Warning this will " +
@@ -195,6 +195,8 @@ elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
+elif args.dist_optimizer == 'pull_get':
+    optimizer = bf.DistributedPullGetOptimizer(optimizer, model=model)
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
@@ -202,11 +204,20 @@ else:
 
 
 def dynamic_topology_update(epoch, batch_idx):
-    if epoch < 3:
-        return
-    num_out_neighbors = len(bf.out_neighbor_ranks())
-    sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
-    optimizer.dst_weights = {sent_neighbor: 1.0}
+    if args.dist_optimizer == 'win_put':
+        if epoch < 3:
+            return
+        num_out_neighbors = len(bf.out_neighbor_ranks())
+        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+        optimizer.dst_weights = {sent_neighbor: 1.0}
+    elif args.dist_optimizer == 'pull_get':
+        if epoch < 3:
+            return
+        num_in_neighbors = len(bf.in_neighbor_ranks())
+        recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
+        optimizer.src_weights = {recv_neighbor: 1.0}
+    else:
+        pass
 
 
 def train(epoch):
@@ -274,7 +285,7 @@ def test(record):
         print(
             "\nTest set: Average loss: {:.4f}, Accuracy: {:.2f}%\n".format(
                 test_loss, 100.0 * test_accuracy
-            )
+            ), flush=True
         )
     record.append((test_loss, 100.0 * test_accuracy))
 
