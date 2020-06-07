@@ -104,12 +104,12 @@ def distributed_grad_descent(rho, maxite = 5000, alpha = 1e-1):
 # ================================================================================
 def exact_diffusion(w_opt, rho, maxite=2000, alpha_ed=1e-1, use_Abar=False):
     
+    topology = bf.load_topology()
+    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     phi, psi, psi_prev = w.clone(), w.clone(), w.clone()
     mse = []
-
-    topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
     
     # construct A_bar
     if use_Abar:
@@ -117,9 +117,9 @@ def exact_diffusion(w_opt, rho, maxite=2000, alpha_ed=1e-1, use_Abar=False):
         for k, v in neighbor_weights.items():
             neighbor_weights[k] = v/2
 
-    # if bf.rank() == 0:
-    #     for k, v in neighbor_weights.items():
-    #         print(neighbor_weights[k])
+    if bf.rank() == 0:
+        for k, v in neighbor_weights.items():
+            print(k, neighbor_weights[k])
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
@@ -159,6 +159,14 @@ def exact_diffusion(w_opt, rho, maxite=2000, alpha_ed=1e-1, use_Abar=False):
 # 2016
 # ================================================================================
 def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
+
+    topology = bf.load_topology()
+    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+
+    if bf.rank() == 0:
+        for k, v in neighbor_weights.items():
+            print(k, neighbor_weights[k])
+
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
     q = w.grad.data  # q^0 = grad(w^0)
@@ -175,6 +183,10 @@ def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
         # Notice the communication of neighbor_allreduce can overlap with gradient computation.
         w_handle = bf.neighbor_allreduce_async(w.data, name='Grad.Tracking.w')
         q_handle = bf.neighbor_allreduce_async(q, name='Grad.Tracking.q')
+
+        # w_handle = bf.neighbor_allreduce_async(w.data, self_weight, neighbor_weights, name='Grad.Tracking.w')
+        # q_handle = bf.neighbor_allreduce_async(q, self_weight, neighbor_weights, name='Grad.Tracking.q')
+
         w.data = bf.synchronize(w_handle) - alpha_gt * q
         # calculate local gradient
         logistic_loss_step(w, rho, tensor_name='neighbor.allreduce.Grad.Tracking.w')
@@ -199,7 +211,7 @@ def gradient_tracking(w_opt, rho, maxite=2000, alpha_gt=1e-1):
 # ============================================================================
 def push_diging(w_opt, rho, maxite=2000, alpha_pd = 1e-1):
 
-    bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+    topology = bf.load_topology()
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())
 
@@ -248,6 +260,7 @@ def push_diging(w_opt, rho, maxite=2000, alpha_pd = 1e-1):
 
 # ======================= Code starts here =======================
 bf.init()
+# bf.set_topology(topology_util.RingGraph(bf.size()))
 
 # The logistic regression problem is
 # min_w (1/n)*\sum_i ln(1 + exp(-y_i*X_i'*w)) + 0.5*rho*|w|^2
