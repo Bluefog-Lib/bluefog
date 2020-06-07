@@ -20,6 +20,7 @@
 #include <nccl.h>
 #include "mpi.h"
 
+#include "common.h"
 #include "logging.h"
 #include "tensor_queue.h"
 
@@ -63,7 +64,7 @@ struct NCCLContext {
 
   // TODO(ybc) Create e intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
-  cudaStream_t s;
+  cudaStream_t stream;
 
   int cuda_device = -1;
   bool is_initialized = false;
@@ -77,6 +78,8 @@ class NCCLController {
   }
 
   void Initialize(const int rank, const int size, const int local_rank);
+
+  void Allreduce(TensorTableEntry& entries);
 
  protected:
   // Outside dependencies

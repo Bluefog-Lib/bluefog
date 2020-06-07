@@ -109,15 +109,35 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 #endif
 }
 
+int DetermineController(const TensorTableEntry& entry) {
+  if (entry.mpi_ops_type != MPIOpsType::ALLREDUCE) return 0;
+  bool have_nccl = false;
+#if HAVE_NCCL
+  have_nccl = true;
+#endif
+  return (have_nccl && entry.device != CPU_DEVICE_ID) ? 1 : 0;
+}
+
 bool RunLoopOnce(BluefogGlobalState& state) {
   try {
     auto entry = state.tensor_queue.PopMessagesFromQueue();
+    int controller_choice = DetermineController(entry);
+    const std::string communicator_name =
+        (controller_choice == 0) ? "MPI" : "NCCL";
     switch (entry.mpi_ops_type) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name;
+            << "Processing " << entry.tensor_name << "with "
+            << communicator_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
-        state.controller->Allreduce(entry);
+        if (controller_choice == 0) {
+          state.controller->Allreduce(entry);
+        }
+#if HAVE_NCCL
+        if (controller_choice == 1) {
+          state.nccl_controller->Allreduce(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BROADCAST:

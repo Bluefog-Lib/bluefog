@@ -56,7 +56,7 @@ void NCCLContext::Initialize(const int rank, const int size,
 
   // Assume one device per process
   CUDACHECK(cudaSetDevice(local_rank));
-  CUDACHECK(cudaStreamCreate(&s));
+  CUDACHECK(cudaStreamCreate(&stream));
 
   ncclCommInitRank(&nccl_comm, size, nccl_id, rank);
 
@@ -74,6 +74,23 @@ void NCCLContext::Finalize() {
 void NCCLController::Initialize(const int rank, const int size,
                                 const int local_rank) {
   nccl_ctx_.Initialize(rank, size, local_rank);
+}
+
+void NCCLController::Allreduce(TensorTableEntry& entry) {
+  const void* sendbuf = entry.tensor->data();
+  void* buffer_data = (void*)entry.output->data();
+  int num_elements = entry.tensor->shape().num_elements();
+
+  int ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
+                               GetNCCLDataType(entry.tensor), ncclSum,
+                               nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+  if (ret_code != ncclSuccess) {
+    throw std::runtime_error(
+        "ncclAllReduce failed, see NCCL output for details.");
+  }
+  // completing NCCL operation by synchronizing on the CUDA stream
+  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+  entry.callback(Status::OK());
 }
 
 }  // namespace common
