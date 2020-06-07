@@ -424,6 +424,7 @@ def build_torch_extension(build_ext, global_options):
     updated_macros = set_macro(
         options['MACROS'], 'HAVE_CUDA', str(int(have_cuda)))
 
+    # TODO(ybc) make this into common options?
     have_nccl = os.getenv('BLUEFOG_WITH_NCCL', '0')
     assert have_nccl in ['0', '1'], "BLUEFOG_WITH_NCCL has to be either 0 or 1"
     if have_cuda and have_nccl:
@@ -433,6 +434,9 @@ def build_torch_extension(build_ext, global_options):
         options['INCLUDES'] += nccl_include_dirs
         options['LIBRARY_DIRS'] += nccl_lib_dirs
         options['LIBRARIES'] += nccl_lib
+        options['SOURCES'] += [
+            "bluefog/common/nccl_controller.cc"
+        ]
         print('INFO: Try PyTorch extension with NCCL.')
 
     updated_macros = set_macro(

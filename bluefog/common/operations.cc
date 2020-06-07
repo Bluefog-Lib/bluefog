@@ -31,6 +31,10 @@
 #include "global_state.h"
 #include "logging.h"
 
+#if HAVE_NCCL
+#include "nccl_controller.h"
+#endif
+
 // Bluefog knobs.
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
 
@@ -44,6 +48,10 @@ BluefogGlobalState bluefog_global;
 
 MPIContext mpi_context;
 
+#if HAVE_NCCL
+NCCLContext nccl_context;
+#endif
+
 }  // namespace
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -54,6 +62,13 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 
   // Initialize controller
   state.controller->Initialize();
+
+#if HAVE_NCCL
+  state.nccl_controller->Initialize(bluefog_global.controller->GetRank(),
+                                    bluefog_global.controller->GetSize(),
+                                    bluefog_global.controller->GetLocalRank());
+  BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
+#endif
 
   // Signal that initialization is completed.
   state.initialization_done = true;
@@ -88,6 +103,10 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
     cb(SHUT_DOWN_ERROR);
   }
   mpi_context.Finalize(mpi_ctx_manager);
+
+#if HAVE_NCCL
+  nccl_context.Finalize();
+#endif
 }
 
 bool RunLoopOnce(BluefogGlobalState& state) {
@@ -179,7 +198,11 @@ void InitializeBluefogOnce() {
   if (!bluefog_global.initialize_flag.test_and_set()) {
     bluefog_global.controller.reset(
         new MPIController(bluefog_global.tensor_queue, mpi_context));
-    bluefog_global.initialization_done = false;
+#if HAVE_NCCL
+    bluefog_global.nccl_controller
+        .reset(new NCCLController(bluefog_global.tensor_queue, nccl_context));
+#endif
+            bluefog_global.initialization_done = false;
     bluefog_global.background_thread =
         std::thread(BackgroundThreadLoop, std::ref(bluefog_global));
   }
