@@ -96,25 +96,22 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
 
 void NCCLController::Broadcast(TensorTableEntry& entry) {
   const int root_rank = entry.root_rank;
-  // On root rank, MPI_Bcast sends data, on other ranks it receives data.
-  const void* sendbuf;
-  void* recvbuf;
-  if (mpi_ctx_.rank_ == root_rank) {
-    sendbuf = entry.tensor->data();
-    recvbuf = nullptr;
-  } else {
-    sendbuf = nullptr;
-    recvbuf = (void*)entry.output->data();
-  }
+  // On root rank, ncclBcast sends data, on other ranks it receives data.
   int num_elements = entry.tensor->shape().num_elements();
+  void* data_ptr;
+  if (mpi_ctx_.rank_ == root_rank) {
+    data_ptr = (void*)entry.tensor->data();
+  } else {
+    data_ptr = (void*)entry.output->data();
+  }
 
   with_device device_guard(entry.device);
-  int ret_code = ncclBroadcast(sendbuf, recvbuf, num_elements,
-                               GetNCCLDataType(entry.tensor), root_rank,
-                               nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+  int ret_code =
+      ncclBcast(data_ptr, num_elements, GetNCCLDataType(entry.tensor),
+                root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
     throw std::runtime_error(
-        "ncclBroadcast failed, see MPI output for details.");
+        "ncclBroadcast failed, see NCCL output for details.");
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
