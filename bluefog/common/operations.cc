@@ -383,6 +383,14 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
   return 1;
 }
 
+int bluefog_nccl_built() {
+  int result = 0;
+#if HAVE_NCCL
+  result = 1;
+#endif
+  return result;
+}
+
 }  // extern "C"
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,

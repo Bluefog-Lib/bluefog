@@ -94,6 +94,9 @@ int bluefog_load_topology_weights(double& self_weight,
 int bluefog_timeline(const bool start_activity, const char* tensor_name,
                      const char* activity_name);
 
+// C interface to return flag indicating if BlueFog was compiled with NCCL support.
+int bluefog_nccl_built();
+
 }
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,

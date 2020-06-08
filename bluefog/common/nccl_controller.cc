@@ -58,7 +58,7 @@ void NCCLContext::Initialize(const int rank, const int size,
 
   // Assume one device per process
   CUDACHECK(cudaSetDevice(local_rank));
-  CUDACHECK(cudaStreamCreate(&nccl_ctx_.stream));
+  CUDACHECK(cudaStreamCreate(&stream));
   ncclCommInitRank(&nccl_comm, size, nccl_id, rank);
 
   is_initialized = true;

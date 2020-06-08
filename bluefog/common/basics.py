@@ -265,6 +265,14 @@ class BlueFogBasics(object):
         self._is_topo_weighted = is_weighted
         return True
 
+    def nccl_built(self) -> bool:
+        """Returns True if BlueFog was compiled with NCCL support.
+
+        Returns:
+          A boolean value indicating whether NCCL support was compiled.
+        """
+        return bool(self._MPI_LIB_CTYPES.bluefog_nccl_built())
+
     def timeline_start_activity(self, tensor_name: str, activity_name: str) -> bool:
         """A python interface to call the timeline for StartActivity.
         If you want to use this function, please make sure to turn on the timeline first by
