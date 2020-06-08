@@ -112,6 +112,9 @@ struct MPIContext {
   std::shared_ptr<WindowManager> GetWindowByName(const std::string& name);
   bool UnregisterWindowName(const std::string& name);
   bool UnregisterAllWindowName();
+
+  Status AllocateOutput(TensorTableEntry& entries, int*& recvcounts, Communicator comm_type);
+  void SetDisplacements(const int* recvcounts, int*& displcmnts, Communicator comm_type);
   
   // The design of WinMutex is flawed. For example, if we call set topology within
   // the mutex acquire time, I don't know what will happen.
@@ -147,6 +150,29 @@ struct MPIContext {
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;
+
+  int rank_ = 0;
+  int local_rank_ = 0;
+
+  int cross_rank_ = 0;
+  int size_ = 1;
+  int local_size_ = 1;
+  int cross_size_ = 1;
+
+  int neighbor_indgree_ = -1;
+  int neighbor_outdgree_ = -1;
+
+  std::vector<int> neighbor_in_ranks_;
+  std::vector<int> neighbor_out_ranks_;
+
+  // ranks of the bluefog world
+  std::vector<int> ranks_;
+
+  // COMM_WORLD ranks of processes running on this node.
+  std::vector<int> local_comm_ranks_;
+
+  double self_weight_;
+  std::unordered_map<int, double> neighbor_weights_;
 };
 
 }  // namespace common

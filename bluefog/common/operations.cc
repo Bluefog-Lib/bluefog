@@ -64,9 +64,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   state.controller->Initialize();
 
 #if HAVE_NCCL
-  state.nccl_controller->Initialize(bluefog_global.controller->GetRank(),
-                                    bluefog_global.controller->GetSize(),
-                                    bluefog_global.controller->GetLocalRank());
+  state.nccl_controller->Initialize();
   BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
 #endif
 
@@ -110,7 +108,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 }
 
 int DetermineController(const TensorTableEntry& entry) {
-  if (entry.mpi_ops_type != MPIOpsType::ALLREDUCE ||
+  if (entry.mpi_ops_type != MPIOpsType::ALLREDUCE &&
       entry.mpi_ops_type != MPIOpsType::BROADCAST)
     return 0;
   bool have_nccl = false;
@@ -229,10 +227,10 @@ void InitializeBluefogOnce() {
     bluefog_global.controller.reset(
         new MPIController(bluefog_global.tensor_queue, mpi_context));
 #if HAVE_NCCL
-    bluefog_global.nccl_controller
-        .reset(new NCCLController(bluefog_global.tensor_queue, nccl_context));
+    bluefog_global.nccl_controller.reset(new NCCLController(
+        bluefog_global.tensor_queue, nccl_context, mpi_context));
 #endif
-            bluefog_global.initialization_done = false;
+    bluefog_global.initialization_done = false;
     bluefog_global.background_thread =
         std::thread(BackgroundThreadLoop, std::ref(bluefog_global));
   }

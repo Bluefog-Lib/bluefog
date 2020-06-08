@@ -427,7 +427,7 @@ def build_torch_extension(build_ext, global_options):
     # TODO(ybc) make this into common options?
     have_nccl = os.getenv('BLUEFOG_WITH_NCCL', '0')
     assert have_nccl in ['0', '1'], "BLUEFOG_WITH_NCCL has to be either 0 or 1"
-    if have_cuda and have_nccl:
+    if have_cuda and have_nccl == '1':
         nccl_include_dirs, nccl_lib_dirs, nccl_lib = get_nccl_dirs(
             build_ext, cuda_include_dirs, cuda_lib_dirs,
             options['COMPILE_FLAGS'])

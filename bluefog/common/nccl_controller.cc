@@ -15,7 +15,9 @@
 // ==============================================================================
 
 #include "nccl_controller.h"
+
 #include "common.h"
+#include "cuda_util.h"
 
 namespace bluefog {
 namespace common {
@@ -56,8 +58,7 @@ void NCCLContext::Initialize(const int rank, const int size,
 
   // Assume one device per process
   CUDACHECK(cudaSetDevice(local_rank));
-  CUDACHECK(cudaStreamCreate(&stream));
-
+  CUDACHECK(cudaStreamCreate(&nccl_ctx_.stream));
   ncclCommInitRank(&nccl_comm, size, nccl_id, rank);
 
   is_initialized = true;
@@ -71,9 +72,8 @@ void NCCLContext::Finalize() {
   cuda_device = -1;
 }
 
-void NCCLController::Initialize(const int rank, const int size,
-                                const int local_rank) {
-  nccl_ctx_.Initialize(rank, size, local_rank);
+void NCCLController::Initialize() {
+  nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
 }
 
 void NCCLController::Allreduce(TensorTableEntry& entry) {
@@ -81,6 +81,7 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   void* buffer_data = (void*)entry.output->data();
   int num_elements = entry.tensor->shape().num_elements();
 
+  with_device device_guard(entry.device);
   int ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
                                GetNCCLDataType(entry.tensor), ncclSum,
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
@@ -96,22 +97,24 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
 void NCCLController::Broadcast(TensorTableEntry& entry) {
   const int root_rank = entry.root_rank;
   // On root rank, MPI_Bcast sends data, on other ranks it receives data.
-  const void* sendbuff;
-  void* recvbuff;
-  if (rank_ == root_rank) {
-    sendbuff = entry.tensor->data();
-    recvbuff = nullptr;
+  const void* sendbuf;
+  void* recvbuf;
+  if (mpi_ctx_.rank_ == root_rank) {
+    sendbuf = entry.tensor->data();
+    recvbuf = nullptr;
   } else {
-    sendbuff = nullptr;
-    recvbuff = (void*)entry.output->data();
+    sendbuf = nullptr;
+    recvbuf = (void*)entry.output->data();
   }
   int num_elements = entry.tensor->shape().num_elements();
 
-  int ret_code = ncclBroadcast(sendbuf, buffer_data, num_elements, root_rank,
-                               GetNCCLDataType(entry.tensor),
+  with_device device_guard(entry.device);
+  int ret_code = ncclBroadcast(sendbuf, recvbuf, num_elements,
+                               GetNCCLDataType(entry.tensor), root_rank,
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
-    throw std::runtime_error("ncclBroadcast failed, see MPI output for details.");
+    throw std::runtime_error(
+        "ncclBroadcast failed, see MPI output for details.");
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
