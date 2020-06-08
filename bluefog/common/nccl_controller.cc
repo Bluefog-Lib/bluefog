@@ -76,6 +76,52 @@ void NCCLController::Initialize() {
   nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
 }
 
+bool CheckSameRecvSize(const int* recvcounts, const int size) {
+  int first_recv_count;
+  for (int i = 0; i < size; i++) {
+    if (i == 0) first_recv_count = recvcounts[0];
+    if (recvcounts[i] != first_recv_count) return false;
+  }
+  return true;
+}
+
+void NCCLController::Allgather(TensorTableEntry& entry) {
+  // Unlike MPI allgatherv, which supports the allgather with different sizes,
+  // NCCL require all to be the same size. We just use same routine to find the
+  // recvcounts and displacement but displacement is not used.
+  int* recvcounts = new int[mpi_ctx_.size_];
+  int* displcmnts = new int[mpi_ctx_.size_];
+  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
+  mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
+  if (!CheckSameRecvSize(recvcounts, mpi_ctx_.size_)) {
+    throw std::runtime_error(
+        "ncclAllGather doesn't support varying lenght of vector. Please make "
+        "sure the size of tensors is the same among all processes.");
+  }
+
+  const void* sendbuf = entry.tensor->data();
+  int num_elements = entry.tensor->shape().num_elements();
+  void* buffer_data = (void*)entry.output->data();
+
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
+  int ret_code = ncclAllGather(sendbuf, buffer_data, num_elements,
+                               GetNCCLDataType(entry.output),
+                               nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+  if (ret_code != ncclSuccess) {
+    throw std::runtime_error(
+        "ncclAllGather failed, see NCCL output for details.");
+  }
+  // completing NCCL operation by synchronizing on the CUDA stream
+  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+
+  delete[] recvcounts;
+  delete[] displcmnts;
+
+  entry.callback(Status::OK());
+}
+
 void NCCLController::Allreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   void* buffer_data = (void*)entry.output->data();

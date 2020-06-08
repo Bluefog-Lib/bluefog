@@ -74,13 +74,14 @@ struct NCCLContext {
 
 class NCCLController {
  public:
-  NCCLController(TensorQueue& tensor_queue, NCCLContext& nccl_ctx, const MPIContext& mpi_ctx)
+  NCCLController(TensorQueue& tensor_queue, NCCLContext& nccl_ctx, MPIContext& mpi_ctx)
       : tensor_queue_(tensor_queue), nccl_ctx_(nccl_ctx), mpi_ctx_(mpi_ctx) {
     BFLOG(DEBUG) << "NCCL Controller Initialized.";
   }
 
   void Initialize();
 
+  void Allgather(TensorTableEntry& entries);
   void Allreduce(TensorTableEntry& entries);
   void Broadcast(TensorTableEntry& entries);
 
@@ -90,7 +91,7 @@ class NCCLController {
 
   NCCLContext& nccl_ctx_;
 
-  const MPIContext& mpi_ctx_;
+  MPIContext& mpi_ctx_;
 };
 
 }  // namespace common

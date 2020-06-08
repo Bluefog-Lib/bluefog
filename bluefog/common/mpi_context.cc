@@ -324,7 +324,7 @@ bool MPIContext::DestroyWinMutex() {
 }
 
 Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
-                                     Communicator comm_type) {
+                                  Communicator comm_type) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
@@ -356,9 +356,9 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
     ret_code = MPI_Allgather(send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
                              GetMPICommunicator(Communicator::GLOBAL));
   } else if (comm_type == Communicator::GRAPH) {
-    ret_code = MPI_Neighbor_allgather(
-        send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
-        GetMPICommunicator(Communicator::GRAPH));
+    ret_code =
+        MPI_Neighbor_allgather(send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
+                               GetMPICommunicator(Communicator::GRAPH));
   }
 
   if (ret_code != MPI_SUCCESS) {
@@ -392,7 +392,7 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
 }
 
 void MPIContext::SetDisplacements(const int* recvcounts, int*& displcmnts,
-                                     Communicator comm_type) {
+                                  Communicator comm_type) {
   int cnt_size = 0;
   if (comm_type == Communicator::GLOBAL) {
     cnt_size = size_;

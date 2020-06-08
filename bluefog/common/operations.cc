@@ -109,7 +109,8 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 
 int DetermineController(const TensorTableEntry& entry) {
   if (entry.mpi_ops_type != MPIOpsType::ALLREDUCE &&
-      entry.mpi_ops_type != MPIOpsType::BROADCAST)
+      entry.mpi_ops_type != MPIOpsType::BROADCAST &&
+      entry.mpi_ops_type != MPIOpsType::ALLGATHER)
     return 0;
   bool have_nccl = false;
 #if HAVE_NCCL
@@ -158,8 +159,16 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::ALLGATHER:
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name;
-        state.controller->Allgather(entry);
+            << "Processing " << entry.tensor_name << "with "
+            << communicator_name;
+        if (controller_choice == 0) {
+          state.controller->Allgather(entry);
+        }
+#if HAVE_NCCL
+        if (controller_choice == 1) {
+          state.nccl_controller->Allgather(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:

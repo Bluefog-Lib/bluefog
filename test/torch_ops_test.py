@@ -191,6 +191,7 @@ class OpsTests(unittest.TestCase):
                     rank_tensor.data.max() == i
                 ), "bf.allgather produces incorrect gathered tensor"
 
+    @unittest.skipIf(bf.nccl_built(), 'nccl do not support variable size on allgather')
     def test_allgather_variable_size(self):
         size = bf.size()
         rank = bf.rank()
