@@ -57,7 +57,9 @@ void NCCLContext::Initialize(const int rank, const int size,
       MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, MPI_COMM_WORLD));
 
   // Assume one device per process
-  CUDACHECK(cudaSetDevice(local_rank));
+  int nDevices = 0;
+  CUDACHECK(cudaGetDeviceCount(&nDevices));
+  CUDACHECK(cudaSetDevice(local_rank%nDevices));
   CUDACHECK(cudaStreamCreate(&stream));
   ncclCommInitRank(&nccl_comm, size, nccl_id, rank);
 

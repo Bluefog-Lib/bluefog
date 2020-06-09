@@ -63,11 +63,6 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   // Initialize controller
   state.controller->Initialize();
 
-#if HAVE_NCCL
-  state.nccl_controller->Initialize();
-  BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
-#endif
-
   // Signal that initialization is completed.
   state.initialization_done = true;
   BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
@@ -123,6 +118,14 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   try {
     auto entry = state.tensor_queue.PopMessagesFromQueue();
     int controller_choice = DetermineController(entry);
+
+#if HAVE_NCCL
+    if(controller_choice==1 && !nccl_context.is_initialized) {
+        state.nccl_controller->Initialize();
+        BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
+    }
+#endif
+
     const std::string communicator_name =
         (controller_choice == 0) ? "MPI" : "NCCL";
     switch (entry.mpi_ops_type) {
