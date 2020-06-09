@@ -50,6 +50,11 @@ namespace common {
 // List of supported frameworks.
 enum class Framework { TENSORFLOW, PYTORCH };
 
+enum class Vendor {
+  MPI = 'MPI',
+  NCCL = 'NCCL',
+};
+
 enum class StatusType {
   OK,
   UNKNOWN_ERROR,
