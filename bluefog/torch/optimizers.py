@@ -150,10 +150,10 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
-        if bf.size() > 1:
-            self._register_hooks()
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
+        if bf.size() > 1:
+            self._register_hooks()
 
     def _register_hooks(self):
         for param_group in self.param_groups:
@@ -289,10 +289,10 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
-        if bf.size() > 1:
-            self._register_hooks()
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
+        if bf.size() > 1:
+            self._register_hooks()
 
     def _register_hooks(self):
         for model in self._models:
@@ -402,11 +402,11 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._use_timeline = False
         self._timeline_hook_handles = []
+        if os.getenv('BLUEFOG_TIMELINE'):
+            self.turn_on_timeline()
         if bf.size() > 1:
             self._register_window()
             self._register_hooks()
-        if os.getenv('BLUEFOG_TIMELINE'):
-            self.turn_on_timeline()
 
     def _register_hooks(self):
         for model in self._models:
