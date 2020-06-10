@@ -115,7 +115,7 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
     throw std::runtime_error(
-        "ncclAllGather failed, see NCCL output for details.");
+        "ncclAllGather failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
@@ -137,7 +137,7 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
     throw std::runtime_error(
-        "ncclAllReduce failed, see NCCL output for details.");
+        "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
@@ -161,7 +161,7 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
                 root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
     throw std::runtime_error(
-        "ncclBroadcast failed, see NCCL output for details.");
+        "ncclBroadcast failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
