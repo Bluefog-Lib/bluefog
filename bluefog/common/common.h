@@ -51,8 +51,8 @@ namespace common {
 enum class Framework { TENSORFLOW, PYTORCH };
 
 enum class Vendor {
-  MPI = 'MPI',
-  NCCL = 'NCCL',
+  MPI,
+  NCCL,
 };
 
 enum class StatusType {

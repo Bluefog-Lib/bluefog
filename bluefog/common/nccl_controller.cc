@@ -18,6 +18,8 @@
 
 #include "common.h"
 #include "cuda_util.h"
+#include "timeline.h"
+#include "operations.h"
 
 namespace bluefog {
 namespace common {
@@ -165,6 +167,64 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
   entry.callback(Status::OK());
 }
+
+#if HAVE_NCCL && NCCL_MINOR > 6
+void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
+  // Note the order of recvcounts and displcments is by the oder of
+  // mpi_ctx_.neighbor_in_ranks_ because of MPI_Neighbor_allgather and
+  // 
+  int* recvcounts = new int[mpi_ctx_.neighbor_indgree_];
+  int* displcmnts = new int[mpi_ctx_.neighbor_indgree_];
+  if (!mpi_ctx_.IsTopoSetup()) {
+    throw std::runtime_error(
+        "Topology has not been set yet cannot run neighbor_allgather");
+  }
+  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
+  mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
+
+  const void* sendbuf = entry.tensor->data();
+  int num_elements = entry.tensor->shape().num_elements();
+  void* buffer_data = (void*)entry.output->data();
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+
+  // Pitfall: neighbor_allgather do not include itself.
+  ncclGroupStart();
+  for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+    int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+    int recv_count = recvcounts[i];
+    int target_disp = displcmnts[i];
+    int element_size = mpi_ctx_.GetMPITypeSize(
+        entry.tensor->dtype());  // Assume NCCL use same size as MPI
+    void* recvbuf =
+        (void*)(static_cast<char*>(buffer_data) + target_disp * element_size);
+    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(entry.tensor), recv_rank,
+                       nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  for (int rank : mpi_ctx_.neighbor_out_ranks_) {
+    NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                       rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  ncclGroupEnd();
+
+  // completing NCCL operation by synchronizing on the CUDA stream
+  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+
+  delete[] recvcounts;
+  delete[] displcmnts;
+  timeline_ptr->ActivityEnd(entry.tensor_name);
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
+  entry.callback(Status::OK());
+  timeline_ptr->ActivityEnd(entry.tensor_name);
+}
+#endif
 
 }  // namespace common
 }  // namespace bluefog

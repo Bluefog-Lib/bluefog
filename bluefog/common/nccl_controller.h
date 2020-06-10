@@ -84,6 +84,9 @@ class NCCLController {
   void Allgather(TensorTableEntry& entries);
   void Allreduce(TensorTableEntry& entries);
   void Broadcast(TensorTableEntry& entries);
+#if HAVE_NCCL && NCCL_MINOR > 6
+  void NeighborAllgather(TensorTableEntry& entries);
+#endif
 
  protected:
   // Outside dependencies
@@ -97,4 +100,4 @@ class NCCLController {
 }  // namespace common
 }  // namespace bluefog
 
-#endif BLUEFOG_COMMON_NCCL_CONTROLLER_H
+#endif // BLUEFOG_COMMON_NCCL_CONTROLLER_H

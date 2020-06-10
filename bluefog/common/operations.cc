@@ -126,6 +126,13 @@ Vendor DetermineController(const TensorTableEntry& entry) {
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
       nccl_impl_available = true;
       break;
+#if HAVE_NCCL && NCCL_MINOR > 6
+    case MPIOpsType::NEIGHBOR_ALLGATHER:
+      by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+#endif
   }
 
   if (!built_with_nccl || !nccl_impl_available || force_mpi) return Vendor::MPI;
@@ -189,7 +196,14 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.controller->NeighborAllgather(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->NeighborAllgather(entry);
+        }
+#if HAVE_NCCL && NCCL_MINOR > 6
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->NeighborAllgather(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLREDUCE:

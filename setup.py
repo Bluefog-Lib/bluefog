@@ -233,7 +233,7 @@ def get_nccl_dirs(build_ext, cuda_include_dirs, cuda_lib_dirs, cpp_flags):
     if nccl_lib:
         nccl_lib_dirs += [nccl_lib]
 
-    nccl_link_mode = os.environ.get('BLUEFOG_NCCL_LINK', 'SHARED')
+    nccl_link_mode = os.environ.get('BLUEFOG_NCCL_LINK', 'STATIC')
     if nccl_link_mode.upper() == 'SHARED':
         nccl_libs += ['nccl']
     else:
@@ -248,6 +248,9 @@ def get_nccl_dirs(build_ext, cuda_include_dirs, cuda_lib_dirs, cpp_flags):
                      code=textwrap.dedent('''\
             #include <nccl.h>
             #if NCCL_MAJOR < 2
+            #error BLUEFOG requires NCCL 2.4 or later version, please upgrade.
+            #endif
+            #if NCCL_MINOR < 4
             #error BLUEFOG requires NCCL 2.4 or later version, please upgrade.
             #endif
             void test() {
