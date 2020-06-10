@@ -181,7 +181,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   }
   mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
-  if (!CheckSameRecvSize(recvcounts, mpi_ctx_.size_)) {
+  if (!CheckSameRecvSize(recvcounts, mpi_ctx_.neighbor_indgree_)) {
     throw std::runtime_error(
         "Neighbor_allgather/allreduce doesn't support varying lenght of vector. Please make "
         "sure the size of tensors is the same among all processes.");
