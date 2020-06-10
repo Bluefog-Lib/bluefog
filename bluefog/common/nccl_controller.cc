@@ -181,6 +181,11 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   }
   mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
+  if (!CheckSameRecvSize(recvcounts, mpi_ctx_.size_)) {
+    throw std::runtime_error(
+        "Neighbor_allgather/allreduce doesn't support varying lenght of vector. Please make "
+        "sure the size of tensors is the same among all processes.");
+  }
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -223,6 +228,12 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
   timeline_ptr->ActivityEnd(entry.tensor_name);
+}
+
+void NCCLController::NeighborAllreduce(TensorTableEntry& entry)  {
+  // The communication pattern of neighbor_allreduce and neighbor_allgather are the same.
+  // The difference happened at the callback phase.
+  NeighborAllgather(entry);
 }
 #endif
 

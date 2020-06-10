@@ -86,6 +86,7 @@ class NCCLController {
   void Broadcast(TensorTableEntry& entries);
 #if HAVE_NCCL && NCCL_MINOR > 6
   void NeighborAllgather(TensorTableEntry& entries);
+  void NeighborAllreduce(TensorTableEntry& entries);
 #endif
 
  protected:

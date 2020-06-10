@@ -98,7 +98,9 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   mpi_context.Finalize(mpi_ctx_manager);
 
 #if HAVE_NCCL
-  nccl_context.Finalize();
+  if (nccl_context.is_initialized) {
+    nccl_context.Finalize();
+  }
 #endif
 }
 
@@ -129,6 +131,11 @@ Vendor DetermineController(const TensorTableEntry& entry) {
 #if HAVE_NCCL && NCCL_MINOR > 6
     case MPIOpsType::NEIGHBOR_ALLGATHER:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::NEIGHBOR_ALLREDUCE:
+      by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI");
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
       nccl_impl_available = true;
       break;
@@ -210,7 +217,14 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
-        state.controller->NeighborAllreduce(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->NeighborAllreduce(entry);
+        }
+#if HAVE_NCCL && NCCL_MINOR > 6
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->NeighborAllreduce(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BARRIER:
