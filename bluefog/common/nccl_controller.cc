@@ -63,7 +63,7 @@ void NCCLContext::Initialize(const int rank, const int size,
   CUDACHECK(cudaGetDeviceCount(&nDevices));
   CUDACHECK(cudaSetDevice(local_rank%nDevices));
   CUDACHECK(cudaStreamCreate(&stream));
-  ncclCommInitRank(&nccl_comm, size, nccl_id, rank);
+  NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
 
   is_initialized = true;
   cuda_device = local_rank;
@@ -71,7 +71,7 @@ void NCCLContext::Initialize(const int rank, const int size,
 }
 
 void NCCLContext::Finalize() {
-  ncclCommDestroy(nccl_comm);
+  NCCLCHECK(ncclCommDestroy(nccl_comm));
   is_initialized = false;
   cuda_device = -1;
 }
