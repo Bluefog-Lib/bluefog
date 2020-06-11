@@ -216,10 +216,10 @@ class BlueFogBasics(object):
             return True
 
         # We remove the self-rank for any cases because MPI graph_comm do not include it.
-        destinations = [r for r in topology.successors(self.rank())
-                        if r != self.rank()]
-        sources = [r for r in topology.predecessors(self.rank())
-                   if r != self.rank()]
+        destinations = sorted([r for r in topology.successors(self.rank())
+                               if r != self.rank()])
+        sources = sorted([r for r in topology.predecessors(self.rank())
+                          if r != self.rank()])
         indegree = len(sources)
         outdegree = len(destinations)
         sources_type = ctypes.c_int * indegree

@@ -160,14 +160,12 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   for (int i = 0; i < indegree; i++) {
     mpi_ctx_.neighbor_in_ranks_.push_back(sources[i]);
   }
-  std::sort(mpi_ctx_.neighbor_in_ranks_.begin(), mpi_ctx_.neighbor_in_ranks_.end());
 
   mpi_ctx_.neighbor_out_ranks_.clear();
   mpi_ctx_.neighbor_out_ranks_.reserve(outdegree);
   for (int i = 0; i < outdegree; i++) {
     mpi_ctx_.neighbor_out_ranks_.push_back(destinations[i]);
   }
-  std::sort(mpi_ctx_.neighbor_out_ranks_.begin(), mpi_ctx_.neighbor_out_ranks_.end());
   mpi_ctx_.DisableTopoWeights();  // Topology weights are always set at
                                   // SetTopologyWeights.
 
