@@ -350,7 +350,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
             }
             output.resize_(shape_vector);
-            output.add_(tensor.mul_(self_weight));
+            output.add_(tensor.mul(self_weight));
           } else {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 1; i < bluefog_neighbor_size(); i++) {
@@ -418,7 +418,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
             }
             output.resize_(shape_vector);
-            output.add_(tensor.mul_(self_weight));
+            output.add_(tensor.mul(self_weight));
           } else {
             auto output_reduced = output.slice(0, 0, first_dim);
             for (int i = 1; i < bluefog_neighbor_size(); i++) {
