@@ -432,6 +432,17 @@ this information.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.nccl_built">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">nccl_built</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.nccl_built" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns True if BlueFog was compiled with NCCL support.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating whether NCCL support was compiled.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.allreduce">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allreduce</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">average</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.allreduce" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that performs averaging or summation of the input tensor over all the
@@ -1068,7 +1079,7 @@ acquired.</p></li>
 
 <dl class="py function">
 <dt id="bluefog.torch.win_lock">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_lock</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_lock" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_lock</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwds</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_lock" title="Permalink to this definition">¶</a></dt>
 <dd><p>win_lock context manager. Within the context, an RMA access epoch
 for its neihbor is created.
 Note The ops of win_get, win_accumulate, and win_put do not need win_lock context.</p>
@@ -1081,7 +1092,7 @@ Note The ops of win_get, win_accumulate, and win_put do not need win_lock contex
 
 <dl class="py function">
 <dt id="bluefog.torch.win_mutex">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_mutex</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ranks</span><span class="p">:</span> <span class="n">List<span class="p">[</span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">exclusive</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_mutex" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_mutex</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwds</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_mutex" title="Permalink to this definition">¶</a></dt>
 <dd><p>A win object implemented mutex context manager. Note, there are N distributed
 mutex over N corresponding processes.</p>
 <dl class="field-list simple">
@@ -1142,7 +1153,7 @@ bfrun –timeline-filename {file_name} …</p>
 
 <dl class="py function">
 <dt id="bluefog.torch.timeline_context">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">timeline_context</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">self</span></em>, <em class="sig-param"><span class="n">tensor_name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">activity_name</span><span class="p">:</span> <span class="n">str</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.timeline_context" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">timeline_context</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwds</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.timeline_context" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager for activating timeline record.
 If you want to use this function, please make sure to turn on the timeline first by
 setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use

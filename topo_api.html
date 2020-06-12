@@ -173,6 +173,41 @@
             
   <div class="section" id="module-bluefog.common.topology_util">
 <span id="topology-related-utility-functions"></span><h1>Topology Related Utility Functions<a class="headerlink" href="#module-bluefog.common.topology_util" title="Permalink to this headline">¶</a></h1>
+<dl class="py data">
+<dt id="bluefog.common.topology_util.List">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">List</code><a class="headerlink" href="#bluefog.common.topology_util.List" title="Permalink to this definition">¶</a></dt>
+<dd><p>The central part of internal API.</p>
+<p>This represents a generic version of type ‘origin’ with type arguments ‘params’.
+There are two kind of these aliases: user defined and special. The special ones
+are wrappers around builtin collections and ABCs in collections.abc. These must
+have ‘name’ always set. If ‘inst’ is False, then the alias can’t be instantiated,
+this is used by e.g. typing.List and typing.Dict.</p>
+<p>alias of List</p>
+</dd></dl>
+
+<dl class="py data">
+<dt id="bluefog.common.topology_util.Tuple">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">Tuple</code><a class="headerlink" href="#bluefog.common.topology_util.Tuple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tuple type; Tuple[X, Y] is the cross-product type of X and Y.</p>
+<p>Example: Tuple[T1, T2] is a tuple of two elements corresponding
+to type variables T1 and T2.  Tuple[int, float, str] is a tuple
+of an int, a float and a string.</p>
+<p>To specify a variable-length tuple of homogeneous type, use Tuple[T, …].</p>
+<p>alias of Tuple</p>
+</dd></dl>
+
+<dl class="py data">
+<dt id="bluefog.common.topology_util.Dict">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">Dict</code><a class="headerlink" href="#bluefog.common.topology_util.Dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>The central part of internal API.</p>
+<p>This represents a generic version of type ‘origin’ with type arguments ‘params’.
+There are two kind of these aliases: user defined and special. The special ones
+are wrappers around builtin collections and ABCs in collections.abc. These must
+have ‘name’ always set. If ‘inst’ is False, then the alias can’t be instantiated,
+this is used by e.g. typing.List and typing.Dict.</p>
+<p>alias of Dict</p>
+</dd></dl>
+
 <dl class="py function">
 <dt id="bluefog.common.topology_util.IsTopologyEquivalent">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">IsTopologyEquivalent</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo1</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">topo2</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.topology_util.IsTopologyEquivalent" title="Permalink to this definition">¶</a></dt>
