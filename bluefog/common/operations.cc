@@ -140,6 +140,8 @@ Vendor DetermineController(const TensorTableEntry& entry) {
       nccl_impl_available = true;
       break;
 #endif
+    default:
+      nccl_impl_available = false;
   }
 
   if (!built_with_nccl || !nccl_impl_available || force_mpi) return Vendor::MPI;

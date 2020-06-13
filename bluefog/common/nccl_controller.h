@@ -1,5 +1,4 @@
-// Modifications copyright (C) 2020 Bluefog Team. All Rights Reserved.
-// Copyright 2019 Uber Technologies, Inc. All Rights Reserved.
+// Copyright (C) 2020 Bluefog Team. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +16,8 @@
 #ifndef BLUEFOG_COMMON_NCCL_CONTROLLER_H
 #define BLUEFOG_COMMON_NCCL_CONTROLLER_H
 
+#include <memory>
+#include <utility>
 #include <nccl.h>
 #include "cuda_runtime.h"
 #include "mpi.h"
@@ -60,13 +61,33 @@ namespace common {
 
 ncclDataType_t GetNCCLDataType(const std::shared_ptr<Tensor> tensor);
 
+struct pair_hash {
+    template <class T1, class T2>
+    std::size_t operator () (const std::pair<T1,T2> &p) const {
+        auto h1 = std::hash<T1>{}(p.first);
+        auto h2 = std::hash<T2>{}(p.second);
+
+        // Since we only used for a pair of int without many pairs,
+        // this might be sufficient.
+        return h1 ^ h2;  
+    }
+};
+
 struct NCCLContext {
   void Initialize(const int rank, const int size, const int local_rank);
   void Finalize();
+  void CleanPeerCommunicator();
 
   // TODO(ybc) Create e intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
   cudaStream_t stream;
+
+  // Communicators between two ranks used to mimic send/recv through broadcast.
+  std::unordered_map<std::pair<int, int>, ncclComm_t, pair_hash>
+      nccl_pair_comms = {};
+  std::unordered_map<std::pair<int, int>, cudaStream_t, pair_hash>
+      pair_streams = {};
+  std::vector<std::pair<int, int>> pair_order = {};
 
   int cuda_device = -1;
   bool is_initialized = false;
@@ -80,6 +101,8 @@ class NCCLController {
   }
 
   void Initialize();
+  void InitPeerCommunicator();
+  void DestroyPeerCommunicator();
 
   void Allgather(TensorTableEntry& entries);
   void Allreduce(TensorTableEntry& entries);

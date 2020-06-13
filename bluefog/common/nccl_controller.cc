@@ -15,6 +15,7 @@
 // ==============================================================================
 
 #include "nccl_controller.h"
+#include <algorithm>
 
 #include "common.h"
 #include "cuda_util.h"
@@ -70,14 +71,79 @@ void NCCLContext::Initialize(const int rank, const int size,
   return;
 }
 
+void NCCLContext::CleanPeerCommunicator() {
+  for (const auto& pair : pair_order) {
+    ncclComm_t& pair_nccl_comm = nccl_pair_comms.at(pair);
+    NCCLCHECK(ncclCommDestroy(pair_nccl_comm));
+    cudaStream_t& pair_stream = pair_streams.at(pair);
+    CUDACHECK(cudaStreamDestroy(pair_stream));
+  }
+  pair_order.clear();
+  pair_streams.clear();
+  nccl_pair_comms.clear();
+}
+
 void NCCLContext::Finalize() {
   NCCLCHECK(ncclCommDestroy(nccl_comm));
+  CUDACHECK(cudaStreamDestroy(stream));
+
+  CleanPeerCommunicator();
   is_initialized = false;
   cuda_device = -1;
 }
 
 void NCCLController::Initialize() {
   nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
+  InitPeerCommunicator();
+}
+
+void NCCLController::InitPeerCommunicator() {
+  // First make pairs that require to build communicator.
+  std::vector<std::pair<int, int>> pairs;
+  for (int peer_rank : mpi_ctx_.neighbor_out_ranks_) {
+    if (mpi_ctx_.rank_ < peer_rank) {
+      pairs.push_back(std::make_pair(mpi_ctx_.rank_, peer_rank));
+    } else if (mpi_ctx_.rank_ > peer_rank) {
+      pairs.push_back(std::make_pair(peer_rank, mpi_ctx_.rank_));
+    }
+  }
+  for (int peer_rank : mpi_ctx_.neighbor_in_ranks_) {
+    if (mpi_ctx_.rank_ < peer_rank) {
+      pairs.push_back(std::make_pair(mpi_ctx_.rank_, peer_rank));
+    } else if (mpi_ctx_.rank_ > peer_rank) {
+      pairs.push_back(std::make_pair(peer_rank, mpi_ctx_.rank_));
+    }
+  }
+
+  // Note our graph definition is directional while the comm is bi-directional.
+  // So we make all pairs and sort them by <smaller rank, larger rank>, then
+  // deduplicate them.
+  std::sort(pairs.begin(), pairs.end());
+  pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
+  for (const auto& pair: pairs) {
+    int my_pair_rank = pair.first == mpi_ctx_.rank_ ? 0 : 1;
+    int tag = pair.first + pair.second * mpi_ctx_.size_;
+    ncclUniqueId nccl_id;
+    if (my_pair_rank == 0) {
+      ncclGetUniqueId(&nccl_id);
+      MPICHECK(
+        MPI_Send((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, pair.second, tag, MPI_COMM_WORLD));
+    } else {
+      MPICHECK(MPI_Recv((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, pair.first,
+                        tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE));
+    }
+    ncclComm_t new_pair_nccl_comm;
+    cudaStream_t new_pair_stream;
+    NCCLCHECK(ncclCommInitRank(&new_pair_nccl_comm, 2, nccl_id, my_pair_rank));
+    CUDACHECK(cudaStreamCreate(&new_pair_stream));
+    nccl_ctx_.nccl_pair_comms[pair] = new_pair_nccl_comm;
+    nccl_ctx_.pair_streams[pair] = new_pair_stream;
+    nccl_ctx_.pair_order.push_back(pair);
+  }
+}
+
+void NCCLController::DestroyPeerCommunicator() {
+  nccl_ctx_.CleanPeerCommunicator();
 }
 
 bool CheckSameRecvSize(const int* recvcounts, const int size) {
