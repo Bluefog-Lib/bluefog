@@ -97,6 +97,36 @@ def distributed_grad_descent(rho, maxite=5000, alpha=1e-1):
 
     return w_opt
 
+# ==================== Diffusion ===========================================
+def diffusion(w_opt, rho, maxite=2000, alpha=1e-1):
+    
+    topology = bf.load_topology()
+    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+
+    w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
+    phi = w.clone()
+    mse = []
+
+    if bf.rank() == 0:
+        for k, v in neighbor_weights.items():
+            print(k, neighbor_weights[k])
+
+    for i in range(maxite):
+        # calculate loccal gradient via pytorch autograd
+        logistic_loss_step(
+            w, rho, tensor_name='neighbor.allreduce.local_variable')
+
+        # diffusion
+        phi = w - alpha * w.grad.data
+        w.data = bf.neighbor_allreduce(
+            phi, self_weight, neighbor_weights, name='local variable')
+        w.grad.data.zero_()
+
+        # record convergence
+        if bf.rank() == 0:
+            mse.append(torch.norm(w.data - w_opt.data, p=2))
+
+    return w, mse
 
 # ==================== Exact Diffusion ===========================================
 # Calculate the true solution with exact diffusion recursion as follows:
@@ -285,7 +315,7 @@ bf.init()
 torch.random.manual_seed(123417 * bf.rank())
 m, n = 20, 5
 X = torch.randn(m, n).to(torch.double)
-w_0 = torch.randn(n, 1).to(torch.double)
+w_0 = (torch.randn(n, 1)).to(torch.double)
 y = torch.rand(m, 1).to(torch.double) < 1 / (1+torch.exp(X.mm(w_0)))
 y = y.double()
 y = 2*y - 1
@@ -295,16 +325,19 @@ rho = 1e-2
 w_opt = distributed_grad_descent(rho)
 
 # solve the logistic regression with indicated decentralized algorithms
-if args.method == 'exact_diffusion':
+if args.method == 'diffusion':
+    w, mse = diffusion(w_opt, rho)
+elif args.method == 'exact_diffusion':
     w, mse = exact_diffusion(w_opt, rho)
 elif args.method == 'gradient_tracking':
-    w, mse = gradient_tracking(w_opt, rho)
+    w, mse = gradient_tracking(w_opt, rho, alpha_gt=1)
 elif args.method == 'push_diging':
     w, mse = push_diging(w_opt, rho)
 
 # plot and print result
 try:
     if bf.rank() == 0:
+        print(mse[-1000:])
         plt.semilogy(mse)
         finalize_plot()
 
