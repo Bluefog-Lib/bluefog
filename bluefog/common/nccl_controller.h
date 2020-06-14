@@ -91,6 +91,7 @@ struct NCCLContext {
 
   int cuda_device = -1;
   bool is_initialized = false;
+  bool is_peer_initialized = false;
 };
 
 class NCCLController {
@@ -107,12 +108,15 @@ class NCCLController {
   void Allgather(TensorTableEntry& entries);
   void Allreduce(TensorTableEntry& entries);
   void Broadcast(TensorTableEntry& entries);
-#if HAVE_NCCL && NCCL_MINOR > 6
   void NeighborAllgather(TensorTableEntry& entries);
   void NeighborAllreduce(TensorTableEntry& entries);
-#endif
 
  protected:
+  ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
+                               ncclDataType_t data_type, int peer_rank);
+  ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
+                               ncclDataType_t data_type, int peer_rank);
+
   // Outside dependencies
   TensorQueue& tensor_queue_;
 

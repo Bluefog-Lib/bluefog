@@ -162,6 +162,7 @@ struct MPIContext {
   int neighbor_indgree_ = -1;
   int neighbor_outdgree_ = -1;
 
+  // Neighbor ranks should not include self.
   std::vector<int> neighbor_in_ranks_;
   std::vector<int> neighbor_out_ranks_;
 

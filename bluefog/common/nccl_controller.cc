@@ -16,6 +16,7 @@
 
 #include "nccl_controller.h"
 #include <algorithm>
+#include <string>
 
 #include "common.h"
 #include "cuda_util.h"
@@ -98,6 +99,8 @@ void NCCLController::Initialize() {
 }
 
 void NCCLController::InitPeerCommunicator() {
+  // Clear the existing communicator
+  DestroyPeerCommunicator();
   // First make pairs that require to build communicator.
   std::vector<std::pair<int, int>> pairs;
   for (int peer_rank : mpi_ctx_.neighbor_out_ranks_) {
@@ -140,6 +143,7 @@ void NCCLController::InitPeerCommunicator() {
     nccl_ctx_.pair_streams[pair] = new_pair_stream;
     nccl_ctx_.pair_order.push_back(pair);
   }
+  nccl_ctx_.is_peer_initialized = true;
 }
 
 void NCCLController::DestroyPeerCommunicator() {
@@ -176,7 +180,7 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
-  int ret_code = ncclAllGather(sendbuf, buffer_data, num_elements,
+  ncclResult_t ret_code = ncclAllGather(sendbuf, buffer_data, num_elements,
                                GetNCCLDataType(entry.output),
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
@@ -198,7 +202,7 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
 
   with_device device_guard(entry.device);
-  int ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
+  ncclResult_t ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
                                GetNCCLDataType(entry.tensor), ncclSum,
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
@@ -222,7 +226,7 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   }
 
   with_device device_guard(entry.device);
-  int ret_code =
+  ncclResult_t ret_code =
       ncclBcast(data_ptr, num_elements, GetNCCLDataType(entry.tensor),
                 root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
@@ -234,7 +238,6 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   entry.callback(Status::OK());
 }
 
-#if HAVE_NCCL && NCCL_MINOR > 6
 void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   // Note the order of recvcounts and displcments is by the oder of
   // mpi_ctx_.neighbor_in_ranks_ because of MPI_Neighbor_allgather and
@@ -267,6 +270,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
 
   // Pitfall: neighbor_allgather do not include itself.
   ncclGroupStart();
+#if NCCL_MINOR > 6
   for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
     int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
     int recv_count = recvcounts[i];
@@ -275,17 +279,69 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
         entry.tensor->dtype());  // Assume NCCL use same size as MPI
     void* recvbuf =
         (void*)(static_cast<char*>(buffer_data) + target_disp * element_size);
-    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(entry.tensor), recv_rank,
-                       nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(entry.tensor),
+                       recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+
   }
   for (int rank : mpi_ctx_.neighbor_out_ranks_) {
     NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
                        rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
   }
-  ncclGroupEnd();
+#else
+  int recv_rank_index = 0;
+  int send_rank_index = 0;
+  for (const auto& pair: nccl_ctx_.pair_order) {
+    int send_rank = mpi_ctx_.neighbor_out_ranks_[send_rank_index];
+    int recv_rank = mpi_ctx_.neighbor_in_ranks_[recv_rank_index];
+    int recv_count = recvcounts[recv_rank_index];
+    int target_disp = displcmnts[recv_rank_index];
+    bool should_recv = false;
+    bool should_send = false;
+    if (recv_rank == pair.first || recv_rank == pair.second) {
+      recv_rank_index++;
+      should_recv = true;
+    }
+    if (send_rank == pair.first || send_rank == pair.second) {
+      send_rank_index++;
+      should_send = true;
+    }
+    int element_size = mpi_ctx_.GetMPITypeSize(
+        entry.tensor->dtype());  // Assume NCCL use same size as MPI
+    void* recvbuf =
+        (void*)(static_cast<char*>(buffer_data) + target_disp * element_size);
 
+    // We assume bi-directional communication
+    if (mpi_ctx_.rank_ == pair.second) {
+      // Recv then send
+      if (should_recv)
+        NCCLCHECK(ncclRecvByBcast(recvbuf, recv_count,
+                                  GetNCCLDataType(entry.tensor), recv_rank));
+
+      if (should_send)
+        NCCLCHECK(ncclSendByBcast(sendbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), send_rank));
+    } else {
+      // Send then recv
+      if (should_send)
+        NCCLCHECK(ncclSendByBcast(sendbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), send_rank));
+
+      if (should_recv)
+        NCCLCHECK(ncclRecvByBcast(recvbuf, recv_count,
+                                  GetNCCLDataType(entry.tensor), recv_rank));
+    }
+  }
+#endif
+
+  ncclGroupEnd();
   // completing NCCL operation by synchronizing on the CUDA stream
+#if NCCL_MINOR > 6
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+#else
+  for (const auto& stream : nccl_ctx_.pair_streams) {
+    CUDACHECK(cudaStreamSynchronize(stream.second));
+  }
+#endif
 
   delete[] recvcounts;
   delete[] displcmnts;
@@ -301,7 +357,59 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry)  {
   // The difference happened at the callback phase.
   NeighborAllgather(entry);
 }
-#endif
+
+ncclResult_t NCCLController::ncclSendByBcast(const void* sendbuf,
+                                             const int count,
+                                             ncclDataType_t data_type,
+                                             int peer_rank) {
+  int root_rank = -1;
+  std::pair<int, int> pair;
+  if (mpi_ctx_.rank_ < peer_rank) {
+    root_rank = 0;
+    pair = std::make_pair(mpi_ctx_.rank_, peer_rank);
+  } else {
+    root_rank = 1;
+    pair = std::make_pair(peer_rank, mpi_ctx_.rank_);
+  }
+  auto comm_it = nccl_ctx_.nccl_pair_comms.find(pair);
+  if (comm_it == nccl_ctx_.nccl_pair_comms.end()) {
+    std::string pair_str =
+        "(" + std::to_string(pair.first) + "," + std::to_string(pair.second) + ")";
+    throw std::runtime_error(
+        pair_str + "cannot be found in the nccl pair communicator when send");
+  }
+  auto stream_it = nccl_ctx_.pair_streams.find(pair);
+
+  ncclResult_t res = ncclBcast((void*)sendbuf, count, data_type, root_rank,
+                               comm_it->second, stream_it->second);
+  return res;
+}
+
+ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
+                                             ncclDataType_t data_type,
+                                             int peer_rank) {
+  int root_rank = -1;
+  std::pair<int, int> pair;
+  if (mpi_ctx_.rank_ < peer_rank) {
+    root_rank = 1;
+    pair = std::make_pair(mpi_ctx_.rank_, peer_rank);
+  } else {
+    root_rank = 0;
+    pair = std::make_pair(peer_rank, mpi_ctx_.rank_);
+  }
+  auto comm_it = nccl_ctx_.nccl_pair_comms.find(pair);
+  if (comm_it == nccl_ctx_.nccl_pair_comms.end()) {
+    std::string pair_str =
+        "(" + std::to_string(pair.first) + "," + std::to_string(pair.second) + ")";
+    throw std::runtime_error(
+        "cannot be found in the nccl pair communicator when recv");
+  }
+  auto stream_it = nccl_ctx_.pair_streams.find(pair);
+
+  ncclResult_t res =
+      ncclBcast(recvbuf, count, data_type, root_rank, comm_it->second, stream_it->second);
+  return res;
+}
 
 }  // namespace common
 }  // namespace bluefog

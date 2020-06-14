@@ -63,6 +63,11 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   // Initialize controller
   state.controller->Initialize();
 
+// #if HAVE_NCCL
+//   state.nccl_controller->Initialize();
+//   BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
+// #endif
+
   // Signal that initialization is completed.
   state.initialization_done = true;
   BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
@@ -128,7 +133,6 @@ Vendor DetermineController(const TensorTableEntry& entry) {
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
       nccl_impl_available = true;
       break;
-#if HAVE_NCCL && NCCL_MINOR > 6
     case MPIOpsType::NEIGHBOR_ALLGATHER:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI");
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
@@ -139,7 +143,6 @@ Vendor DetermineController(const TensorTableEntry& entry) {
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
       nccl_impl_available = true;
       break;
-#endif
     default:
       nccl_impl_available = false;
   }
@@ -208,7 +211,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         if (controller_vendor == Vendor::MPI) {
           state.controller->NeighborAllgather(entry);
         }
-#if HAVE_NCCL && NCCL_MINOR > 6
+#if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
           state.nccl_controller->NeighborAllgather(entry);
         }
@@ -222,7 +225,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         if (controller_vendor == Vendor::MPI) {
           state.controller->NeighborAllreduce(entry);
         }
-#if HAVE_NCCL && NCCL_MINOR > 6
+#if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
           state.nccl_controller->NeighborAllreduce(entry);
         }
@@ -381,8 +384,15 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
         << "Cannot set the topology because there are unfinished MPI ops.";
     return -1;
   }
-  return bluefog_global.controller->SetTopology(indegree, sources, outdegree,
+
+  bool mpi_result = bluefog_global.controller->SetTopology(indegree, sources, outdegree,
                                                 destinations);
+// #if HAVE_NCCL
+//   if (mpi_result) {
+//     bluefog_global.nccl_controller->InitPeerCommunicator();
+//   }
+// #endif
+  return mpi_result;
 }
 
 int bluefog_set_topology_with_weights(int indegree, const int* sources,
