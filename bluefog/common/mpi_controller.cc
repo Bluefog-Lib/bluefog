@@ -48,20 +48,20 @@ void MPIController::Initialize() {
   mpi_threads_supported_ = (provided == MPI_THREAD_MULTIPLE);
 
   // Get MPI rank to determine if we are rank zero.
-  MPI_Comm_rank(mpi_ctx_.mpi_comm, &rank_);
+  MPI_Comm_rank(mpi_ctx_.mpi_comm, &mpi_ctx_.rank_);
 
   // Get MPI size to determine how many tensors to wait for before reducing.
-  MPI_Comm_size(mpi_ctx_.mpi_comm, &size_);
+  MPI_Comm_size(mpi_ctx_.mpi_comm, &mpi_ctx_.size_);
 
   // Determine local rank by querying the local communicator.
-  MPI_Comm_rank(mpi_ctx_.local_comm, &local_rank_);
-  MPI_Comm_size(mpi_ctx_.local_comm, &local_size_);
-  local_comm_ranks_ = std::vector<int>((size_t)local_size_);
-  local_comm_ranks_[local_rank_] = rank_;
+  MPI_Comm_rank(mpi_ctx_.local_comm, &mpi_ctx_.local_rank_);
+  MPI_Comm_size(mpi_ctx_.local_comm, &mpi_ctx_.local_size_);
+  mpi_ctx_.local_comm_ranks_ = std::vector<int>((size_t)mpi_ctx_.local_size_);
+  mpi_ctx_.local_comm_ranks_[mpi_ctx_.local_rank_] = mpi_ctx_.rank_;
 
   // Get cross-node rank and size in case of hierarchical allreduce.
-  MPI_Comm_rank(mpi_ctx_.cross_comm, &cross_rank_);
-  MPI_Comm_size(mpi_ctx_.cross_comm, &cross_size_);
+  MPI_Comm_rank(mpi_ctx_.cross_comm, &mpi_ctx_.cross_rank_);
+  MPI_Comm_size(mpi_ctx_.cross_comm, &mpi_ctx_.cross_size_);
 
   BFLOG(DEBUG) << "MPI controller initialized.";
 }
@@ -70,96 +70,11 @@ int MPIController::GetTypeSize(DataType dtype) {
   return mpi_ctx_.GetMPITypeSize(dtype);
 }
 
-Status MPIController::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
-                                     Communicator comm_type) {
-  Timeline* timeline_ptr;
-  Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
-
-  // Every tensor participating in Allgather operation may have different
-  // first dimension size, but the rest of dimensions are same for all
-  // tensors.  Here we get shape of tensor sliced by first dimension.
-  // TODO(ybc): Check single_slice_shape is same cross all ranks.
-  TensorShape single_slice_shape;
-  for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
-    single_slice_shape.AddDim(entry.tensor->shape().dim_size(i));
-  }
-
-  // cnt_size is the number of expected receiving info.
-  // For allgather, it is the global size.
-  // For neighbor_allgather, it is the number of in-neighbor (excluding itself).
-  int cnt_size = 0;
-  if (comm_type == Communicator::GLOBAL) {
-    cnt_size = size_;
-  } else if (comm_type == Communicator::GRAPH) {
-    cnt_size = neighbor_indgree_;
-  }
-
-  int* send_count = new int[1];
-  send_count[0] = entry.tensor->shape().dim_size(0);
-  int* gather_count = new int[cnt_size];
-  int ret_code = -1;
-  if (comm_type == Communicator::GLOBAL) {
-    ret_code = MPI_Allgather(send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
-                             mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-  } else if (comm_type == Communicator::GRAPH) {
-    ret_code = MPI_Neighbor_allgather(
-        send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
-        mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
-  }
-
-  if (ret_code != MPI_SUCCESS) {
-    throw std::runtime_error(
-        "MPI_Allgather (pre-allgather to get size) failed, see MPI output for "
-        "details.");
-  }
-
-  // Copy tensor sizes from the response into a vector of int64_t
-  // and compute total size.  This is size of first dimension.
-  int64_t total_entry_dimension_size = 0;
-  for (int rc = 0; rc < cnt_size; ++rc) {
-    total_entry_dimension_size += gather_count[rc];
-    recvcounts[rc] = single_slice_shape.num_elements() * gather_count[rc];
-  }
-  BFLOG(TRACE, rank_) << "total_entry_dimension_size: "
-                      << total_entry_dimension_size;
-
-  // Allgather output will have shape of:
-  // (sum of first dimension of every tensor) x (tensor slice shape).
-  TensorShape output_shape;
-
-  output_shape.AddDim((int64_t)total_entry_dimension_size);
-  output_shape.AppendShape(single_slice_shape);
-
-  Status status = entry.context->AllocateOutput(output_shape, &entry.output);
-  delete[] gather_count;
-
-  timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
-  return status;
-}
-
-void MPIController::SetDisplacements(const int* recvcounts, int*& displcmnts,
-                                     Communicator comm_type) {
-  int cnt_size = 0;
-  if (comm_type == Communicator::GLOBAL) {
-    cnt_size = size_;
-  } else if (comm_type == Communicator::GRAPH) {
-    cnt_size = neighbor_indgree_;
-  }
-  for (int rc = 0; rc < cnt_size; ++rc) {
-    if (rc == 0) {
-      displcmnts[rc] = 0;
-    } else {
-      displcmnts[rc] = displcmnts[rc - 1] + recvcounts[rc - 1];
-    }
-  }
-}
-
 void MPIController::Allgather(TensorTableEntry& entry) {
-  int* recvcounts = new int[size_];
-  int* displcmnts = new int[size_];
-  AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
-  SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
+  int* recvcounts = new int[mpi_ctx_.size_];
+  int* displcmnts = new int[mpi_ctx_.size_];
+  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
+  mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -205,7 +120,7 @@ void MPIController::Broadcast(TensorTableEntry& entry) {
   const int root_rank = entry.root_rank;
   // On root rank, MPI_Bcast sends data, on other ranks it receives data.
   void* data_ptr;
-  if (rank_ == root_rank) {
+  if (mpi_ctx_.rank_ == root_rank) {
     data_ptr = (void*)entry.tensor->data();
   } else {
     data_ptr = (void*)entry.output->data();
@@ -234,25 +149,25 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
 
   // Get neighbor in/out size and ranks.
   int unused_neighbor_is_weighted_ = -1;
-  MPI_Dist_graph_neighbors_count(mpi_ctx_.graph_comm, &neighbor_indgree_,
-                                 &neighbor_outdgree_,
+  MPI_Dist_graph_neighbors_count(mpi_ctx_.graph_comm, &mpi_ctx_.neighbor_indgree_,
+                                 &mpi_ctx_.neighbor_outdgree_,
                                  &unused_neighbor_is_weighted_);
 
   // Clear the previous neighbor_in_ranks_ is necessary because we might
   // change the topology.
-  neighbor_in_ranks_.clear();
-  neighbor_in_ranks_.reserve(indegree);
+  mpi_ctx_.neighbor_in_ranks_.clear();
+  mpi_ctx_.neighbor_in_ranks_.reserve(indegree);
   for (int i = 0; i < indegree; i++) {
-    neighbor_in_ranks_.push_back(sources[i]);
+    mpi_ctx_.neighbor_in_ranks_.push_back(sources[i]);
   }
-  std::sort(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end());
+  std::sort(mpi_ctx_.neighbor_in_ranks_.begin(), mpi_ctx_.neighbor_in_ranks_.end());
 
-  neighbor_out_ranks_.clear();
-  neighbor_out_ranks_.reserve(outdegree);
+  mpi_ctx_.neighbor_out_ranks_.clear();
+  mpi_ctx_.neighbor_out_ranks_.reserve(outdegree);
   for (int i = 0; i < outdegree; i++) {
-    neighbor_out_ranks_.push_back(destinations[i]);
+    mpi_ctx_.neighbor_out_ranks_.push_back(destinations[i]);
   }
-  std::sort(neighbor_out_ranks_.begin(), neighbor_out_ranks_.end());
+  std::sort(mpi_ctx_.neighbor_out_ranks_.begin(), mpi_ctx_.neighbor_out_ranks_.end());
   mpi_ctx_.DisableTopoWeights();  // Topology weights are always set at
                                   // SetTopologyWeights.
 
@@ -267,9 +182,9 @@ int MPIController::SetTopologyWeights(int indegree, const int* sources,
   if (!mpi_ctx_.IsTopoSetup()) {
     return -1;
   }
-  self_weight_ = self_weight;
+  mpi_ctx_.self_weight_ = self_weight;
   for (int i = 0; i < indegree; i++) {
-    neighbor_weights_[sources[i]] = neighbor_weights[i];
+    mpi_ctx_.neighbor_weights_[sources[i]] = neighbor_weights[i];
   }
   mpi_ctx_.EnableTopoWeights();
   return 1;
@@ -277,10 +192,10 @@ int MPIController::SetTopologyWeights(int indegree, const int* sources,
 
 int MPIController::LoadTopology(int* indegree, int*& sources, int* outdegree,
                                 int*& destinations) {
-  *indegree = neighbor_in_ranks_.size();
-  sources = &neighbor_in_ranks_[0];
-  *outdegree = neighbor_out_ranks_.size();
-  destinations = &neighbor_out_ranks_[0];
+  *indegree = mpi_ctx_.neighbor_in_ranks_.size();
+  sources = &mpi_ctx_.neighbor_in_ranks_[0];
+  *outdegree = mpi_ctx_.neighbor_out_ranks_.size();
+  destinations = &mpi_ctx_.neighbor_out_ranks_[0];
   return 1;
 }
 
@@ -290,19 +205,19 @@ int MPIController::LoadTopologyWeights(
   if (!mpi_ctx_.IsWeighted()) {
     return 0;
   }
-  self_weight = self_weight_;
-  neighbor_weights = &neighbor_weights_;
+  self_weight = mpi_ctx_.self_weight_;
+  neighbor_weights = &mpi_ctx_.neighbor_weights_;
   return 1;
 }
 
 void MPIController::NeighborAllgather(TensorTableEntry& entry) {
-  int* recvcounts = new int[neighbor_indgree_];
-  int* displcmnts = new int[neighbor_indgree_];
+  int* recvcounts = new int[mpi_ctx_.neighbor_indgree_];
+  int* displcmnts = new int[mpi_ctx_.neighbor_indgree_];
   if (!mpi_ctx_.IsTopoSetup()) {
     throw std::runtime_error("Topology of MPI has not been set yet.");
   }
-  AllocateOutput(entry, recvcounts, Communicator::GRAPH);
-  SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
+  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
+  mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -445,16 +360,16 @@ Status MPIController::WinCreate(
   //  neighbor_tensors. Otherwise, window is associated with null pointer.
   std::shared_ptr<MPI_Win> mpi_win_ptr;
   int neighbor_tensor_index = 0;
-  for (int rank = 0; rank < size_; rank++) {
+  for (int rank = 0; rank < mpi_ctx_.size_; rank++) {
     auto mpi_win_ptr = std::make_shared<MPI_Win>();
     std::shared_ptr<Tensor> t = nullptr;
-    if (rank == rank_) {
+    if (rank == mpi_ctx_.rank_) {
       // Sender (no need to allocate the memory with it.)
       data_buf = nullptr;
       element_size = 1;
       win_size = 0;
-    } else if (std::find(neighbor_in_ranks_.begin(), neighbor_in_ranks_.end(),
-                         rank) != neighbor_in_ranks_.end()) {
+    } else if (std::find(mpi_ctx_.neighbor_in_ranks_.begin(), mpi_ctx_.neighbor_in_ranks_.end(),
+                         rank) != mpi_ctx_.neighbor_in_ranks_.end()) {
       // Receiver
       t = neighbor_tensors[neighbor_tensor_index++];
       data_buf = (void*)t->data();
@@ -499,11 +414,11 @@ Status MPIController::WinSync(const std::string& name, int device) {
 
   with_device device_guard(device);
   auto win_mananger = it->second;
-  for (auto rank : neighbor_in_ranks_) {
+  for (auto rank : mpi_ctx_.neighbor_in_ranks_) {
     auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
-    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, rank_, MPI_MODE_NOCHECK, *mpi_win_ptr);
+    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK, *mpi_win_ptr);
     MPI_Win_sync(*mpi_win_ptr);
-    MPI_Win_unlock(rank_, *mpi_win_ptr);
+    MPI_Win_unlock(mpi_ctx_.rank_, *mpi_win_ptr);
   }
 
   return Status::OK();
@@ -516,7 +431,7 @@ Status MPIController::WinFence(const std::string& name) {
   }
 
   std::shared_ptr<WindowManager> win_mananger = it->second;
-  for (int rank = 0; rank < size_; rank++) {
+  for (int rank = 0; rank < mpi_ctx_.size_; rank++) {
     MPI_Win_fence(0, *(win_mananger->GetWinByRank(rank)));
   }
 
@@ -556,7 +471,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
-  MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
+  MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
 
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
@@ -564,13 +479,13 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
   std::vector<std::pair<int, double>> sorted_dst_weights =
-      GetSortedDstWeights(rank_, size_, entry.dst_weights);
+      GetSortedDstWeights(mpi_ctx_.rank_, mpi_ctx_.size_, entry.dst_weights);
 
   for (auto kv : sorted_dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
 
-    BFLOG(TRACE, rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
+    BFLOG(TRACE, mpi_ctx_.rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
 
     if (entry.require_mutex) {
       mutex_ranks.clear();
@@ -582,7 +497,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, mpi_win);
     // avoid putting the tensor for itself (NOT valid).
-    if (target_rank == rank_) continue;
+    if (target_rank == mpi_ctx_.rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
     int target_disp = 0;  // offset in win buffer
@@ -607,7 +522,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     }
   }
 
-  BFLOG(TRACE, rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
+  BFLOG(TRACE, mpi_ctx_.rank_) << "MPI_Put for " << entry.tensor_name << " is done.";
 
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
@@ -625,20 +540,20 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
-  MPI_Win mpi_win = *(win_mananger->GetWinByRank(rank_));
+  MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   std::vector<std::pair<int, double>> sorted_dst_weights =
-      GetSortedDstWeights(rank_, size_, entry.dst_weights);
+      GetSortedDstWeights(mpi_ctx_.rank_, mpi_ctx_.size_, entry.dst_weights);
 
   for (auto kv : sorted_dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
     // avoid putting the tensor for itself (NOT valid).
-    if (target_rank == rank_) continue;
+    if (target_rank == mpi_ctx_.rank_) continue;
 
     if (entry.require_mutex) {
       mutex_ranks.clear();
@@ -677,7 +592,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       WinMutexRelease(mutex_ranks, /*is_sync=*/false);
     }
   }
-  BFLOG(TRACE, rank_) << "MPI_Accmulate for " << entry.tensor_name
+  BFLOG(TRACE, mpi_ctx_.rank_) << "MPI_Accmulate for " << entry.tensor_name
                       << " is done.";
 
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
@@ -703,7 +618,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   for (auto kv : entry.src_weights) {
     int target_rank = kv.first;
     // avoid getting the tensor for itself.
-    if (target_rank == rank_) continue;
+    if (target_rank == mpi_ctx_.rank_) continue;
 
     if (entry.require_mutex) {
       mutex_ranks.clear();
@@ -718,7 +633,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     int num_elements = tensor->shape().num_elements();
     MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(tensor);
 
-    BFLOG(DEBUG, rank_) << "MPI_Get for " << entry.tensor_name << " is to get "
+    BFLOG(DEBUG, mpi_ctx_.rank_) << "MPI_Get for " << entry.tensor_name << " is to get "
                         << num_elements << " from " << target_rank;
 
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -745,7 +660,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     }
   }
 
-  BFLOG(TRACE, rank_) << "Win_get for " << entry.tensor_name << " is done.";
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Win_get for " << entry.tensor_name << " is done.";
   entry.callback(Status::OK());
 }
 
@@ -768,10 +683,10 @@ Status MPIController::WinLock(const std::string& name) {
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
 
   // It only locks the memory in local.
-  int target_rank = rank_;
+  int target_rank = mpi_ctx_.rank_;
   MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK, mpi_win);
 
-  for (const int& rank : neighbor_in_ranks_) {
+  for (const int& rank : mpi_ctx_.neighbor_in_ranks_) {
     auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, target_rank, MPI_MODE_NOCHECK,
                  *mpi_win_ptr);
@@ -791,10 +706,10 @@ Status MPIController::WinUnlock(const std::string& name) {
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
 
   // It only locks the memory in local.
-  int target_rank = rank_;
+  int target_rank = mpi_ctx_.rank_;
   MPI_Win_unlock(target_rank, mpi_win);
 
-  for (const int& rank : neighbor_in_ranks_) {
+  for (const int& rank : mpi_ctx_.neighbor_in_ranks_) {
     auto mpi_win_ptr = win_mananger->GetWinByRank(rank);
     MPI_Win_unlock(target_rank, *mpi_win_ptr);
   }
@@ -828,7 +743,7 @@ Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks,
 
   for (int rank : acquire_ranks) {
     mutex_win = mpi_ctx_.win_mutex[rank];
-    BFLOG(TRACE, rank_) << "Acquire Win Mutex for rank " << rank;
+    BFLOG(TRACE, mpi_ctx_.rank_) << "Acquire Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     do {
       if (is_sync) {
@@ -871,7 +786,7 @@ Status MPIController::WinMutexRelease(const std::vector<int>& release_ranks,
   std::shared_ptr<MPI_Win> mutex_win;
   for (int rank : release_ranks) {
     mutex_win = mpi_ctx_.win_mutex[rank];
-    BFLOG(TRACE, rank_) << "Release Win Mutex for rank " << rank;
+    BFLOG(TRACE, mpi_ctx_.rank_) << "Release Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     if (is_sync) {
       // TODO(ybc) Notice the following accumulate may cause the value to be

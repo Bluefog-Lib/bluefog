@@ -23,8 +23,11 @@
 
 #include "tensor_queue.h"
 #include "mpi_controller.h"
-
 #include "timeline.h"
+
+#if HAVE_NCCL
+#include "nccl_controller.h"
+#endif
 
 namespace bluefog {
 namespace common {
@@ -56,6 +59,10 @@ struct BluefogGlobalState {
   bool timeline_enabled = false;
 
   std::shared_ptr<MPIController> controller;
+
+  #if HAVE_NCCL
+  std::unique_ptr<NCCLController> nccl_controller;
+  #endif
 
   TensorQueue tensor_queue;
 

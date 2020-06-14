@@ -34,16 +34,16 @@ class MPIController {
 
   int GetTypeSize(DataType dtype);
 
-  inline const std::vector<int>& GetRanks() const { return ranks_; };
-  inline int GetRank() const { return rank_; };
-  inline int GetLocalRank() const { return local_rank_; };
-  inline int GetCrossRank() const { return cross_rank_; };
-  inline int GetSize() const { return size_; };
-  inline int GetLocalSize() const { return local_size_; };
-  inline int GetCrossSize() const { return cross_size_; };
-  inline int GetNeighborSize() const { return neighbor_indgree_; };
+  inline const std::vector<int>& GetRanks() const { return mpi_ctx_.ranks_; };
+  inline int GetRank() const { return mpi_ctx_.rank_; };
+  inline int GetLocalRank() const { return mpi_ctx_.local_rank_; };
+  inline int GetCrossRank() const { return mpi_ctx_.cross_rank_; };
+  inline int GetSize() const { return mpi_ctx_.size_; };
+  inline int GetLocalSize() const { return mpi_ctx_.local_size_; };
+  inline int GetCrossSize() const { return mpi_ctx_.cross_size_; };
+  inline int GetNeighborSize() const { return mpi_ctx_.neighbor_indgree_; };
   inline const std::vector<int>& GetLocalCommRanks() const {
-    return local_comm_ranks_;
+    return mpi_ctx_.local_comm_ranks_;
   };
 
   inline bool IsMpiThreadsSupported() const { return mpi_threads_supported_; }
@@ -100,33 +100,6 @@ class MPIController {
 
   // flag indicating whether MPI multi-threading is supported.
   bool mpi_threads_supported_ = false;
-
-  Status AllocateOutput(TensorTableEntry& entries, int*& recvcounts, Communicator comm_type);
-  void SetDisplacements(const int* recvcounts, int*& displcmnts, Communicator comm_type);
-
- private:
-  int rank_ = 0;
-  int local_rank_ = 0;
-
-  int cross_rank_ = 0;
-  int size_ = 1;
-  int local_size_ = 1;
-  int cross_size_ = 1;
-
-  int neighbor_indgree_ = -1;
-  int neighbor_outdgree_ = -1;
-
-  std::vector<int> neighbor_in_ranks_;
-  std::vector<int> neighbor_out_ranks_;
-
-  // ranks of the bluefog world
-  std::vector<int> ranks_;
-
-  // COMM_WORLD ranks of processes running on this node.
-  std::vector<int> local_comm_ranks_;
-
-  double self_weight_;
-  std::unordered_map<int, double> neighbor_weights_;
 };
 
 class WinMutexGuard {

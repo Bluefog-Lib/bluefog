@@ -32,6 +32,9 @@ parser.add_argument(
     "--plot-interactive", action='store_true', help="Use plt.show() to present the plot."
 )
 parser.add_argument(
+    "--max-iter", action='store', type=int, default=1000, help="Use plt.show() to present the plot."
+)
+parser.add_argument(
     "--method", help="this example supports exact_diffusion, gradient_tracking, and push_diging",
     default='exact_diffusion'
 )
@@ -220,35 +223,34 @@ w_opt = distributed_grad_descent()
 
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'exact_diffusion':
-    w, mse = exact_diffusion(w_opt)
+    w, mse = exact_diffusion(w_opt, maxite=args.maxite)
 elif args.method == 'gradient_tracking':
-    w, mse = gradient_tracking(w_opt, alpha_gt=5e-3)
+    w, mse = gradient_tracking(w_opt, alpha_gt=5e-3, maxite=args.maxite)
 elif args.method == 'push_diging':
-    w, mse = push_diging(w_opt, alpha_pd=5e-3)
+    w, mse = push_diging(w_opt, alpha_pd=5e-3, maxite=args.maxite)
+else:
+    raise NotImplementedError(
+        'Algorithm not support. This example only supports' +
+        ' exact_diffusion, gradient_tracking, and push_diging'
+    )
 
 # plot and print result
-try:
-    if bf.rank() == 0:
-        plt.semilogy(mse)
-        finalize_plot()
+if bf.rank() == 0:
+    plt.semilogy(mse)
+    finalize_plot()
 
-    # calculate local and global gradient
-    grad = torch.norm(bf.allreduce(A.T.mm(A.mm(w) - b)),
-                      p=2)  # global gradient
+# calculate local and global gradient
+grad = torch.norm(bf.allreduce(A.T.mm(A.mm(w) - b)),
+                  p=2)  # global gradient
 
-    # evaluate the convergence of gradient tracking for logistic regression
-    # the norm of global gradient is expected to be 0 (optimality condition)
-    global_grad_norm = torch.norm(grad, p=2)
-    print("[{}] Rank {}: global gradient norm: {}".format(
-        args.method, bf.rank(), global_grad_norm))
+# evaluate the convergence of gradient tracking for logistic regression
+# the norm of global gradient is expected to be 0 (optimality condition)
+global_grad_norm = torch.norm(grad, p=2)
+print("[{}] Rank {}: global gradient norm: {}".format(
+    args.method, bf.rank(), global_grad_norm))
 
-    # the norm of local gradient is expected not to be close to 0
-    # this is because each rank converges to global solution, not local solution
-    local_grad_norm = torch.norm(A.T.mm(A.mm(w) - b), p=2)
-    print("[{}] Rank {}: local gradient norm: {}".format(
-        args.method, bf.rank(), local_grad_norm))
-
-except NameError:
-    if bf.rank() == 0:
-        print('Algorithm not support. This example only supports'
-              + ' exact_diffusion, gradient_tracking, and push_diging')
+# the norm of local gradient is expected not to be close to 0
+# this is because each rank converges to global solution, not local solution
+local_grad_norm = torch.norm(A.T.mm(A.mm(w) - b), p=2)
+print("[{}] Rank {}: local gradient norm: {}".format(
+    args.method, bf.rank(), local_grad_norm))

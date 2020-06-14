@@ -31,6 +31,10 @@
 #include "global_state.h"
 #include "logging.h"
 
+#if HAVE_NCCL
+#include "nccl_controller.h"
+#endif
+
 // Bluefog knobs.
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
 
@@ -44,6 +48,10 @@ BluefogGlobalState bluefog_global;
 
 MPIContext mpi_context;
 
+#if HAVE_NCCL
+NCCLContext nccl_context;
+#endif
+
 }  // namespace
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -54,6 +62,11 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 
   // Initialize controller
   state.controller->Initialize();
+
+#if HAVE_NCCL
+  state.nccl_controller->Initialize();
+  BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
+#endif
 
   // Signal that initialization is completed.
   state.initialization_done = true;
@@ -88,31 +101,74 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
     cb(SHUT_DOWN_ERROR);
   }
   mpi_context.Finalize(mpi_ctx_manager);
+
+#if HAVE_NCCL
+  nccl_context.Finalize();
+#endif
+}
+
+int DetermineController(const TensorTableEntry& entry) {
+  if (entry.mpi_ops_type != MPIOpsType::ALLREDUCE &&
+      entry.mpi_ops_type != MPIOpsType::BROADCAST &&
+      entry.mpi_ops_type != MPIOpsType::ALLGATHER)
+    return 0;
+  bool have_nccl = false;
+#if HAVE_NCCL
+  have_nccl = true;
+#endif
+  return (have_nccl && entry.device != CPU_DEVICE_ID) ? 1 : 0;
 }
 
 bool RunLoopOnce(BluefogGlobalState& state) {
   try {
     auto entry = state.tensor_queue.PopMessagesFromQueue();
+    int controller_choice = DetermineController(entry);
+    const std::string communicator_name =
+        (controller_choice == 0) ? "MPI" : "NCCL";
     switch (entry.mpi_ops_type) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name;
+            << "Processing " << entry.tensor_name << "with "
+            << communicator_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
-        state.controller->Allreduce(entry);
+        if (controller_choice == 0) {
+          state.controller->Allreduce(entry);
+        }
+#if HAVE_NCCL
+        if (controller_choice == 1) {
+          state.nccl_controller->Allreduce(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name;
+            << "Processing " << entry.tensor_name << "with "
+            << communicator_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_BROADCAST);
-        state.controller->Broadcast(entry);
+        if (controller_choice == 0) {
+          state.controller->Broadcast(entry);
+        }
+#if HAVE_NCCL
+        if (controller_choice == 1) {
+          state.nccl_controller->Broadcast(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name;
-        state.controller->Allgather(entry);
+            << "Processing " << entry.tensor_name << "with "
+            << communicator_name;
+        if (controller_choice == 0) {
+          state.controller->Allgather(entry);
+        }
+#if HAVE_NCCL
+        if (controller_choice == 1) {
+          state.nccl_controller->Allgather(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
@@ -179,6 +235,10 @@ void InitializeBluefogOnce() {
   if (!bluefog_global.initialize_flag.test_and_set()) {
     bluefog_global.controller.reset(
         new MPIController(bluefog_global.tensor_queue, mpi_context));
+#if HAVE_NCCL
+    bluefog_global.nccl_controller.reset(new NCCLController(
+        bluefog_global.tensor_queue, nccl_context, mpi_context));
+#endif
     bluefog_global.initialization_done = false;
     bluefog_global.background_thread =
         std::thread(BackgroundThreadLoop, std::ref(bluefog_global));
@@ -330,6 +390,14 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
     timeline_ptr->ActivityEnd(tensor_name);
   }
   return 1;
+}
+
+int bluefog_nccl_built() {
+  int result = 0;
+#if HAVE_NCCL
+  result = 1;
+#endif
+  return result;
 }
 
 }  // extern "C"

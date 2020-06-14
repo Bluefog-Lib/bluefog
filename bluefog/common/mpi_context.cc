@@ -18,6 +18,8 @@
 
 #include "mpi_context.h"
 #include "logging.h"
+#include "operations.h"
+#include "timeline.h"
 
 namespace bluefog {
 namespace common {
@@ -319,6 +321,91 @@ bool MPIContext::DestroyWinMutex() {
   win_mutex.clear();
   self_mutex_mem.reset();
   return true;
+}
+
+Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
+                                  Communicator comm_type) {
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
+
+  // Every tensor participating in Allgather operation may have different
+  // first dimension size, but the rest of dimensions are same for all
+  // tensors.  Here we get shape of tensor sliced by first dimension.
+  // TODO(ybc): Check single_slice_shape is same cross all ranks.
+  TensorShape single_slice_shape;
+  for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
+    single_slice_shape.AddDim(entry.tensor->shape().dim_size(i));
+  }
+
+  // cnt_size is the number of expected receiving info.
+  // For allgather, it is the global size.
+  // For neighbor_allgather, it is the number of in-neighbor (excluding itself).
+  int cnt_size = 0;
+  if (comm_type == Communicator::GLOBAL) {
+    cnt_size = size_;
+  } else if (comm_type == Communicator::GRAPH) {
+    cnt_size = neighbor_indgree_;
+  }
+
+  int* send_count = new int[1];
+  send_count[0] = entry.tensor->shape().dim_size(0);
+  int* gather_count = new int[cnt_size];
+  int ret_code = -1;
+  if (comm_type == Communicator::GLOBAL) {
+    ret_code = MPI_Allgather(send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
+                             GetMPICommunicator(Communicator::GLOBAL));
+  } else if (comm_type == Communicator::GRAPH) {
+    ret_code =
+        MPI_Neighbor_allgather(send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
+                               GetMPICommunicator(Communicator::GRAPH));
+  }
+
+  if (ret_code != MPI_SUCCESS) {
+    throw std::runtime_error(
+        "MPI_Allgather (pre-allgather to get size) failed, see MPI output for "
+        "details.");
+  }
+
+  // Copy tensor sizes from the response into a vector of int64_t
+  // and compute total size.  This is size of first dimension.
+  int64_t total_entry_dimension_size = 0;
+  for (int rc = 0; rc < cnt_size; ++rc) {
+    total_entry_dimension_size += gather_count[rc];
+    recvcounts[rc] = single_slice_shape.num_elements() * gather_count[rc];
+  }
+  BFLOG(TRACE, rank_) << "total_entry_dimension_size: "
+                      << total_entry_dimension_size;
+
+  // Allgather output will have shape of:
+  // (sum of first dimension of every tensor) x (tensor slice shape).
+  TensorShape output_shape;
+
+  output_shape.AddDim((int64_t)total_entry_dimension_size);
+  output_shape.AppendShape(single_slice_shape);
+
+  Status status = entry.context->AllocateOutput(output_shape, &entry.output);
+  delete[] gather_count;
+
+  timeline_ptr->ActivityEnd(entry.tensor_name);  // End for Allocate_Output.
+  return status;
+}
+
+void MPIContext::SetDisplacements(const int* recvcounts, int*& displcmnts,
+                                  Communicator comm_type) {
+  int cnt_size = 0;
+  if (comm_type == Communicator::GLOBAL) {
+    cnt_size = size_;
+  } else if (comm_type == Communicator::GRAPH) {
+    cnt_size = neighbor_indgree_;
+  }
+  for (int rc = 0; rc < cnt_size; ++rc) {
+    if (rc == 0) {
+      displcmnts[rc] = 0;
+    } else {
+      displcmnts[rc] = displcmnts[rc - 1] + recvcounts[rc - 1];
+    }
+  }
 }
 
 }  // namespace common

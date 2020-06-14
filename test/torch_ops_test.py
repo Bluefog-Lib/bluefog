@@ -191,6 +191,7 @@ class OpsTests(unittest.TestCase):
                     rank_tensor.data.max() == i
                 ), "bf.allgather produces incorrect gathered tensor"
 
+    @unittest.skipIf(bf.nccl_built(), 'nccl do not support variable size on allgather')
     def test_allgather_variable_size(self):
         size = bf.size()
         rank = bf.rank()
@@ -231,6 +232,70 @@ class OpsTests(unittest.TestCase):
                     "bf.allgather(var) produces incorrect gathered tensor"
                 assert rank_tensor.data.max() == i, \
                     "bf.allgather(var) produces incorrect gathered tensor"
+
+    def test_neighbor_allreduce_sum_precision(self):
+        """Test that the neighbor all reduce precision (sum) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+        sum_value = (len(neighbor_ranks)+1)*(2**-256)
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.DoubleTensor(*([23] * dim)).fill_(1).mul_(2**-256)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            nw = {i: 1.0 for i in neighbor_ranks}
+            reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0, 
+                                                           neighbor_weights=nw, name=name)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data - sum_value).abs().max() == 0
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_avg_precision(self):
+        """Test that the neighbor all reduce precision (avg) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+        sum_value = 2**-256
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.DoubleTensor(*([23] * dim)).fill_(1).mul_(2**-256)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, name=name)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data - sum_value).abs().max() == 0
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
