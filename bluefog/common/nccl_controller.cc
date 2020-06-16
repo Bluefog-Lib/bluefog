@@ -288,29 +288,44 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
                        rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
   }
 #else
-  int recv_rank_index = 0;
-  int send_rank_index = 0;
-  for (const auto& pair: nccl_ctx_.pair_order) {
+  uint recv_rank_index = 0;
+  uint send_rank_index = 0;
+  for (const auto& pair : nccl_ctx_.pair_order) {
+    int peer_rank = mpi_ctx_.rank_ == pair.first ? pair.second : pair.first;
+
     int send_rank = mpi_ctx_.neighbor_out_ranks_[send_rank_index];
     int recv_rank = mpi_ctx_.neighbor_in_ranks_[recv_rank_index];
     int recv_count = recvcounts[recv_rank_index];
     int target_disp = displcmnts[recv_rank_index];
     bool should_recv = false;
     bool should_send = false;
-    if (recv_rank == pair.first || recv_rank == pair.second) {
-      recv_rank_index++;
-      should_recv = true;
-    }
-    if (send_rank == pair.first || send_rank == pair.second) {
+    if (send_rank_index < mpi_ctx_.neighbor_out_ranks_.size() &&
+        peer_rank == send_rank) {
       send_rank_index++;
       should_send = true;
+      BFLOG(DEBUG, mpi_ctx_.rank_) << "Should send to rank " << peer_rank;
     }
+    if (recv_rank_index < mpi_ctx_.neighbor_in_ranks_.size() &&
+        peer_rank == recv_rank) {
+      recv_rank_index++;
+      should_recv = true;
+      BFLOG(DEBUG, mpi_ctx_.rank_) << "Should recv from rank " << peer_rank;
+    }
+
+    // BFLOG(DEBUG, mpi_ctx_.rank_)
+    //     << "Neighbor in ranks " << mpi_ctx_.neighbor_in_ranks_[0] << " "
+    //     << mpi_ctx_.neighbor_in_ranks_[1] << " "
+    //     << mpi_ctx_.neighbor_in_ranks_[2];
+    // BFLOG(DEBUG, mpi_ctx_.rank_)
+    //     << "Neighbor out ranks " << mpi_ctx_.neighbor_out_ranks_[0] << " "
+    //     << mpi_ctx_.neighbor_out_ranks_[1] << " "
+    //     << mpi_ctx_.neighbor_out_ranks_[2];
+
     int element_size = mpi_ctx_.GetMPITypeSize(
         entry.tensor->dtype());  // Assume NCCL use same size as MPI
     void* recvbuf =
         (void*)(static_cast<char*>(buffer_data) + target_disp * element_size);
 
-    // We assume bi-directional communication
     if (mpi_ctx_.rank_ == pair.second) {
       // Recv then send
       if (should_recv)
@@ -352,9 +367,9 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
-void NCCLController::NeighborAllreduce(TensorTableEntry& entry)  {
-  // The communication pattern of neighbor_allreduce and neighbor_allgather are the same.
-  // The difference happened at the callback phase.
+void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
+  // The communication pattern of neighbor_allreduce and neighbor_allgather are
+  // the same. The difference happened at the callback phase.
   NeighborAllgather(entry);
 }
 
