@@ -280,11 +280,10 @@ void InitializeBluefogOnce() {
   mpi_context
       .Enable();  // We always enable mpi since we relied on MPI only now.
   if (!bluefog_global.initialize_flag.test_and_set()) {
-    bluefog_global.controller.reset(
-        new MPIController(bluefog_global.tensor_queue, mpi_context));
+    bluefog_global.controller.reset(new MPIController(mpi_context));
 #if HAVE_NCCL
-    bluefog_global.nccl_controller.reset(new NCCLController(
-        bluefog_global.tensor_queue, nccl_context, mpi_context));
+    bluefog_global.nccl_controller.reset(
+        new NCCLController(nccl_context, mpi_context));
 #endif
     bluefog_global.initialization_done = false;
     bluefog_global.background_thread =
@@ -387,11 +386,12 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
 
   bool mpi_result = bluefog_global.controller->SetTopology(indegree, sources, outdegree,
                                                 destinations);
-// #if HAVE_NCCL
-//   if (mpi_result) {
-//     bluefog_global.nccl_controller->InitPeerCommunicator();
-//   }
-// #endif
+#if HAVE_NCCL
+  if (mpi_result && nccl_context.is_initialized) {
+    bluefog_global.nccl_controller->DestroyPeerCommunicator();
+    bluefog_global.nccl_controller->InitPeerCommunicator();
+  }
+#endif
   return mpi_result;
 }
 

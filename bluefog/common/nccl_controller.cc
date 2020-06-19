@@ -63,17 +63,19 @@ void NCCLContext::Initialize(const int rank, const int size,
   // Assume one device per process
   int nDevices = 0;
   CUDACHECK(cudaGetDeviceCount(&nDevices));
-  CUDACHECK(cudaSetDevice(local_rank%nDevices));
+  CUDACHECK(cudaSetDevice(local_rank % nDevices));
   CUDACHECK(cudaStreamCreate(&stream));
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
 
   is_initialized = true;
-  cuda_device = local_rank;
+  cuda_device = local_rank % nDevices;
   return;
 }
 
 void NCCLContext::CleanPeerCommunicator() {
   for (const auto& pair : pair_order) {
+    BFLOG(DEBUG) << "Destory comm for pair (" << pair.first << ", "
+                 << pair.second << ")";
     ncclComm_t& pair_nccl_comm = nccl_pair_comms.at(pair);
     NCCLCHECK(ncclCommDestroy(pair_nccl_comm));
     cudaStream_t& pair_stream = pair_streams.at(pair);
@@ -99,8 +101,10 @@ void NCCLController::Initialize() {
 }
 
 void NCCLController::InitPeerCommunicator() {
-  // Clear the existing communicator
-  DestroyPeerCommunicator();
+  int nDevices = 0;
+  CUDACHECK(cudaGetDeviceCount(&nDevices));
+  CUDACHECK(cudaSetDevice(mpi_ctx_.local_rank_ % nDevices));
+
   // First make pairs that require to build communicator.
   std::vector<std::pair<int, int>> pairs;
   for (int peer_rank : mpi_ctx_.neighbor_out_ranks_) {
@@ -123,7 +127,11 @@ void NCCLController::InitPeerCommunicator() {
   // deduplicate them.
   std::sort(pairs.begin(), pairs.end());
   pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
-  for (const auto& pair: pairs) {
+  if (mpi_ctx_.rank_ == 2) BFLOG(DEBUG, mpi_ctx_.rank_) << "pairs: " << pairs.size();
+  for (const auto& pair : pairs) {
+    if (mpi_ctx_.rank_ == 2)
+      BFLOG(DEBUG, mpi_ctx_.rank_)
+          << "pairs: (" << pair.first << "." << pair.second << ")";
     int my_pair_rank = pair.first == mpi_ctx_.rank_ ? 0 : 1;
     int tag = pair.first + pair.second * mpi_ctx_.size_;
     ncclUniqueId nccl_id;
@@ -143,6 +151,7 @@ void NCCLController::InitPeerCommunicator() {
     nccl_ctx_.pair_streams[pair] = new_pair_stream;
     nccl_ctx_.pair_order.push_back(pair);
   }
+  if (mpi_ctx_.rank_ == 2) BFLOG(DEBUG, mpi_ctx_.rank_) << "pairs end!";
   nccl_ctx_.is_peer_initialized = true;
 }
 
@@ -311,15 +320,6 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
       should_recv = true;
       BFLOG(DEBUG, mpi_ctx_.rank_) << "Should recv from rank " << peer_rank;
     }
-
-    // BFLOG(DEBUG, mpi_ctx_.rank_)
-    //     << "Neighbor in ranks " << mpi_ctx_.neighbor_in_ranks_[0] << " "
-    //     << mpi_ctx_.neighbor_in_ranks_[1] << " "
-    //     << mpi_ctx_.neighbor_in_ranks_[2];
-    // BFLOG(DEBUG, mpi_ctx_.rank_)
-    //     << "Neighbor out ranks " << mpi_ctx_.neighbor_out_ranks_[0] << " "
-    //     << mpi_ctx_.neighbor_out_ranks_[1] << " "
-    //     << mpi_ctx_.neighbor_out_ranks_[2];
 
     int element_size = mpi_ctx_.GetMPITypeSize(
         entry.tensor->dtype());  // Assume NCCL use same size as MPI

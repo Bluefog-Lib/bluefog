@@ -78,7 +78,12 @@ class WindowManager {
   std::shared_ptr<MPI_Win> global_win_;
 };
 
-struct MPIContext {
+class MPIContext {
+ public:
+  MPIContext() = default;
+  MPIContext(const MPIContext&) = delete;
+  MPIContext& operator=(MPIContext) = delete;
+
   void Enable() { enabled_ = true; };
   void SetTopoSetup() { topo_setup_ = true; }
   void ResetTopoSetup() { topo_setup_ = false; }

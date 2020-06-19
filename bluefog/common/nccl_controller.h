@@ -73,7 +73,12 @@ struct pair_hash {
     }
 };
 
-struct NCCLContext {
+class NCCLContext {
+ public:
+  NCCLContext() = default;
+  NCCLContext(const NCCLContext&) = delete;
+  NCCLContext& operator=(NCCLContext other) = delete;
+
   void Initialize(const int rank, const int size, const int local_rank);
   void Finalize();
   void CleanPeerCommunicator();
@@ -96,8 +101,8 @@ struct NCCLContext {
 
 class NCCLController {
  public:
-  NCCLController(TensorQueue& tensor_queue, NCCLContext& nccl_ctx, MPIContext& mpi_ctx)
-      : tensor_queue_(tensor_queue), nccl_ctx_(nccl_ctx), mpi_ctx_(mpi_ctx) {
+  NCCLController(NCCLContext& nccl_ctx, MPIContext& mpi_ctx)
+      : nccl_ctx_(nccl_ctx), mpi_ctx_(mpi_ctx) {
     BFLOG(DEBUG) << "NCCL Controller Initialized.";
   }
 
@@ -118,8 +123,6 @@ class NCCLController {
                                ncclDataType_t data_type, int peer_rank);
 
   // Outside dependencies
-  TensorQueue& tensor_queue_;
-
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
