@@ -25,6 +25,7 @@ import torch.optim as optim
 import torch.utils.data.distributed
 from torchvision import models
 import bluefog.torch as bf
+from bluefog.common import topology_util
 
 
 # Benchmark settings
@@ -67,6 +68,9 @@ if args.dist_optimizer == 'horovod':
     import horovod.torch as bf
 
 bf.init()
+# if args.dist_optimizer != 'horovod':
+#     print("Set ring topo.")
+#     bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
 
 if args.cuda:
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())

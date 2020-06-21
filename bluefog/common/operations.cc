@@ -386,7 +386,7 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
 
   bool mpi_result = bluefog_global.controller->SetTopology(indegree, sources, outdegree,
                                                 destinations);
-#if HAVE_NCCL
+#if HAVE_NCCL && NCCL_MINOR < 7
   if (mpi_result && nccl_context.is_initialized) {
     bluefog_global.nccl_controller->DestroyPeerCommunicator();
     bluefog_global.nccl_controller->InitPeerCommunicator();
@@ -450,6 +450,7 @@ int bluefog_nccl_built() {
   int result = 0;
 #if HAVE_NCCL
   result = 1;
+  BFLOG(DEBUG) << "NCCL VERSION: " << NCCL_MAJOR << "." << NCCL_MINOR;
 #endif
   return result;
 }

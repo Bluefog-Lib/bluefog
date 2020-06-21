@@ -90,14 +90,19 @@ void NCCLContext::Finalize() {
   NCCLCHECK(ncclCommDestroy(nccl_comm));
   CUDACHECK(cudaStreamDestroy(stream));
 
+#if NCCL_MINOR < 7
   CleanPeerCommunicator();
+#endif
+
   is_initialized = false;
   cuda_device = -1;
 }
 
 void NCCLController::Initialize() {
   nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
+#if NCCL_MINOR < 7
   InitPeerCommunicator();
+#endif
 }
 
 void NCCLController::InitPeerCommunicator() {
