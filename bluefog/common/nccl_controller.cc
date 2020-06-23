@@ -72,6 +72,7 @@ void NCCLContext::Initialize(const int rank, const int size,
   return;
 }
 
+#if NCCL_MINOR < 7
 void NCCLContext::CleanPeerCommunicator() {
   for (const auto& pair : pair_order) {
     BFLOG(DEBUG) << "Destory comm for pair (" << pair.first << ", "
@@ -85,6 +86,7 @@ void NCCLContext::CleanPeerCommunicator() {
   pair_streams.clear();
   nccl_pair_comms.clear();
 }
+#endif
 
 void NCCLContext::Finalize() {
   NCCLCHECK(ncclCommDestroy(nccl_comm));
@@ -105,10 +107,13 @@ void NCCLController::Initialize() {
 #endif
 }
 
+#if NCCL_MINOR < 7
 void NCCLController::InitPeerCommunicator() {
   int nDevices = 0;
   CUDACHECK(cudaGetDeviceCount(&nDevices));
   CUDACHECK(cudaSetDevice(mpi_ctx_.local_rank_ % nDevices));
+
+  BFLOG(DEBUG) << "Initiate peer communicator";
 
   // First make pairs that require to build communicator.
   std::vector<std::pair<int, int>> pairs;
@@ -161,8 +166,10 @@ void NCCLController::InitPeerCommunicator() {
 }
 
 void NCCLController::DestroyPeerCommunicator() {
+  BFLOG(DEBUG) << "Destroy peer communicator";
   nccl_ctx_.CleanPeerCommunicator();
 }
+#endif
 
 bool CheckSameRecvSize(const int* recvcounts, const int size) {
   int first_recv_count;

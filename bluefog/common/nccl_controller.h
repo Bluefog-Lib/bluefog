@@ -107,8 +107,10 @@ class NCCLController {
   }
 
   void Initialize();
+#if NCCL_MINOR < 7
   void InitPeerCommunicator();
   void DestroyPeerCommunicator();
+#endif
 
   void Allgather(TensorTableEntry& entries);
   void Allreduce(TensorTableEntry& entries);

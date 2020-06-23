@@ -63,10 +63,8 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   // Initialize controller
   state.controller->Initialize();
 
-// #if HAVE_NCCL
-//   state.nccl_controller->Initialize();
-//   BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
-// #endif
+  // We use Lazy initialized pattern. nccl_controller will be initialized only
+  // when it necessary. 
 
   // Signal that initialization is completed.
   state.initialization_done = true;
