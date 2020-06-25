@@ -279,15 +279,18 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         for model in self._models:
             for parent_name, layer in _named_leaf_module(model):
                 layer.register_forward_hook(self._make_hook(parent_name))
+                for _, p in layer.named_parameters():
+                    self._requires_update.add(p)
 
     def _make_hook(self, parent_name):
         def hook(module, *unused):
             for name, p in module.named_parameters():
+                if not module.training:
+                    continue
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    self._requires_update.add(p)
                     handle = self._neighbor_allreduce_data_async(p)
                     self._handles[p] = handle
         return hook
@@ -408,6 +411,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
+                if not module.training:
+                    continue
                 if p.requires_grad:
                     handle = bf.win_put_nonblocking(
                         tensor=p.data, name=parent_name+'.'+name,
@@ -421,6 +426,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
+                if not module.training:
+                    continue
                 if p.requires_grad:
                     handle = bf.win_get_nonblocking(
                         name=parent_name+'.'+name, src_weights=self.src_weights,
@@ -559,6 +566,8 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                 if self._use_timeline:
                     # End forward computation timeline
                     bf.timeline_end_activity(full_name)
+                if not module.training:
+                    continue
                 if p.requires_grad:
                     ps_weights = self._named_ps_weights[full_name]
                     extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
