@@ -205,7 +205,7 @@ val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=args.val_batch_size, sampler=val_sampler, **kwargs
 )
 
-model = getattr(models, args.model)()
+model = getattr(models, args.model)(num_classes=10)
 
 if args.cuda:
     # Move model to GPU.
