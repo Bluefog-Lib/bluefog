@@ -111,7 +111,7 @@ def exact_diffusion(w_opt, maxite=2000, alpha_ed=1e-2, use_Abar=False):
         phi = psi + x - psi_prev
         x = bf.neighbor_allreduce(
             phi, self_weight, neighbor_weights, name='local variable')
-        psi_prev = psi
+        psi_prev = psi.clone()
         if bf.rank() == 0:
             mse.append(torch.norm(x - w_opt, p=2))
 
@@ -179,8 +179,7 @@ def push_diging(w_opt, maxite=2000, alpha_pd=1e-2):
 
     mse_pd = []
     for i in range(maxite):
-        if i % 10 == 0:
-            bf.barrier()
+        bf.barrier()
 
         w[:n] = w[:n] - alpha_pd*w[n:2*n]
         bf.win_accumulate(
@@ -189,6 +188,7 @@ def push_diging(w_opt, maxite=2000, alpha_pd=1e-2):
                          for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(2)
+        bf.barrier()
         w = bf.win_update_then_collect(name="w_buff")
 
         x = w[:n]/w[-1]
@@ -207,6 +207,8 @@ def push_diging(w_opt, maxite=2000, alpha_pd=1e-2):
 
 # ======================= Code starts here =======================
 bf.init()
+bf.set_topology(topology_util.MeshGrid2DGraph(bf.size()), is_weighted=True)
+# bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
 
 # Generate data
 # y = A@x + ns where ns is Gaussion noise
@@ -220,14 +222,13 @@ b = A.mm(x_o) + ns
 # calculate the global solution w_opt via distributed gradient descent
 w_opt = distributed_grad_descent()
 
-
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'exact_diffusion':
-    w, mse = exact_diffusion(w_opt, maxite=args.maxite)
+    w, mse = exact_diffusion(w_opt, maxite=args.max_iter, alpha_ed=5e-3, use_Abar=True)
 elif args.method == 'gradient_tracking':
-    w, mse = gradient_tracking(w_opt, alpha_gt=5e-3, maxite=args.maxite)
+    w, mse = gradient_tracking(w_opt, alpha_gt=5e-3, maxite=args.max_iter)
 elif args.method == 'push_diging':
-    w, mse = push_diging(w_opt, alpha_pd=5e-3, maxite=args.maxite)
+    w, mse = push_diging(w_opt, alpha_pd=5e-3, maxite=args.max_iter)
 else:
     raise NotImplementedError(
         'Algorithm not support. This example only supports' +
