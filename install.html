@@ -221,6 +221,11 @@ make -j <span class="k">$(</span>nproc<span class="k">)</span> all <span class="
 make install
 </pre></div>
 </div>
+<p>If you have NCCL installed in your system, it is also recommend to use NCCL instead of OpenMPI as
+communication implementation. To install Bluefog with NCCL implementation, you need to run</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BLUEFOG_WITH_NCCL</span><span class="o">=</span><span class="m">1</span> pip install --no-cache-dir bluefog
+</pre></div>
+</div>
 </div>
 <div class="section" id="installing-bluefog-from-github-directly">
 <h2>Installing Bluefog from Github Directly<a class="headerlink" href="#installing-bluefog-from-github-directly" title="Permalink to this headline">¶</a></h2>
