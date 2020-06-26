@@ -98,11 +98,13 @@ parser.add_argument("--average-test-result", action="store_true",
 parser.add_argument("--enable-dynamic-topology", action="store_true",
                     default=False, help=("Enable each iteration to transmit one neighbor " +
                                          "per iteration dynamically."))
+parser.add_argument('--virtual-topology', type=str, default="power2",
+                    help='The underlying virtual topology. Supporting options are ' +
+                    '[power2(Default), ring, mesh, star].')
 
 args = parser.parse_args()
 args.cuda = (not args.no_cuda) and (torch.cuda.is_available())
 allreduce_batch_size = args.batch_size * args.batches_per_allreduce
-
 
 if args.dist_optimizer == 'horovod':
     print("importing horovod")
@@ -111,6 +113,19 @@ if args.dist_optimizer == 'horovod':
 # Bluefog: initialize library.
 bf.init()
 torch.manual_seed(args.seed)
+if args.dist_optimizer != 'horovod':
+    if args.virtual_topology == "power2":
+        pass
+    elif args.virtual_topology == "ring":
+        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
+    elif args.virtual_topology == "mesh":
+        bf.set_topology(topology_util.RingGraph(
+            bf.size(), connect_style=0), is_weighted=True)
+    elif args.virtual_topology == "star":
+        bf.set_topology(topology_util.StarGraph(bf.size()))
+    else:
+        raise ValueError("Unknown args.virtual_topology, supporting options are " +
+                         "[power2(Default), ring, mesh, star].")
 
 if args.cuda:
     print("using cuda.")
