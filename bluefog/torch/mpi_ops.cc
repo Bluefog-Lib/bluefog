@@ -92,7 +92,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto bf_output = bf_tensor;
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_tensor, op_name, device,
+        bf_tensor, bf_tensor, op_name, CPU_DEVICE_ID,
         [handle, average, output, cpu_buffer, device, op_name, tid,
          timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
@@ -148,7 +148,7 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
 
     auto enqueue_result = EnqueueTensorBroadcast(
-        bf_tensor, bf_tensor, root_rank, op_name, device,
+        bf_tensor, bf_tensor, root_rank, op_name, CPU_DEVICE_ID,
         [handle, output, cpu_buffer, device, op_name, tid,
          timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
@@ -200,7 +200,7 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
 
     auto enqueue_result = EnqueueTensorAllgather(
-        bf_tensor, bf_context, op_name, device,
+        bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
         [handle, cpu_output, device, output, op_name, tid,
          timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
@@ -250,7 +250,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
 
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, op_name, device,
+        bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
         [handle, cpu_output, device, output, op_name, tid,
          timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
@@ -301,7 +301,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, op_name, device,
+        bf_context, bf_tensor, bf_output, op_name, CPU_DEVICE_ID,
         [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
          output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);

@@ -1,14 +1,14 @@
 # This file is used for the testing under docker environment.
 # The bluefog folder is binded in the docker storage system so that
 # a local modification can be reflected in the docker container as well.
-FROM nvidia/cuda:10.0-devel-ubuntu18.04
+FROM nvidia/cuda:10.1-devel-ubuntu18.04
 
 # TensorFlow version is tightly coupled to CUDA and cuDNN so it should be selected carefully
 ENV TENSORFLOW_VERSION=2.1.0
 ENV PYTORCH_VERSION=1.4.0
 ENV TORCHVISION_VERSION=0.5.0
-ENV CUDNN_VERSION=7.6.0.64-1+cuda10.0
-ENV NCCL_VERSION=2.4.7-1+cuda10.0
+ENV CUDNN_VERSION=7.6.0.64-1+cuda10.1
+ENV NCCL_VERSION=2.7.3-1+cuda10.1
 
 # Python 2.7 or 3.6 is supported by Ubuntu Bionic out of the box
 ARG python=3.7
@@ -72,7 +72,7 @@ RUN mkdir /tmp/openmpi && \
 
 # Install Horovod, temporarily using CUDA stubs
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
-    HOROVOD_GPU_ALLREDUCE=MPI HOROVOD_WITH_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 HOROVOD_WITHOUT_MXNET=1 \
+    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITH_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 HOROVOD_WITHOUT_MXNET=1 \
          pip install --no-cache-dir horovod && \
     ldconfig
 

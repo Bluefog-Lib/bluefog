@@ -63,10 +63,8 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   // Initialize controller
   state.controller->Initialize();
 
-#if HAVE_NCCL
-  state.nccl_controller->Initialize();
-  BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
-#endif
+  // We use Lazy initialized pattern. nccl_controller will be initialized only
+  // when it necessary. 
 
   // Signal that initialization is completed.
   state.initialization_done = true;
@@ -103,39 +101,74 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   mpi_context.Finalize(mpi_ctx_manager);
 
 #if HAVE_NCCL
-  nccl_context.Finalize();
+  if (nccl_context.is_initialized) {
+    nccl_context.Finalize();
+  }
 #endif
 }
 
-int DetermineController(const TensorTableEntry& entry) {
-  if (entry.mpi_ops_type != MPIOpsType::ALLREDUCE &&
-      entry.mpi_ops_type != MPIOpsType::BROADCAST &&
-      entry.mpi_ops_type != MPIOpsType::ALLGATHER)
-    return 0;
-  bool have_nccl = false;
+Vendor DetermineController(const TensorTableEntry& entry) {
+  bool nccl_impl_available = false;
+  bool force_mpi = false;
+  bool built_with_nccl = false;
 #if HAVE_NCCL
-  have_nccl = true;
+  built_with_nccl = true;
 #endif
-  return (have_nccl && entry.device != CPU_DEVICE_ID) ? 1 : 0;
+  char* by_mpi_env;
+  switch (entry.mpi_ops_type) {
+    case MPIOpsType::ALLREDUCE:
+      by_mpi_env = std::getenv("BLUEFOG_ALLREDUCE_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::BROADCAST:
+      by_mpi_env = std::getenv("BLUEFOG_BROADCAST_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::ALLGATHER:
+      by_mpi_env = std::getenv("BLUEFOG_ALLGATHER_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::NEIGHBOR_ALLGATHER:
+      by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::NEIGHBOR_ALLREDUCE:
+      by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    default:
+      nccl_impl_available = false;
+  }
+
+  if (!built_with_nccl || !nccl_impl_available || force_mpi) return Vendor::MPI;
+  return entry.device != CPU_DEVICE_ID ? Vendor::NCCL : Vendor::MPI;
 }
 
 bool RunLoopOnce(BluefogGlobalState& state) {
   try {
     auto entry = state.tensor_queue.PopMessagesFromQueue();
-    int controller_choice = DetermineController(entry);
-    const std::string communicator_name =
-        (controller_choice == 0) ? "MPI" : "NCCL";
+    Vendor controller_vendor = DetermineController(entry);
+#if HAVE_NCCL
+    if(controller_vendor==Vendor::NCCL && !nccl_context.is_initialized) {
+        state.nccl_controller->Initialize();
+        BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
+    }
+#endif
     switch (entry.mpi_ops_type) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name << "with "
-            << communicator_name;
+            << "Processing " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
-        if (controller_choice == 0) {
+        if (controller_vendor == Vendor::MPI) {
           state.controller->Allreduce(entry);
         }
 #if HAVE_NCCL
-        if (controller_choice == 1) {
+        if (controller_vendor == Vendor::NCCL) {
           state.nccl_controller->Allreduce(entry);
         }
 #endif
@@ -143,14 +176,13 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         break;
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name << "with "
-            << communicator_name;
+            << "Processing " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_BROADCAST);
-        if (controller_choice == 0) {
+        if (controller_vendor == Vendor::MPI) {
           state.controller->Broadcast(entry);
         }
 #if HAVE_NCCL
-        if (controller_choice == 1) {
+        if (controller_vendor == Vendor::NCCL) {
           state.nccl_controller->Broadcast(entry);
         }
 #endif
@@ -159,13 +191,12 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::ALLGATHER:
         state.timeline.ActivityStart(entry.tensor_name, MPI_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing " << entry.tensor_name << "with "
-            << communicator_name;
-        if (controller_choice == 0) {
+            << "Processing " << entry.tensor_name;
+        if (controller_vendor == Vendor::MPI) {
           state.controller->Allgather(entry);
         }
 #if HAVE_NCCL
-        if (controller_choice == 1) {
+        if (controller_vendor == Vendor::NCCL) {
           state.nccl_controller->Allgather(entry);
         }
 #endif
@@ -175,14 +206,28 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLGATHER);
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.controller->NeighborAllgather(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->NeighborAllgather(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->NeighborAllgather(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
-        state.controller->NeighborAllreduce(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->NeighborAllreduce(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->NeighborAllreduce(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BARRIER:
@@ -233,11 +278,10 @@ void InitializeBluefogOnce() {
   mpi_context
       .Enable();  // We always enable mpi since we relied on MPI only now.
   if (!bluefog_global.initialize_flag.test_and_set()) {
-    bluefog_global.controller.reset(
-        new MPIController(bluefog_global.tensor_queue, mpi_context));
+    bluefog_global.controller.reset(new MPIController(mpi_context));
 #if HAVE_NCCL
-    bluefog_global.nccl_controller.reset(new NCCLController(
-        bluefog_global.tensor_queue, nccl_context, mpi_context));
+    bluefog_global.nccl_controller.reset(
+        new NCCLController(nccl_context, mpi_context));
 #endif
     bluefog_global.initialization_done = false;
     bluefog_global.background_thread =
@@ -337,8 +381,16 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
         << "Cannot set the topology because there are unfinished MPI ops.";
     return -1;
   }
-  return bluefog_global.controller->SetTopology(indegree, sources, outdegree,
+
+  bool mpi_result = bluefog_global.controller->SetTopology(indegree, sources, outdegree,
                                                 destinations);
+#if HAVE_NCCL && NCCL_MINOR < 7
+  if (mpi_result && nccl_context.is_initialized) {
+    bluefog_global.nccl_controller->DestroyPeerCommunicator();
+    bluefog_global.nccl_controller->InitPeerCommunicator();
+  }
+#endif
+  return mpi_result;
 }
 
 int bluefog_set_topology_with_weights(int indegree, const int* sources,
@@ -396,6 +448,7 @@ int bluefog_nccl_built() {
   int result = 0;
 #if HAVE_NCCL
   result = 1;
+  BFLOG(DEBUG) << "NCCL VERSION: " << NCCL_MAJOR << "." << NCCL_MINOR;
 #endif
   return result;
 }

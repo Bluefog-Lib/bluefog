@@ -544,7 +544,6 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data - expect_result).abs().max() < EPSILON
             ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced tensor"
 
-
     def test_neighbor_allgather(self):
         """Test that the neighbor all gather 1D, 2D, 3D tensors correctly."""
         size = bf.size()

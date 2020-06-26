@@ -26,8 +26,8 @@ namespace common {
 
 class MPIController {
  public:
-  MPIController(TensorQueue& tensor_queue, MPIContext& mpi_ctx)
-      : tensor_queue_(tensor_queue), mpi_ctx_(mpi_ctx) {
+  MPIController(MPIContext& mpi_ctx)
+      : mpi_ctx_(mpi_ctx) {
     BFLOG(DEBUG) << "MPI Controller Initialized.";
   }
   void Initialize();
@@ -94,8 +94,6 @@ class MPIController {
 
  protected:
   // Outside dependencies
-  TensorQueue& tensor_queue_;
-
   MPIContext& mpi_ctx_;
 
   // flag indicating whether MPI multi-threading is supported.

@@ -16,6 +16,7 @@
 
 from contextlib import contextmanager
 import itertools
+import os
 import warnings
 
 import torch
@@ -116,7 +117,23 @@ def _register_timeline(optimizer, models, parameter_names, parent_name=None):
         pre_forward_hook_handles.append(model.register_forward_pre_hook(
             _timeline_forward_pre_hook))
 
-    return [*backward_hook_handles, *pre_forward_hook_handles, *backward_end_hook_handles]
+    def _make_timeline_forward_end_hook(parent_name):
+        def _timeline_forward_end_hook(module, *unused):
+            for name, _ in module.named_parameters():
+                full_name = parent_name+'.'+name if parent_name else name
+                bf.timeline_end_activity(full_name)
+        return _timeline_forward_end_hook
+
+    forward_end_hook_handles = []
+    for model in models:
+        for name, layer in _named_leaf_module(model):
+            full_name = parent_name+'.'+name if parent_name else name
+            handle = layer.register_forward_hook(
+                _make_timeline_forward_end_hook(full_name))
+            forward_end_hook_handles.append(handle)
+
+    return [*backward_hook_handles, *backward_end_hook_handles,
+            *pre_forward_hook_handles, *forward_end_hook_handles]
 
 
 class _DistributedOptimizer(torch.optim.Optimizer):
@@ -133,6 +150,8 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        if os.getenv('BLUEFOG_TIMELINE'):
+            self.turn_on_timeline()
         if bf.size() > 1:
             self._register_hooks()
 
@@ -157,8 +176,6 @@ class _DistributedOptimizer(torch.optim.Optimizer):
 
     def _allreduce_grad_async(self, p):
         name = self._parameter_names.get(p)
-        if self._use_timeline:
-            bf.timeline_end_activity("allreduce." + name)
         handle = bf.allreduce_nonblocking(
             p.grad, average=True, name=name
         )
@@ -272,6 +289,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        if os.getenv('BLUEFOG_TIMELINE'):
+            self.turn_on_timeline()
         if bf.size() > 1:
             self._register_hooks()
 
@@ -297,9 +316,6 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
-        if self._use_timeline:
-            # End forward computation timeline
-            bf.timeline_end_activity("neighbor.allreduce." + name)
         handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
                                                    neighbor_weights=self.neighbor_weights)
         return handle
@@ -392,6 +408,8 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._use_timeline = False
         self._timeline_hook_handles = []
+        if os.getenv('BLUEFOG_TIMELINE'):
+            self.turn_on_timeline()
         if bf.size() > 1:
             self._register_window()
             self._register_hooks()

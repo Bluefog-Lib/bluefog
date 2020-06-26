@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import List
+from typing import List, Callable
 import atexit
 import contextlib
 import ctypes
@@ -44,19 +44,24 @@ class BlueFogBasics(object):
         self._is_topo_weighted = False
         self.warn_timeline = False
 
-    def init(self, topology: networkx.DiGraph = None,
+    def init(self, topology_fn: Callable[[int], networkx.DiGraph] = None,
              is_weighted: bool = False):
         """A function that initializes BlueFog.
 
         Args:
-          topology: A networkx. DiGraph object to decide the topology. If not provided
-            a default power_two_ring structure is used.
+          topology_fn: A callable function that takes size as input and return
+            networkx.DiGraph object to decide the topology. If not provided
+            a default power_two_ring structure is called.
           is_weighted: If set to true, the neighbor ops like (win_update, neighbor_allreduce) will
             execute the weighted average instead, where the weight is the value used in
             topology matrix (including self).
         """
         self._MPI_LIB_CTYPES.bluefog_init()
-        self.set_topology(topology, is_weighted)
+        if topology_fn:
+            topo = topology_fn(self.size())
+        else:
+            topo = topology_util.PowerTwoRingGraph(self.size())
+        self.set_topology(topo, is_weighted)
         atexit.register(self.shutdown)
 
     def shutdown(self) -> int:
@@ -216,10 +221,10 @@ class BlueFogBasics(object):
             return True
 
         # We remove the self-rank for any cases because MPI graph_comm do not include it.
-        destinations = [r for r in topology.successors(self.rank())
-                        if r != self.rank()]
-        sources = [r for r in topology.predecessors(self.rank())
-                   if r != self.rank()]
+        destinations = sorted([r for r in topology.successors(self.rank())
+                               if r != self.rank()])
+        sources = sorted([r for r in topology.predecessors(self.rank())
+                          if r != self.rank()])
         indegree = len(sources)
         outdegree = len(destinations)
         sources_type = ctypes.c_int * indegree

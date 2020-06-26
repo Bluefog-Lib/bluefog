@@ -294,3 +294,4 @@ for epoch in range(1, args.epochs + 1):
     train(epoch)
 test(test_record)
 print(f"[{bf.rank()}]: ", test_record)
+bf.barrier()

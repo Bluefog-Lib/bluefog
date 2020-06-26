@@ -78,7 +78,12 @@ class WindowManager {
   std::shared_ptr<MPI_Win> global_win_;
 };
 
-struct MPIContext {
+class MPIContext {
+ public:
+  MPIContext() = default;
+  MPIContext(const MPIContext&) = delete;
+  MPIContext& operator=(MPIContext) = delete;
+
   void Enable() { enabled_ = true; };
   void SetTopoSetup() { topo_setup_ = true; }
   void ResetTopoSetup() { topo_setup_ = false; }
@@ -162,6 +167,7 @@ struct MPIContext {
   int neighbor_indgree_ = -1;
   int neighbor_outdgree_ = -1;
 
+  // Neighbor ranks should not include self.
   std::vector<int> neighbor_in_ranks_;
   std::vector<int> neighbor_out_ranks_;
 

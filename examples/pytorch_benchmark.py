@@ -25,6 +25,7 @@ import torch.optim as optim
 import torch.utils.data.distributed
 from torchvision import models
 import bluefog.torch as bf
+from bluefog.common import topology_util
 
 
 # Benchmark settings
@@ -52,11 +53,14 @@ parser.add_argument('--profiler', action='store_true', default=False,
 parser.add_argument('--partition', type=int, default=None,
                     help='partition size')
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
-                    help='The type of distributed optimizer. Supporting options are '+
-                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
+                    help='The type of distributed optimizer. Supporting options are ' +
+                    '[win_put(default), neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
 parser.add_argument('--enable-dynamic-topology', action='store_true',
                     default=False, help=('Enable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
+parser.add_argument('--virtual-topology', type=str, default="power2",
+                    help='The underlying virtual topology. Supporting options are ' +
+                    '[power2(Default), ring, mesh, star].')
 
 
 args = parser.parse_args()
@@ -67,6 +71,19 @@ if args.dist_optimizer == 'horovod':
     import horovod.torch as bf
 
 bf.init()
+if args.dist_optimizer != 'horovod':
+    if args.virtual_topology == "power2":
+        pass
+    elif args.virtual_topology == "ring":
+        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
+    elif args.virtual_topology == "mesh":
+        bf.set_topology(topology_util.RingGraph(
+            bf.size(), connect_style=0), is_weighted=True)
+    elif args.virtual_topology == "star":
+        bf.set_topology(topology_util.StarGraph(bf.size()))
+    else:
+        raise ValueError("Unknown args.virtual_topology, supporting options are " +
+                         "[power2(Default), ring, mesh, star].")
 
 if args.cuda:
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
