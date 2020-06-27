@@ -60,6 +60,7 @@ def finalize_plot():
         plt.show()
     plt.close()
 
+
 def generate_data(m, n, task='logistic_regression'):
 
     if task == 'logistic_regression':
@@ -83,11 +84,11 @@ def generate_data(m, n, task='logistic_regression'):
 
 def _loss_step(X, y, x_, loss='logistic_regression', **kwargs):
     """Calculate gradient via pytorch autograd."""
-    
+
     if loss == 'logistic_regression':
         rho = kwargs.get('rho', 1e-1)
         loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
-                    0.5*rho*torch.norm(x_, p=2)
+            0.5*rho*torch.norm(x_, p=2)
     elif loss == 'linear_regression':
         loss_ = 0.5*torch.mean(torch.norm(X.mm(x_) - y, p=2))
 
@@ -100,6 +101,7 @@ def _loss_step(X, y, x_, loss='logistic_regression', **kwargs):
     loss_.backward()
 
     return loss_
+
 
 def loss_step(X, y, x_, tensor_name, loss='logistic_regression', **kwargs):
     """Calculate gradient via pytorch autograd."""
@@ -118,6 +120,7 @@ def loss_step(X, y, x_, tensor_name, loss='logistic_regression', **kwargs):
 # it will be used to verify the solution of various decentralized algorithms.
 # ================================================================================
 
+
 def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
 
     if loss == 'logistic_regression':
@@ -133,8 +136,8 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
 
     for _ in range(maxite):
         # calculate gradient via pytorch autograd
-        loss_step(X, y, w_opt, tensor_name='allreduce.gradient', \
-                            loss=loss, rho=rho)
+        loss_step(X, y, w_opt, tensor_name='allreduce.gradient',
+                  loss=loss, rho=rho)
         # global gradient
         grad = bf.allreduce(w_opt.grad.data, name='gradient')
 
@@ -142,8 +145,8 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
         w_opt.data = w_opt.data - alpha*grad
         w_opt.grad.data.zero_()
 
-    loss_step(X, y, w_opt, tensor_name='allreduce.gradient', \
-                        loss=loss, rho=rho)
+    loss_step(X, y, w_opt, tensor_name='allreduce.gradient',
+              loss=loss, rho=rho)
     grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
 
     # evaluate the convergence of distributed logistic regression
@@ -165,13 +168,15 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
 # x^{k+1} = allreduce(x^k - alpha * local_grad)
 #
 # Reference:
-# 
+#
 # [R1] A. H. Sayed, ``Adaptive networks'', Proceedings of the IEEE, 2014
 #
 # [R2] A. H. Sayed, ``Adaptation, learning, and optimization over networks'', 2014
 # ================================================================================
+
+
 def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
-    
+
     if loss == 'logistic_regression':
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
@@ -182,7 +187,8 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
             ' linear_regression and logistic_regression')
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+    self_weight, neighbor_weights = topology_util.GetWeights(
+        topology, bf.rank())
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     phi = w.clone()
@@ -190,8 +196,8 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
-        loss_step(X, y, w, \
-            tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
+        loss_step(X, y, w,
+                  tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
 
         # diffusion
         phi = w - alpha * w.grad.data
@@ -221,6 +227,8 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 # [R2] Z. Li, W. Shi and M. Yan, ``A Decentralized Proximal-gradient Method with
 #  Network Independent Step-sizes and Separated Convergence Rates'', 2019
 # ================================================================================
+
+
 def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, **kwargs):
 
     if loss == 'logistic_regression':
@@ -255,13 +263,14 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
-        loss_step(X, y, w, tensor_name='neighbor.allreduce.local_variable', \
-                            loss=loss, rho=rho)
+        loss_step(X, y, w, tensor_name='neighbor.allreduce.local_variable',
+                  loss=loss, rho=rho)
 
         # exact diffusion
         psi = w - alpha * w.grad.data
         phi = psi + w.data - psi_prev
-        w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
+        w.data = bf.neighbor_allreduce(
+            phi, self_weight, neighbor_weights, name='local variable')
         psi_prev = psi.clone()
         w.grad.data.zero_()
 
@@ -291,6 +300,8 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
 # [R4] P. Di Lorenzo and G. Scutari, ``Next: In-network nonconvex optimization'',
 # 2016
 # ================================================================================
+
+
 def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
     if loss == 'logistic_regression':
@@ -303,8 +314,8 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
             ' linear_regression and logistic_regression')
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
-                        loss=loss, rho=rho)
+    loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w',
+              loss=loss, rho=rho)
     q = w.grad.data  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
@@ -317,12 +328,13 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
 
         # Notice the communication of neighbor_allreduce can overlap with gradient computation.
-        w_handle = bf.neighbor_allreduce_nonblocking(w.data, name='Grad.Tracking.w')
+        w_handle = bf.neighbor_allreduce_nonblocking(
+            w.data, name='Grad.Tracking.w')
         q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha * q
         # calculate local gradient
-        loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
-                        loss=loss, rho=rho)
+        loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w',
+                  loss=loss, rho=rho)
         grad = w.grad.data.clone()
         q = bf.synchronize(q_handle) + grad - grad_prev
         grad_prev = grad
@@ -336,7 +348,7 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
 # ======================= Push-DIGing for directed graph =======================
 # Calculate the true solution with Push-DIGing:
-# 
+#
 # u^{k+1} = directed_neighbor_allreduce(u^k - alpha y^k)
 # v^{k+1} = directed_neighbor_allreduce(v^k)
 # x^{k+1} = (v^{k+1})^{-1}*u^{k+1}
@@ -347,6 +359,8 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 # [R1] A. Nedic, A. Olshevsky, and W. Shi, ``Achieving geometric convergence
 # for distributed optimization over time-varying graphs'', 2017. (Alg. 2)
 # ============================================================================
+
+
 def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
     if loss == 'logistic_regression':
@@ -365,12 +379,12 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     # Insteady of three directed_neighbor_allreduce operations for u, y,
     # and v respectively, we exploit one directed_neighbor_allreduce for
     # the combo vector w. This guarantees u, y, and v to be transmitted
-    # simultanesly and avoids the mismatch between them. Experiments 
+    # simultanesly and avoids the mismatch between them. Experiments
     # show directed_neighbor_allreduce(w) is crutial for convergence of
     # push_diging.
     w = torch.zeros(2*n+1, 1).to(torch.double)
     x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
+    loss_step(X, y, x, tensor_name='w_buff', loss=loss, rho=rho)
 
     grad = x.grad.data.clone()
     w[n:2*n] = grad
@@ -397,7 +411,7 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         w = bf.win_update_then_collect(name="w_buff")
 
         x.data = w[:n]/w[-1]
-        loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
+        loss_step(X, y, x, tensor_name='w_buff', loss=loss, rho=rho)
         grad = x.grad.data.clone()
         x.grad.data.zero_()
 
@@ -437,23 +451,23 @@ rho = 1e-2
 X, y = generate_data(m, n, task=args.task)
 
 # calculate the global solution w_opt via distributed gradient descent
-w_opt = distributed_grad_descent(X, y, loss=args.task, \
-                                    maxite=args.max_iter, alpha=args.lr, rho=rho)
+w_opt = distributed_grad_descent(X, y, loss=args.task,
+                                 maxite=args.max_iter, alpha=args.lr, rho=rho)
 
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'diffusion':
     w, mse = diffusion(X, y, w_opt, loss=args.task,
-                        maxite=args.max_iter, alpha=args.lr, rho=rho)
+                       maxite=args.max_iter, alpha=args.lr, rho=rho)
 elif args.method == 'exact_diffusion':
-    w, mse = exact_diffusion(X, y, w_opt, loss=args.task, \
-                                maxite=args.max_iter, alpha=args.lr, \
-                                use_Abar=True, rho=rho)
+    w, mse = exact_diffusion(X, y, w_opt, loss=args.task,
+                             maxite=args.max_iter, alpha=args.lr,
+                             use_Abar=True, rho=rho)
 elif args.method == 'gradient_tracking':
-    w, mse = gradient_tracking(X, y, w_opt, loss=args.task, \
-                maxite=args.max_iter, alpha=args.lr, rho=rho)
+    w, mse = gradient_tracking(X, y, w_opt, loss=args.task,
+                               maxite=args.max_iter, alpha=args.lr, rho=rho)
 elif args.method == 'push_diging':
-    w, mse = push_diging(X, y, w_opt, loss=args.task, \
-                maxite=args.max_iter, alpha=args.lr, rho=rho)
+    w, mse = push_diging(X, y, w_opt, loss=args.task,
+                         maxite=args.max_iter, alpha=args.lr, rho=rho)
 else:
     raise NotImplementedError(
         'Algorithm not support. This example only supports' +
