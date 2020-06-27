@@ -73,11 +73,15 @@ def generate_data(m, n, task='logistic_regression'):
         x_o = torch.randn(n, 1).to(torch.double)
         ns = 0.1*torch.randn(m, 1).to(torch.double)
         y = X.mm(x_o) + ns
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression')
 
     return X, y
 
 
-def loss_step(X, y, x_, loss='logistic_regression', **kwargs):
+def _loss_step(X, y, x_, loss='logistic_regression', **kwargs):
     """Calculate gradient via pytorch autograd."""
     
     if loss == 'logistic_regression':
@@ -87,27 +91,32 @@ def loss_step(X, y, x_, loss='logistic_regression', **kwargs):
     elif loss == 'linear_regression':
         loss_ = 0.5*torch.mean(torch.norm(X.mm(x_) - y, p=2))
 
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression'
+        )
+
     loss_.backward()
 
     return loss_
 
-def loss_step_timeline(X, y, x_, tensor_name, loss='logistic_regression', **kwargs):
+def loss_step(X, y, x_, tensor_name, loss='logistic_regression', **kwargs):
     """Calculate gradient via pytorch autograd."""
 
     if os.getenv('BLUEFOG_TIMELINE'):
         with bf.timeline_context(tensor_name=tensor_name,
                                  activity_name="gradient computation"):
-            return loss_step(X, y, x_, loss=loss, **kwargs)
+            return _loss_step(X, y, x_, loss=loss, **kwargs)
 
     else:
-        return loss_step(X, y, x_, loss=loss, **kwargs)
+        return _loss_step(X, y, x_, loss=loss, **kwargs)
 
-# # ================== Distributed gradient descent ================================
-# # Calculate the solution with distributed gradient descent:
-# # x^{k+1} = x^k - alpha * allreduce(local_grad)
-# # it will be used to verify the solution of various decentralized algorithms.
-# # ================================================================================
-
+# ================== Distributed gradient descent ================================
+# Calculate the solution with distributed gradient descent:
+# x^{k+1} = x^k - alpha * allreduce(local_grad)
+# it will be used to verify the solution of various decentralized algorithms.
+# ================================================================================
 
 def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
 
@@ -115,12 +124,16 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
         rho = 0
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression')
 
     w_opt = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 
-    for i in range(maxite):
+    for _ in range(maxite):
         # calculate gradient via pytorch autograd
-        loss_step_timeline(X, y, w_opt, tensor_name='allreduce.gradient', \
+        loss_step(X, y, w_opt, tensor_name='allreduce.gradient', \
                             loss=loss, rho=rho)
         # global gradient
         grad = bf.allreduce(w_opt.grad.data, name='gradient')
@@ -129,7 +142,7 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
         w_opt.data = w_opt.data - alpha*grad
         w_opt.grad.data.zero_()
 
-    loss_step_timeline(X, y, w_opt, tensor_name='allreduce.gradient', \
+    loss_step(X, y, w_opt, tensor_name='allreduce.gradient', \
                         loss=loss, rho=rho)
     grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
 
@@ -147,7 +160,7 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
 
     return w_opt
 
-# ==================== Diffusion ===========================================
+# ==================== Diffusion ================================================
 # Calculate the solution with diffusion:
 # x^{k+1} = allreduce(x^k - alpha * local_grad)
 #
@@ -163,6 +176,10 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
         rho = 0
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression')
 
     topology = bf.load_topology()
     self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
@@ -171,13 +188,9 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     phi = w.clone()
     mse = []
 
-    if bf.rank() == 0:
-        for k, v in neighbor_weights.items():
-            print(k, neighbor_weights[k])
-
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
-        loss_step_timeline(X, y, w, \
+        loss_step(X, y, w, \
             tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
 
         # diffusion
@@ -214,6 +227,11 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
         rho = 0
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression'
+        )
 
     topology = bf.load_topology()
     self_weight, neighbor_weights = topology_util.GetWeights(
@@ -237,7 +255,7 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
 
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
-        loss_step_timeline(X, y, w, tensor_name='neighbor.allreduce.local_variable', \
+        loss_step(X, y, w, tensor_name='neighbor.allreduce.local_variable', \
                             loss=loss, rho=rho)
 
         # exact diffusion
@@ -279,23 +297,20 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
         rho = 0
-
-    topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
-
-    # if bf.rank() == 0:
-    #     for k, v in neighbor_weights.items():
-    #         print(k, neighbor_weights[k])
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression')
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    loss_step_timeline(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
+    loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
                         loss=loss, rho=rho)
     q = w.grad.data  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
     grad_prev = q.clone()
     mse = []
-    for i in range(maxite):
+    for _ in range(maxite):
 
         # Algorithm:
         # w^{k+1} = neighbor_allreduce(w^k) - alpha*q^k
@@ -306,7 +321,7 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha * q
         # calculate local gradient
-        loss_step_timeline(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
+        loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
                         loss=loss, rho=rho)
         grad = w.grad.data.clone()
         q = bf.synchronize(q_handle) + grad - grad_prev
@@ -321,6 +336,11 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
 # ======================= Push-DIGing for directed graph =======================
 # Calculate the true solution with Push-DIGing:
+# 
+# u^{k+1} = directed_neighbor_allreduce(u^k - alpha y^k)
+# v^{k+1} = directed_neighbor_allreduce(v^k)
+# x^{k+1} = (v^{k+1})^{-1}*u^{k+1}
+# y^{k+1} = directed_neighbor_allreduce(y^k) + grad(x^{k+1}) - grad(x^k)
 #
 # Reference:
 #
@@ -333,14 +353,24 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
         rho = 0
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression')
 
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())
 
-    # u, y, v = w[:n], w[n:2*n], w[2n]
+    # We let w = col{u, y, v}, i.e., u, y, v = w[:n], w[n:2*n], w[2n]
+    # Insteady of three directed_neighbor_allreduce operations for u, y,
+    # and v respectively, we exploit one directed_neighbor_allreduce for
+    # the combo vector w. This guarantees u, y, and v to be transmitted
+    # simultanesly and avoids the mismatch between them. Experiments 
+    # show directed_neighbor_allreduce(w) is crutial for convergence of
+    # push_diging.
     w = torch.zeros(2*n+1, 1).to(torch.double)
     x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    loss_step_timeline(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
+    loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
 
     grad = x.grad.data.clone()
     w[n:2*n] = grad
@@ -352,7 +382,7 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     bf.win_create(w, name="w_buff", zero_init=True)
 
     mse = []
-    for i in range(maxite):
+    for _ in range(maxite):
         bf.barrier()
 
         w[:n] = w[:n] - alpha*w[n:2*n]
@@ -367,7 +397,7 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         w = bf.win_update_then_collect(name="w_buff")
 
         x.data = w[:n]/w[-1]
-        loss_step_timeline(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
+        loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
         grad = x.grad.data.clone()
         x.grad.data.zero_()
 
@@ -393,6 +423,11 @@ elif args.topology == 'star':
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
 elif args.topology == 'ring':
     bf.set_topology(topology_util.RingGraph(bf.size()))
+else:
+    raise NotImplementedError(
+        'Topology not supported. This example only supports' +
+        ' mesh, star, ring and power_two_ring'
+    )
 
 
 # Generate data for logistic regression (synthesized data)
@@ -407,7 +442,7 @@ w_opt = distributed_grad_descent(X, y, loss=args.task, \
 
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'diffusion':
-    w, mse = diffusion(X, y, w_opt, loss=args.task, \
+    w, mse = diffusion(X, y, w_opt, loss=args.task,
                         maxite=args.max_iter, alpha=args.lr, rho=rho)
 elif args.method == 'exact_diffusion':
     w, mse = exact_diffusion(X, y, w_opt, loss=args.task, \
@@ -432,7 +467,7 @@ if bf.rank() == 0:
     finalize_plot()
 
 # calculate local and global gradient
-loss_step_timeline(X, y, w, tensor_name='w_buff', loss=args.task, rho=rho)
+loss_step(X, y, w, tensor_name='w_buff', loss=args.task, rho=rho)
 grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
 
 # evaluate the convergence of gradient tracking for logistic regression
