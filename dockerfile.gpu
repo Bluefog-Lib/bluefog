@@ -79,8 +79,8 @@ RUN pip install bluefog
 
 RUN mkdir /bluefog
 RUN cd /bluefog && \
-    wget https://github.com/Bluefog-Lib/bluefog/releases/download/v0.2.0/examples_v0.2.0.tar.gz && \
-    tar -zxv -f examples_v0.2.0.tar.gz && \
-    rm examples_v0.2.0.tar.gz
+    wget https://github.com/Bluefog-Lib/bluefog/releases/download/v0.2.1/examples_v0.2.1.tar.gz && \
+    tar -zxv -f examples_v0.2.1.tar.gz && \
+    rm examples_v0.2.1.tar.gz
 
 WORKDIR "bluefog"
