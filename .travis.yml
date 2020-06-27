@@ -45,11 +45,13 @@ script:
 
 # Build and deploy the doc through the sphinx.
 before_deploy:
+    if: env(MPI) = openmpi AND os = linux
     - pip$PY install sphinx sphinx_rtd_theme
     - cd docs && make html
     - touch _build/html/.nojekyll
 
 deploy:
+    if: env(MPI) = openmpi AND os = linux
     provider: pages
     skip_cleanup: true
     github_token: $GITHUB_PAGES_TOKEN  # Set in the settings page of your repository, as a secure variable
