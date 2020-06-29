@@ -163,7 +163,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
+        state.timeline.ActivityStart(entry.tensor_name, "ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
           state.controller->Allreduce(entry);
         }
@@ -177,7 +177,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_BROADCAST);
+        state.timeline.ActivityStart(entry.tensor_name, "BROADCAST");
         if (controller_vendor == Vendor::MPI) {
           state.controller->Broadcast(entry);
         }
@@ -189,7 +189,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
-        state.timeline.ActivityStart(entry.tensor_name, MPI_ALLGATHER);
+        state.timeline.ActivityStart(entry.tensor_name, "ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         if (controller_vendor == Vendor::MPI) {
@@ -203,7 +203,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
-        state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLGATHER);
+        state.timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         if (controller_vendor == Vendor::MPI) {
@@ -219,7 +219,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::NEIGHBOR_ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
+        state.timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
           state.controller->NeighborAllreduce(entry);
         }
@@ -242,21 +242,21 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_PUT on " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_PUT);
+        state.timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
         state.controller->WinPut(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_GET on " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_GET);
+        state.timeline.ActivityStart(entry.tensor_name, "WIN_GET");
         state.controller->WinGet(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_ACCUMULATE);
+        state.timeline.ActivityStart(entry.tensor_name, "WIN_ACCUMULATE");
         state.controller->WinAccumulate(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;

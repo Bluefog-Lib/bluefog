@@ -26,6 +26,7 @@
 #include "logging.h"
 #include "mpi_context.h"
 #include "tensor_queue.h"
+#include "timeline.h"
 
 #define MPICHECK(cmd)                                                  \
   do {                                                                 \
@@ -124,10 +125,13 @@ class NCCLController {
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
 
+private:
   // Outside dependencies
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
+  
+  Timeline* timeline_ptr_;
 };
 
 }  // namespace common

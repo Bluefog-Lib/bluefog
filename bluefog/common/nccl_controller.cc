@@ -105,6 +105,10 @@ void NCCLController::Initialize() {
 #if NCCL_MINOR < 7
   InitPeerCommunicator();
 #endif
+  Status timeline_status = GetBluefogTimeline(timeline_ptr_);
+  if (!timeline_status.ok()) {
+    BFLOG(INFO) << "Timeline is not used because " << timeline_status.reason();
+  }
 }
 
 #if NCCL_MINOR < 7
@@ -198,6 +202,8 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
 
+  timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
+
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
@@ -210,6 +216,7 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+  timeline_ptr_->ActivityEnd(entry.tensor_name);
 
   delete[] recvcounts;
   delete[] displcmnts;
@@ -223,6 +230,8 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
 
   with_device device_guard(entry.device);
+
+  timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   ncclResult_t ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
                                GetNCCLDataType(entry.tensor), ncclSum,
                                nccl_ctx_.nccl_comm, nccl_ctx_.stream);
@@ -232,6 +241,8 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+  timeline_ptr_->ActivityEnd(entry.tensor_name);
+
   entry.callback(Status::OK());
 }
 
@@ -247,6 +258,8 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   }
 
   with_device device_guard(entry.device);
+
+  timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   ncclResult_t ret_code =
       ncclBcast(data_ptr, num_elements, GetNCCLDataType(entry.tensor),
                 root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream);
@@ -256,6 +269,8 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   }
   // completing NCCL operation by synchronizing on the CUDA stream
   CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+  timeline_ptr_->ActivityEnd(entry.tensor_name);
+
   entry.callback(Status::OK());
 }
 
@@ -281,14 +296,10 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
 
-  Timeline* timeline_ptr;
-  Status timeline_status = GetBluefogTimeline(timeline_ptr);
-
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
-  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
-
+  timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   // Pitfall: neighbor_allgather do not include itself.
   ncclGroupStart();
 #if NCCL_MINOR > 6
@@ -372,11 +383,11 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
 
   delete[] recvcounts;
   delete[] displcmnts;
-  timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr_->ActivityEnd(entry.tensor_name);
 
-  timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
+  timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
-  timeline_ptr->ActivityEnd(entry.tensor_name);
+  timeline_ptr_->ActivityEnd(entry.tensor_name);
 }
 
 void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
