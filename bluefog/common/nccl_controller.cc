@@ -17,6 +17,7 @@
 #include "nccl_controller.h"
 #include <algorithm>
 #include <string>
+#include <thread>
 
 #include "common.h"
 #include "cuda_util.h"
@@ -98,6 +99,31 @@ void NCCLContext::Finalize() {
 
   is_initialized = false;
   cuda_device = -1;
+}
+
+cudaError_t NCCLContext::GetCudaEvent(cudaEvent_t* event) {
+  auto& mutex = cuda_events_mutex;
+  {
+    std::lock_guard<std::mutex> guard(mutex);
+    if (!cuda_events.empty()) {
+      *event = cuda_events.front();
+      cuda_events.pop();
+      return cudaSuccess;
+    }
+  }
+
+  return cudaEventCreateWithFlags(
+      event, cudaEventBlockingSync | cudaEventDisableTiming);
+}
+
+cudaError_t NCCLContext::ReleaseCudaEvent(cudaEvent_t event) {
+  auto& mutex = cuda_events_mutex;
+  {
+    std::lock_guard<std::mutex> guard(mutex);
+    cuda_events.push(event);
+  }
+
+  return cudaSuccess;
 }
 
 void NCCLController::Initialize() {
@@ -214,14 +240,25 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
     throw std::runtime_error(
         "ncclAllGather failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
   }
-  // completing NCCL operation by synchronizing on the CUDA stream
-  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
-  timeline_ptr_->ActivityEnd(entry.tensor_name);
+
+  auto tid = std::this_thread::get_id();
+  // TODO: use thread pool or single thread for callbacks
+  std::thread finalizer_thread([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    entry.callback(Status::OK());
+  });
+
+  finalizer_thread.detach();
 
   delete[] recvcounts;
   delete[] displcmnts;
-
-  entry.callback(Status::OK());
 }
 
 void NCCLController::Allreduce(TensorTableEntry& entry) {
@@ -239,11 +276,22 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
     throw std::runtime_error(
         "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
   }
-  // completing NCCL operation by synchronizing on the CUDA stream
-  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
-  timeline_ptr_->ActivityEnd(entry.tensor_name);
 
-  entry.callback(Status::OK());
+  auto tid = std::this_thread::get_id();
+  // TODO: use thread pool or single thread for callbacks
+  std::thread finalizer_thread([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    entry.callback(Status::OK());
+  });
+
+  finalizer_thread.detach();
 }
 
 void NCCLController::Broadcast(TensorTableEntry& entry) {
@@ -267,11 +315,22 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
     throw std::runtime_error(
         "ncclBroadcast failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
   }
-  // completing NCCL operation by synchronizing on the CUDA stream
-  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
-  timeline_ptr_->ActivityEnd(entry.tensor_name);
 
-  entry.callback(Status::OK());
+  auto tid = std::this_thread::get_id();
+  // TODO: use thread pool or single thread for callbacks
+  std::thread finalizer_thread([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    entry.callback(Status::OK());
+  });
+
+  finalizer_thread.detach();
 }
 
 void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
@@ -372,22 +431,35 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
 #endif
 
   ncclGroupEnd();
-  // completing NCCL operation by synchronizing on the CUDA stream
 #if NCCL_MINOR > 6
-  CUDACHECK(cudaStreamSynchronize(nccl_ctx_.stream));
+  auto tid = std::this_thread::get_id();
+  // TODO: use thread pool or single thread for callbacks
+  std::thread finalizer_thread([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    entry.callback(Status::OK());
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  });
 #else
   for (const auto& stream : nccl_ctx_.pair_streams) {
     CUDACHECK(cudaStreamSynchronize(stream.second));
   }
-#endif
-
-  delete[] recvcounts;
-  delete[] displcmnts;
   timeline_ptr_->ActivityEnd(entry.tensor_name);
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
   timeline_ptr_->ActivityEnd(entry.tensor_name);
+#endif
+
+  delete[] recvcounts;
+  delete[] displcmnts;
 }
 
 void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
