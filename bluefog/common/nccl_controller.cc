@@ -447,6 +447,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
     entry.callback(Status::OK());
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
   });
+  finalizer_thread.detach();
 #else
   for (const auto& stream : nccl_ctx_.pair_streams) {
     CUDACHECK(cudaStreamSynchronize(stream.second));
