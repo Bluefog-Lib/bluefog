@@ -90,12 +90,7 @@ class NCCLContext {
 
   // TODO(ybc) Create e intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
-  std::vector<cudaStream_t> streams;
-  int current_stream_number = 0;
-
-  // We have multiple streams. Everytime call a get stream will return the current stream and
-  // update the current stream number. Next call will rotated into next one.
-  cudaStream_t* GetCurrentStream();
+  cudaStream_t stream;
 
   // We reuse CUDA events as it appears that their creation carries non-zero cost.
   std::queue<cudaEvent_t> cuda_events;
