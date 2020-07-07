@@ -51,4 +51,4 @@ clean_build:
 
 .PHONY: clean_so
 clean_so:
-	rm ./bluefog/torch/mpi_lib.*.so; rm ./bluefog/tensorflow/mpi_lib.*.so
+	rm ./bluefog/torch/mpi_lib.*.so
