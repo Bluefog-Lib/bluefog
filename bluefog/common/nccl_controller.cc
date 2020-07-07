@@ -65,7 +65,9 @@ void NCCLContext::Initialize(const int rank, const int size,
   int nDevices = 0;
   CUDACHECK(cudaGetDeviceCount(&nDevices));
   CUDACHECK(cudaSetDevice(local_rank % nDevices));
-  CUDACHECK(cudaStreamCreate(&stream));
+  int greatest_priority;
+  CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
+  CUDACHECK(cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking, greatest_priority));
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
 
   is_initialized = true;
