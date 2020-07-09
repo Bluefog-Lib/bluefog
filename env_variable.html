@@ -1,0 +1,321 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Bluefog Environment Variables &mdash; Bluefog  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Performance" href="performance.html" />
+    <link rel="prev" title="Bluefog Docker Usage" href="docker.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> Bluefog
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.2.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">INSTALLATION</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installing Bluefog</a></li>
+</ul>
+<p class="caption"><span class="caption-text">API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="topo_api.html">Bluefog Topology API</a></li>
+</ul>
+<p class="caption"><span class="caption-text">More Information</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Environment Variable</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#debug">Debug</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#performance">Performance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
+<li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Bluefog</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Bluefog Environment Variables</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/env_variable.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="bluefog-environment-variables">
+<h1>Bluefog Environment Variables<a class="headerlink" href="#bluefog-environment-variables" title="Permalink to this headline">¶</a></h1>
+<p>Bluefog has several environment variables to tune or enable some functionality for specific usage.</p>
+<div class="section" id="debug">
+<h2>Debug<a class="headerlink" href="#debug" title="Permalink to this headline">¶</a></h2>
+<p>If you want to see more verbose logs of Bluefog, you can set</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span> <span class="nv">BLUEFOG_LOG_LEVEL</span><span class="o">=</span>info
+</pre></div>
+</div>
+<p>There are six different levels – <cite>trace</cite>, <cite>debug</cite>, <cite>info</cite>, <cite>warning</cite>, <cite>error</cite>, and <cite>fatal</cite>. Default is <cite>warning</cite>.</p>
+<p>You can also hide the time in logs by setting:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span> <span class="nv">BLUEFOG_LOG_HIDE_TIME</span><span class="o">=</span><span class="m">1</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Permalink to this headline">¶</a></h2>
+<p><strong>Timeline</strong>:</p>
+<p>You can set <cite>BLUEFOG_TIMELINE</cite> with some filename to turn on the timeline. See our timeline document for more details.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span> <span class="nv">BLUEFOG_TIMELINE</span><span class="o">=</span>/path/filename
+</pre></div>
+</div>
+<p><strong>MPI Thread Support</strong>:</p>
+<p>By default, we will ask for MPI_THREAD_SERIALIZED – The process may be
+multi-threaded, but only the main thread will make MPI calls (all MPI calls
+are funneled to the main thread). The main reason we use this level is MPI win
+ops doesn’t have good support for multiple processes on multiple hosts unless
+running under a system with an RDMA  capable network such as Infiniband.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span>  <span class="nv">BLUEFOG_MPI_THREAD_LEVEL</span><span class="o">=</span><span class="m">2</span>
+</pre></div>
+</div>
+<p>The environment variable BLUEFOG_MPI_THREAD_LEVEL has to be one of the values 0, 1, 2, or 3
+– corresponding to <cite>MPI_THREAD_SINGLE</cite>, <cite>MPI_THREAD_FUNNELED</cite>, <cite>MPI_THREAD_SERIALIZED</cite>, or <cite>MPI_THREAD_MULTIPLE</cite></p>
+<p><strong>Ops Running Backend</strong>:</p>
+<p>If you build the Bluefog with NCCL, most communication operations will be executed through the NCCL. However, you still can force
+it to be run by MPI through set following environment variable(s) to be 1:</p>
+<ul class="simple">
+<li><p>BLUEFOG_ALLREDUCE_BY_MPI</p></li>
+<li><p>BLUEFOG_ALLGATHER_BY_MPI</p></li>
+<li><p>BLUEFOG_BROADCAST_BY_MPI</p></li>
+<li><p>BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI</p></li>
+<li><p>BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI</p></li>
+</ul>
+<p>GPU tensor will send through GPU directly if it is supported. If you want to specify it to communication through the CPU, set
+following environment variable to be 1 or 0:</p>
+<ul class="simple">
+<li><p>BLUEFOG_OPS_ON_CPU</p></li>
+<li><p>BLUEFOG_WIN_ON_GPU</p></li>
+</ul>
+<p><strong>Misc</strong>:</p>
+<p>Due to unclear reason that mpi_put/get/accumlate under the
+mpi_lock epoch cannot send too long vector in one time, we
+define this number as the maximum size of win_ops can send.</p>
+<ul class="simple">
+<li><p>BLUEFOG_MAX_WIN_SENT_LENGTH (Default: 2000)</p></li>
+</ul>
+</div>
+<div class="section" id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h2>
+<p><strong>MPI Related</strong>:</p>
+<ul class="simple">
+<li><p>BLUEFOG_MPICXX_SHOW – Specify the location of MPI include and library location (Default: “mpicxx -show”).</p></li>
+</ul>
+<p><strong>CUDA Related</strong>:</p>
+<p>If the cuda is detected, such as pytorch supports CUDA, Bluefog will be built with CUDA automatically. You don’t need
+to specify any of followings unless the installation location of CUDA is not at standard position.</p>
+<ul class="simple">
+<li><p>BLUEFOG_CUDA_HOME – Specify the CUDA Home location, i.e. the parent folder of include and library.</p></li>
+<li><p>BLUEFOG_CUDA_INCLUDE – Specify the CUDA include location.</p></li>
+<li><p>BLUEFOG_CUDA_LIB – Specify the CUDA library location.</p></li>
+</ul>
+<p><strong>NCCL Related</strong>:</p>
+<p>Unlike CUDA, you have to manually set <cite>BLUEFOG_WITH_NCCL=1</cite> during the installation if you want to build Bluefog with
+NCCL support. The other locaiton variables is similar to CUDA ones.</p>
+<ul class="simple">
+<li><p>BLUEFOG_WITH_NCCL – Set 1 to let bluefog built with NCCL (Default: 0),</p></li>
+<li><p>BLUEFOG_NCCL_HOME – Specify the NCCL Home location, i.e. the parent folder of include and library.</p></li>
+<li><p>BLUEFOG_NCCL_INCLUDE – Specify the NCCL include location.</p></li>
+<li><p>BLUEFOG_NCCL_LIB – Specify the NCCL library location.</p></li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="performance.html" class="btn btn-neutral float-right" title="Performance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="docker.html" class="btn btn-neutral float-left" title="Bluefog Docker Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2020, Bicheng Ying
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

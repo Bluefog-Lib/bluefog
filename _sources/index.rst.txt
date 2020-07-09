@@ -130,7 +130,6 @@ algorithm, please read our :ref:`Ops Explanation` page.
    :caption: API
 
    Bluefog Torch API <torch_api>
-   Bluefog Tensorflow API <tensorflow_api>
    Bluefog Topology API <topo_api>
 
 .. toctree::
@@ -140,6 +139,7 @@ algorithm, please read our :ref:`Ops Explanation` page.
    Bluefog Ops Explanation <bluefog_ops>
    Lauching Application Through bfrun <running>
    Bluefog Docker Usage <docker>
+   Bluefog Environment Variable <env_variable>
    Bluefog Perform Comparison <performance>
    Bluefog Rationale <rationale>
    Bluefog Timeline <timeline>
