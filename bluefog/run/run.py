@@ -218,6 +218,8 @@ def main():
             common_intfs = [args.nic]
     tcp_intf_arg = '-mca btl_tcp_if_include {common_intfs}'.format(
         common_intfs=','.join(common_intfs)) if common_intfs else ''
+    nccl_socket_intf_arg = '-x NCCL_SOCKET_IFNAME={common_intfs}'.format(
+        common_intfs=','.join(common_intfs)) if common_intfs else ''
 
     if args.ssh_port:
         ssh_port_arg = "-mca plm_rsh_args \"-p {ssh_port}\"".format(
@@ -249,12 +251,14 @@ def main():
         '-bind-to none -map-by slot '
         '-mca pml ob1 {ib_arg}'
         '{ssh_port_arg} {tcp_intf_arg} '
+        '{nccl_socket_intf_arg} '
         '{extra_flags} {env} {command}'
         .format(num_proc=args.np,
                 hosts_arg=hosts_arg,
                 ib_arg=ib_arg,
                 ssh_port_arg=ssh_port_arg,
                 tcp_intf_arg=tcp_intf_arg,
+                nccl_socket_intf_arg=nccl_socket_intf_arg,
                 extra_flags=extra_flags,
                 env=' '.join('-x %s' % key for key in env.keys() if env_util.is_exportable(key)),
                 command=' '.join(shlex.quote(par) for par in args.command))
