@@ -218,6 +218,8 @@ struct TensorTableEntry {
   int root_rank = -1;
   // GPU to do reduction on, or CPU_DEVICE_ID in case of CPU.
   int device = CPU_DEVICE_ID;
+  // Event indicating that data is ready.
+  std::shared_ptr<ReadyEvent> ready_event;
   // Source and destination of ranks used in win ops.
   // It maps the src(dst) rank to the weight.
   std::unordered_map<int, double> dst_weights = {};

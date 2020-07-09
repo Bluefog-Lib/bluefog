@@ -159,6 +159,14 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
     }
 #endif
+
+    // Wait for the data is ready (in GPU case).
+    if(entry.ready_event != nullptr) {
+      while(!entry.ready_event->Ready()) {
+        std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+      }
+    }
+
     switch (entry.mpi_ops_type) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
@@ -457,6 +465,7 @@ int bluefog_nccl_built() {
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback) {
   TensorTableEntry e;
@@ -464,6 +473,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   e.tensor = tensor;
   e.output = output;
   e.device = device;
+  e.ready_event = ready_event;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLREDUCE;
 
@@ -535,6 +545,7 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
 Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
+                                      std::shared_ptr<ReadyEvent> ready_event,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
   TensorTableEntry e;
@@ -542,6 +553,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   e.tensor = tensor;
   e.output = output;
   e.context = context;
+  e.ready_event = ready_event;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::NEIGHBOR_ALLREDUCE;

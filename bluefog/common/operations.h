@@ -101,6 +101,7 @@ int bluefog_nccl_built();
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback);
 
@@ -122,6 +123,7 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
 Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
+                                      std::shared_ptr<ReadyEvent> ready_event,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 

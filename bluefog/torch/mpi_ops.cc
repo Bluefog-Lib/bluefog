@@ -84,7 +84,8 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
-        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
+    auto ready_event = RecordReadyEvent(device);
     // When input and out are the same, mpi_allreduce use IN_PLACE mode.
     // Because we will copy from cpu to gpu anway, there is no reason
     // allocate two cpu memories.
@@ -92,7 +93,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto bf_output = bf_tensor;
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_tensor, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_tensor, ready_event, op_name, CPU_DEVICE_ID,
         [handle, average, output, cpu_buffer, device, op_name, tid,
          timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
@@ -109,9 +110,10 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_output = std::make_shared<TorchTensor>(output);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_output, op_name, device,
+        bf_tensor, bf_output, ready_event, op_name, device,
         [handle, average, output, op_name, tid, timeline_ptr](const Status& status) mutable {
           // Will execute in the `device` context.
           if (average && bluefog_size() > 1) {
@@ -294,14 +296,15 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
-        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto cpu_output = ::torch::empty_like(cpu_buffer);
     auto bf_context =
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, op_name, CPU_DEVICE_ID,
+        bf_context, bf_tensor, bf_output, ready_event, op_name, CPU_DEVICE_ID,
         [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
          output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
           with_device device_guard(device);
@@ -372,9 +375,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto bf_output = std::make_shared<TorchTensor>(tensor);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, op_name, device,
+        bf_context, bf_tensor, bf_output, ready_event, op_name, device,
         [handle, self_weight, neighbor_weights, avg_computation,
          tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
           int first_dim = output.size(0) / bluefog_neighbor_size();
