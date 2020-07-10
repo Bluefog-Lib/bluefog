@@ -405,8 +405,6 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   });
   finalizer_thread.detach();
 
-  entry.callback(Status::OK());
-
 #else
   ncclGroupStart();
   uint recv_rank_index = 0;
