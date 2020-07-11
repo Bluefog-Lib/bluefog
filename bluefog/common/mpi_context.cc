@@ -178,22 +178,6 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   // Create cross node communicator.
   MPI_Comm_split(mpi_comm, local_rank, world_rank, &cross_comm);
 
-  // Determine if cluster is homogeneous, i.e., if every node has the same
-  // local_size
-  auto local_sizes = std::vector<int>(size_);
-  MPI_Allgather(&local_size_, 1, MPI_INT, local_sizes.data(), 1, MPI_INT,
-                mpi_comm);
-
-  is_homogeneous_ = true;
-  for (int i = 0; i < size_; ++i) {
-    if (local_sizes[i] != local_size_) {
-      is_homogeneous_ = false;
-      break;
-    }
-  }
-  BFLOG(TRACE) << "Running environment " << (is_homogeneous_ ? "is" : "is NOT")
-               << " homogeneous (i.e. same local size on each node)";
-
   // The real graph communicator creatation is late.
   graph_comm = MPI_COMM_NULL;
   DisableTopoWeights();

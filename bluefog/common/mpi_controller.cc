@@ -63,6 +63,22 @@ void MPIController::Initialize() {
   MPI_Comm_rank(mpi_ctx_.cross_comm, &mpi_ctx_.cross_rank_);
   MPI_Comm_size(mpi_ctx_.cross_comm, &mpi_ctx_.cross_size_);
 
+  // Determine if cluster is homogeneous, i.e., if every node has the same
+  // local_size
+  auto local_sizes = std::vector<int>(mpi_ctx_.size_);
+  MPI_Allgather(&mpi_ctx_.local_size_, 1, MPI_INT, local_sizes.data(), 1, MPI_INT,
+                mpi_ctx_.mpi_comm);
+
+  mpi_ctx_.is_homogeneous_ = true;
+  for (int i = 0; i < mpi_ctx_.size_; ++i) {
+    if (local_sizes[i] != mpi_ctx_.local_size_) {
+      mpi_ctx_.is_homogeneous_ = false;
+      break;
+    }
+  }
+  BFLOG(TRACE) << "Running environment " << (mpi_ctx_.is_homogeneous_ ? "is" : "is NOT")
+               << " homogeneous (i.e. same local size on each node)";
+
   BFLOG(DEBUG) << "MPI controller initialized.";
 }
 
