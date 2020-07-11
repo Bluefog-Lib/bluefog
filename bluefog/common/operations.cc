@@ -90,7 +90,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
       << "Shutting down background thread";
 
   // Signal that shutdown has been requested.
-  state.shut_down = true;
+  // state.shut_down = true;
   // Notify all outstanding operations that Bluefog has been shut down
   // and finalize tensor queue.
   std::vector<StatusCallback> callbacks;
@@ -98,13 +98,12 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   for (auto& cb : callbacks) {
     cb(SHUT_DOWN_ERROR);
   }
-  mpi_context.Finalize(mpi_ctx_manager);
-
 #if HAVE_NCCL
   if (nccl_context.is_initialized) {
     nccl_context.Finalize();
   }
 #endif
+  mpi_context.Finalize(mpi_ctx_manager);
 }
 
 Vendor DetermineController(const TensorTableEntry& entry) {
@@ -318,8 +317,8 @@ void bluefog_shutdown() {
     bluefog_global.shut_down = true;
     bluefog_global.background_thread.join();
     // Reset the initialization flag to allow restarting with bluefog_init(...)
-    bluefog_global.initialize_flag.clear();
-    bluefog_global.shut_down = false;
+    //bluefog_global.initialize_flag.clear();
+    //bluefog_global.shut_down = false;
   }
 }
 

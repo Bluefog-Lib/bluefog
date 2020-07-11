@@ -175,6 +175,8 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   MPI_Comm_rank(mpi_comm, &world_rank);
   MPI_Comm_rank(local_comm, &local_rank);
 
+
+
   // Create cross node communicator.
   MPI_Comm_split(mpi_comm, local_rank, world_rank, &cross_comm);
 
@@ -187,6 +189,14 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
   if (!enabled_) {
     return;
   }
+
+  if (graph_comm != MPI_COMM_NULL) {
+    UnregisterAllWindowName();
+    DestroyWinMutex();
+    DisableTopoWeights();
+    MPI_Comm_free(&graph_comm);
+  }
+
   if (mpi_comm != MPI_COMM_NULL && mpi_comm != MPI_COMM_WORLD) {
     MPI_Comm_free(&mpi_comm);
   }
@@ -198,15 +208,6 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
   if (cross_comm != MPI_COMM_NULL) {
     MPI_Comm_free(&cross_comm);
   }
-
-  if (graph_comm != MPI_COMM_NULL) {
-    MPI_Comm_free(&graph_comm);
-    DisableTopoWeights();
-  }
-
-  UnregisterAllWindowName();
-
-  DestroyWinMutex();
 
   if (should_finalize) {
     ctx_manager.EnvFinalize();

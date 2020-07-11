@@ -96,12 +96,14 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
         bf_tensor, bf_tensor, ready_event, op_name, CPU_DEVICE_ID,
         [handle, average, output, cpu_buffer, device, op_name, tid,
          timeline_ptr](const Status& status) mutable {
-          with_device device_guard(device);
-          output.copy_(cpu_buffer);
+          if (status.ok()) {
+            with_device device_guard(device);
+            output.copy_(cpu_buffer);
 
-          // Will execute in the `device` context.
-          if (average && bluefog_size() > 1) {
-            output.div_(bluefog_size());
+            // Will execute in the `device` context.
+            if (average && bluefog_size() > 1) {
+              output.div_(bluefog_size());
+            }
           }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
@@ -116,8 +118,10 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
         bf_tensor, bf_output, ready_event, op_name, device,
         [handle, average, output, op_name, tid, timeline_ptr](const Status& status) mutable {
           // Will execute in the `device` context.
-          if (average && bluefog_size() > 1) {
-            output.div_(bluefog_size());
+          if (status.ok()) {
+            if (average && bluefog_size() > 1) {
+              output.div_(bluefog_size());
+            }
           }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
@@ -153,8 +157,10 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
         bf_tensor, bf_tensor, root_rank, op_name, CPU_DEVICE_ID,
         [handle, output, cpu_buffer, device, op_name, tid,
          timeline_ptr](const Status& status) mutable {
-          with_device device_guard(device);
-          output.copy_(cpu_buffer);
+          if (status.ok()) {
+            with_device device_guard(device);
+            output.copy_(cpu_buffer);
+          }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
@@ -205,10 +211,12 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
         bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
         [handle, cpu_output, device, output, op_name, tid,
          timeline_ptr](const Status& status) mutable {
-          with_device device_guard(device);
-          // output needs to be resized before copying in the CPU tensor.
-          output.resize_(cpu_output.sizes());
-          output.copy_(cpu_output);
+          if (status.ok()) {
+            with_device device_guard(device);
+            // output needs to be resized before copying in the CPU tensor.
+            output.resize_(cpu_output.sizes());
+            output.copy_(cpu_output);
+          }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
@@ -255,10 +263,12 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
         bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
         [handle, cpu_output, device, output, op_name, tid,
          timeline_ptr](const Status& status) mutable {
-          with_device device_guard(device);
-          // output needs to be resized before copying in the CPU tensor.
-          output.resize_(cpu_output.sizes());
-          output.copy_(cpu_output);
+          if (status.ok()) {
+            with_device device_guard(device);
+            // output needs to be resized before copying in the CPU tensor.
+            output.resize_(cpu_output.sizes());
+            output.copy_(cpu_output);
+          }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
@@ -307,63 +317,65 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         bf_context, bf_tensor, bf_output, ready_event, op_name, CPU_DEVICE_ID,
         [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
          output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
-          with_device device_guard(device);
-          output.resize_(cpu_output.sizes());
-          output.copy_(cpu_output);
-          
-          int first_dim = output.size(0) / bluefog_neighbor_size();
-          std::vector<int64_t> shape_vector;
-          shape_vector.push_back(first_dim);
-          for (int idx = 1; idx < tensor.dim(); ++idx) {
-            shape_vector.push_back(tensor.size(idx));
-          }
+          if (status.ok()) {
+            with_device device_guard(device);
+            output.resize_(cpu_output.sizes());
+            output.copy_(cpu_output);
+            
+            int first_dim = output.size(0) / bluefog_neighbor_size();
+            std::vector<int64_t> shape_vector;
+            shape_vector.push_back(first_dim);
+            for (int idx = 1; idx < tensor.dim(); ++idx) {
+              shape_vector.push_back(tensor.size(idx));
+            }
 
-          // 1) For a distributed graph topology, created with
-          // MPI_Dist_graph_create, the sequence of neighbors in the send and
-          // receive buffers at each process is defined as the sequence returned
-          // by MPI_Dist_graph_neighbors for destinations and sources,
-          // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
-          // created with MPI_Dist_graph_create_adjacent then the order of the
-          // values in sources and destinations is identical to the input that
-          // was used by the process with the same rank in comm_old in the
-          // creation call.
-          int indgree = 0;
-          int outdegree = 0;
-          int* sources_ptr = nullptr;
-          int* destinations_ptr = nullptr;
-          bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                destinations_ptr);
+            // 1) For a distributed graph topology, created with
+            // MPI_Dist_graph_create, the sequence of neighbors in the send and
+            // receive buffers at each process is defined as the sequence returned
+            // by MPI_Dist_graph_neighbors for destinations and sources,
+            // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
+            // created with MPI_Dist_graph_create_adjacent then the order of the
+            // values in sources and destinations is identical to the input that
+            // was used by the process with the same rank in comm_old in the
+            // creation call.
+            int indgree = 0;
+            int outdegree = 0;
+            int* sources_ptr = nullptr;
+            int* destinations_ptr = nullptr;
+            bluefog_load_topology(&indgree, sources_ptr, &outdegree,
+                                  destinations_ptr);
 
-          // if avg_computation is set to be False, sum computation will be taken place.
-          if (avg_computation) {
-            auto output_reduced = output.slice(0, 0, first_dim);
-            for (int i = 0; i < indgree; i++) {
-              double weight = 0.0;
-              auto it = neighbor_weights.find(*(sources_ptr + i));
-              if (it != neighbor_weights.end()) {
-                weight = it->second;
+            // if avg_computation is set to be False, sum computation will be taken place.
+            if (avg_computation) {
+              auto output_reduced = output.slice(0, 0, first_dim);
+              for (int i = 0; i < indgree; i++) {
+                double weight = 0.0;
+                auto it = neighbor_weights.find(*(sources_ptr + i));
+                if (it != neighbor_weights.end()) {
+                  weight = it->second;
+                }
+
+                if (i == 0) {
+                  output_reduced.mul_(weight);
+                } else {
+                  output_reduced.add_(
+                      output.slice(0, i * first_dim, (i + 1) * first_dim)
+                          .mul_(weight));
+                }
               }
-
-              if (i == 0) {
-                output_reduced.mul_(weight);
-              } else {
+              output.resize_(shape_vector);
+              output.add_(tensor.mul(self_weight));
+            } else {
+              auto output_reduced = output.slice(0, 0, first_dim);
+              for (int i = 1; i < bluefog_neighbor_size(); i++) {
                 output_reduced.add_(
-                    output.slice(0, i * first_dim, (i + 1) * first_dim)
-                        .mul_(weight));
+                    output.slice(0, i * first_dim, (i + 1) * first_dim));
               }
+              output.resize_(shape_vector);
+              // Include self data as well.
+              output.add_(tensor);
+              output.div_(bluefog_neighbor_size() + 1);
             }
-            output.resize_(shape_vector);
-            output.add_(tensor.mul(self_weight));
-          } else {
-            auto output_reduced = output.slice(0, 0, first_dim);
-            for (int i = 1; i < bluefog_neighbor_size(); i++) {
-              output_reduced.add_(
-                  output.slice(0, i * first_dim, (i + 1) * first_dim));
-            }
-            output.resize_(shape_vector);
-            // Include self data as well.
-            output.add_(tensor);
-            output.div_(bluefog_neighbor_size() + 1);
           }
 
           handle_manager.MarkDone(handle, status);
@@ -381,60 +393,62 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         bf_context, bf_tensor, bf_output, ready_event, op_name, device,
         [handle, self_weight, neighbor_weights, avg_computation,
          tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
-          int first_dim = output.size(0) / bluefog_neighbor_size();
-          std::vector<int64_t> shape_vector;
-          shape_vector.push_back(first_dim);
-          for (int idx = 1; idx < tensor.dim(); ++idx) {
-            shape_vector.push_back(tensor.size(idx));
-          }
+          if (status.ok()) {
+            int first_dim = output.size(0) / bluefog_neighbor_size();
+            std::vector<int64_t> shape_vector;
+            shape_vector.push_back(first_dim);
+            for (int idx = 1; idx < tensor.dim(); ++idx) {
+              shape_vector.push_back(tensor.size(idx));
+            }
 
-          // 1) For a distributed graph topology, created with
-          // MPI_Dist_graph_create, the sequence of neighbors in the send and
-          // receive buffers at each process is defined as the sequence returned
-          // by MPI_Dist_graph_neighbors for destinations and sources,
-          // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
-          // created with MPI_Dist_graph_create_adjacent then the order of the
-          // values in sources and destinations is identical to the input that
-          // was used by the process with the same rank in comm_old in the
-          // creation call.
-          int indgree = 0;
-          int outdegree = 0;
-          int* sources_ptr = nullptr;
-          int* destinations_ptr = nullptr;
-          bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                destinations_ptr);
-          // if avg_computation is set to be True, average computation will be taken place.
-          if (avg_computation) {
-            auto output_reduced = output.slice(0, 0, first_dim);
-            for (int i = 0; i < indgree; i++) {
-              double weight = 0.0;
-              auto it = neighbor_weights.find(*(sources_ptr + i));
-              if (it != neighbor_weights.end()) {
-                weight = it->second;
+            // 1) For a distributed graph topology, created with
+            // MPI_Dist_graph_create, the sequence of neighbors in the send and
+            // receive buffers at each process is defined as the sequence returned
+            // by MPI_Dist_graph_neighbors for destinations and sources,
+            // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
+            // created with MPI_Dist_graph_create_adjacent then the order of the
+            // values in sources and destinations is identical to the input that
+            // was used by the process with the same rank in comm_old in the
+            // creation call.
+            int indgree = 0;
+            int outdegree = 0;
+            int* sources_ptr = nullptr;
+            int* destinations_ptr = nullptr;
+            bluefog_load_topology(&indgree, sources_ptr, &outdegree,
+                                  destinations_ptr);
+            // if avg_computation is set to be True, average computation will be taken place.
+            if (avg_computation) {
+              auto output_reduced = output.slice(0, 0, first_dim);
+              for (int i = 0; i < indgree; i++) {
+                double weight = 0.0;
+                auto it = neighbor_weights.find(*(sources_ptr + i));
+                if (it != neighbor_weights.end()) {
+                  weight = it->second;
+                }
+
+                if (i == 0) {
+                  output_reduced.mul_(weight);
+                } else {
+                  output_reduced.add_(
+                      output.slice(0, i * first_dim, (i + 1) * first_dim)
+                          .mul_(weight));
+                }
               }
-
-              if (i == 0) {
-                output_reduced.mul_(weight);
-              } else {
+              output.resize_(shape_vector);
+              output.add_(tensor.mul(self_weight));
+            } else {
+              auto output_reduced = output.slice(0, 0, first_dim);
+              for (int i = 1; i < bluefog_neighbor_size(); i++) {
                 output_reduced.add_(
-                    output.slice(0, i * first_dim, (i + 1) * first_dim)
-                        .mul_(weight));
+                    output.slice(0, i * first_dim, (i + 1) * first_dim));
               }
+              output.resize_(shape_vector);
+              // Include self data as well.
+              output.add_(tensor);
+              output.div_(bluefog_neighbor_size() + 1);
             }
-            output.resize_(shape_vector);
-            output.add_(tensor.mul(self_weight));
-          } else {
-            auto output_reduced = output.slice(0, 0, first_dim);
-            for (int i = 1; i < bluefog_neighbor_size(); i++) {
-              output_reduced.add_(
-                  output.slice(0, i * first_dim, (i + 1) * first_dim));
-            }
-            output.resize_(shape_vector);
-            // Include self data as well.
-            output.add_(tensor);
-            output.div_(bluefog_neighbor_size() + 1);
-          }
 
+          }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
