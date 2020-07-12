@@ -29,16 +29,15 @@ addons:
 before_install:
     - ./scripts/install_mpi.sh $MPI
     - pip$PY install numpy==1.18.1
-    - pip$PY install torch==1.4.0 tensorflow==2.1.0
+    - pip$PY install torch==1.4.0
     - pip$PY install matplotlib  # For the plot in doc
     - python$PY --version
     - python$PY -c "import torch; print(torch.__version__)"
-    - python$PY -c "import tensorflow as tf; print(tf.__version__)"
     - if [[ "$MPI" == "mpich" ]]; then mpichversion; fi
     - if [[ "$MPI" == "openmpi" ]]; then ompi_info; fi
 
 install:
-    - pip$PY install .
+    - BLUEFOG_WITHOUT_TENSORFLOW=1 pip$PY install .
 
 script:
     - mv bluefog _bluefog  # Force to use installed package instead of local one
