@@ -17,6 +17,8 @@
 #ifndef BLUEFOG_COMMON_CUDA_UTIL_H
 #define BLUEFOG_COMMON_CUDA_UTIL_H
 
+#include "common.h"
+
 namespace bluefog {
 namespace common {
 
