@@ -291,7 +291,8 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                         double self_weight, const std::unordered_map<int, double>& neighbor_weights,
-                        bool avg_computation, const std::string& name) {
+                        const std::vector<int>& send_neighbors, bool avg_computation,
+                        const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();

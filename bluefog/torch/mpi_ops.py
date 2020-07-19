@@ -352,8 +352,19 @@ def _neighbor_allreduce_function_factory(tensor):
     return 'bluefog_torch_neighbor_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name):
+def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
+                                    send_neighbors, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
+    if send_neighbors is None:
+        send_neighbors = []
+    elif len(send_neighbors) == 0:
+        raise ValueError("Argument send_neighbors cannot be empty.")
+    elif not set(send_neighbors).issubset(set(out_neighbor_ranks())):
+        raise ValueError("Argument send_neighbors should only contain the ranks that belong to "
+                         " out-neighbors.")
+    elif self_weight is None or neighbor_weights is None:
+        raise ValueError("Arguments self_weight and neighbor_weights should be presented if"
+                         "enabling dynamic topology.")
     if self_weight is None and neighbor_weights is None:
         if is_topo_weighted():
             topology = load_topology()
@@ -379,13 +390,15 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        avg_computation, name.encode() if name is not None else "")
+                                        send_neighbors, avg_computation, name.encode()
+                                        if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
 def neighbor_allreduce(tensor: torch.Tensor,
                        self_weight: float = None, neighbor_weights: Dict[int, float] = None,
+                       send_neighbors: List[int] = None,
                        name: str = None) -> torch.Tensor:
     """
     A function that performs weighted averaging of the input tensor over the negihbors and itself
@@ -407,6 +420,9 @@ def neighbor_allreduce(tensor: torch.Tensor,
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
+        send_neighbors: the list of neighbor nodes to be sent to. If set to be None, assume the
+            topology is static. If having values, assume the topology is dynamic, this node will
+            only send its value to the neighbors listed in this variable.
         name: A name of the reduction operation.
 
     Returns:
@@ -418,14 +434,15 @@ def neighbor_allreduce(tensor: torch.Tensor,
        (self_weight is not None and neighbor_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    handle = neighbor_allreduce_nonblocking(
-        tensor, self_weight, neighbor_weights, name)
+    handle = neighbor_allreduce_nonblocking(tensor, self_weight, neighbor_weights,
+                                            send_neighbors, name)
     return synchronize(handle)
 
 
 def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                    self_weight: float = None,
                                    neighbor_weights: Dict[int, float] = None,
+                                   send_neighbors: List[int] = None,
                                    name: str = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the
@@ -447,6 +464,9 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
+        send_neighbors: the list of neighbor nodes to be sent to. If set to be None, assume the
+            topology is static. If having values, assume the topology is dynamic, this node will
+            only send its value to the neighbors listed in this variable.
         name: A name of the neighbor_allreduce operation.
 
     Returns:
@@ -460,7 +480,8 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     output = tensor.new(tensor.shape)
-    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name)
+    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
+                                           send_neighbors, name)
 
 
 def poll(handle: int) -> bool:
