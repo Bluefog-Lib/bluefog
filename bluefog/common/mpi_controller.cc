@@ -312,6 +312,34 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
+void MPIController::PairGossip(TensorTableEntry& entry) {
+  const void* sendbuf = entry.tensor->data();
+  void* recvbuf = (void*)entry.output->data();
+  const int num_elements = entry.tensor->shape().num_elements();
+  const int recv_num_elements = entry.output->shape().num_elements();
+  const int target_rank = entry.root_rank;  // We re-use root rank (broadcast)
+                                            // as target rank in pair gossip.
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  with_device device_guard(entry.device);
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  int ret_code = MPI_Sendrecv(
+      sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), target_rank,
+      0, recvbuf, recv_num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+      target_rank, 0, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
+      MPI_STATUS_IGNORE);
+  if (ret_code != MPI_SUCCESS) {
+    throw std::runtime_error(
+        "Pair_gossip(through MPI_Sendrecv) failed, see MPI output for "
+        "details.");
+  }
+  timeline_ptr->ActivityEnd(entry.tensor_name);
+
+  entry.callback(Status::OK());
+}
+
 bool MPIController::IsMpiUnifiedModel() {
   void* data_buf = nullptr;
   int win_size = 1;

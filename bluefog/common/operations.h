@@ -127,6 +127,11 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 
+Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
+                               std::shared_ptr<Tensor> output,
+                               const int target_rank, const std::string& name,
+                               const int device, StatusCallback callback);
+
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const std::string& name,
                               const std::unordered_map<int, double>& dst_ranks,

@@ -58,6 +58,11 @@ _win_handle_map = {}
 _win_map = {}
 
 
+def _check_rank(rank):
+    assert isinstance(rank, int), "Rank has to be an integer."
+    assert rank >= 0, "Ranks must be an integer between 0 and size-1."
+    assert rank < size, "Ranks must be an integer between 0 and size-1."
+
 def _check_function(function_factory, tensor, *args):
     function = function_factory(tensor, *args)
     if not hasattr(mpi_lib, function):
@@ -461,6 +466,38 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                          "the same time")
     output = tensor.new(tensor.shape)
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name)
+
+
+def _pair_gossip_nonblocking_function_factory(tensor):
+    return 'bluefog_torch_pair_gossip_nonblocking_' + tensor.type().replace('.', '_')
+
+
+def _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight, name):
+    function = _check_function(
+        _pair_gossip_nonblocking_function_factory, tensor)
+    handle = getattr(mpi_lib, function)(tensor, output, target_rank,
+                                        self_weight, pair_weight,
+                                        name.encode() if name is not None else "")
+    _handle_map[handle] = (tensor, output)
+    return handle
+
+
+def pair_gossip(tensor: torch.Tensor,
+                target_rank: int, self_weight: float = 0.5, pair_weight: float = 0.5, name: str = None) -> torch.Tensor:
+    """TBD
+    """
+    handle = pair_gossip_nonblocking(
+        tensor, target_rank, self_weight, pair_weight, name)
+    return synchronize(handle)
+
+
+def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5,
+                            pair_weight: float = 0.5, name: str = None) -> int:
+    """TBD
+    """
+
+    output = tensor.new(tensor.shape)
+    return _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight, name)
 
 
 def poll(handle: int) -> bool:

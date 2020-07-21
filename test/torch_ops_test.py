@@ -586,6 +586,56 @@ class OpsTests(unittest.TestCase):
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
 
+    def test_pair_gossip(self):
+        size = bf.size()
+        rank = bf.rank()
+        target_rank = rank - 1 if rank % 2 else rank + 1
+        if bf.size() % 2:
+            warnings.warn("Pair gossip only run with even processes. Skipped.")
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+            
+        expect_result = (rank+target_rank) / 2
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            gossiped_tensor = bf.pair_gossip(tensor, target_rank)
+            assert (
+                list(gossiped_tensor.shape) == [23] * dim
+            ), "bf.pair_gossip produces incorrect reduced shape"
+            assert (
+                (gossiped_tensor.data - expect_result).abs().max() < EPSILON
+            ), "bf.pair_gossip produces incorrect reduced tensor"
+
+    def test_pair_gossip_weighted(self):
+        size = bf.size()
+        rank = bf.rank()
+        target_rank = rank - 1 if rank % 2 else rank + 1
+        if bf.size() % 2:
+            warnings.warn(
+                "Pair gossip(weighted) only run with even processes. Skipped.")
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        expect_result = 0.3*rank + 0.7*target_rank
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            gossiped_tensor = bf.pair_gossip(
+                tensor, target_rank, self_weight=0.3, pair_weight=0.7)
+            assert (
+                list(gossiped_tensor.shape) == [2] * dim
+            ), "bf.pair_gossip(weighted) produces incorrect reduced shape"
+            assert (
+                (gossiped_tensor.data - expect_result).abs().max() < EPSILON
+            ), "bf.pair_gossip(weighted) produces incorrect reduced tensor"
+
 
 if __name__ == "__main__":
     unittest.main()
