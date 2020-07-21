@@ -479,8 +479,27 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
     ::torch::Tensor cpu_buffer_output =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     auto bf_output = std::make_shared<TorchTensor>(cpu_buffer_output);
-    // TODO(ybc)
-    throw std::runtime_error("Not implemented yet");
+
+    auto enqueue_result = EnqueueTensorPairGossip(
+        bf_tensor, bf_output, target_rank, op_name, CPU_DEVICE_ID,
+        [handle, tensor, output, cpu_buffer_output, device, self_weight,
+         pair_weight, op_name, tid,
+         timeline_ptr](const Status& status) mutable {
+          // Will execute in the `device` context.
+          if (status.ok()) {
+            with_device device_guard(device);
+            output.copy_(cpu_buffer_output);
+
+            if (self_weight == 0.5 && pair_weight == 0.5) {
+              output.add_(tensor).div_(2);
+            } else {
+              output.mul_(pair_weight).add_(tensor.mul(self_weight));
+            }
+          }
+          handle_manager.MarkDone(handle, status);
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
+        });
+    ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_output = std::make_shared<TorchTensor>(output);

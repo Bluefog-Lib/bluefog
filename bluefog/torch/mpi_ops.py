@@ -482,9 +482,26 @@ def _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weig
     return handle
 
 
-def pair_gossip(tensor: torch.Tensor,
-                target_rank: int, self_weight: float = 0.5, pair_weight: float = 0.5, name: str = None) -> torch.Tensor:
-    """TBD
+# TODO(ybc) Consider active and passive version of pair gossip.
+def pair_gossip(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5, 
+                pair_weight: float = 0.5, name: str = None) -> torch.Tensor:
+    """
+    A function that performs (weighted if specified) averaging of the input tensor and pair tensors
+    in the Bluefog processes.
+
+    Arguments:
+        tensor: A tensor to pair_gossip.
+        target_rank: The rank of pair node.
+        self_weight: The weight for self node.
+        pair_weight: The weight for pair node.
+        name: A name of the pair_gossip operation.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`.
+
+    Note: 1. The input tensor is not modified.
+          2. The pair process should call simultaneously with corresponding arguments.
+          3. If not carefully used, it can lead to deadlock.
     """
     handle = pair_gossip_nonblocking(
         tensor, target_rank, self_weight, pair_weight, name)
@@ -493,7 +510,24 @@ def pair_gossip(tensor: torch.Tensor,
 
 def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5,
                             pair_weight: float = 0.5, name: str = None) -> int:
-    """TBD
+    """
+    A function that nonblockingly performs (weighted if specified) averaging of the input tensor
+     and pair tensors in the Bluefog processes.
+
+    Arguments:
+        tensor: A tensor to pair_gossip.
+        target_rank: The rank of pair node.
+        self_weight: The weight for self node.
+        pair_weight: The weight for pair node.
+        name: A name of the pair_gossip operation.
+
+    Returns:
+        A handle to the neighbor_allreduce operation that can be used with `poll()` or
+        `synchronize()`.
+
+    Note: 1. The input tensor is not modified.
+          2. The pair process should call simultaneously with corresponding arguments.
+          3. If not carefully used, it can lead to deadlock.
     """
 
     output = tensor.new(tensor.shape)
