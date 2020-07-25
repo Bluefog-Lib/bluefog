@@ -459,13 +459,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
 int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
                  const int target_rank, const double self_weight,
-                 const double pair_weight, const std::string& name) {
+                 const double pair_weight, bool avg_computation, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
   auto device = GetDeviceID(tensor);
   auto op_name = GetOpName("pair.gossip", name, handle);
-
+ 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(op_name, "ENQUEUE_PAIR_GOSSIP");
@@ -483,14 +483,14 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
     auto enqueue_result = EnqueueTensorPairGossip(
         bf_tensor, bf_output, target_rank, op_name, CPU_DEVICE_ID,
         [handle, tensor, output, cpu_buffer_output, device, self_weight,
-         pair_weight, op_name, tid,
+         pair_weight, avg_computation, op_name, tid,
          timeline_ptr](const Status& status) mutable {
           // Will execute in the `device` context.
           if (status.ok()) {
             with_device device_guard(device);
             output.copy_(cpu_buffer_output);
 
-            if (self_weight == 0.5 && pair_weight == 0.5) {
+            if (avg_computation) {
               output.add_(tensor).div_(2);
             } else {
               output.mul_(pair_weight).add_(tensor.mul(self_weight));
@@ -506,11 +506,11 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorPairGossip(
         bf_tensor, bf_output, target_rank, op_name, device,
-        [handle, tensor, output, self_weight, pair_weight, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
+        [handle, tensor, output, self_weight, pair_weight, avg_computation,
+         op_name, tid, timeline_ptr](const Status& status) mutable {
           // Will execute in the `device` context.
           if (status.ok()) {
-            if (self_weight == 0.5 && pair_weight == 0.5) {
+            if (avg_computation) {
               output.add_(tensor).div_(2);
             } else {
               output.mul_(pair_weight).add_(tensor.mul(self_weight));

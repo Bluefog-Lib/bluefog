@@ -472,19 +472,20 @@ def _pair_gossip_nonblocking_function_factory(tensor):
     return 'bluefog_torch_pair_gossip_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight, name):
+def _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight,
+                             avg_computation, name):
     function = _check_function(
         _pair_gossip_nonblocking_function_factory, tensor)
     handle = getattr(mpi_lib, function)(tensor, output, target_rank,
-                                        self_weight, pair_weight,
+                                        self_weight, pair_weight, avg_computation,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
 # TODO(ybc) Consider active and passive version of pair gossip.
-def pair_gossip(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5, 
-                pair_weight: float = 0.5, name: str = None) -> torch.Tensor:
+def pair_gossip(tensor: torch.Tensor, target_rank: int, self_weight: float = None,
+                pair_weight: float = None, name: str = None) -> torch.Tensor:
     """
     A function that performs (weighted if specified) averaging of the input tensor and pair tensors
     in the Bluefog processes.
@@ -492,8 +493,10 @@ def pair_gossip(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5
     Arguments:
         tensor: A tensor to pair_gossip.
         target_rank: The rank of pair node.
-        self_weight: The weight for self node.
-        pair_weight: The weight for pair node.
+        self_weight: The weight for self node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
+        pair_weight: The weight for pair node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
         name: A name of the pair_gossip operation.
 
     Returns:
@@ -508,8 +511,8 @@ def pair_gossip(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5
     return synchronize(handle)
 
 
-def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight: float = 0.5,
-                            pair_weight: float = 0.5, name: str = None) -> int:
+def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight: float = None,
+                            pair_weight: float = None, name: str = None) -> int:
     """
     A function that nonblockingly performs (weighted if specified) averaging of the input tensor
      and pair tensors in the Bluefog processes.
@@ -517,8 +520,10 @@ def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight:
     Arguments:
         tensor: A tensor to pair_gossip.
         target_rank: The rank of pair node.
-        self_weight: The weight for self node.
-        pair_weight: The weight for pair node.
+        self_weight: The weight for self node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
+        pair_weight: The weight for pair node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
         name: A name of the pair_gossip operation.
 
     Returns:
@@ -529,9 +534,17 @@ def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight:
           2. The pair process should call simultaneously with corresponding arguments.
           3. If not carefully used, it can lead to deadlock.
     """
-
+    if pair_weight is None and self_weight is None:
+        pair_weight = 0
+        self_weight = 0
+        avg_computation = True
+    elif pair_weight is not None and self_weight is not None:
+        avg_computation = False
+    else:
+        raise ValueError("self_weight and pair_weight have to be set at same time.")
     output = tensor.new(tensor.shape)
-    return _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight, name)
+    return _pair_gossip_nonblocking(tensor, output, target_rank, self_weight,
+                                    pair_weight, avg_computation, name)
 
 
 def poll(handle: int) -> bool:
