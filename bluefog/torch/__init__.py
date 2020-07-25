@@ -45,6 +45,7 @@ from bluefog.torch.mpi_ops import broadcast, broadcast_nonblocking
 from bluefog.torch.mpi_ops import broadcast_, broadcast_nonblocking_
 from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_nonblocking
 from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_nonblocking
+from bluefog.torch.mpi_ops import pair_gossip, pair_gossip_nonblocking
 from bluefog.torch.mpi_ops import poll, synchronize, barrier
 
 from bluefog.torch.mpi_ops import win_create, win_free
