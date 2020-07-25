@@ -748,6 +748,69 @@ The data structure of weights should be {rank : weight} and rank has to belong t
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.pair_gossip">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">pair_gossip</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">target_rank</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">pair_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.pair_gossip" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs (weighted if specified) averaging of the input tensor and pair tensors
+in the Bluefog processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to pair_gossip.</p></li>
+<li><p><strong>target_rank</strong> – The rank of pair node.</p></li>
+<li><p><strong>self_weight</strong> – The weight for self node. If self_weight and pair_weight are not set,
+the returned tensor will be average value.</p></li>
+<li><p><strong>pair_weight</strong> – The weight for pair node. If self_weight and pair_weight are not set,
+the returned tensor will be average value.</p></li>
+<li><p><strong>name</strong> – A name of the pair_gossip operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Note: 1. The input tensor is not modified.</dt><dd><ol class="arabic simple" start="2">
+<li><p>The pair process should call simultaneously with corresponding arguments.</p></li>
+<li><p>If not carefully used, it can lead to deadlock.</p></li>
+</ol>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.pair_gossip_nonblocking">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">pair_gossip_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">target_rank</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">pair_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.pair_gossip_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>A function that nonblockingly performs (weighted if specified) averaging of the input tensor</dt><dd><p>and pair tensors in the Bluefog processes.</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to pair_gossip.</p></li>
+<li><p><strong>target_rank</strong> – The rank of pair node.</p></li>
+<li><p><strong>self_weight</strong> – The weight for self node. If self_weight and pair_weight are not set,
+the returned tensor will be average value.</p></li>
+<li><p><strong>pair_weight</strong> – The weight for pair node. If self_weight and pair_weight are not set,
+the returned tensor will be average value.</p></li>
+<li><p><strong>name</strong> – A name of the pair_gossip operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the neighbor_allreduce operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Note: 1. The input tensor is not modified.</dt><dd><ol class="arabic simple" start="2">
+<li><p>The pair process should call simultaneously with corresponding arguments.</p></li>
+<li><p>If not carefully used, it can lead to deadlock.</p></li>
+</ol>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.poll">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">poll</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">handle</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.poll" title="Permalink to this definition">¶</a></dt>
 <dd><p>Polls an allreduce, allgather or broadcast handle to determine whether underlying
