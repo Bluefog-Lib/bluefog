@@ -90,9 +90,9 @@ int64_t TorchTensor::size() const {
   return tensor_.element_size() * tensor_.numel();
 }
 
-::torch::Tensor TorchTensor::MakeCopy(int device) {
+std::shared_ptr<TorchTensor> TorchTensor::MakeCopy(int device) {
   with_device device_context(device);
-  return tensor_.clone();
+  return std::make_shared<TorchTensor>(tensor_.clone());
 }
 
 ::torch::Tensor TorchTensor::GetUnderlyingTensor() { return tensor_; }
