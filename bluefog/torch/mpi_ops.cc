@@ -317,17 +317,23 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_context =
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
+    auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
+    auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, ready_event, &recv_neighbors, &send_neighbors, op_name,
-        CPU_DEVICE_ID, [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
-         output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
+        bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
+        op_name, CPU_DEVICE_ID, [handle, self_weight, neighbor_weights, avg_computation, cpu_output,
+        tensor, recv_neighbors, send_neighbors, output, device, op_name, tid, timeline_ptr]
+        (const Status& status) mutable {
           if (status.ok()) {
             with_device device_guard(device);
             output.resize_(cpu_output.sizes());
             output.copy_(cpu_output);
+
+            int recv_size = bluefog_neighbor_size();
+            if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
             
-            int first_dim = output.size(0) / bluefog_neighbor_size();
+            int first_dim = output.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
             for (int idx = 1; idx < tensor.dim(); ++idx) {
@@ -353,9 +359,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             // if avg_computation is set to be False, sum computation will be taken place.
             if (avg_computation) {
               auto output_reduced = output.slice(0, 0, first_dim);
+              if (!send_neighbors.empty()) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
-                auto it = neighbor_weights.find(*(sources_ptr + i));
+                int recv_rank;
+                if(send_neighbors.empty()) recv_rank = *(sources_ptr+i);
+                else recv_rank = recv_neighbors[i];
+                auto it = neighbor_weights.find(recv_rank);
                 if (it != neighbor_weights.end()) {
                   weight = it->second;
                 }
@@ -392,14 +402,18 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto bf_output = std::make_shared<TorchTensor>(tensor);
+    auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
+    auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, ready_event, &recv_neighbors, &send_neighbors, op_name,
-        device, [handle, self_weight, neighbor_weights, avg_computation,
-         tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
+        bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
+        op_name, device, [handle, self_weight, neighbor_weights, avg_computation, recv_neighbors,
+        send_neighbors, tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
           if (status.ok()) {
-            int first_dim = output.size(0) / bluefog_neighbor_size();
+            int recv_size = bluefog_neighbor_size();
+            if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
+            int first_dim = output.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
             for (int idx = 1; idx < tensor.dim(); ++idx) {
@@ -424,9 +438,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             // if avg_computation is set to be True, average computation will be taken place.
             if (avg_computation) {
               auto output_reduced = output.slice(0, 0, first_dim);
+              if (!send_neighbors.empty()) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
-                auto it = neighbor_weights.find(*(sources_ptr + i));
+                int recv_rank;
+                if(send_neighbors.empty()) recv_rank = *(sources_ptr+i);
+                else recv_rank = recv_neighbors[i];
+                auto it = neighbor_weights.find(recv_rank);
                 if (it != neighbor_weights.end()) {
                   weight = it->second;
                 }

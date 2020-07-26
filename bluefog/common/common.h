@@ -226,8 +226,8 @@ struct TensorTableEntry {
   std::unordered_map<int, double> src_weights = {};
 
   // Neighbors for dynamic neighbor_allreduce.
-  const std::vector<int>* send_neighbors = nullptr;
-  const std::vector<int>* recv_neighbors = nullptr;
+  std::shared_ptr<std::vector<int>> send_neighbors;
+  std::shared_ptr<std::vector<int>> recv_neighbors;
 
   // The ops requires the mutex.
   bool require_mutex = false;

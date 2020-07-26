@@ -365,6 +365,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     elif self_weight is None or neighbor_weights is None:
         raise ValueError("Arguments self_weight and neighbor_weights should be presented if"
                          "enabling dynamic topology.")
+    else:
+        pass
     if self_weight is None and neighbor_weights is None:
         if is_topo_weighted():
             topology = load_topology()

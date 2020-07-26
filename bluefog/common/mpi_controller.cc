@@ -273,9 +273,15 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // Allgather output will have shape of:
   // (sum of first dimension of every tensor) x (tensor slice shape).
   // For allreduce, the first dimension of every tensor should be the same.
-  int total_entry_dimension_size =
-      entry.tensor->shape().dim_size(0) * GetNeighborSize();
   TensorShape output_shape;
+  int total_entry_dimension_size;
+  if (entry.send_neighbors->empty()) {
+    total_entry_dimension_size = 
+      entry.tensor->shape().dim_size(0) * GetNeighborSize();
+  } else {
+    total_entry_dimension_size = 
+      entry.tensor->shape().dim_size(0) * entry.recv_neighbors->size();
+  }
   output_shape.AddDim(total_entry_dimension_size);
   for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
     output_shape.AddDim(entry.tensor->shape().dim_size(i));
@@ -296,14 +302,43 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // mpi_neighbor_allgather do not! Because for saving the communication there
   // is no need to transfer the local info again. However, for computation view,
   // including itself is more intuitive.
-  int ret_code = MPI_Neighbor_allgather(
-      sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
-      num_elements, mpi_ctx_.GetMPIDataType(entry.output),
-      mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
-  if (ret_code != MPI_SUCCESS) {
-    throw std::runtime_error(
-        "MPI_Neighbor_allreduce(through neighbor_allgather) failed, see MPI "
-        "output for details.");
+  if (entry.send_neighbors->empty()) {
+    int ret_code = MPI_Neighbor_allgather(
+        sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
+        num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+        mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Neighbor_allreduce(through neighbor_allgather) failed, see MPI "
+          "output for details.");
+    }
+  } else {
+    int nsend = entry.send_neighbors->size();
+    int nrecv = entry.recv_neighbors->size();
+    std::vector<MPI_Request> requests(nsend+nrecv);
+    std::vector<MPI_Status> statuses(nsend+nrecv);
+    int element_size = mpi_ctx_.GetMPITypeSize(entry.output->dtype());
+    for (int i = 0; i < nrecv; ++i) {
+      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data())
+                              +num_elements*i*element_size);
+      int ret_code = MPI_Irecv(recvbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+          entry.recv_neighbors->at(i), 0, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
+          &requests[i+nsend]);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Irecv(through neighbor_allgather) failed, see MPI output for details.");
+      }
+    }
+    for (int i = 0; i < nsend; ++i) {
+      int ret_code = MPI_Isend(sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
+          entry.send_neighbors->at(i), 0, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
+          &requests[i]);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Isend(through neighbor_allgather) failed, see MPI output for details.");
+      }
+    }
+    MPI_Waitall(nsend+nrecv, requests.data(), statuses.data());
   }
   timeline_ptr->ActivityEnd(entry.tensor_name);
 
