@@ -297,6 +297,37 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data - sum_value).abs().max() == 0
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
+    def test_neighbor_allreduce_dynamic_topo_move(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        self_weight = 0.0
+        neighbor_weights = {(rank-1) % size : 1.0}
+        send_ranks = [(rank + 1) % size]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
+                    neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data - (rank-1) % size).abs().max() < EPSILON
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
     def test_neighbor_allreduce_dynamic_topo_avg(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
         size = bf.size()
