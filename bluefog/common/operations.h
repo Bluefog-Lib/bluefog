@@ -124,6 +124,8 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
                                       std::shared_ptr<ReadyEvent> ready_event,
+                                      const std::vector<int>* recv_neighbors,
+                                      const std::vector<int>* send_neighbors,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 

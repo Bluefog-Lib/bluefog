@@ -305,6 +305,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  std::vector<int> recv_neighbors;
+  for (auto kv : neighbor_weights)
+      recv_neighbors.push_back(kv.first);
+
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
@@ -315,8 +319,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, ready_event, op_name, CPU_DEVICE_ID,
-        [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
+        bf_context, bf_tensor, bf_output, ready_event, &recv_neighbors, &send_neighbors, op_name,
+        CPU_DEVICE_ID, [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
          output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
           if (status.ok()) {
             with_device device_guard(device);
@@ -391,8 +395,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, ready_event, op_name, device,
-        [handle, self_weight, neighbor_weights, avg_computation,
+        bf_context, bf_tensor, bf_output, ready_event, &recv_neighbors, &send_neighbors, op_name,
+        device, [handle, self_weight, neighbor_weights, avg_computation,
          tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
           if (status.ok()) {
             int first_dim = output.size(0) / bluefog_neighbor_size();
