@@ -362,6 +362,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     elif not set(send_neighbors).issubset(set(out_neighbor_ranks())):
         raise ValueError("Argument send_neighbors should only contain the ranks that belong to "
                          " out-neighbors.")
+    elif len(set(send_neighbors)) != len(send_neighbors):
+        raise ValueError("Argument send_neighbors should only contain the unique ranks.")
     elif self_weight is None or neighbor_weights is None:
         raise ValueError("Arguments self_weight and neighbor_weights should be presented if"
                          "enabling dynamic topology.")

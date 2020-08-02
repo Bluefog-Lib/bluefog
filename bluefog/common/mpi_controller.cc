@@ -287,7 +287,6 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
     output_shape.AddDim(entry.tensor->shape().dim_size(i));
   }
 
-  
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   timeline_ptr->ActivityEnd(entry.tensor_name);
@@ -296,6 +295,52 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
+
+  bool is_topo_check_fail = false;
+  if (!entry.send_neighbors->empty()) {
+    timeline_ptr->ActivityStart(entry.tensor_name, "NEGOTIATION");
+    int size = mpi_ctx_.size_;
+    int nsend = entry.send_neighbors->size();
+    int nrecv = entry.recv_neighbors->size();
+    bool* send_check_buf = new bool[2*size];
+    std::fill_n(send_check_buf, 2*size, false);
+    bool* recv_check_buf = new bool[2*size*size];
+    for (int send_rank : *(entry.send_neighbors))
+        send_check_buf[send_rank] = true;
+    for (int recv_rank : *(entry.recv_neighbors))
+        send_check_buf[mpi_ctx_.size_+recv_rank] = true;
+    int ret_code = MPI_Allgather(send_check_buf, size*2, MPI_C_BOOL,
+                                 recv_check_buf, size*2, MPI_C_BOOL,
+                                 mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+    if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, see MPI output "
+            "for details.");
+    }
+    auto get_index = [size](int i, int j) -> int { return 2*size*i+j; };
+    for (int i = 0; i < size; ++i) {
+        if (is_topo_check_fail) break;
+        for (int j = 0; j < size; ++j) {
+            if (!recv_check_buf[get_index(i, j)]) continue;
+            if (!recv_check_buf[get_index(j, i+size)]) {
+                is_topo_check_fail = true;
+                break;
+            } else {
+                recv_check_buf[get_index(j, i+size)] = false;
+            }
+        }
+    }
+    for (int i = 0; i < size; ++i) {
+        if (is_topo_check_fail) break;
+        for (int j = 0; j < size; ++j) {
+            if(!recv_check_buf[get_index(i, j+size)]) continue;
+            is_topo_check_fail = true;
+        }
+    }
+    delete [] send_check_buf;
+    delete [] recv_check_buf;
+    timeline_ptr->ActivityEnd(entry.tensor_name);
+  }
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   // Pitfall: Our neighbor_allreduce include itself, while
@@ -309,10 +354,10 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
         mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
     if (ret_code != MPI_SUCCESS) {
       throw std::runtime_error(
-          "MPI_Neighbor_allreduce(through neighbor_allgather) failed, see MPI "
+          "MPI_Neighbor_allreduce (through neighbor_allgather) failed, see MPI "
           "output for details.");
     }
-  } else {
+  } else if (!is_topo_check_fail) {
     int nsend = entry.send_neighbors->size();
     int nrecv = entry.recv_neighbors->size();
     std::vector<MPI_Request> requests(nsend+nrecv);
@@ -326,7 +371,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           &requests[i+nsend]);
       if (ret_code != MPI_SUCCESS) {
         throw std::runtime_error(
-            "MPI_Irecv(through neighbor_allgather) failed, see MPI output for details.");
+            "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI output for details.");
       }
     }
     for (int i = 0; i < nsend; ++i) {
@@ -335,7 +380,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           &requests[i]);
       if (ret_code != MPI_SUCCESS) {
         throw std::runtime_error(
-            "MPI_Isend(through neighbor_allgather) failed, see MPI output for details.");
+            "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI output for details.");
       }
     }
     MPI_Waitall(nsend+nrecv, requests.data(), statuses.data());
@@ -343,7 +388,12 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMPUTE_AVERAGE");
-  entry.callback(Status::OK());
+  if (is_topo_check_fail) {
+    entry.callback(Status::InvalidArgument("Send and recv neighbors dont' match in neighbor "
+                                           "allreduce dynamic topology"));
+  } else {
+    entry.callback(Status::OK());
+  }
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
