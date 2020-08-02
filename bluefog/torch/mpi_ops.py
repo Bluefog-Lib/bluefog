@@ -58,10 +58,10 @@ _win_handle_map = {}
 _win_map = {}
 
 
-def _check_rank(rank):
-    assert isinstance(rank, int), "Rank has to be an integer."
-    assert rank >= 0, "Ranks must be an integer between 0 and size-1."
-    assert rank < size, "Ranks must be an integer between 0 and size-1."
+def _check_rank(rank_: int):
+    assert isinstance(rank_, int), "Rank has to be an integer."
+    assert rank_ >= 0, "Ranks must be an integer between 0 and size-1."
+    assert rank_ < size(), "Ranks must be an integer between 0 and size-1."
 
 def _check_function(function_factory, tensor, *args):
     function = function_factory(tensor, *args)

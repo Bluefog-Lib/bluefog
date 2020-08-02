@@ -317,7 +317,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         bf_context, bf_tensor, bf_output, ready_event, op_name, CPU_DEVICE_ID,
         [handle, self_weight, neighbor_weights, avg_computation, cpu_output, tensor,
          output, device, op_name, tid, timeline_ptr](const Status& status) mutable {
-          if (status.ok()) {
+          if (status.ok() && bluefog_neighbor_size() > 0) {
             with_device device_guard(device);
             output.resize_(cpu_output.sizes());
             output.copy_(cpu_output);
@@ -393,7 +393,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         bf_context, bf_tensor, bf_output, ready_event, op_name, device,
         [handle, self_weight, neighbor_weights, avg_computation,
          tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
-          if (status.ok()) {
+          if (status.ok() && bluefog_neighbor_size() > 0) {
             int first_dim = output.size(0) / bluefog_neighbor_size();
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
@@ -447,7 +447,6 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output.add_(tensor);
               output.div_(bluefog_neighbor_size() + 1);
             }
-
           }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
