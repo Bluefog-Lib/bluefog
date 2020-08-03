@@ -257,8 +257,8 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             nw = {i: 1.0 for i in neighbor_ranks}
-            reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0, 
-                                                           neighbor_weights=nw, name=name)
+            reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
+                                                   neighbor_weights=nw, name=name)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -595,8 +595,8 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
-            
+            dtypes += [torch.cuda.FloatTensor]
+
         expect_result = (rank+target_rank) / 2
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -620,7 +620,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+            dtypes += [torch.cuda.FloatTensor]
 
         expect_result = 0.3*rank + 0.7*target_rank
         dims = [1, 2, 3]
