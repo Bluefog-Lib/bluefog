@@ -353,7 +353,7 @@ def _neighbor_allreduce_function_factory(tensor):
 
 
 def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
-                                    send_neighbors, name):
+                                    send_neighbors, enable_topo_check, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if send_neighbors is None:
         send_neighbors = []
@@ -394,15 +394,15 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        send_neighbors, avg_computation, name.encode()
-                                        if name is not None else "")
+                                        send_neighbors, enable_topo_check, avg_computation,
+                                        name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
 def neighbor_allreduce(tensor: torch.Tensor,
                        self_weight: float = None, neighbor_weights: Dict[int, float] = None,
-                       send_neighbors: List[int] = None,
+                       send_neighbors: List[int] = None, enable_topo_check: bool = False,
                        name: str = None) -> torch.Tensor:
     """
     A function that performs weighted averaging of the input tensor over the negihbors and itself
@@ -417,16 +417,19 @@ def neighbor_allreduce(tensor: torch.Tensor,
 
     Arguments:
         tensor: A tensor to weighted average.
-        self_weight: the weight for self node, used with neighbor_weights.
-        neighbor_weights: the weights for neighbor nodes, used with self weight.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_weights: The weights for neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
-        send_neighbors: the list of neighbor nodes to be sent to. If set to be None, assume the
-            topology is static. If having values, assume the topology is dynamic, this node will
-            only send its value to the neighbors listed in this variable.
+        send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
+            the current node sends to all of its (out-)neighbors. If having values, assume only
+            part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+            partial neighbors listed in this variable.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other.
         name: A name of the reduction operation.
 
     Returns:
@@ -439,7 +442,7 @@ def neighbor_allreduce(tensor: torch.Tensor,
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     handle = neighbor_allreduce_nonblocking(tensor, self_weight, neighbor_weights,
-                                            send_neighbors, name)
+                                            send_neighbors, enable_topo_check, name)
     return synchronize(handle)
 
 
@@ -447,6 +450,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                    self_weight: float = None,
                                    neighbor_weights: Dict[int, float] = None,
                                    send_neighbors: List[int] = None,
+                                   enable_topo_check: bool = False,
                                    name: str = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the
@@ -461,16 +465,19 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
 
     Arguments:
         tensor: A tensor to neighbor_allreduce.
-        self_weight: the weight for self node, used with neighbor_weights.
-        neighbor_weights: the weights for neighbor nodes, used with self weight.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_weights: The weights for neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
-        send_neighbors: the list of neighbor nodes to be sent to. If set to be None, assume the
-            topology is static. If having values, assume the topology is dynamic, this node will
-            only send its value to the neighbors listed in this variable.
+        send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
+            the current node sends to all of its (out-)neighbors. If having values, assume only
+            part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+            partial neighbors listed in this variable.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other.
         name: A name of the neighbor_allreduce operation.
 
     Returns:
@@ -485,7 +492,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                          "the same time")
     output = tensor.new(tensor.shape)
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
-                                           send_neighbors, name)
+                                           send_neighbors, enable_topo_check, name)
 
 
 def poll(handle: int) -> bool:

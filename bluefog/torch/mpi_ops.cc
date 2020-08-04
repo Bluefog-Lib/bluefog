@@ -291,8 +291,8 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                         double self_weight, const std::unordered_map<int, double>& neighbor_weights,
-                        const std::vector<int>& send_neighbors, bool avg_computation,
-                        const std::string& name) {
+                        const std::vector<int>& send_neighbors, bool enable_topo_check,
+                        bool avg_computation, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
@@ -322,8 +322,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        op_name, CPU_DEVICE_ID, [handle, self_weight, neighbor_weights, avg_computation, cpu_output,
-        tensor, recv_neighbors, send_neighbors, output, device, op_name, tid, timeline_ptr]
+        enable_topo_check, op_name, CPU_DEVICE_ID, [handle, self_weight, neighbor_weights,
+        avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device,
+        op_name, tid, timeline_ptr]
         (const Status& status) mutable {
           if (status.ok()) {
             with_device device_guard(device);
@@ -408,8 +409,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        op_name, device, [handle, self_weight, neighbor_weights, avg_computation, recv_neighbors,
-        send_neighbors, tensor, output, op_name, tid, timeline_ptr](const Status& status) mutable {
+        enable_topo_check, op_name, device, [handle, self_weight, neighbor_weights, avg_computation,
+        recv_neighbors, send_neighbors, tensor, output, op_name, tid, timeline_ptr]
+        (const Status& status) mutable {
           if (status.ok()) {
             int recv_size = bluefog_neighbor_size();
             if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
