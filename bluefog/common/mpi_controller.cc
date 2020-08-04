@@ -262,6 +262,71 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
+// Function to check if the sending and receiving neighbors match in the topology.
+bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry, Timeline* timeline_ptr,
+                                  const MPI_Comm& comm) {
+  bool res = false;
+  // enabled the check if enable_topo_check is true and partial neighbor_allreduce is activated.
+  if (entry.enable_topo_check && !entry.send_neighbors->empty()) {
+    timeline_ptr->ActivityStart(entry.tensor_name, "NEGOTIATION");
+    // Put all the send and recv neighbors in a single vector, and obtain a send matrix and a recv
+    // matrix through MPI_Allgather.
+    bool* send_check_buf = new bool[2*size];
+    std::fill_n(send_check_buf, 2*size, false);
+    bool* recv_check_buf = new bool[2*size*size];
+    for (int send_rank : *(entry.send_neighbors))
+        send_check_buf[send_rank] = true;
+    for (int recv_rank : *(entry.recv_neighbors))
+        send_check_buf[size+recv_rank] = true;
+    int ret_code = MPI_Allgather(send_check_buf, size*2, MPI_C_BOOL,
+                                 recv_check_buf, size*2, MPI_C_BOOL, comm);
+    if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, see MPI output "
+            "for details.");
+    }
+    // This checks that send matrix and transposed recv matrix should be the same. If same,
+    // the topology is good to go. If not, there is mismatch edge to be fixed.
+    auto GetSendIndex = [size](int i, int j) -> int { return 2*size*i+j; };
+    auto GetRecvIndex = [size](int i, int j) -> int { return 2*size*i+j+size; };
+    for (int i = 0; i < size; ++i) {
+        if (res) break;
+        for (int j = 0; j < size; ++j) {
+            if (recv_check_buf[GetSendIndex(i, j)] != recv_check_buf[GetRecvIndex(j, i)]) {
+                res = true;
+                break;
+            }
+        }
+    }
+    delete [] send_check_buf;
+    delete [] recv_check_buf;
+    timeline_ptr->ActivityEnd(entry.tensor_name);
+  }
+  return res;
+}
+
+std::string GenerateNeighborAllreduceErrorMessage(const std::vector<MPI_Status>& statuses,
+                                                  int nsend, int nrecv) {
+  std::string error_message = "";
+  bool error_encountered = false;
+  for (int i = 0; i < nsend; ++i) {
+    const auto& status = statuses[i];
+    error_message += "MPI_Isend to Process " + std::to_string(status.MPI_SOURCE);
+    error_message += "; with tag " + std::to_string(status.MPI_TAG);
+    error_message += "; with error code " + std::to_string(status.MPI_ERROR) + "\n";
+    if(status.MPI_ERROR != MPI_SUCCESS) error_encountered = true;
+  }
+  for (int i = 0; i < nrecv; ++i) {
+    const auto& status = statuses[i+nsend];
+    error_message += "MPI_Irecv from Process " + std::to_string(status.MPI_SOURCE);
+    error_message += "; with tag " + std::to_string(status.MPI_TAG);
+    error_message += "; with error code " + std::to_string(status.MPI_ERROR) + "\n";
+    if(status.MPI_ERROR != MPI_SUCCESS) error_encountered = true;
+  }
+  if (!error_encountered) error_message = "";
+  return error_message;
+}
+
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -273,15 +338,15 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // Allgather output will have shape of:
   // (sum of first dimension of every tensor) x (tensor slice shape).
   // For allreduce, the first dimension of every tensor should be the same.
-  int total_entry_dimension_size =
-      entry.tensor->shape().dim_size(0) * GetNeighborSize();
   TensorShape output_shape;
+  const int neighbor_size = entry.send_neighbors->empty() ? GetNeighborSize()
+                                                          : entry.recv_neighbors->size();
+  const int total_entry_dimension_size = entry.tensor->shape().dim_size(0) * neighbor_size;
   output_shape.AddDim(total_entry_dimension_size);
   for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
     output_shape.AddDim(entry.tensor->shape().dim_size(i));
   }
 
-  
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   timeline_ptr->ActivityEnd(entry.tensor_name);
@@ -291,24 +356,67 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
+  // If only partial sending is enabled, the following code block checks whether the sending
+  // and recieving neighbors match each other when enable_topo_check is set to be True.
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(mpi_ctx_.size_, entry, timeline_ptr,
+                                mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   // Pitfall: Our neighbor_allreduce include itself, while
   // mpi_neighbor_allgather do not! Because for saving the communication there
   // is no need to transfer the local info again. However, for computation view,
   // including itself is more intuitive.
-  int ret_code = MPI_Neighbor_allgather(
-      sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
-      num_elements, mpi_ctx_.GetMPIDataType(entry.output),
-      mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
-  if (ret_code != MPI_SUCCESS) {
-    throw std::runtime_error(
-        "MPI_Neighbor_allreduce(through neighbor_allgather) failed, see MPI "
-        "output for details.");
+  std::string error_message = "";
+  if (entry.send_neighbors->empty()) {
+    int ret_code = MPI_Neighbor_allgather(
+        sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
+        num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+        mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Neighbor_allreduce (through neighbor_allgather) failed, see MPI "
+          "output for details.");
+    }
+  } else if (!is_topo_check_fail) {
+    int nsend = entry.send_neighbors->size();
+    int nrecv = entry.recv_neighbors->size();
+    std::vector<MPI_Request> requests(nsend+nrecv);
+    std::vector<MPI_Status> statuses(nsend+nrecv);
+    int element_size = mpi_ctx_.GetMPITypeSize(entry.output->dtype());
+    for (int i = 0; i < nrecv; ++i) {
+      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data())
+                              +num_elements*i*element_size);
+      int ret_code = MPI_Irecv(recvbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+          entry.recv_neighbors->at(i), mpi_ctx_.rank_+entry.recv_neighbors->at(i),
+          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i+nsend]);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI output for details.");
+      }
+    }
+    for (int i = 0; i < nsend; ++i) {
+      int ret_code = MPI_Isend(sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
+          entry.send_neighbors->at(i), mpi_ctx_.rank_+entry.send_neighbors->at(i),
+          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI output for details.");
+      }
+    }
+    MPI_Waitall(nsend+nrecv, requests.data(), statuses.data());
+    error_message = GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
   }
   timeline_ptr->ActivityEnd(entry.tensor_name);
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMPUTE_AVERAGE");
-  entry.callback(Status::OK());
+  if (is_topo_check_fail) {
+    entry.callback(Status::InvalidArgument("Send and recv neighbors dont' match in neighbor "
+                                           "allreduce dynamic topology"));
+  } else if (error_message != "") {
+    entry.callback(Status::UnknownError(error_message));
+  } else {
+    entry.callback(Status::OK());
+  }
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 

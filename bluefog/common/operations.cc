@@ -552,6 +552,9 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
                                       std::shared_ptr<ReadyEvent> ready_event,
+                                      std::shared_ptr<std::vector<int>> recv_neighbors,
+                                      std::shared_ptr<std::vector<int>> send_neighbors,
+                                      bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
   TensorTableEntry e;
@@ -560,6 +563,9 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   e.output = output;
   e.context = context;
   e.ready_event = ready_event;
+  e.recv_neighbors = recv_neighbors;
+  e.send_neighbors = send_neighbors;
+  e.enable_topo_check = enable_topo_check;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::NEIGHBOR_ALLREDUCE;

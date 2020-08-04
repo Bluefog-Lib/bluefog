@@ -226,6 +226,13 @@ struct TensorTableEntry {
   std::unordered_map<int, double> dst_weights = {};
   std::unordered_map<int, double> src_weights = {};
 
+  // Neighbors for dynamic neighbor_allreduce.
+  std::shared_ptr<std::vector<int>> send_neighbors;
+  std::shared_ptr<std::vector<int>> recv_neighbors;
+
+  // Boolean value for enabling topology check.
+  bool enable_topo_check = false;
+
   // The ops requires the mutex.
   bool require_mutex = false;
 
