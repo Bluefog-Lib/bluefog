@@ -686,7 +686,7 @@ different processes must have the same rank and shape.</p>
 
 <dl class="py function">
 <dt id="bluefog.torch.neighbor_allreduce">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">send_neighbors</span><span class="p">:</span> <span class="n">List<span class="p">[</span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">enable_topo_check</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that performs weighted averaging of the input tensor over the negihbors and itself
 in the Bluefog processes. The default behavior is (uniformly) average.</p>
 <p>The input tensor is not modified.</p>
@@ -698,13 +698,20 @@ are ready to send and receive the tensor.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to weighted average.</p></li>
-<li><p><strong>self_weight</strong> – the weight for self node, used with neighbor_weights.</p></li>
-<li><p><strong>neighbor_weights</strong> – the weights for neighbor nodes, used with self weight.
+<li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – The weights for neighbor nodes, used with self weight.
 If neighbor_weights is presented, the return tensor will return the weighted average
 defined by these weights and the self_weight. If not, the return tensor will return
 the weighted average defined by the topology weights is provided or uniformly average.
 The data structure of weights should be {rank : weight} and rank has to belong to the
 (in-)neighbors.</p></li>
+<li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
+the current node sends to all of its (out-)neighbors. If having values, assume only
+part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+partial neighbors listed in this variable.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
 <li><p><strong>name</strong> – A name of the reduction operation.</p></li>
 </ul>
 </dd>
@@ -717,7 +724,7 @@ The data structure of weights should be {rank : weight} and rank has to belong t
 
 <dl class="py function">
 <dt id="bluefog.torch.neighbor_allreduce_nonblocking">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">neighbor_allreduce_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">neighbor_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">send_neighbors</span><span class="p">:</span> <span class="n">List<span class="p">[</span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">enable_topo_check</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that nonblockingly performs weighted averaging of the input tensor over the
 negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.</p>
 <p>The input tensor is not modified.</p>
@@ -729,13 +736,20 @@ are ready to send and receive the tensor.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to neighbor_allreduce.</p></li>
-<li><p><strong>self_weight</strong> – the weight for self node, used with neighbor_weights.</p></li>
-<li><p><strong>neighbor_weights</strong> – the weights for neighbor nodes, used with self weight.
+<li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – The weights for neighbor nodes, used with self weight.
 If neighbor_weights is presented, the return tensor will return the weighted average
 defined by these weights and the self_weight. If not, the return tensor will return
 the weighted average defined by the topology weights is provided or uniformly average.
 The data structure of weights should be {rank : weight} and rank has to belong to the
 (in-)neighbors.</p></li>
+<li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
+the current node sends to all of its (out-)neighbors. If having values, assume only
+part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+partial neighbors listed in this variable.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
 <li><p><strong>name</strong> – A name of the neighbor_allreduce operation.</p></li>
 </ul>
 </dd>
