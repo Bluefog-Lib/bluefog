@@ -326,7 +326,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device,
         op_name, tid, timeline_ptr]
         (const Status& status) mutable {
-          if (status.ok()) {
+          if (status.ok() && bluefog_neighbor_size() > 0) {
             with_device device_guard(device);
             output.resize_(cpu_output.sizes());
             output.copy_(cpu_output);
@@ -412,9 +412,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         enable_topo_check, op_name, device, [handle, self_weight, neighbor_weights, avg_computation,
         recv_neighbors, send_neighbors, tensor, output, op_name, tid, timeline_ptr]
         (const Status& status) mutable {
-          if (status.ok()) {
-            int recv_size = bluefog_neighbor_size();
-            if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
+          int recv_size = bluefog_neighbor_size();
+          if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
+          if (status.ok() && recv_size > 0) {
             int first_dim = output.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
@@ -472,13 +472,80 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output.add_(tensor);
               output.div_(bluefog_neighbor_size() + 1);
             }
-
           }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         });
     ThrowIfError(enqueue_result);
   }
+  return handle;
+}
+
+int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
+                 const int target_rank, const double self_weight,
+                 const double pair_weight, bool avg_computation, const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+
+  auto handle = handle_manager.AllocateHandle();
+  auto device = GetDeviceID(tensor);
+  auto op_name = GetOpName("pair.gossip", name, handle);
+ 
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+  timeline_ptr->ActivityStart(op_name, "ENQUEUE_PAIR_GOSSIP");
+  // Note callback function will be called by different thread.
+  std::thread::id tid = std::this_thread::get_id();
+
+  if (OPS_ON_CPU && tensor.device().is_cuda()) {
+    ::torch::Tensor cpu_buffer =
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
+    ::torch::Tensor cpu_buffer_output =
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    auto bf_output = std::make_shared<TorchTensor>(cpu_buffer_output);
+
+    auto enqueue_result = EnqueueTensorPairGossip(
+        bf_tensor, bf_output, target_rank, op_name, CPU_DEVICE_ID,
+        [handle, tensor, output, cpu_buffer_output, device, self_weight,
+         pair_weight, avg_computation, op_name, tid,
+         timeline_ptr](const Status& status) mutable {
+          // Will execute in the `device` context.
+          if (status.ok()) {
+            with_device device_guard(device);
+            output.copy_(cpu_buffer_output);
+
+            if (avg_computation) {
+              output.add_(tensor).div_(2);
+            } else {
+              output.mul_(pair_weight).add_(tensor.mul(self_weight));
+            }
+          }
+          handle_manager.MarkDone(handle, status);
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
+        });
+    ThrowIfError(enqueue_result);
+  } else {
+    auto bf_tensor = std::make_shared<TorchTensor>(tensor);
+    auto bf_output = std::make_shared<TorchTensor>(output);
+
+    auto enqueue_result = EnqueueTensorPairGossip(
+        bf_tensor, bf_output, target_rank, op_name, device,
+        [handle, tensor, output, self_weight, pair_weight, avg_computation,
+         op_name, tid, timeline_ptr](const Status& status) mutable {
+          // Will execute in the `device` context.
+          if (status.ok()) {
+            if (avg_computation) {
+              output.add_(tensor).div_(2);
+            } else {
+              output.mul_(pair_weight).add_(tensor.mul(self_weight));
+            }
+          }
+          handle_manager.MarkDone(handle, status);
+          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
+        });
+    ThrowIfError(enqueue_result);
+  }
+
   return handle;
 }
 
@@ -577,23 +644,27 @@ PYBIND11_MODULE(mpi_lib, m) {
 #endif
 
   // neighbor_allreduce
-  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_IntTensor",
-        &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_LongTensor",
-        &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_FloatTensor",
         &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_DoubleTensor",
         &DoNeighborAllreduce);
 #if HAVE_CUDA
-  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_IntTensor",
-        &DoNeighborAllreduce);
-  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_LongTensor",
-        &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_FloatTensor",
         &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_DoubleTensor",
         &DoNeighborAllreduce);
+#endif
+
+  // Pair_gossip
+  m.def("bluefog_torch_pair_gossip_nonblocking_torch_FloatTensor",
+        &DoPairGossip);
+  m.def("bluefog_torch_pair_gossip_nonblocking_torch_DoubleTensor",
+        &DoPairGossip);
+#if HAVE_CUDA
+  m.def("bluefog_torch_pair_gossip_nonblocking_torch_cuda_FloatTensor",
+        &DoPairGossip);
+  m.def("bluefog_torch_pair_gossip_nonblocking_torch_cuda_DoubleTensor",
+        &DoPairGossip);
 #endif
 
   // basics

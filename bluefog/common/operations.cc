@@ -237,6 +237,13 @@ bool RunLoopOnce(BluefogGlobalState& state) {
 #endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
+      case MPIOpsType::PAIR_GOSSIP:
+        BFLOG(TRACE, bluefog_global.controller->GetRank())
+            << "Processing " << entry.tensor_name;
+        state.timeline.ActivityStart(entry.tensor_name, "PAIR_GOSSIP");
+        state.controller->PairGossip(entry);
+        state.timeline.ActivityEnd(entry.tensor_name);
+        break;
       case MPIOpsType::BARRIER:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing Barrier now ";
@@ -562,6 +569,26 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::NEIGHBOR_ALLREDUCE;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  return status;
+}
+
+Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
+                               std::shared_ptr<Tensor> output,
+                               const int target_rank, const std::string& name,
+                               const int device, StatusCallback callback) {
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.tensor = tensor;
+  e.output = output;
+  e.root_rank = target_rank;
+  e.device = device;
+  e.callback = callback;
+  e.mpi_ops_type = MPIOpsType::PAIR_GOSSIP;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;

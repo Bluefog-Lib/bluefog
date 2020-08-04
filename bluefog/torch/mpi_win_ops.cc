@@ -79,7 +79,7 @@ bool WinTorchStorageManager::RegisterWinName(
   // We need to allocate neighbor_indegree tensor space for it.
   NeighborTable neighbor_tensors;
   for (int i = 0; i < in_neighbor_degree_; i++) {
-    auto t = std::make_shared<TorchTensor>(tensor->MakeCopy(device));
+    std::shared_ptr<TorchTensor> t = tensor->MakeCopy(device);
     if (zero_init) t->GetUnderlyingTensor().fill_(0.0);
     int source_rank = *(sources_ptr + i);
     neighbor_tensors[source_rank] = t;

@@ -117,6 +117,20 @@ NEIGHBOR_ALLREDUCE_H(torch_cuda_FloatTensor, THCudaTensor)
 NEIGHBOR_ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
+#define PAIR_GOSSIP_H(torch_Tensor, THTensor)                             \
+  extern "C" int bluefog_torch_pair_gossip_nonblocking_##torch_Tensor(    \
+      THTensor* tensor, THTensor* output, int target_rank,                \
+      double self_weight,  double pair_weight,  bool avg_computation,     \
+      char* name);
+
+PAIR_GOSSIP_H(torch_FloatTensor, THFloatTensor)
+PAIR_GOSSIP_H(torch_DoubleTensor, THDoubleTensor)
+
+#if HAVE_CUDA
+PAIR_GOSSIP_H(torch_cuda_FloatTensor, THCudaTensor)
+PAIR_GOSSIP_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
+#endif
+
 extern "C" int bluefog_torch_poll(int handle);
 extern "C" void bluefog_torch_wait_and_clear(int handle);
 extern "C" void bluefog_torch_barrier();
