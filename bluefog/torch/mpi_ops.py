@@ -402,7 +402,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
 
 def neighbor_allreduce(tensor: torch.Tensor,
                        self_weight: float = None, neighbor_weights: Dict[int, float] = None,
-                       send_neighbors: List[int] = None, enable_topo_check: bool = False,
+                       send_neighbors: List[int] = None, enable_topo_check: bool = True,
                        name: str = None) -> torch.Tensor:
     """
     A function that performs weighted averaging of the input tensor over the negihbors and itself
@@ -429,7 +429,8 @@ def neighbor_allreduce(tensor: torch.Tensor,
             part of (out-)neighbors will be sent to. In this mode, this node sends its value to
             partial neighbors listed in this variable.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
-            sending and recieving neighbors match with each other.
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
         name: A name of the reduction operation.
 
     Returns:
@@ -450,7 +451,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                    self_weight: float = None,
                                    neighbor_weights: Dict[int, float] = None,
                                    send_neighbors: List[int] = None,
-                                   enable_topo_check: bool = False,
+                                   enable_topo_check: bool = True,
                                    name: str = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the
@@ -477,7 +478,8 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
             part of (out-)neighbors will be sent to. In this mode, this node sends its value to
             partial neighbors listed in this variable.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
-            sending and recieving neighbors match with each other.
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
         name: A name of the neighbor_allreduce operation.
 
     Returns:
