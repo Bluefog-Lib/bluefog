@@ -220,9 +220,15 @@ the adjacenty matrix is the same only.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.GetWeights">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetWeights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return a Tuple of self_weight and neighbor_weights dictionary.</p>
+<dt id="bluefog.common.topology_util.GetRecvWeights">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetRecvWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetRecvWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights for receiving dictionary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.common.topology_util.GetSendWeights">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetSendWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetSendWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights for sending dictionary.</p>
 </dd></dl>
 
 <dl class="py function">
