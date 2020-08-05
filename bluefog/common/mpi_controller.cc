@@ -411,7 +411,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityStart(entry.tensor_name, "COMPUTE_AVERAGE");
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument("Send and recv neighbors dont' match in neighbor "
-                                           "allreduce dynamic topology"));
+                                           "allreduce with partial send/recv request."));
   } else if (error_message != "") {
     entry.callback(Status::UnknownError(error_message));
   } else {

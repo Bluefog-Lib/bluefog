@@ -36,8 +36,8 @@ def IsTopologyEquivalent(topo1: nx.DiGraph, topo2: nx.DiGraph) -> bool:
     return (A1 == A2).all()
 
 
-def GetWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]]:
-    """Return a Tuple of self_weight and neighbor_weights dictionary."""
+def GetRecvWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]]:
+    """Return a Tuple of self_weight and neighbor_weights for receiving dictionary."""
     weight_matrix = nx.to_numpy_array(topo)
     self_weight = 0.0
     neighbor_weights = {}
@@ -46,6 +46,18 @@ def GetWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]]:
             self_weight = weight_matrix[src_rank, rank]
         else:
             neighbor_weights[src_rank] = weight_matrix[src_rank, rank]
+    return self_weight, neighbor_weights
+
+def GetSendWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]]:
+    """Return a Tuple of self_weight and neighbor_weights for sending dictionary."""
+    weight_matrix = nx.to_numpy_array(topo)
+    self_weight = 0.0
+    neighbor_weights = {}
+    for recv_rank in topo.successors(rank):
+        if recv_rank == rank:
+            self_weight = weight_matrix[rank, recv_rank]
+        else:
+            neighbor_weights[recv_rank] = weight_matrix[rank, recv_rank]
     return self_weight, neighbor_weights
 
 

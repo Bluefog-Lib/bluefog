@@ -187,7 +187,7 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
             ' linear_regression and logistic_regression')
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(
+    self_weight, neighbor_weights = topology_util.GetRecvWeights(
         topology, bf.rank())
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
@@ -242,7 +242,7 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
         )
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(
+    self_weight, neighbor_weights = topology_util.GetRecvWeights(
         topology, bf.rank())
 
     if bf.rank() == 0:

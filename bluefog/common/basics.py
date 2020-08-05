@@ -169,7 +169,8 @@ class BlueFogBasics(object):
         _rank = self.rank()
         in_neighbor_ranks = [r for r in self._topology.predecessors(self.rank())
                              if r != _rank]
-        return in_neighbor_ranks
+        return sorted(in_neighbor_ranks,
+                      key=lambda x: x-_rank if x > _rank else x - _rank + self.size())
 
     def out_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all out-neighbors.
@@ -183,7 +184,8 @@ class BlueFogBasics(object):
         _rank = self.rank()
         out_neighbor_ranks = [r for r in self._topology.successors(self.rank())
                               if r != _rank]
-        return out_neighbor_ranks
+        return sorted(out_neighbor_ranks,
+                      key=lambda x: x-_rank if x > _rank else x - _rank + self.size())
 
     def set_topology(self, topology: networkx.DiGraph = None,
                      is_weighted: bool = False) -> bool:
@@ -241,7 +243,7 @@ class BlueFogBasics(object):
         else:
             # Here the source_weights is a vector containing weights from source, i.e.,
             # (in-)neighbors, converted from the neighbor_weights dictionary.
-            self_weight, neighbor_weights = topology_util.GetWeights(topology, self.rank())
+            self_weight, neighbor_weights = topology_util.GetRecvWeights(topology, self.rank())
             source_weights = [neighbor_weights[r] for r in sorted(neighbor_weights.keys())]
             source_weights_type = ctypes.c_float * indegree
             self._MPI_LIB_CTYPES.bluefog_set_topology_with_weights.argtypes = (

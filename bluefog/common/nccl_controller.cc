@@ -468,6 +468,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   delete[] displcmnts;
 }
 
+// TODO(ybc) Support partial send and recieve for dyanmic topology usage.
 void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // The communication pattern of neighbor_allreduce and neighbor_allgather are
   // the same. The difference happened at the callback phase.

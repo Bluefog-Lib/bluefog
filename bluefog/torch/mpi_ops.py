@@ -21,7 +21,7 @@ import torch
 
 from bluefog.torch import mpi_lib  # C library
 from bluefog.common.basics import BlueFogBasics, logger
-from bluefog.common.topology_util import GetWeights
+from bluefog.common.topology_util import GetRecvWeights
 
 _basics = BlueFogBasics(__file__, 'mpi_lib')
 
@@ -362,7 +362,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if send_neighbors is None:
         send_neighbors = []
-    elif len(send_neighbors) == 0:
+    elif not send_neighbors:
         raise ValueError("Argument send_neighbors cannot be empty.")
     elif not set(send_neighbors).issubset(set(out_neighbor_ranks())):
         raise ValueError("Argument send_neighbors should only contain the ranks that belong to "
@@ -377,7 +377,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     if self_weight is None and neighbor_weights is None:
         if is_topo_weighted():
             topology = load_topology()
-            self_weight, neighbor_weights = GetWeights(topology, rank())
+            self_weight, neighbor_weights = GetRecvWeights(topology, rank())
             avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
@@ -754,7 +754,7 @@ def win_update(name: str,
     elif neighbor_weights is None and self_weight is None:
         if is_topo_weighted():
             topology = load_topology()
-            self_weight, neighbor_weights = GetWeights(topology, rank())
+            self_weight, neighbor_weights = GetRecvWeights(topology, rank())
             avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
