@@ -169,8 +169,7 @@ class BlueFogBasics(object):
         _rank = self.rank()
         in_neighbor_ranks = [r for r in self._topology.predecessors(self.rank())
                              if r != _rank]
-        return sorted(in_neighbor_ranks,
-                      key=lambda x: x-_rank if x > _rank else x - _rank + self.size())
+        return in_neighbor_ranks
 
     def out_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all out-neighbors.
@@ -184,8 +183,7 @@ class BlueFogBasics(object):
         _rank = self.rank()
         out_neighbor_ranks = [r for r in self._topology.successors(self.rank())
                               if r != _rank]
-        return sorted(out_neighbor_ranks,
-                      key=lambda x: x-_rank if x > _rank else x - _rank + self.size())
+        return out_neighbor_ranks
 
     def set_topology(self, topology: networkx.DiGraph = None,
                      is_weighted: bool = False) -> bool:
