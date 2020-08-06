@@ -699,7 +699,7 @@ are ready to send and receive the tensor.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to weighted average.</p></li>
 <li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
-<li><p><strong>neighbor_weights</strong> – The weights for neighbor nodes, used with self weight.
+<li><p><strong>neighbor_weights</strong> – The weights for in-neighbor nodes, used with self weight.
 If neighbor_weights is presented, the return tensor will return the weighted average
 defined by these weights and the self_weight. If not, the return tensor will return
 the weighted average defined by the topology weights is provided or uniformly average.
@@ -737,7 +737,7 @@ are ready to send and receive the tensor.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to neighbor_allreduce.</p></li>
 <li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
-<li><p><strong>neighbor_weights</strong> – The weights for neighbor nodes, used with self weight.
+<li><p><strong>neighbor_weights</strong> – The weights for in-neighbor nodes, used with self weight.
 If neighbor_weights is presented, the return tensor will return the weighted average
 defined by these weights and the self_weight. If not, the return tensor will return
 the weighted average defined by the topology weights is provided or uniformly average.
