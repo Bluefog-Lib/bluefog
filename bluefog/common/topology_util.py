@@ -229,3 +229,12 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
         topo[i] = np.roll(x, i)
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
+
+
+def IsRegularGraph(topo: nx.DiGraph) -> bool:
+    """Dtermine a graph is regular or not, i.e. all node have same degree."""
+    degree = topo.degree(0)
+    for rank in range(1, topo.number_of_nodes()):
+        if topo.degree(rank) != degree:
+            return False
+    return True
