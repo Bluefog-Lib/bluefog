@@ -423,7 +423,7 @@ def neighbor_allreduce(tensor: torch.Tensor,
     Arguments:
         tensor: A tensor to weighted average.
         self_weight: The weight for self node, used with neighbor_weights.
-        neighbor_weights: The weights for neighbor nodes, used with self weight.
+        neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
@@ -472,7 +472,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     Arguments:
         tensor: A tensor to neighbor_allreduce.
         self_weight: The weight for self node, used with neighbor_weights.
-        neighbor_weights: The weights for neighbor nodes, used with self weight.
+        neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
