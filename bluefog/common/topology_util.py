@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Iterator
 
 import numpy as np
 import networkx as nx
@@ -47,6 +47,7 @@ def GetRecvWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]
         else:
             neighbor_weights[src_rank] = weight_matrix[src_rank, rank]
     return self_weight, neighbor_weights
+
 
 def GetSendWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]]:
     """Return a Tuple of self_weight and neighbor_weights for sending dictionary."""
@@ -232,9 +233,52 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
 
 
 def IsRegularGraph(topo: nx.DiGraph) -> bool:
-    """Dtermine a graph is regular or not, i.e. all node have same degree."""
+    """Dtermine a graph is regular or not, i.e. all nodes have the same degree."""
     degree = topo.degree(0)
     for rank in range(1, topo.number_of_nodes()):
         if topo.degree(rank) != degree:
             return False
     return True
+
+
+def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[int, List[int]]]:
+    """A utility function to generate 1-outoging send rank and corresponding recieving rank(s). 
+
+    Args:
+        topo (nx.DiGraph): The base topology to generate dynamic send and receive ranks.
+        self_rank (int): The self rank.
+
+    Yields:
+        Iterator[Tuple[int, List[int]]]: send_rank, recv_ranks.
+
+    Example:
+
+        >>> from bluefog.common import topology_util
+        >>> topo = topology_util.PowerTwoRingGraph(10)
+        >>> gen = topology_util.GetDynamicSendRecvRanks(topo, 0)
+        >>> for _ in range(10):
+        >>>     print(next(gen))
+    """
+    # Generate all outgoing ranks sorted by clock-wise. (Imagine all ranks put on a clock.)
+    size = topo.number_of_nodes()
+    sorted_send_ranks = []
+    for rank in range(size):
+        sorted_ranks = sorted(topo.successors(rank),
+                              key=lambda r, rk=rank: r-rk if r >= rk else r-rk+size)
+        if sorted_ranks[0] == rank:
+            sorted_ranks = sorted_ranks[1:]  # remove the self-loop
+        sorted_send_ranks.append(sorted_ranks)
+
+    self_degree = topo.out_degree(self_rank) - 1
+    index = 0
+    while True:
+        send_rank = sorted_send_ranks[self_rank][index % self_degree]
+        recv_ranks = []
+        for other_rank in range(size):
+            if other_rank == self_rank:
+                continue
+            degree = topo.out_degree(other_rank) - 1
+            if sorted_send_ranks[other_rank][index % degree] == self_rank:
+                recv_ranks.append(other_rank)
+        yield send_rank, recv_ranks
+        index += 1
