@@ -562,8 +562,70 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   });
   finalizer_thread.detach();
 #else
-  throw std::runtime_error(
-      "Sorry, haven't supporting neighbor_allreduce with NCCL < 2.7.");
+  ncclGroupStart();
+  uint recv_rank_index = 0;
+  uint send_rank_index = 0;
+  int send_rank, recv_rank;
+  int num_recv_size, num_send_size;
+  if (entry.send_neighbors->empty()) {
+    num_recv_size = mpi_ctx_.neighbor_in_ranks_.size();
+    num_send_size = mpi_ctx_.neighbor_out_ranks_.size();
+  } else {
+    num_recv_size = entry.recv_neighbors->size();
+    num_send_size = entry.send_neighbors->size();
+  }
+  for (const auto& pair : nccl_ctx_.pair_order) {
+    int peer_rank = mpi_ctx_.rank_ == pair.first ? pair.second : pair.first;
+    if (entry.send_neighbors->empty()) {
+      send_rank = mpi_ctx_.neighbor_out_ranks_[send_rank_index];
+      recv_rank = mpi_ctx_.neighbor_in_ranks_[recv_rank_index];
+    } else {
+      send_rank = entry.send_neighbors->at(send_rank_index);
+      recv_rank = entry.recv_neighbors->at(recv_rank_index);
+    }
+
+    int target_disp = displcmnts[recv_rank_index];
+    bool should_recv = false;
+    bool should_send = false;
+    if (send_rank_index < num_send_size && peer_rank == send_rank) {
+      send_rank_index++;
+      should_send = true;
+      BFLOG(DEBUG, mpi_ctx_.rank_) << "Should send to rank " << peer_rank;
+    }
+    if (recv_rank_index < num_recv_size && peer_rank == recv_rank) {
+      recv_rank_index++;
+      should_recv = true;
+      BFLOG(DEBUG, mpi_ctx_.rank_) << "Should recv from rank " << peer_rank;
+    }
+
+    void* recvbuf = (void*)(static_cast<const char*>(buffer_data) +
+                              num_elements * recv_rank_index * element_size);
+    if (mpi_ctx_.rank_ == pair.second) {
+      // Recv then send
+      if (should_recv)
+        NCCLCHECK(ncclRecvByBcast(recvbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), recv_rank));
+
+      if (should_send)
+        NCCLCHECK(ncclSendByBcast(sendbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), send_rank));
+    } else {
+      // Send then recv
+      if (should_send)
+        NCCLCHECK(ncclSendByBcast(sendbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), send_rank));
+
+      if (should_recv)
+        NCCLCHECK(ncclRecvByBcast(recvbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), recv_rank));
+    }
+  }
+  ncclGroupEnd();
+
+  for (const auto& stream : nccl_ctx_.pair_streams) {
+    CUDACHECK(cudaStreamSynchronize(stream.second));
+  }
+  entry.callback(Status::OK());
 #endif
 }
 
