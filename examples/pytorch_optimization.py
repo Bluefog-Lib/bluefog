@@ -316,7 +316,7 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w',
               loss=loss, rho=rho)
-    q = w.grad.data  # q^0 = grad(w^0)
+    q = w.grad.data.clone()  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
     grad_prev = q.clone()
