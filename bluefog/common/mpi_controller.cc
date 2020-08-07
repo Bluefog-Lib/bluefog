@@ -284,8 +284,7 @@ bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
     if (ret_code != MPI_SUCCESS) {
       throw std::runtime_error(
           "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, "
-          "see MPI output "
-          "for details.");
+          "see MPI output for details.");
     }
     // This checks that send matrix and transposed recv matrix should be the
     // same. If same, the topology is good to go. If not, there is mismatch edge

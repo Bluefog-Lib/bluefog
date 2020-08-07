@@ -298,7 +298,6 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data - sum_value).abs().max() == 0
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
-    @unittest.skip("Still failed with error.")
     def test_neighbor_allreduce_dynamic_topo_check(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
         size = bf.size()
