@@ -115,7 +115,7 @@ def exact_diffusion(w_opt, rho, beta, maxite=2000, alpha_ed=1e-1, use_Abar=False
     mse = []
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(
+    self_weight, neighbor_weights = topology_util.GetRecvWeights(
         topology, bf.rank())
 
     # construct A_bar

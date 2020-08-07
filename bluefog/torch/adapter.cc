@@ -15,12 +15,17 @@
 // ==============================================================================
 
 #if HAVE_CUDA
+#if TORCH_VERSION >= 1005000000
+#include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAStream.h>
+#else
 #include <THC/THC.h>
 #endif
+#endif
 
-#include "adapter.h"
 #include "../common/cuda_util.h"
 #include "../common/logging.h"
+#include "adapter.h"
 
 #if HAVE_CUDA
 extern THCState* state;
@@ -31,9 +36,9 @@ namespace torch {
 
 using ::bluefog::common::DataType;
 using ::bluefog::common::Framework;
+using ::bluefog::common::OpContext;
 using ::bluefog::common::Status;
 using ::bluefog::common::StatusType;
-using ::bluefog::common::OpContext;
 using ::bluefog::common::with_device;
 
 TorchTensor::TorchTensor(::torch::Tensor tensor) : tensor_(tensor) {}
@@ -85,9 +90,9 @@ int64_t TorchTensor::size() const {
   return tensor_.element_size() * tensor_.numel();
 }
 
-::torch::Tensor TorchTensor::MakeCopy(int device) {
+std::shared_ptr<TorchTensor> TorchTensor::MakeCopy(int device) {
   with_device device_context(device);
-  return tensor_.clone();
+  return std::make_shared<TorchTensor>(tensor_.clone());
 }
 
 ::torch::Tensor TorchTensor::GetUnderlyingTensor() { return tensor_; }
@@ -119,9 +124,11 @@ TorchPersistentBuffer::TorchPersistentBuffer(int device, int64_t size)
     : device_(device) {
   with_device device_context(device_);
   if (device_ == CPU_DEVICE_ID) {
-    tensor_ = ::torch::empty(size, ::torch::device(::torch::kCPU).dtype(::torch::kByte));
+    tensor_ = ::torch::empty(
+        size, ::torch::device(::torch::kCPU).dtype(::torch::kByte));
   } else {
-    tensor_ = ::torch::empty(size, ::torch::device(::torch::kCUDA).dtype(::torch::kByte));
+    tensor_ = ::torch::empty(
+        size, ::torch::device(::torch::kCUDA).dtype(::torch::kByte));
   }
 }
 
@@ -133,9 +140,8 @@ const void* TorchPersistentBuffer::AccessData(
 TorchOpContext::TorchOpContext(int device, ::torch::Tensor output)
     : device_(device), output_(output) {}
 
-Status
-TorchOpContext::AllocatePersistent(int64_t size,
-                                   std::shared_ptr<common::PersistentBuffer>* tensor) {
+Status TorchOpContext::AllocatePersistent(
+    int64_t size, std::shared_ptr<common::PersistentBuffer>* tensor) {
   // Allocation errors are handled using PyTorch exceptions.
   *tensor = std::make_shared<TorchPersistentBuffer>(device_, size);
   return Status::OK();
@@ -168,9 +174,7 @@ Status TorchOpContext::AllocateZeros(int64_t num_elements, DataType dtype,
   return Status::OK();
 }
 
-Framework TorchOpContext::framework() const {
-  return Framework::PYTORCH;
-}
+Framework TorchOpContext::framework() const { return Framework::PYTORCH; }
 
 #if HAVE_CUDA
 struct ReadyEventRegistry {
@@ -191,12 +195,22 @@ TorchReadyEvent::TorchReadyEvent(int device) : device_(device) {
       cuda_event_ = queue.front();
       queue.pop();
     } else {
+#if TORCH_VERSION >= 1005000000
+      C10_CUDA_CHECK(cudaEventCreateWithFlags(
+          &cuda_event_, cudaEventBlockingSync | cudaEventDisableTiming));
+#else
       THCudaCheck(cudaEventCreateWithFlags(
           &cuda_event_, cudaEventBlockingSync | cudaEventDisableTiming));
+#endif
     }
   }
+#if TORCH_VERSION >= 1005000000
+  auto stream = c10::cuda::getCurrentCUDAStream(device_);
+  C10_CUDA_CHECK(cudaEventRecord(cuda_event_, stream));
+#else
   auto stream = THCState_getCurrentStreamOnDevice(state, device_);
   THCudaCheck(cudaEventRecord(cuda_event_, stream));
+#endif
 }
 
 TorchReadyEvent::~TorchReadyEvent() {
@@ -212,7 +226,11 @@ bool TorchReadyEvent::Ready() const {
   if (status == cudaErrorNotReady) {
     return false;
   }
+#if TORCH_VERSION >= 1005000000
+  C10_CUDA_CHECK(status);
+#else
   THCudaCheck(status);
+#endif
   return true;
 }
 #endif
@@ -226,8 +244,9 @@ std::shared_ptr<common::ReadyEvent> RecordReadyEvent(int device) {
 #if HAVE_CUDA
     return std::make_shared<TorchReadyEvent>(device);
 #else
-    throw std::logic_error("Internal error. Requested ReadyEvent "
-                           "with GPU device but not compiled with CUDA.");
+    throw std::logic_error(
+        "Internal error. Requested ReadyEvent "
+        "with GPU device but not compiled with CUDA.");
 #endif
   }
 }

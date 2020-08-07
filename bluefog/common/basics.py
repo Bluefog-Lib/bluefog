@@ -241,7 +241,7 @@ class BlueFogBasics(object):
         else:
             # Here the source_weights is a vector containing weights from source, i.e.,
             # (in-)neighbors, converted from the neighbor_weights dictionary.
-            self_weight, neighbor_weights = topology_util.GetWeights(topology, self.rank())
+            self_weight, neighbor_weights = topology_util.GetRecvWeights(topology, self.rank())
             source_weights = [neighbor_weights[r] for r in sorted(neighbor_weights.keys())]
             source_weights_type = ctypes.c_float * indegree
             self._MPI_LIB_CTYPES.bluefog_set_topology_with_weights.argtypes = (

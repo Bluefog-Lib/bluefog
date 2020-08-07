@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import inspect
 import itertools
+import pytest
 import unittest
 import warnings
 
@@ -257,8 +258,8 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             nw = {i: 1.0 for i in neighbor_ranks}
-            reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0, 
-                                                           neighbor_weights=nw, name=name)
+            reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
+                                                   neighbor_weights=nw, name=name)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -295,6 +296,99 @@ class OpsTests(unittest.TestCase):
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
             assert (
                 (reduced_tensor.data - sum_value).abs().max() == 0
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_dynamic_topo_check(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        self_weight = 0.0
+        neighbor_weights = {(rank-1) % size : 1.0}
+        send_ranks = [(rank + 2) % size]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            with pytest.raises(ValueError):
+                reduced_tensor = bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
+                    neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+
+    def test_neighbor_allreduce_dynamic_topo_move(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        self_weight = 0.0
+        neighbor_weights = {(rank-1) % size : 1.0}
+        send_ranks = [(rank + 1) % size]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
+                    neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (move) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data - (rank-1) % size).abs().max() < EPSILON
+            ), "bf.neighbor_allreduce (move) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_dynamic_topo_avg(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+
+        self_weight = 1/(num_indegree+1)
+        neighbor_weights = {i: self_weight for i in neighbor_ranks}
+        send_ranks = [(rank + 2**i) % size for i in range(num_indegree)]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
+                    neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data.mul_(num_indegree+1) -
+                 sum_value).abs().max() < EPSILON
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg(self):
@@ -585,6 +679,56 @@ class OpsTests(unittest.TestCase):
 
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
+
+    def test_pair_gossip(self):
+        size = bf.size()
+        rank = bf.rank()
+        target_rank = rank - 1 if rank % 2 else rank + 1
+        if bf.size() % 2:
+            warnings.warn("Pair gossip only run with even processes. Skipped.")
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        expect_result = (rank+target_rank) / 2
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            gossiped_tensor = bf.pair_gossip(tensor, target_rank)
+            assert (
+                list(gossiped_tensor.shape) == [23] * dim
+            ), "bf.pair_gossip produces incorrect reduced shape"
+            assert (
+                (gossiped_tensor.data - expect_result).abs().max() < EPSILON
+            ), "bf.pair_gossip produces incorrect reduced tensor"
+
+    def test_pair_gossip_weighted(self):
+        size = bf.size()
+        rank = bf.rank()
+        target_rank = rank - 1 if rank % 2 else rank + 1
+        if bf.size() % 2:
+            warnings.warn(
+                "Pair gossip(weighted) only run with even processes. Skipped.")
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+
+        expect_result = 0.3*rank + 0.7*target_rank
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            gossiped_tensor = bf.pair_gossip(
+                tensor, target_rank, self_weight=0.3, pair_weight=0.7)
+            assert (
+                list(gossiped_tensor.shape) == [2] * dim
+            ), "bf.pair_gossip(weighted) produces incorrect reduced shape"
+            assert (
+                (gossiped_tensor.data - expect_result).abs().max() < EPSILON
+            ), "bf.pair_gossip(weighted) produces incorrect reduced tensor"
 
 
 if __name__ == "__main__":

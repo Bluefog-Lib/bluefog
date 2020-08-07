@@ -163,6 +163,11 @@ for _ in range(100):
 data_index = 0
 
 
+if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
+    dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+        bf.load_topology(), bf.rank())
+
+
 def dynamic_topology_update(batch_idx):
     if args.dist_optimizer == 'win_put':
         num_out_neighbors = len(bf.out_neighbor_ranks())
@@ -172,6 +177,13 @@ def dynamic_topology_update(batch_idx):
         num_in_neighbors = len(bf.in_neighbor_ranks())
         recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
         optimizer.src_weights = {recv_neighbor: 1.0}
+    elif args.dist_optimizer == 'neighbor_allreduce':
+        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = [send_neighbor]
+        optimizer.neighbor_weights = {
+            r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
+        optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
+        optimizer.enable_topo_check = False
     else:
         pass
 

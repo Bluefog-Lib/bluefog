@@ -90,7 +90,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
       << "Shutting down background thread";
 
   // Signal that shutdown has been requested.
-  state.shut_down = true;
+  // state.shut_down = true;
   // Notify all outstanding operations that Bluefog has been shut down
   // and finalize tensor queue.
   std::vector<StatusCallback> callbacks;
@@ -98,13 +98,12 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   for (auto& cb : callbacks) {
     cb(SHUT_DOWN_ERROR);
   }
-  mpi_context.Finalize(mpi_ctx_manager);
-
 #if HAVE_NCCL
   if (nccl_context.is_initialized) {
     nccl_context.Finalize();
   }
 #endif
+  mpi_context.Finalize(mpi_ctx_manager);
 }
 
 Vendor DetermineController(const TensorTableEntry& entry) {
@@ -159,11 +158,19 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
     }
 #endif
+
+    // Wait for the data is ready (in GPU case).
+    if(entry.ready_event != nullptr) {
+      while(!entry.ready_event->Ready()) {
+        std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+      }
+    }
+
     switch (entry.mpi_ops_type) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_ALLREDUCE);
+        state.timeline.ActivityStart(entry.tensor_name, "ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
           state.controller->Allreduce(entry);
         }
@@ -177,7 +184,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_BROADCAST);
+        state.timeline.ActivityStart(entry.tensor_name, "BROADCAST");
         if (controller_vendor == Vendor::MPI) {
           state.controller->Broadcast(entry);
         }
@@ -189,7 +196,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
-        state.timeline.ActivityStart(entry.tensor_name, MPI_ALLGATHER);
+        state.timeline.ActivityStart(entry.tensor_name, "ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         if (controller_vendor == Vendor::MPI) {
@@ -203,7 +210,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
-        state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLGATHER);
+        state.timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         if (controller_vendor == Vendor::MPI) {
@@ -219,7 +226,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::NEIGHBOR_ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_NEIGHBOR_ALLREDUCE);
+        state.timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
           state.controller->NeighborAllreduce(entry);
         }
@@ -228,6 +235,13 @@ bool RunLoopOnce(BluefogGlobalState& state) {
           state.nccl_controller->NeighborAllreduce(entry);
         }
 #endif
+        state.timeline.ActivityEnd(entry.tensor_name);
+        break;
+      case MPIOpsType::PAIR_GOSSIP:
+        BFLOG(TRACE, bluefog_global.controller->GetRank())
+            << "Processing " << entry.tensor_name;
+        state.timeline.ActivityStart(entry.tensor_name, "PAIR_GOSSIP");
+        state.controller->PairGossip(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BARRIER:
@@ -242,21 +256,21 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_PUT on " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_PUT);
+        state.timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
         state.controller->WinPut(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_GET on " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_GET);
+        state.timeline.ActivityStart(entry.tensor_name, "WIN_GET");
         state.controller->WinGet(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, MPI_WIN_ACCUMULATE);
+        state.timeline.ActivityStart(entry.tensor_name, "WIN_ACCUMULATE");
         state.controller->WinAccumulate(entry);
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
@@ -310,8 +324,8 @@ void bluefog_shutdown() {
     bluefog_global.shut_down = true;
     bluefog_global.background_thread.join();
     // Reset the initialization flag to allow restarting with bluefog_init(...)
-    bluefog_global.initialize_flag.clear();
-    bluefog_global.shut_down = false;
+    //bluefog_global.initialize_flag.clear();
+    //bluefog_global.shut_down = false;
   }
 }
 
@@ -457,6 +471,7 @@ int bluefog_nccl_built() {
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback) {
   TensorTableEntry e;
@@ -464,6 +479,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   e.tensor = tensor;
   e.output = output;
   e.device = device;
+  e.ready_event = ready_event;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLREDUCE;
 
@@ -535,6 +551,10 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
 Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
+                                      std::shared_ptr<ReadyEvent> ready_event,
+                                      std::shared_ptr<std::vector<int>> recv_neighbors,
+                                      std::shared_ptr<std::vector<int>> send_neighbors,
+                                      bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
   TensorTableEntry e;
@@ -542,9 +562,33 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   e.tensor = tensor;
   e.output = output;
   e.context = context;
+  e.ready_event = ready_event;
+  e.recv_neighbors = recv_neighbors;
+  e.send_neighbors = send_neighbors;
+  e.enable_topo_check = enable_topo_check;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::NEIGHBOR_ALLREDUCE;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  return status;
+}
+
+Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
+                               std::shared_ptr<Tensor> output,
+                               const int target_rank, const std::string& name,
+                               const int device, StatusCallback callback) {
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.tensor = tensor;
+  e.output = output;
+  e.root_rank = target_rank;
+  e.device = device;
+  e.callback = callback;
+  e.mpi_ops_type = MPIOpsType::PAIR_GOSSIP;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;

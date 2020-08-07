@@ -26,24 +26,6 @@
 namespace bluefog {
 namespace common {
 
-// Activity names, see BLUEFOG Timeline for more details.
-#define MPI_ALLREDUCE "MPI_ALLREDUCE"
-#define ENQUEUE_ALLREDUCE "ENQUEUE_ALLREDUCE"
-#define MPI_NEIGHBOR_ALLREDUCE "MPI_NEIGHBOR_ALLREDUCE"
-#define ENQUEUE_NEIGHBOR_ALLREDUCE "ENQUEUE_NEIGHBOR_ALLREDUCE"
-#define MPI_BROADCAST "MPI_BROADCAST"
-#define ENQUEUE_BROADCAST "ENQUEUE_BROADCAST"
-#define MPI_ALLGATHER "MPI_ALLGATHER"
-#define ENQUEUE_ALLGATHER "ENQUEUE_ALLGATHER"
-#define MPI_NEIGHBOR_ALLGATHER "MPI_NEIGHBOR_ALLGATHER"
-#define ENQUEUE_NEIGHBOR_ALLGATHER "ENQUEUE_NEIGHBOR_ALLGATHER"
-#define MPI_WIN_PUT "MPI_WIN_PUT"
-#define ENQUEUE_WIN_PUT "ENQUEUE_WIN_PUT"
-#define MPI_WIN_GET "MPI_WIN_GET"
-#define ENQUEUE_WIN_GET "ENQUEUE_WIN_GET"
-#define MPI_WIN_ACCUMULATE "MPI_WIN_ACCUMULATE"
-#define ENQUEUE_WIN_ACCUMULATE "ENQUEUE_WIN_ACCUMULATE"
-
 // Device ID used for CPU.
 #define CPU_DEVICE_ID (-1)
 
@@ -94,6 +76,7 @@ enum class MPIOpsType {
   BROADCAST = 3,
   NEIGHBOR_ALLREDUCE = 4,
   NEIGHBOR_ALLGATHER = 5,
+  PAIR_GOSSIP = 10,
   WIN_PUT = 6,
   WIN_GET = 7,
   WIN_ACCUMULATE = 8,
@@ -236,10 +219,19 @@ struct TensorTableEntry {
   int root_rank = -1;
   // GPU to do reduction on, or CPU_DEVICE_ID in case of CPU.
   int device = CPU_DEVICE_ID;
+  // Event indicating that data is ready.
+  std::shared_ptr<ReadyEvent> ready_event;
   // Source and destination of ranks used in win ops.
   // It maps the src(dst) rank to the weight.
   std::unordered_map<int, double> dst_weights = {};
   std::unordered_map<int, double> src_weights = {};
+
+  // Neighbors for dynamic neighbor_allreduce.
+  std::shared_ptr<std::vector<int>> send_neighbors;
+  std::shared_ptr<std::vector<int>> recv_neighbors;
+
+  // Boolean value for enabling topology check.
+  bool enable_topo_check = false;
 
   // The ops requires the mutex.
   bool require_mutex = false;

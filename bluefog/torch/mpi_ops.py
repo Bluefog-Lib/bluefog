@@ -21,7 +21,7 @@ import torch
 
 from bluefog.torch import mpi_lib  # C library
 from bluefog.common.basics import BlueFogBasics, logger
-from bluefog.common.topology_util import GetWeights
+from bluefog.common.topology_util import GetRecvWeights
 
 _basics = BlueFogBasics(__file__, 'mpi_lib')
 
@@ -57,6 +57,11 @@ _win_handle_map = {}
 # Added in WinCreate, removed in WinFree, and referred by sync.
 _win_map = {}
 
+
+def _check_rank(rank_: int):
+    assert isinstance(rank_, int), "Rank has to be an integer."
+    assert rank_ >= 0, "Ranks must be an integer between 0 and size-1."
+    assert rank_ < size(), "Ranks must be an integer between 0 and size-1."
 
 def _check_function(function_factory, tensor, *args):
     function = function_factory(tensor, *args)
@@ -352,12 +357,27 @@ def _neighbor_allreduce_function_factory(tensor):
     return 'bluefog_torch_neighbor_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name):
+def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
+                                    send_neighbors, enable_topo_check, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
+    if send_neighbors is None:
+        send_neighbors = []
+    elif not send_neighbors:
+        raise ValueError("Argument send_neighbors cannot be empty.")
+    elif not set(send_neighbors).issubset(set(out_neighbor_ranks())):
+        raise ValueError("Argument send_neighbors should only contain the ranks that belong to "
+                         " out-neighbors.")
+    elif len(set(send_neighbors)) != len(send_neighbors):
+        raise ValueError("Argument send_neighbors should only contain the unique ranks.")
+    elif self_weight is None or neighbor_weights is None:
+        raise ValueError("Arguments self_weight and neighbor_weights should be presented if"
+                         "enabling dynamic topology.")
+    else:
+        pass
     if self_weight is None and neighbor_weights is None:
         if is_topo_weighted():
             topology = load_topology()
-            self_weight, neighbor_weights = GetWeights(topology, rank())
+            self_weight, neighbor_weights = GetRecvWeights(topology, rank())
             avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
@@ -379,13 +399,15 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        avg_computation, name.encode() if name is not None else "")
+                                        send_neighbors, enable_topo_check, avg_computation,
+                                        name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
 def neighbor_allreduce(tensor: torch.Tensor,
                        self_weight: float = None, neighbor_weights: Dict[int, float] = None,
+                       send_neighbors: List[int] = None, enable_topo_check: bool = True,
                        name: str = None) -> torch.Tensor:
     """
     A function that performs weighted averaging of the input tensor over the negihbors and itself
@@ -400,13 +422,20 @@ def neighbor_allreduce(tensor: torch.Tensor,
 
     Arguments:
         tensor: A tensor to weighted average.
-        self_weight: the weight for self node, used with neighbor_weights.
-        neighbor_weights: the weights for neighbor nodes, used with self weight.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
+        send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
+            the current node sends to all of its (out-)neighbors. If having values, assume only
+            part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+            partial neighbors listed in this variable.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
         name: A name of the reduction operation.
 
     Returns:
@@ -418,14 +447,16 @@ def neighbor_allreduce(tensor: torch.Tensor,
        (self_weight is not None and neighbor_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    handle = neighbor_allreduce_nonblocking(
-        tensor, self_weight, neighbor_weights, name)
+    handle = neighbor_allreduce_nonblocking(tensor, self_weight, neighbor_weights,
+                                            send_neighbors, enable_topo_check, name)
     return synchronize(handle)
 
 
 def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                    self_weight: float = None,
                                    neighbor_weights: Dict[int, float] = None,
+                                   send_neighbors: List[int] = None,
+                                   enable_topo_check: bool = True,
                                    name: str = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the
@@ -440,13 +471,20 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
 
     Arguments:
         tensor: A tensor to neighbor_allreduce.
-        self_weight: the weight for self node, used with neighbor_weights.
-        neighbor_weights: the weights for neighbor nodes, used with self weight.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
+        send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
+            the current node sends to all of its (out-)neighbors. If having values, assume only
+            part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+            partial neighbors listed in this variable.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
         name: A name of the neighbor_allreduce operation.
 
     Returns:
@@ -460,7 +498,87 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     output = tensor.new(tensor.shape)
-    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights, name)
+    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
+                                           send_neighbors, enable_topo_check, name)
+
+
+def _pair_gossip_nonblocking_function_factory(tensor):
+    return 'bluefog_torch_pair_gossip_nonblocking_' + tensor.type().replace('.', '_')
+
+
+def _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight,
+                             avg_computation, name):
+    function = _check_function(
+        _pair_gossip_nonblocking_function_factory, tensor)
+    handle = getattr(mpi_lib, function)(tensor, output, target_rank,
+                                        self_weight, pair_weight, avg_computation,
+                                        name.encode() if name is not None else "")
+    _handle_map[handle] = (tensor, output)
+    return handle
+
+
+# TODO(ybc) Consider active and passive version of pair gossip.
+def pair_gossip(tensor: torch.Tensor, target_rank: int, self_weight: float = None,
+                pair_weight: float = None, name: str = None) -> torch.Tensor:
+    """
+    A function that performs (weighted if specified) averaging of the input tensor and pair tensors
+    in the Bluefog processes.
+
+    Arguments:
+        tensor: A tensor to pair_gossip.
+        target_rank: The rank of pair node.
+        self_weight: The weight for self node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
+        pair_weight: The weight for pair node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
+        name: A name of the pair_gossip operation.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`.
+
+    Note: 1. The input tensor is not modified.
+          2. The pair process should call simultaneously with corresponding arguments.
+          3. If not carefully used, it can lead to deadlock.
+    """
+    handle = pair_gossip_nonblocking(
+        tensor, target_rank, self_weight, pair_weight, name)
+    return synchronize(handle)
+
+
+def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight: float = None,
+                            pair_weight: float = None, name: str = None) -> int:
+    """
+    A function that nonblockingly performs (weighted if specified) averaging of the input tensor
+     and pair tensors in the Bluefog processes.
+
+    Arguments:
+        tensor: A tensor to pair_gossip.
+        target_rank: The rank of pair node.
+        self_weight: The weight for self node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
+        pair_weight: The weight for pair node. If self_weight and pair_weight are not set,
+            the returned tensor will be average value.
+        name: A name of the pair_gossip operation.
+
+    Returns:
+        A handle to the neighbor_allreduce operation that can be used with `poll()` or
+        `synchronize()`.
+
+    Note: 1. The input tensor is not modified.
+          2. The pair process should call simultaneously with corresponding arguments.
+          3. If not carefully used, it can lead to deadlock.
+    """
+    if pair_weight is None and self_weight is None:
+        pair_weight = 0
+        self_weight = 0
+        avg_computation = True
+    elif pair_weight is not None and self_weight is not None:
+        avg_computation = False
+    else:
+        raise ValueError("self_weight and pair_weight have to be set at same time.")
+    output = tensor.new(tensor.shape)
+    return _pair_gossip_nonblocking(tensor, output, target_rank, self_weight,
+                                    pair_weight, avg_computation, name)
 
 
 def poll(handle: int) -> bool:
@@ -636,7 +754,7 @@ def win_update(name: str,
     elif neighbor_weights is None and self_weight is None:
         if is_topo_weighted():
             topology = load_topology()
-            self_weight, neighbor_weights = GetWeights(topology, rank())
+            self_weight, neighbor_weights = GetRecvWeights(topology, rank())
             avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)

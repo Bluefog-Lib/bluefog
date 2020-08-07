@@ -39,7 +39,7 @@ class TorchTensor : public common::Tensor {
   virtual int64_t size() const override;
   
   // TODO(ybc) Figure out a better encapsulated way to do it.
-  ::torch::Tensor MakeCopy(int device);
+  std::shared_ptr<TorchTensor> MakeCopy(int device);
   ::torch::Tensor GetUnderlyingTensor();
 
  protected:

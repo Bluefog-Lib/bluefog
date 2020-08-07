@@ -1,6 +1,6 @@
 // A pure C++ mpi win ops to implement simple gossip algorithm.
 // Compile and run with
-//   mpicxx -o mpi_gossip mpi_gossip.cc -std=c++11 && bfrun -np 8 mpi_gossip
+//   mpicxx -o mpi_gossip mpi_gossip.cc -std=c++11 && bfrun -np 2 mpi_gossip
 #include <mpi.h>
 #include <stdio.h>
 

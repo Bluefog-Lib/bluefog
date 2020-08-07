@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "common.h"
 #include "logging.h"
 #include "cuda_util.h"
 

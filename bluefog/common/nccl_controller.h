@@ -17,6 +17,7 @@
 #define BLUEFOG_COMMON_NCCL_CONTROLLER_H
 
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <nccl.h>
 #include "cuda_runtime.h"
@@ -26,6 +27,7 @@
 #include "logging.h"
 #include "mpi_context.h"
 #include "tensor_queue.h"
+#include "timeline.h"
 
 #define MPICHECK(cmd)                                                  \
   do {                                                                 \
@@ -83,9 +85,16 @@ class NCCLContext {
   void Finalize();
   void CleanPeerCommunicator();
 
+  cudaError_t GetCudaEvent(cudaEvent_t* event);
+  cudaError_t ReleaseCudaEvent(cudaEvent_t event);
+
   // TODO(ybc) Create e intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
   cudaStream_t stream;
+
+  // We reuse CUDA events as it appears that their creation carries non-zero cost.
+  std::queue<cudaEvent_t> cuda_events;
+  std::mutex cuda_events_mutex;
 
   // Communicators between two ranks used to mimic send/recv through broadcast.
   std::unordered_map<std::pair<int, int>, ncclComm_t, pair_hash>
@@ -124,10 +133,13 @@ class NCCLController {
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
 
+private:
   // Outside dependencies
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
+  
+  Timeline* timeline_ptr_;
 };
 
 }  // namespace common

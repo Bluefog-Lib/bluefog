@@ -58,6 +58,7 @@ class MPIController {
   void Broadcast(TensorTableEntry& entries);
   void NeighborAllgather(TensorTableEntry& entries);
   void NeighborAllreduce(TensorTableEntry& entries);
+  void PairGossip(TensorTableEntry& entry);
   void WinPut(TensorTableEntry& entries);
   void WinGet(TensorTableEntry& entries);
   void WinAccumulate(TensorTableEntry& entries);

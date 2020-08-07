@@ -492,7 +492,8 @@ class custom_build_ext(_build_ext):
         if not os.environ.get('BLUEFOG_WITHOUT_PYTORCH'):
             dummy_import_torch()
 
-        if not os.environ.get('BLUEFOG_WITHOUT_TENSORFLOW'):
+        # Disable the tensorflow built since it is supported yet.
+        if False and not os.environ.get('BLUEFOG_WITHOUT_TENSORFLOW'):
             try:
                 check_tf_version()
                 build_tf_extension(self, options)
@@ -547,7 +548,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
-    ext_modules=[bluefog_torch_mpi_lib, bluefog_tensorflow_mpi_lib],
+    ext_modules=[bluefog_torch_mpi_lib],
     cmdclass={"build_ext": custom_build_ext},
     setup_requires=['numpy>=1.17', 'cffi>=1.4.0'],
     install_requires=reqs,
