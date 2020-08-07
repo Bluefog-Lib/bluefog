@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "cuda_util.h"
+#include "mpi_controller.h"
 #include "operations.h"
 #include "timeline.h"
 
@@ -470,9 +471,162 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
 
 // TODO(ybc) Support partial send and recieve for dyanmic topology usage.
 void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
-  // The communication pattern of neighbor_allreduce and neighbor_allgather are
-  // the same. The difference happened at the callback phase.
-  NeighborAllgather(entry);
+  const void* sendbuf = entry.tensor->data();
+  const int num_elements = entry.tensor->shape().num_elements();
+  const int element_size = mpi_ctx_.GetMPITypeSize(
+      entry.tensor->dtype());  // Assume NCCL use same size as MPI
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  // MPI have no neighbor_allreduce API. So we will utilize neighbor_allgather.
+  // Allgather output will have shape of:
+  // (sum of first dimension of every tensor) x (tensor slice shape).
+  // For allreduce, the first dimension of every tensor should be the same.
+  TensorShape output_shape;
+  const int neighbor_size = entry.send_neighbors->empty()
+                                ? mpi_ctx_.neighbor_indgree_
+                                : entry.recv_neighbors->size();
+  const int total_entry_dimension_size =
+      entry.tensor->shape().dim_size(0) * neighbor_size;
+  output_shape.AddDim(total_entry_dimension_size);
+  for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
+    output_shape.AddDim(entry.tensor->shape().dim_size(i));
+  }
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
+  Status status = entry.context->AllocateOutput(output_shape, &entry.output);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
+
+  void* buffer_data = (void*)entry.output->data();
+
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
+  // If only partial sending is enabled, the following code block checks whether
+  // the sending and recieving neighbors match each other when enable_topo_check
+  // is set to be True.
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
+      mpi_ctx_.size_, entry, timeline_ptr,
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  if (is_topo_check_fail) {
+    entry.callback(Status::InvalidArgument(
+        "Send and recv neighbors dont' match in neighbor "
+        "allreduce with partial send/recv request."));
+  }
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+#if NCCL_MINOR > 6
+  ncclGroupStart();
+  if (entry.send_neighbors->empty()) {
+    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                              num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  } else {
+    for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+      int recv_rank = entry.recv_neighbors->at(i);
+      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                              num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : *entry.send_neighbors) {
+      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  }
+  ncclGroupEnd();
+
+  auto tid = std::this_thread::get_id();
+  // TODO: use thread pool or single thread for callbacks
+  std::thread finalizer_thread([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    entry.callback(Status::OK());
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  });
+  finalizer_thread.detach();
+#else
+  ncclGroupStart();
+  uint recv_rank_index = 0;
+  uint send_rank_index = 0;
+  int send_rank, recv_rank;
+  int num_recv_size, num_send_size;
+  if (entry.send_neighbors->empty()) {
+    num_recv_size = mpi_ctx_.neighbor_in_ranks_.size();
+    num_send_size = mpi_ctx_.neighbor_out_ranks_.size();
+  } else {
+    num_recv_size = entry.recv_neighbors->size();
+    num_send_size = entry.send_neighbors->size();
+  }
+  for (const auto& pair : nccl_ctx_.pair_order) {
+    int peer_rank = mpi_ctx_.rank_ == pair.first ? pair.second : pair.first;
+    if (entry.send_neighbors->empty()) {
+      send_rank = mpi_ctx_.neighbor_out_ranks_[send_rank_index];
+      recv_rank = mpi_ctx_.neighbor_in_ranks_[recv_rank_index];
+    } else {
+      send_rank = entry.send_neighbors->at(send_rank_index);
+      recv_rank = entry.recv_neighbors->at(recv_rank_index);
+    }
+
+    int target_disp = displcmnts[recv_rank_index];
+    bool should_recv = false;
+    bool should_send = false;
+    if (send_rank_index < num_send_size && peer_rank == send_rank) {
+      send_rank_index++;
+      should_send = true;
+      BFLOG(DEBUG, mpi_ctx_.rank_) << "Should send to rank " << peer_rank;
+    }
+    if (recv_rank_index < num_recv_size && peer_rank == recv_rank) {
+      recv_rank_index++;
+      should_recv = true;
+      BFLOG(DEBUG, mpi_ctx_.rank_) << "Should recv from rank " << peer_rank;
+    }
+
+    void* recvbuf = (void*)(static_cast<const char*>(buffer_data) +
+                              num_elements * recv_rank_index * element_size);
+    if (mpi_ctx_.rank_ == pair.second) {
+      // Recv then send
+      if (should_recv)
+        NCCLCHECK(ncclRecvByBcast(recvbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), recv_rank));
+
+      if (should_send)
+        NCCLCHECK(ncclSendByBcast(sendbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), send_rank));
+    } else {
+      // Send then recv
+      if (should_send)
+        NCCLCHECK(ncclSendByBcast(sendbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), send_rank));
+
+      if (should_recv)
+        NCCLCHECK(ncclRecvByBcast(recvbuf, num_elements,
+                                  GetNCCLDataType(entry.tensor), recv_rank));
+    }
+  }
+  ncclGroupEnd();
+
+  for (const auto& stream : nccl_ctx_.pair_streams) {
+    CUDACHECK(cudaStreamSynchronize(stream.second));
+  }
+  entry.callback(Status::OK());
+#endif
 }
 
 ncclResult_t NCCLController::ncclSendByBcast(const void* sendbuf,
