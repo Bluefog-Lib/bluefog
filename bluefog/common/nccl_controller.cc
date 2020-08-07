@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "cuda_util.h"
+#include "mpi_controller.h"
 #include "operations.h"
 #include "timeline.h"
 
@@ -470,9 +471,100 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
 
 // TODO(ybc) Support partial send and recieve for dyanmic topology usage.
 void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
-  // The communication pattern of neighbor_allreduce and neighbor_allgather are
-  // the same. The difference happened at the callback phase.
-  NeighborAllgather(entry);
+  const void* sendbuf = entry.tensor->data();
+  const int num_elements = entry.tensor->shape().num_elements();
+  const int element_size = mpi_ctx_.GetMPITypeSize(
+      entry.tensor->dtype());  // Assume NCCL use same size as MPI
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  // MPI have no neighbor_allreduce API. So we will utilize neighbor_allgather.
+  // Allgather output will have shape of:
+  // (sum of first dimension of every tensor) x (tensor slice shape).
+  // For allreduce, the first dimension of every tensor should be the same.
+  TensorShape output_shape;
+  const int neighbor_size = entry.send_neighbors->empty()
+                                ? mpi_ctx_.neighbor_indgree_
+                                : entry.recv_neighbors->size();
+  const int total_entry_dimension_size =
+      entry.tensor->shape().dim_size(0) * neighbor_size;
+  output_shape.AddDim(total_entry_dimension_size);
+  for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
+    output_shape.AddDim(entry.tensor->shape().dim_size(i));
+  }
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
+  Status status = entry.context->AllocateOutput(output_shape, &entry.output);
+  timeline_ptr->ActivityEnd(entry.tensor_name);
+
+  void* buffer_data = (void*)entry.output->data();
+
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
+  // If only partial sending is enabled, the following code block checks whether
+  // the sending and recieving neighbors match each other when enable_topo_check
+  // is set to be True.
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
+      mpi_ctx_.size_, entry, timeline_ptr,
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  if (is_topo_check_fail) {
+    entry.callback(Status::InvalidArgument(
+        "Send and recv neighbors dont' match in neighbor "
+        "allreduce with partial send/recv request."));
+  }
+
+  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+#if NCCL_MINOR > 6
+  ncclGroupStart();
+  if (entry.send_neighbors->empty()) {
+    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                              num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  } else {
+    for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+      int recv_rank = entry.recv_neighbors->at(i);
+      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                              num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : *entry.send_neighbors) {
+      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  }
+  ncclGroupEnd();
+
+  auto tid = std::this_thread::get_id();
+  // TODO: use thread pool or single thread for callbacks
+  std::thread finalizer_thread([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    entry.callback(Status::OK());
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  });
+  finalizer_thread.detach();
+#else
+  throw std::runtime_error(
+      "Sorry, haven't supporting neighbor_allreduce with NCCL < 2.7.");
+#endif
 }
 
 ncclResult_t NCCLController::ncclSendByBcast(const void* sendbuf,

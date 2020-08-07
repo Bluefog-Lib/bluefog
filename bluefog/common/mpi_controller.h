@@ -17,17 +17,22 @@
 #ifndef BLUEFOG_COMMON_MPI_CONTROLLER_H
 #define BLUEFOG_COMMON_MPI_CONTROLLER_H
 
+#include "logging.h"
 #include "mpi_context.h"
 #include "tensor_queue.h"
-#include "logging.h"
+#include "timeline.h"
 
 namespace bluefog {
 namespace common {
 
+// Function to check if the sending and receiving neighbors match in the
+// topology.
+bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
+                                  Timeline* timeline_ptr, const MPI_Comm& comm);
+
 class MPIController {
  public:
-  MPIController(MPIContext& mpi_ctx)
-      : mpi_ctx_(mpi_ctx) {
+  MPIController(MPIContext& mpi_ctx) : mpi_ctx_(mpi_ctx) {
     BFLOG(DEBUG) << "MPI Controller Initialized.";
   }
   void Initialize();
@@ -104,8 +109,7 @@ class MPIController {
 class WinMutexGuard {
  public:
   explicit WinMutexGuard(MPIController* mpi_controller,
-                         const std::vector<int>& acquire_ranks,
-                         bool is_sync);
+                         const std::vector<int>& acquire_ranks, bool is_sync);
   virtual ~WinMutexGuard();
   WinMutexGuard(const WinMutexGuard&) = delete;
   WinMutexGuard& operator=(const WinMutexGuard&) = delete;

@@ -263,40 +263,44 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
 }
 
 // Function to check if the sending and receiving neighbors match in the topology.
-bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry, Timeline* timeline_ptr,
-                                  const MPI_Comm& comm) {
+bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
+                                  Timeline* timeline_ptr, const MPI_Comm& comm) {
   bool res = false;
-  // enabled the check if enable_topo_check is true and partial neighbor_allreduce is activated.
+  // enabled the check if enable_topo_check is true and partial
+  // neighbor_allreduce is activated.
   if (entry.enable_topo_check && !entry.send_neighbors->empty()) {
     timeline_ptr->ActivityStart(entry.tensor_name, "NEGOTIATION");
-    // Put all the send and recv neighbors in a single vector, and obtain a send matrix and a recv
-    // matrix through MPI_Allgather.
-    bool* send_check_buf = new bool[2*size];
-    std::fill_n(send_check_buf, 2*size, false);
-    bool* recv_check_buf = new bool[2*size*size];
+    // Put all the send and recv neighbors in a single vector, and obtain a send
+    // matrix and a recv matrix through MPI_Allgather.
+    bool* send_check_buf = new bool[2 * size];
+    std::fill_n(send_check_buf, 2 * size, false);
+    bool* recv_check_buf = new bool[2 * size * size];
     for (int send_rank : *(entry.send_neighbors))
-        send_check_buf[send_rank] = true;
+      send_check_buf[send_rank] = true;
     for (int recv_rank : *(entry.recv_neighbors))
-        send_check_buf[size+recv_rank] = true;
-    int ret_code = MPI_Allgather(send_check_buf, size*2, MPI_C_BOOL,
-                                 recv_check_buf, size*2, MPI_C_BOOL, comm);
+      send_check_buf[size + recv_rank] = true;
+    int ret_code = MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
+                                 recv_check_buf, size * 2, MPI_C_BOOL, comm);
     if (ret_code != MPI_SUCCESS) {
-        throw std::runtime_error(
-            "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, see MPI output "
-            "for details.");
+      throw std::runtime_error(
+          "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, "
+          "see MPI output "
+          "for details.");
     }
-    // This checks that send matrix and transposed recv matrix should be the same. If same,
-    // the topology is good to go. If not, there is mismatch edge to be fixed.
+    // This checks that send matrix and transposed recv matrix should be the
+    // same. If same, the topology is good to go. If not, there is mismatch edge
+    // to be fixed.
     auto GetSendIndex = [size](int i, int j) -> int { return 2*size*i+j; };
     auto GetRecvIndex = [size](int i, int j) -> int { return 2*size*i+j+size; };
     for (int i = 0; i < size; ++i) {
-        if (res) break;
-        for (int j = 0; j < size; ++j) {
-            if (recv_check_buf[GetSendIndex(i, j)] != recv_check_buf[GetRecvIndex(j, i)]) {
-                res = true;
-                break;
-            }
+      if (res) break;
+      for (int j = 0; j < size; ++j) {
+        if (recv_check_buf[GetSendIndex(i, j)] !=
+            recv_check_buf[GetRecvIndex(j, i)]) {
+          res = true;
+          break;
         }
+      }
     }
     delete [] send_check_buf;
     delete [] recv_check_buf;
@@ -358,8 +362,9 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   // If only partial sending is enabled, the following code block checks whether the sending
   // and recieving neighbors match each other when enable_topo_check is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(mpi_ctx_.size_, entry, timeline_ptr,
-                                mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
+      mpi_ctx_.size_, entry, timeline_ptr,
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   // Pitfall: Our neighbor_allreduce include itself, while
