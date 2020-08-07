@@ -45,6 +45,10 @@ parser.add_argument(
     help='Supporting modes are ' +
                     '[normal, compute_and_no_communicate, sleep_and_communicate].')
 
+parser.add_argument(
+    "--sleep-time", action='store', type=float, default=1e-1, help="sleep time"
+)
+
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 parser.add_argument('--no-autograd', action='store_true', default=False,
@@ -61,7 +65,9 @@ parser.add_argument(
     "--task", help="this example supports linear_regression and logistic_regression",
     default='logistic_regression')
 parser.add_argument('--data-size', type=int, default=2000,
-                    help='input batch size')
+                    help='input data size')
+parser.add_argument('--data-dim', type=int, default=500,
+                    help='input data dimension')            
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -111,7 +117,7 @@ else:
 # Set up fake data
 # Generate data for logistic regression (synthesized data)
 torch.random.manual_seed(123417 * bf.rank())
-m, n = args.data_size, 500
+m, n = args.data_size, args.data_dim
 X = torch.randn(m, n).to(torch.double)
 w_0 = (torch.randn(n, 1)).to(torch.double)
 y = torch.rand(m, 1).to(torch.double) < 1 / (1+torch.exp(X.mm(w_0)))
@@ -122,11 +128,12 @@ rho = 1e-2
 w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
 
 if args.cuda:
-    X, y, w = X.cuda(), y.cuda(), w.cuda()
+    X, y = X.cuda(), y.cuda()
+    w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True, device="cuda")
 
 logistic_loss_step(
 w, rho, X, y, tensor_name='neighbor.allreduce.Grad.Tracking.w', calculate_by_hand=args.no_autograd)
-q = w.grad.data  # q^0 = grad(w^0)
+q = w.grad.data.clone()  # q^0 = grad(w^0)
 w.grad.data.zero_()
 grad_prev = q.clone()
 alpha = 1e-1
@@ -137,8 +144,8 @@ def benchmark_step():
 
     if args.computation_mode == "normal":
         w_handle = bf.neighbor_allreduce_nonblocking(w.data, name='Grad.Tracking.w')
-        q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
         w.data = - alpha * q + bf.synchronize(w_handle) 
+        q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
 
         # calculate local gradient
         logistic_loss_step(
@@ -149,7 +156,7 @@ def benchmark_step():
         w.grad.data.zero_()
 
     elif args.computation_mode == "compute_and_no_communicate":
-        w.data = - alpha * q 
+        w.data = - alpha * q
         # calculate local gradient
         logistic_loss_step(
             w, rho, X, y, tensor_name='neighbor.allreduce.Grad.Tracking.w', calculate_by_hand=args.no_autograd)
@@ -161,10 +168,9 @@ def benchmark_step():
     elif args.computation_mode == "sleep_and_communicate":
         w_handle = bf.neighbor_allreduce_nonblocking(w.data, name='Grad.Tracking.w')
         q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
-        w.data = bf.synchronize(w_handle) 
+        w.data = bf.synchronize(w_handle)
+        systemtime.sleep(args.sleep_time)
         q = bf.synchronize(q_handle)
-
-        systemtime.sleep(0.1)
 
 def log(s, nl=True):
     if bf.local_rank() != 0:
@@ -172,7 +178,7 @@ def log(s, nl=True):
     print(s, end='\n' if nl else '', flush=True)
 
 log('Model: %s' % args.task)
-log('Data size: %d' % m)
+log('Data size: %d, Data dims: %d' % (m, n))
 device = 'GPU' if args.cuda else 'CPU'
 log('Number of %ss: %d' % (device, bf.size()))
 
