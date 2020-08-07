@@ -281,6 +281,8 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         named_parameters, models = _check_named_parameters(self, model)
         self.neighbor_weights = None
         self.self_weight = None
+        self.send_neighbors = None
+        self.enable_topo_check = False
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
@@ -317,7 +319,9 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
         handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
-                                                   neighbor_weights=self.neighbor_weights)
+                                                   neighbor_weights=self.neighbor_weights,
+                                                   send_neighbors=self.send_neighbors,
+                                                   enable_topo_check=self.enable_topo_check)
         return handle
 
     def turn_on_timeline(self):
