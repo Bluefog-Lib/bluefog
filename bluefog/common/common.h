@@ -100,6 +100,8 @@ inline std::string CommunicatorName(Communicator comm) {
 
 const std::string& DataType_Name(DataType value);
 
+std::size_t DataType_Size(DataType value);
+
 class Status {
  public:
   Status();
