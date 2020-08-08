@@ -15,6 +15,7 @@
 
 from typing import List, Tuple, Dict, Iterator
 
+import math
 import numpy as np
 import networkx as nx
 
@@ -78,6 +79,75 @@ def PowerTwoRingGraph(size: int) -> nx.DiGraph:
     """
     assert size > 0
     x = np.array([1.0 if i & (i - 1) == 0 else 0 for i in range(size)])
+    x /= x.sum()
+    topo = np.empty((size, size))
+    for i in range(size):
+        topo[i] = np.roll(x, i)
+    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    return G
+
+
+def isPowerOf(x, base):
+    assert isinstance(base, int), "Base has to be a integer."
+    assert base > 1, "Base has to a interger larger than 1."
+    assert x > 0
+    if (base ** int(math.log(x, base))) == x:
+        return True
+    return False
+
+
+def PowerGraph(size: int, base: int = 2) -> nx.DiGraph:
+    """Generate graph topology such that each points only
+    connected to a point such that the index difference is power of base. (Default is 2)
+
+    Example: A PowerGraph with 12 nodes:
+
+    .. plot::
+        :context: close-figs
+
+        >>> import networkx as nx
+        >>> from bluefog.common import topology_util
+        >>> G = topology_util.PowerGraph(12)
+        >>> nx.draw_circular(G)
+    """
+    x = [1.0]
+    for i in range(1, size):
+        if isPowerOf(i, base):
+            x.append(1.0)
+        else:
+            x.append(0.0)
+    x = np.array(x)
+    x /= x.sum()
+    topo = np.empty((size, size))
+    for i in range(size):
+        topo[i] = np.roll(x, i)
+    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    return G
+
+
+def SymmetricPowerGraph(size: int, base: int = 4) -> nx.DiGraph:
+    """
+     Generate symmeteric graph topology such that for the first half of nodes
+     only connected to a point such that the index difference is power of base (Default is 4)
+     and the connectivity for the second half of nodes just mirrored to the first half.
+
+    Example: A SymmetricPowerGraph with 12 nodes:
+    .. plot::
+        :context: close-figs
+
+        >>> import networkx as nx
+        >>> from bluefog.common import topology_util
+        >>> G = topology_util.SymmetricPowerGraph(12)
+        >>> nx.draw_circular(G)
+    """
+    x = [1.0]
+    for i in range(1, size):
+        index = i if i <= size // 2 else size - i
+        if isPowerOf(index, base):
+            x.append(1.0)
+        else:
+            x.append(0.0)
+    x = np.array(x)
     x /= x.sum()
     topo = np.empty((size, size))
     for i in range(size):

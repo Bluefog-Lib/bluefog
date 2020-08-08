@@ -51,7 +51,7 @@ class BlueFogBasics(object):
         Args:
           topology_fn: A callable function that takes size as input and return
             networkx.DiGraph object to decide the topology. If not provided
-            a default power_two_ring structure is called.
+            a default power graph (base 2) structure is called.
           is_weighted: If set to true, the neighbor ops like (win_update, neighbor_allreduce) will
             execute the weighted average instead, where the weight is the value used in
             topology matrix (including self).
@@ -60,7 +60,7 @@ class BlueFogBasics(object):
         if topology_fn:
             topo = topology_fn(self.size())
         else:
-            topo = topology_util.PowerTwoRingGraph(self.size())
+            topo = topology_util.PowerGraph(self.size())
         self.set_topology(topo, is_weighted)
         atexit.register(self.shutdown)
 
@@ -191,7 +191,7 @@ class BlueFogBasics(object):
 
         Args:
           Topo: A networkx.DiGraph object to decide the topology. If not provided
-            a default power_two_ring structure is used.
+            a default power graph (base 2) structure is used.
           is_weighted: If set to true, the win_update and neighbor_allreduce will execute the
             weighted average instead, where the weights are the value used in topology matrix
             (including self weight). Note win_get/win_put/win_accumulate do not use this weight
@@ -207,7 +207,7 @@ class BlueFogBasics(object):
             >>> bf.set_topology(topology_util.RingGraph(bf.size()))
         """
         if topology is None:
-            topology = topology_util.PowerTwoRingGraph(size=self.size())
+            topology = topology_util.PowerGraph(size=self.size())
             if self.local_rank() == 0:
                 logger.info(
                     "Topology is not specified. Default Power Two topology is used.")

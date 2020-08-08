@@ -19,11 +19,11 @@ from __future__ import print_function
 
 import inspect
 import itertools
-import pytest
 import unittest
 import warnings
 
 import numpy as np
+import pytest
 import torch
 import networkx as nx
 
@@ -346,8 +346,9 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
-                    neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            reduced_tensor = bf.neighbor_allreduce(
+                tensor, name=name, self_weight=self_weight,
+                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (move) produces incorrect reduced shape"
@@ -381,8 +382,9 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
-            reduced_tensor = bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
-                    neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            reduced_tensor = bf.neighbor_allreduce(
+                tensor, name=name, self_weight=self_weight,
+                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"

@@ -45,7 +45,7 @@ for i in range(50):
 print("Rank {}: consensus with weights".format(bf.rank()), x[0, 0])
 
 # Use win_accumulate to simulate the push-sum algorithm (sync).
-bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+bf.set_topology(topology_util.PowerGraph(bf.size()))
 outdegree = len(bf.out_neighbor_ranks())
 indegree = len(bf.in_neighbor_ranks())
 
