@@ -286,7 +286,7 @@ will put at <cite>step()</cite> to synchronous processes.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>topology_fn</strong> – A callable function that takes size as input and return
 networkx.DiGraph object to decide the topology. If not provided
-a default power_two_ring structure is called.</p></li>
+a default power graph (base 2) structure is called.</p></li>
 <li><p><strong>is_weighted</strong> – If set to true, the neighbor ops like (win_update, neighbor_allreduce) will
 execute the weighted average instead, where the weight is the value used in
 topology matrix (including self).</p></li>
@@ -370,7 +370,7 @@ on a node, their local ranks will be zero through six, inclusive.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>Topo</strong> – A networkx.DiGraph object to decide the topology. If not provided
-a default power_two_ring structure is used.</p></li>
+a default power graph (base 2) structure is used.</p></li>
 <li><p><strong>is_weighted</strong> – If set to true, the win_update and neighbor_allreduce will execute the
 weighted average instead, where the weights are the value used in topology matrix
 (including self weight). Note win_get/win_put/win_accumulate do not use this weight

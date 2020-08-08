@@ -244,7 +244,7 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.</
 <span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 
 <span class="c1"># Setup the topology for communication</span>
-<span class="n">bf</span><span class="o">.</span><span class="n">set_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">PowerTwoRingGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">()))</span>
+<span class="n">bf</span><span class="o">.</span><span class="n">set_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">PowerGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">()))</span>
 <span class="n">outdegree</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">out_neighbor_ranks</span><span class="p">())</span>
 <span class="n">indegree</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">in_neighbor_ranks</span><span class="p">())</span>
 

@@ -233,13 +233,13 @@ the adjacenty matrix is the same only.</p>
 
 <dl class="py function">
 <dt id="bluefog.common.topology_util.GetRecvWeights">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetRecvWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetRecvWeights" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetRecvWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span>float<span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.Dict" title="bluefog.common.topology_util.Dict">Dict</a><span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetRecvWeights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return a Tuple of self_weight and neighbor_weights for receiving dictionary.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt id="bluefog.common.topology_util.GetSendWeights">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetSendWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>float<span class="p">, </span>Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetSendWeights" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetSendWeights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span>float<span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.Dict" title="bluefog.common.topology_util.Dict">Dict</a><span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetSendWeights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return a Tuple of self_weight and neighbor_weights for sending dictionary.</p>
 </dd></dl>
 
@@ -261,8 +261,50 @@ connected to a point such that the index difference is power of 2.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.common.topology_util.isPowerOf">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">isPowerOf</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">x</span></em>, <em class="sig-param"><span class="n">base</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.common.topology_util.isPowerOf" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.common.topology_util.PowerGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">PowerGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">base</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">2</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.PowerGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate graph topology such that each points only
+connected to a point such that the index difference is power of base. (Default is 2)</p>
+<p>Example: A PowerGraph with 12 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">PowerGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/topo_api-2.png" src="_images/topo_api-2.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.common.topology_util.SymmetricPowerGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">SymmetricPowerGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">base</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">4</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.SymmetricPowerGraph" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Generate symmeteric graph topology such that for the first half of nodes
+only connected to a point such that the index difference is power of base (Default is 4)
+and the connectivity for the second half of nodes just mirrored to the first half.</p>
+</div></blockquote>
+<p>Example: A SymmetricPowerGraph with 12 nodes:
+.. plot:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">:</span><span class="n">context</span><span class="p">:</span> <span class="n">close</span><span class="o">-</span><span class="n">figs</span>
+
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">SymmetricPowerGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.common.topology_util.MeshGrid2DGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">MeshGrid2DGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">shape</span><span class="p">:</span> <span class="n">Tuple<span class="p">[</span>int<span class="p">, </span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">MeshGrid2DGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">shape</span><span class="p">:</span> <span class="n"><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span>int<span class="p">, </span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate 2D MeshGrid structure of graph.</p>
 <p>Assume shape = (nrow, ncol), when shape is provided, a meshgrid of nrow*ncol will be generated.
 when shape is not provided, nrow and ncol will be the two closest factors of size.</p>
@@ -278,7 +320,7 @@ into a linear one.</p>
 </pre></div>
 </div>
 <div class="figure align-default">
-<img alt="_images/topo_api-2.png" src="_images/topo_api-2.png" />
+<img alt="_images/topo_api-3.png" src="_images/topo_api-3.png" />
 </div>
 </dd></dl>
 
@@ -297,7 +339,7 @@ is the weight from node j to node i.</p>
 </pre></div>
 </div>
 <div class="figure align-default">
-<img alt="_images/topo_api-3.png" src="_images/topo_api-3.png" />
+<img alt="_images/topo_api-4.png" src="_images/topo_api-4.png" />
 </div>
 </dd></dl>
 
@@ -316,7 +358,7 @@ and 2 represents the right-connection.</p>
 </pre></div>
 </div>
 <div class="figure align-default">
-<img alt="_images/topo_api-4.png" src="_images/topo_api-4.png" />
+<img alt="_images/topo_api-5.png" src="_images/topo_api-5.png" />
 </div>
 </dd></dl>
 
@@ -333,7 +375,7 @@ For example, a FullyConnectedGraph with 16 nodes:</p>
 </pre></div>
 </div>
 <div class="figure align-default">
-<img alt="_images/topo_api-5.png" src="_images/topo_api-5.png" />
+<img alt="_images/topo_api-6.png" src="_images/topo_api-6.png" />
 </div>
 </dd></dl>
 
@@ -345,7 +387,7 @@ For example, a FullyConnectedGraph with 16 nodes:</p>
 
 <dl class="py function">
 <dt id="bluefog.common.topology_util.GetDynamicSendRecvRanks">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetDynamicSendRecvRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; Iterator<span class="p">[</span>Tuple<span class="p">[</span>int<span class="p">, </span>List<span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetDynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetDynamicSendRecvRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Iterator" title="bluefog.common.topology_util.Iterator">Iterator</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span>int<span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetDynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
 <dd><p>A utility function to generate 1-outoging send rank and corresponding recieving rank(s).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
