@@ -1159,36 +1159,25 @@ acquired.</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.win_lock">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_lock</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_lock" title="Permalink to this definition">¶</a></dt>
-<dd><p>win_lock context manager. Within the context, an RMA access epoch
-for its neihbor is created.
-Note The ops of win_get, win_accumulate, and win_put do not need win_lock context.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>name</strong> – The name of existing MPI_win object. If not found, ValueError will raise.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt id="bluefog.torch.win_mutex">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_mutex</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ranks</span><span class="p">:</span> <span class="n">List<span class="p">[</span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">exclusive</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_mutex" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_mutex</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">ranks</span><span class="p">:</span> <span class="n">List<span class="p">[</span>int<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">exclusive</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_mutex" title="Permalink to this definition">¶</a></dt>
 <dd><p>A win object implemented mutex context manager. Note, there are N distributed
 mutex over N corresponding processes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>ranks</strong> – The mutex associated with the ranks will be acquired.
-If not presented, out_neighbor ranks will be used.</p></li>
-<li><p><strong>exclusive</strong> – If not exclusive, multiple processes can hold the mutex for the ranks
-but it cannot hold with one exclusive one.</p></li>
+<li><p><strong>name</strong> – Used to get the mutex for the window that registered by name.</p></li>
+<li><p><strong>ranks</strong> – The mutex associated with the specified ranks is acquired.
+If not presented, the mutex with all out_neighbor ranks are acquired.</p></li>
+<li><p><strong>exclusive</strong> – If not exclusive, multiple (inclusive) processes can hold the mutex for
+the ranks. While only one exclusive processes (no other inclusive ones) can
+acquire the mutex.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">win_create</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">win_mutex</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">win_mutex</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
 <span class="go">        tensor = bf.win_update_then_collect(name)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">win_put</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 </pre></div>
