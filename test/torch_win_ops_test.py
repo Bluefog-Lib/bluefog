@@ -577,20 +577,24 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test over at least 3 nodes".format(fname))
             return
         bf.set_topology(topology_util.FullyConnectedGraph(size))
+        tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+        window_name = "win_mutex_full"
+        bf.win_create(tensor, window_name)
+
         if rank == 0:
-            with bf.win_mutex():
+            with bf.win_mutex(window_name):
                 bf.barrier()
-                time.sleep(2.01)
+                time.sleep(1.01)
         else:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex():
+            with bf.win_mutex(window_name):
                 time.sleep(0.001)
             t_end = time.time()
-            assert (t_end - t_start) > 2, \
-                "The mutex acquire time should be longer than 2 second"
-            assert (t_end - t_start) < 3, \
-                "The mutex acquire time should be shorter than 3 second"
+            assert (t_end - t_start) > 1, \
+                "The mutex acquire time should be longer than 1 second"
+            assert (t_end - t_start) < 2, \
+                "The mutex acquire time should be shorter than 2 second"
 
     def test_win_mutex_given_ranks(self):
         size = bf.size()
@@ -601,24 +605,27 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test above 4 nodes".format(fname))
             return
 
+        tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+        window_name = "win_mutex_given_ranks"
+        bf.win_create(tensor, window_name)
         if rank == 0:
-            with bf.win_mutex([0]):
+            with bf.win_mutex(window_name, [0]):
                 bf.barrier()
-                time.sleep(2.01)
+                time.sleep(1.01)
         elif rank == 1:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex([1]):
+            with bf.win_mutex(window_name, [1]):
                 time.sleep(0.001)
             t_end = time.time()
             assert (t_end - t_start) < 0.1
         elif rank == 2:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex([0]):
+            with bf.win_mutex(window_name, [0]):
                 time.sleep(0.001)
             t_end = time.time()
-            assert (t_end - t_start) > 2
+            assert (t_end - t_start) > 1
         else:
             bf.barrier()
 

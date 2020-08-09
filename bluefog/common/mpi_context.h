@@ -66,16 +66,26 @@ class WindowManager {
   // Manually free the win memory.
   void FreeAllWins();
 
+  // The design of WinMutex is flawed. For example, if we call set topology within
+  // the mutex acquire time, I don't know what will happen.
+  bool InitializeMutexWin(const MPI_Comm& mpi_comm);
+  bool DestroyMutexWin();
+  inline std::shared_ptr<MPI_Win> GetMutexWin() { return mutex_win_; }
+
  private:
   // Store all the pointers to the MPI WIN and underlying tensor.
   // It should always keep the order from 0 to WORLD_SIZE-1.
-  // Used with win_put.
+  // Used with win_put and win_accumulate.
   std::vector<std::pair<std::shared_ptr<MPI_Win>, std::shared_ptr<Tensor>>>
       wins_tensor_vec_;
 
   // A window associated with the self (all connected).
-  // Used with win_accumulate and win_get.
+  // Used with win_get.
   std::shared_ptr<MPI_Win> global_win_;
+
+  // MPI Window used for mutex.
+  std::shared_ptr<MPI_Win> mutex_win_;
+  std::unique_ptr<int> mutex_mem_;
 };
 
 class MPIContext {
@@ -120,11 +130,6 @@ class MPIContext {
 
   Status AllocateOutput(TensorTableEntry& entries, int*& recvcounts, Communicator comm_type);
   void SetDisplacements(const int* recvcounts, int*& displcmnts, Communicator comm_type);
-  
-  // The design of WinMutex is flawed. For example, if we call set topology within
-  // the mutex acquire time, I don't know what will happen.
-  bool InitializeWinMutex();
-  bool DestroyWinMutex();
 
   // Flag indicating whether mpi is enabled.
   bool enabled_ = false;
@@ -148,10 +153,6 @@ class MPIContext {
 
   // MPI Windows used for one-sided communication.
   std::unordered_map<std::string, std::shared_ptr<WindowManager>> named_win_map;
-
-  // MPI Window used for mutex.
-  std::vector<std::shared_ptr<MPI_Win>> win_mutex;
-  std::unique_ptr<int> self_mutex_mem = nullptr;
 
   // Whether mpi context should be finalize.
   bool should_finalize = false;

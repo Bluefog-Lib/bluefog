@@ -193,8 +193,12 @@ extern "C" void bluefog_torch_win_wait(int handle);
 extern "C" void bluefog_torch_win_lock(char* name);
 extern "C" void bluefog_torch_win_unlock(char* name);
 
-extern "C" void bluefog_torch_win_mutex_acquire(const std::vector<int>& ranks, bool exclusive);
-extern "C" void bluefog_torch_win_mutex_release(const std::vector<int>& ranks, bool exclusive);
+extern "C" void bluefog_torch_win_mutex_acquire(char* name,
+                                                const std::vector<int>& ranks,
+                                                bool exclusive);
+extern "C" void bluefog_torch_win_mutex_release(char* name,
+                                                const std::vector<int>& ranks,
+                                                bool exclusive);
 
 }  // namespace torch
 }  // namespace bluefog

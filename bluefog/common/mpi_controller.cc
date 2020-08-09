@@ -160,7 +160,6 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   int res_build_graph =
       mpi_ctx_.BuildGraphComm(indegree, sources, outdegree, destinations);
   if (res_build_graph == -1) return -1;
-  mpi_ctx_.DestroyWinMutex();
   mpi_ctx_.SetTopoSetup();
 
   // Get neighbor in/out size and ranks.
@@ -184,8 +183,6 @@ int MPIController::SetTopology(int indegree, const int* sources, int outdegree,
   }
   mpi_ctx_.DisableTopoWeights();  // Topology weights are always set at
                                   // SetTopologyWeights.
-
-  mpi_ctx_.InitializeWinMutex();
   return 1;
 }
 
@@ -645,7 +642,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
       mutex_ranks.clear();
       mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -672,7 +669,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     timeline_ptr->ActivityEnd(entry.tensor_name);
 
     if (entry.require_mutex) {
-      WinMutexRelease(mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
     }
   }
 
@@ -713,7 +710,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       mutex_ranks.clear();
       mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
     auto tensor = entry.tensor->data_weight(weight);
@@ -732,7 +729,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
           MPI_Accumulate(sendbuf_start, sent_size, data_type, target_rank,
                          target_disp, sent_size, data_type, MPI_SUM, mpi_win);
       if (ret_code != MPI_SUCCESS) {
-        if (entry.require_mutex) WinMutexRelease(mutex_ranks, /*is_sync=*/false);
+        if (entry.require_mutex) WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
         throw std::runtime_error(
             "MPI_Accumulate failed, see MPI output for details.");
       }
@@ -743,7 +740,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
 
     timeline_ptr->ActivityEnd(entry.tensor_name);
     if (entry.require_mutex) {
-      WinMutexRelease(mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
     }
   }
   BFLOG(TRACE, mpi_ctx_.rank_) << "MPI_Accmulate for " << entry.tensor_name
@@ -778,7 +775,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
       mutex_ranks.clear();
       mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
 
@@ -810,7 +807,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
 
     if (entry.require_mutex) {
-      WinMutexRelease(mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
     }
   }
 
@@ -871,17 +868,27 @@ Status MPIController::WinUnlock(const std::string& name) {
   return Status::OK();
 }
 
-Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks,
+Status MPIController::WinMutexAcquire(const std::string& name,
+                                      const std::vector<int>& acquire_ranks,
                                       bool is_sync) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex for " << name << " is acquired.";
   // The logic is similar to read-write lock:
   // Value starts at 0:
   //    1. is_sync step +1 if value is 0 else wait
   //    2. Not is_sync step -1 if value is <= 0 else wait. (i.e. we allow
   //    multiple non sync step).
-  if (mpi_ctx_.win_mutex.empty()) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
     return Status::PreconditionError(
-        "Cannot accquire Win Mutex because it may not be initialized or has "
-        "been destroyed.");
+        "Cannot accquire Mutex Win for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+  std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
+  if (!mutex_win) {
+    return Status::PreconditionError("Cannot accuire Mutex Win for " + name +
+                                     ". The data window for that name is found"
+                                     "but the mutex window is not.");
   }
 
   // TODO(ybc) Try better implementation than Spin Lock.
@@ -893,28 +900,25 @@ Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks,
   int oldval = 0;
   int target_disp = 0;
 
-  std::shared_ptr<MPI_Win> mutex_win;
-
   for (int rank : acquire_ranks) {
-    mutex_win = mpi_ctx_.win_mutex[rank];
     BFLOG(TRACE, mpi_ctx_.rank_) << "Acquire Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     do {
       if (is_sync) {
         MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank, target_disp, MPI_SUM,
-                        *mutex_win);
+                         *mutex_win);
         MPI_Win_flush(rank, *mutex_win);
         if (oldval == 0) break;
         MPI_Accumulate(&minus_one, 1, MPI_INT, rank, target_disp, 1, MPI_INT,
-                      MPI_SUM, *mutex_win);
+                       MPI_SUM, *mutex_win);
         MPI_Win_flush(rank, *mutex_win);
       } else {
-        MPI_Fetch_and_op(&minus_one, &oldval, MPI_INT, rank, target_disp, MPI_SUM,
-                        *mutex_win);
+        MPI_Fetch_and_op(&minus_one, &oldval, MPI_INT, rank, target_disp,
+                         MPI_SUM, *mutex_win);
         MPI_Win_flush(rank, *mutex_win);
         if (oldval <= 0) break;
-        MPI_Accumulate(&one, 1, MPI_INT, rank, target_disp, 1, MPI_INT,
-                      MPI_SUM, *mutex_win);
+        MPI_Accumulate(&one, 1, MPI_INT, rank, target_disp, 1, MPI_INT, MPI_SUM,
+                       *mutex_win);
         MPI_Win_flush(rank, *mutex_win);
       }
       std::this_thread::sleep_for(std::chrono::microseconds(1));
@@ -925,21 +929,29 @@ Status MPIController::WinMutexAcquire(const std::vector<int>& acquire_ranks,
   return Status::OK();
 }
 
-Status MPIController::WinMutexRelease(const std::vector<int>& release_ranks,
+Status MPIController::WinMutexRelease(const std::string& name,
+                                      const std::vector<int>& release_ranks,
                                       bool is_sync) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex for " << name << " is released.";
   int one = 1;
   int minus_one = -1;
   int target_disp = 0;
 
-  if (mpi_ctx_.win_mutex.empty()) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
     return Status::PreconditionError(
-        "Cannot release Win Mutex because it may not be initialized or has "
-        "been destroyed.");
+        "Cannot release Mutex Win for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+  std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
+  if (!mutex_win) {
+    return Status::PreconditionError("Cannot release Mutex Win for " + name +
+                                     ". The data window for that name is found"
+                                     "but mutex window is not.");
   }
 
-  std::shared_ptr<MPI_Win> mutex_win;
   for (int rank : release_ranks) {
-    mutex_win = mpi_ctx_.win_mutex[rank];
     BFLOG(TRACE, mpi_ctx_.rank_) << "Release Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     if (is_sync) {
@@ -958,16 +970,18 @@ Status MPIController::WinMutexRelease(const std::vector<int>& release_ranks,
 }
 
 WinMutexGuard::WinMutexGuard(MPIController* mpi_controller,
+                             const std::string& name,
                              const std::vector<int>& acquire_ranks,
                              bool is_sync)
     : mpi_controller_(mpi_controller),
+      name_(name),
       acquire_ranks_(acquire_ranks),
       is_sync_(is_sync) {
-  mpi_controller_->WinMutexAcquire(acquire_ranks_, is_sync_);
+  mpi_controller_->WinMutexAcquire(name, acquire_ranks_, is_sync_);
 }
 
 WinMutexGuard::~WinMutexGuard() {
-  mpi_controller_->WinMutexAcquire(acquire_ranks_, is_sync_);
+  mpi_controller_->WinMutexAcquire(name_, acquire_ranks_, is_sync_);
 }
 
 }  // namespace common
