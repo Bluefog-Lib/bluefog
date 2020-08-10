@@ -68,7 +68,7 @@ class WinOpsTests(unittest.TestCase):
 
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         dims = [1, 2, 3]
@@ -98,7 +98,7 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
         if size <= 1:
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
@@ -124,7 +124,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -194,7 +194,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         indegree = int(np.ceil(np.log2(size)))
         expected_result = rank * (indegree+1)
@@ -229,7 +229,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -270,7 +270,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -314,7 +314,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -355,7 +355,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
@@ -391,7 +391,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
@@ -433,7 +433,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         avg_value = rank + ((rank-1) % size) * 1.23 / 2.0
 
@@ -468,7 +468,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -503,7 +503,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -541,7 +541,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # We use given destination to form a (right-)ring.
         avg_value = (rank + 1.23*((rank-1) % size)) / float(2)
