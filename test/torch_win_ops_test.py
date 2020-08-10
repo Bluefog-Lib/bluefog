@@ -17,15 +17,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import inspect
+import itertools
+import time
+import warnings
+import unittest
+
 from bluefog.common import topology_util
 import bluefog.torch as bf
 import torch
 import numpy as np
-import inspect
-import itertools
-import time
-import unittest
-import warnings
 warnings.simplefilter("ignore")
 
 
@@ -51,8 +52,7 @@ class WinOpsTests(unittest.TestCase):
     @staticmethod
     def cast_and_place(tensor, dtype):
         if dtype.is_cuda:
-            device_id = bf.local_rank()
-            device_id = 0
+            device_id = bf.local_rank() % torch.cuda.device_count()
             return tensor.cuda(device_id).type(dtype)
         return tensor.type(dtype)
 
