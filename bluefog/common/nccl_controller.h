@@ -22,6 +22,7 @@
 #include <nccl.h>
 #include "cuda_runtime.h"
 #include "mpi.h"
+#include "thread_pool.h"
 
 #include "common.h"
 #include "logging.h"
@@ -140,6 +141,8 @@ private:
   MPIContext& mpi_ctx_;
   
   Timeline* timeline_ptr_;
+
+  ThreadPool finalizer_thread_pool;
 };
 
 }  // namespace common
