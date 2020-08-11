@@ -131,7 +131,8 @@ def SymmetricPowerGraph(size: int, base: int = 4) -> nx.DiGraph:
      only connected to a point such that the index difference is power of base (Default is 4)
      and the connectivity for the second half of nodes just mirrored to the first half.
 
-    Example: A SymmetricPowerGraph with 12 nodes:
+    Example: A SymmetricPowerGraph with 12 nodes
+
     .. plot::
         :context: close-figs
 
