@@ -379,6 +379,23 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           "output for details.");
     }
   } else if (!is_topo_check_fail) {
+    // Sort the send and recv order to avoid the conflict of commmunication as
+    // much as possible.
+    int rank = mpi_ctx_.rank_;
+    int size = mpi_ctx_.size_;
+    std::sort(entry.send_neighbors->begin(), entry.send_neighbors->end(),
+              [rank, size](int a, int b) {
+                int a_index = a >= rank ? a - rank : a - rank + size;
+                int b_index = b >= rank ? b - rank : b - rank + size;
+                return a_index - b_index;
+              });
+    std::sort(entry.recv_neighbors->begin(), entry.recv_neighbors->end(),
+              [rank, size](int a, int b) {
+                int a_index = a >= rank ? a - rank : a - rank + size;
+                int b_index = b >= rank ? b - rank : b - rank + size;
+                return b_index - a_index;
+              });
+
     int nsend = entry.send_neighbors->size();
     int nrecv = entry.recv_neighbors->size();
     std::vector<MPI_Request> requests(nsend+nrecv);
