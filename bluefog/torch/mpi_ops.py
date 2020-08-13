@@ -1029,8 +1029,8 @@ def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
         name: Used to get the mutex for the window that registered by name.
         ranks: The mutex associated with the specified ranks is acquired.
             If not presented, the mutex with all out_neighbor ranks are acquired.
-        exclusive: If not exclusive, multiple (inclusive) processes can hold the mutex for 
-            the ranks. While only one exclusive processes (no other inclusive ones) can 
+        exclusive: If not exclusive, multiple (inclusive) processes can hold the mutex for
+            the ranks. While only one exclusive processes (no other inclusive ones) can
             acquire the mutex.
 
     Example:
