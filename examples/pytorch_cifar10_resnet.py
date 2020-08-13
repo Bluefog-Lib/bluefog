@@ -367,6 +367,7 @@ def dynamic_topology_update(epoch, batch_idx):
     elif args.dist_optimizer == 'push_sum':
         if epoch < 3:
             return
+        num_out_neighbors = len(bf.out_neighbor_ranks())
         sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5

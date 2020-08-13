@@ -178,6 +178,7 @@ def dynamic_topology_update(batch_idx):
         recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
         optimizer.src_weights = {recv_neighbor: 1.0}
     elif args.dist_optimizer == 'push_sum':
+        num_out_neighbors = len(bf.out_neighbor_ranks())
         sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
