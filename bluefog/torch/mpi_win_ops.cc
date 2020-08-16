@@ -370,6 +370,7 @@ int DoWinFree(const std::string& name) {
 }
 
 int DoWinPut(::torch::Tensor tensor, const std::string& name,
+             const double self_weight,
              const std::unordered_map<int, double>& dst_weights,
              const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
@@ -397,7 +398,13 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowPut(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle, name, timeline_ptr, tid](const Status& status) {
+      [handle, name, timeline_ptr, tid, tensor,
+       self_weight](const Status& status) {
+        if (status.ok()) {
+          if (self_weight != 1.0) {
+            tensor.mul_(self_weight);
+          }
+        }
         win_handle_manager.MarkDone(handle, status);
         timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
       });
@@ -407,6 +414,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
+                    const double self_weight,
                     const std::unordered_map<int, double>& dst_weights,
                     const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
@@ -432,7 +440,13 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle, name, timeline_ptr, tid](const Status& status) {
+      [handle, name, timeline_ptr, tid, tensor,
+       self_weight](const Status& status) {
+        if (status.ok()) {
+          if (self_weight != 1.0) {
+            tensor.mul_(self_weight);
+          }
+        }
         win_handle_manager.MarkDone(handle, status);
         timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
       });

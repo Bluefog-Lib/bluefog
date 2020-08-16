@@ -148,6 +148,7 @@ WIN_SYNC_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #define WIN_PUT_H(torch_Tensor, THTensor)                             \
   extern "C" int bluefog_torch_win_put_##torch_Tensor(                \
       THTensor* tensor, char* name,                                   \
+      const double self_weight,                                       \
       const std::unordered_map<int, double>& dst_weights,             \
       const bool require_mutex);
 
@@ -166,6 +167,7 @@ WIN_PUT_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #define WIN_ACCUMULATE_H(torch_Tensor, THTensor)                         \
   extern "C" int bluefog_torch_win_accumulate_##torch_Tensor(            \
       THTensor* tensor, char* name,                                      \
+      const double self_weight,                                          \
       const std::unordered_map<int, double>& dst_weights,                \
       const bool require_mutex);
 

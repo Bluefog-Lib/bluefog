@@ -60,7 +60,7 @@ elif args.virtual_topology == "power3":
 elif args.virtual_topology == "power4":
     bf.set_topology(topology_util.PowerGraph(bf.size(), base=4))
 elif args.virtual_topology == "ring":
-    bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
+    bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
 elif args.virtual_topology == "mesh":
     bf.set_topology(topology_util.RingGraph(
         bf.size(), connect_style=0), is_weighted=True)
@@ -115,11 +115,8 @@ else:
                            for rank in bf.out_neighbor_ranks()}
             self_weight = 1/(1+outdegree)
 
-        # Out-going neighbor
-        bf.win_accumulate(x_ext, name="x_ext",
+        bf.win_accumulate(x_ext, name="x_ext", self_weight=self_weight,
                           dst_weights=dst_weights, require_mutex=True)
-        # Self times weight.
-        x_ext.mul_(self_weight)
 
         bf.win_update_then_collect(name="x_ext")
         mse.append(torch.norm(x_ext[:-1]/x_ext[-1]-x_bar, p=2) / torch.norm(x_bar, p=2))
