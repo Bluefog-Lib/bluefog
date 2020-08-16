@@ -94,12 +94,13 @@ bool WindowManager::InitializeWeightWin(const MPI_Comm& mpi_comm) {
   if (!weight_win_) {
      weight_win_  = std::make_shared<MPI_Win>();
   }
-  // We only need one value for self mutex.
-  weight_mem_ = std::unique_ptr<double>(new double(1.0));
+  weight_mem_ .resize(global_size);
+  std::fill_n(weight_mem_.data(), global_size, 0.0);
+  weight_mem_[self_rank] = 1.0;
 
   int element_size = 0;
   MPI_Type_size(MPI_DOUBLE, &element_size);
-  int win_size = 1 * element_size;
+  int win_size = global_size * element_size;
   MPI_Win_create((void *)weight_win_.get(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
                  weight_win_.get());
   return true;
@@ -107,13 +108,22 @@ bool WindowManager::InitializeWeightWin(const MPI_Comm& mpi_comm) {
 
 bool WindowManager::DestroyWeightWin() {
   if (!weight_win_) {
-    weight_mem_.reset();
+    weight_mem_.clear();
     return false;
   }
   MPI_Win_free(weight_win_.get());
   weight_win_.reset();
-  weight_mem_.reset();
+  weight_mem_.clear();
   return true;
+}
+
+double WindowManager::GetAssociatedWeight(int rank) {
+  if (!weight_win_) {
+    std::runtime_error(
+        "Try to get the weight but associated window has been destroyed or has "
+        "not initialized yet.");
+  }
+  return weight_mem_[rank];
 }
 
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {

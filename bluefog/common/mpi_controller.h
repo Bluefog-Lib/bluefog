@@ -101,6 +101,9 @@ class MPIController {
   Status WinMutexRelease(const std::string& name,
                          const std::vector<int>& release_ranks, bool is_sync);
 
+  Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
+                                             const int rank, double* weight);
+
  protected:
   // Outside dependencies
   MPIContext& mpi_ctx_;

@@ -790,5 +790,14 @@ Status GetBluefogTimeline(Timeline*& timeline) {
   return Status::OK();
 }
 
+Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
+                                           const int rank, double* weight) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  return bluefog_global.controller->GetAssociatedWinWeightByNameAndRank(
+      name, rank, weight);
+}
+
 }  // namespace common
 }  // namespace bluefog
