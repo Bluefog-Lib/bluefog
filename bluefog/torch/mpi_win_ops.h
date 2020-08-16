@@ -196,6 +196,8 @@ extern "C" void bluefog_torch_win_lock(char* name);
 extern "C" void bluefog_torch_win_unlock(char* name);
 
 extern "C" double bluefog_torch_win_associated_weight(char* name);
+extern "C" void bluefog_torch_set_win_ops_with_associated_weight_state(
+    bool value);
 
 extern "C" void bluefog_torch_win_mutex_acquire(char* name,
                                                 const std::vector<int>& ranks,

@@ -1047,6 +1047,25 @@ Status MPIController::GetAssociatedWinWeightByNameAndRank(
   return Status::OK();
 }
 
+Status MPIController::SetAssociatedWinWeightByNameAndRank(
+    const std::string& name, const int rank, double weight) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot get associated win weights for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+  if (rank < 0 || rank >= mpi_ctx_.size_) {
+    return Status::PreconditionError(
+        "Argument Rank to retrieve associated weights should be a value "
+        "between 0 (inclusive) and "
+        "size(exclusive) to retrieve the weights.");
+  }
+  it->second->SetAssociatedWeight(rank, weight);
+  return Status::OK();
+}
+
 WinMutexGuard::WinMutexGuard(MPIController* mpi_controller,
                              const std::string& name,
                              const std::vector<int>& acquire_ranks,

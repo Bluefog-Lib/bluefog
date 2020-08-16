@@ -126,6 +126,15 @@ double WindowManager::GetAssociatedWeight(int rank) {
   return weight_mem_[rank];
 }
 
+void WindowManager::SetAssociatedWeight(int rank, double weight) {
+  if (!weight_win_) {
+    std::runtime_error(
+        "Try to set the weight but associated window has been destroyed or has "
+        "not initialized yet.");
+  }
+  weight_mem_[rank] = weight;
+}
+
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {
   return GetMPIDataType(tensor->dtype());
 }

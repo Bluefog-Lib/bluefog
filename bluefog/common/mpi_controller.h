@@ -104,6 +104,8 @@ class MPIController {
 
   Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
                                              const int rank, double* weight);
+  Status SetAssociatedWinWeightByNameAndRank(const std::string& name,
+                                             const int rank, double weight);
 
  protected:
   // Outside dependencies

@@ -52,6 +52,9 @@ MPIContext mpi_context;
 NCCLContext nccl_context;
 #endif
 
+// If set, win_ops will execute the same ops on associated_weight as well.
+static bool global_with_associated_weight_state = false;
+
 }  // namespace
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -611,6 +614,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
   e.dst_weights = dst_weights;
+  e.win_ops_with_associated_weight = global_with_associated_weight_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -631,6 +635,7 @@ Status EnqueueTensorWindowAccumulate(
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
+  e.win_ops_with_associated_weight = global_with_associated_weight_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -685,11 +690,12 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status WindowSync(const std::string& name, int device, bool with_associated_weight) {
+Status WindowSync(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinSync(name, device, with_associated_weight);
+  Status status = bluefog_global.controller->WinSync(
+      name, device, global_with_associated_weight_state);
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -797,6 +803,23 @@ Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
   }
   return bluefog_global.controller->GetAssociatedWinWeightByNameAndRank(
       name, rank, weight);
+}
+
+Status SetAssociatedWinWeightByNameAndRank(const std::string& name,
+                                           const int rank, const double weight) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  return bluefog_global.controller->SetAssociatedWinWeightByNameAndRank(
+      name, rank, weight);
+}
+
+void SetWinOpsWithAssociatedWeightState(bool value) {
+  global_with_associated_weight_state = value;
+}
+
+bool GetWinOpsWithAssociatedWeightState() {
+  return global_with_associated_weight_state;
 }
 
 }  // namespace common

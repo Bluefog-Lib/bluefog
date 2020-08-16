@@ -75,6 +75,7 @@ class WindowManager {
   inline std::shared_ptr<MPI_Win> GetWeightWin() { return weight_win_; }
   inline double* GetUnderlyingWeightMemory() { return weight_mem_.data(); };
   double GetAssociatedWeight(int rank);
+  void SetAssociatedWeight(int rank, double weight);
 
  private:
   // Store all the pointers to the MPI WIN and underlying tensor.

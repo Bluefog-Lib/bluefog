@@ -159,8 +159,7 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, int device);
 
-Status WindowSync(const std::string& name, int device,
-                  bool with_associated_weight);
+Status WindowSync(const std::string& name, int device);
 
 Status WindowFree(const std::string& name, int device);
 
@@ -178,6 +177,13 @@ Status WindowMutexRelease(const std::string& name,
 
 Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
                                            const int rank, double* weight);
+
+Status SetAssociatedWinWeightByNameAndRank(const std::string& name,
+                                           const int rank, double weight);
+
+void SetWinOpsWithAssociatedWeightState(bool value);
+
+bool GetWinOpsWithAssociatedWeightState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
 

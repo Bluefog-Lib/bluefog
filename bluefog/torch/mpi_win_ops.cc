@@ -64,6 +64,22 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
   return CPU_DEVICE_ID;
 }
 
+double GetWinAssociateWeight(const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+  double weight = 0.0;
+  Status status = common::GetAssociatedWinWeightByNameAndRank(
+      name, common::bluefog_rank(), &weight);
+  ThrowIfError(status);
+  return weight;
+}
+
+void SetWinAssociateWeight(const std::string& name, const double value) {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::SetAssociatedWinWeightByNameAndRank(
+      name, common::bluefog_rank(), value);
+  ThrowIfError(status);
+}
+
 }  // namespace
 
 bool WinTorchStorageManager::RegisterWinName(
@@ -295,7 +311,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     return 0;
   }
 
-  Status status = common::WindowSync(name, device, /*with_associated_weight=*/false);
+  Status status = common::WindowSync(name, device);
 
   ::torch::Tensor cpu_buffer = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
@@ -381,6 +397,9 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
+  // Have to get that value here since it will be used in callback, of which
+  // might change will wait for communication.
+  bool associate_with_weight = common::GetWinOpsWithAssociatedWeightState();
 
   std::shared_ptr<TorchTensor> bf_tensor;
 
@@ -398,11 +417,15 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowPut(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle, name, timeline_ptr, tid, tensor,
-       self_weight](const Status& status) {
+      [handle, name, timeline_ptr, tid, tensor, self_weight,
+       associate_with_weight](const Status& status) {
         if (status.ok()) {
           if (self_weight != 1.0) {
             tensor.mul_(self_weight);
+          }
+          if (associate_with_weight) {
+            double old_value = GetWinAssociateWeight(name);
+            SetWinAssociateWeight(name, old_value * self_weight);
           }
         }
         win_handle_manager.MarkDone(handle, status);
@@ -425,6 +448,10 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
+  // Have to get that value here since it will be used in callback, of which
+  // might change will wait for communication.
+  bool associate_with_weight = common::GetWinOpsWithAssociatedWeightState();
+
   std::shared_ptr<TorchTensor> bf_tensor;
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
@@ -440,11 +467,15 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle, name, timeline_ptr, tid, tensor,
-       self_weight](const Status& status) {
+      [handle, name, timeline_ptr, tid, tensor, self_weight,
+       associate_with_weight](const Status& status) {
         if (status.ok()) {
           if (self_weight != 1.0) {
             tensor.mul_(self_weight);
+          }
+          if (associate_with_weight) {
+            double old_value = GetWinAssociateWeight(name);
+            SetWinAssociateWeight(name, old_value * self_weight);
           }
         }
         win_handle_manager.MarkDone(handle, status);
@@ -537,13 +568,8 @@ void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
   ThrowIfError(status);
 }
 
-double GetWinAssociateWeight(const std::string& name) {
-  ThrowIfError(common::CheckInitialized());
-  double weight = 0.0;
-  Status status = common::GetAssociatedWinWeightByNameAndRank(
-      name, common::bluefog_rank(), &weight);
-  ThrowIfError(status);
-  return weight;
+void SetWinOpsWithAssociatedWeightState(bool value) {
+  common::SetWinOpsWithAssociatedWeightState(value);
 }
 
 void AddWinOpsIntoPybind(py::module& m) {
@@ -608,6 +634,7 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
 
   m.def("bluefog_torch_win_associated_weight", &GetWinAssociateWeight);
+  m.def("bluefog_torch_set_win_ops_with_associated_weight_state", &SetWinOpsWithAssociatedWeightState);
 }
 
 }  // namespace torch
