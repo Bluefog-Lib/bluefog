@@ -295,7 +295,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     return 0;
   }
 
-  Status status = common::WindowSync(name, device);
+  Status status = common::WindowSync(name, device, /*with_associated_weight=*/false);
 
   ::torch::Tensor cpu_buffer = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {

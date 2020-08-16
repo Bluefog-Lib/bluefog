@@ -73,6 +73,7 @@ class WindowManager {
   bool InitializeWeightWin(const MPI_Comm& mpi_comm);
   bool DestroyWeightWin();
   inline std::shared_ptr<MPI_Win> GetWeightWin() { return weight_win_; }
+  inline double* GetUnderlyingWeightMemory() { return weight_mem_.data(); };
   double GetAssociatedWeight(int rank);
 
  private:

@@ -83,7 +83,8 @@ class MPIController {
                    const std::string& name, int device);
   Status WinFree(const std::string& name, int device);
   Status WinFreeAll();
-  Status WinSync(const std::string& name, int device);
+  Status WinSync(const std::string& name, int device,
+                 bool with_associated_weight);
   Status WinFence(const std::string& name);
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);

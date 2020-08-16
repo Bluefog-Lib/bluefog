@@ -574,7 +574,7 @@ Status MPIController::WinFreeAll() {
   return Status::OK();
 }
 
-Status MPIController::WinSync(const std::string& name, int device) {
+Status MPIController::WinSync(const std::string& name, int device, bool with_associated_weight) {
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_sync failed with ") + name);
@@ -587,6 +587,13 @@ Status MPIController::WinSync(const std::string& name, int device) {
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK, *mpi_win_ptr);
     MPI_Win_sync(*mpi_win_ptr);
     MPI_Win_unlock(mpi_ctx_.rank_, *mpi_win_ptr);
+  }
+  if (with_associated_weight) {
+    auto weight_win_ptr = win_mananger->GetWeightWin();
+    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
+                 *weight_win_ptr);
+    MPI_Win_sync(*weight_win_ptr);
+    MPI_Win_unlock(mpi_ctx_.rank_, *weight_win_ptr);
   }
 
   return Status::OK();
@@ -685,6 +692,23 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityEnd(entry.tensor_name);
 
+    if (entry.win_ops_with_associated_weight) {
+      std::shared_ptr<MPI_Win> weight_win = win_mananger->GetWeightWin();
+      MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
+      // Unlike data window, weight window is just a raw "world size" vector.
+      int target_disp =
+          target_rank * mpi_ctx_.GetMPITypeSize(DataType::BLUEFOG_FLOAT64);
+      double* weight_memory = win_mananger->GetUnderlyingWeightMemory();
+      const void* self_weight_start =
+          (const void*)(weight_memory + mpi_ctx_.rank_);
+      int ret_code = MPI_Put(self_weight_start, 1, MPI_DOUBLE, target_rank,
+                             target_disp, 1, MPI_DOUBLE, *weight_win);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Put failed, see MPI output for details.");
+      }
+      MPI_Win_unlock(target_rank, *weight_win);
+    }
+
     if (entry.require_mutex) {
       WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
     }
@@ -756,6 +780,25 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     MPI_Win_unlock(target_rank, mpi_win);
 
     timeline_ptr->ActivityEnd(entry.tensor_name);
+    if (entry.win_ops_with_associated_weight) {
+      std::shared_ptr<MPI_Win> weight_win = win_mananger->GetWeightWin();
+      MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
+      // Unlike data window, weight window is just a raw "world size" vector.
+      int target_disp =
+          target_rank * mpi_ctx_.GetMPITypeSize(DataType::BLUEFOG_FLOAT64);
+      double* weight_memory = win_mananger->GetUnderlyingWeightMemory();
+      const void* self_weight_start =
+          (const void*)(weight_memory + mpi_ctx_.rank_);
+      int ret_code =
+          MPI_Accumulate(self_weight_start, 1, MPI_DOUBLE, target_rank,
+                         target_disp, 1, MPI_DOUBLE, MPI_SUM, *weight_win);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Accumulate failed, see MPI output for details.");
+      }
+      MPI_Win_unlock(target_rank, *weight_win);
+    }
+
     if (entry.require_mutex) {
       WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
     }

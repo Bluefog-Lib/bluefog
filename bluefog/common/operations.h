@@ -159,7 +159,8 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
                     const std::string& name, int device);
 
-Status WindowSync(const std::string& name, int device);
+Status WindowSync(const std::string& name, int device,
+                  bool with_associated_weight);
 
 Status WindowFree(const std::string& name, int device);
 

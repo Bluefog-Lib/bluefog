@@ -685,11 +685,11 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status WindowSync(const std::string& name, int device) {
+Status WindowSync(const std::string& name, int device, bool with_associated_weight) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinSync(name, device);
+  Status status = bluefog_global.controller->WinSync(name, device, with_associated_weight);
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
