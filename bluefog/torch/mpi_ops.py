@@ -1069,3 +1069,7 @@ def _win_mutex_acquire(name, ranks, exclusive):
 
 def _win_mutex_release(name, ranks, exclusive):
     mpi_lib.bluefog_torch_win_mutex_release(name, ranks, exclusive)
+
+
+def win_associate_weight(name: str) -> float:
+    return mpi_lib.bluefog_torch_win_associated_weight(name)

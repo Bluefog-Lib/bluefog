@@ -537,6 +537,15 @@ void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
   ThrowIfError(status);
 }
 
+double GetWinAssociateWeight(const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+  double weight = 0.0;
+  Status status = common::GetAssociatedWinWeightByNameAndRank(
+      name, common::bluefog_rank(), &weight);
+  ThrowIfError(status);
+  return weight;
+}
+
 void AddWinOpsIntoPybind(py::module& m) {
   // one-sided communication
   m.def("bluefog_torch_win_create_torch_IntTensor", &DoWinCreate);
@@ -597,6 +606,8 @@ void AddWinOpsIntoPybind(py::module& m) {
 
   m.def("bluefog_torch_win_mutex_acquire", &DoWinMutexAcquire);
   m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
+
+  m.def("bluefog_torch_win_associated_weight", &GetWinAssociateWeight);
 }
 
 }  // namespace torch
