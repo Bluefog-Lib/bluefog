@@ -72,6 +72,11 @@ class WindowManager {
   bool DestroyMutexWin();
   inline std::shared_ptr<MPI_Win> GetMutexWin() { return mutex_win_; }
 
+  // The weight 
+  bool InitializeWeightWin(const MPI_Comm& mpi_comm);
+  bool DestroyWeightWin();
+  inline std::shared_ptr<MPI_Win> GetWeightWin() { return weight_win_; }
+
  private:
   // Store all the pointers to the MPI WIN and underlying tensor.
   // It should always keep the order from 0 to WORLD_SIZE-1.
@@ -86,6 +91,10 @@ class WindowManager {
   // MPI Window used for mutex.
   std::shared_ptr<MPI_Win> mutex_win_;
   std::unique_ptr<int> mutex_mem_;
+
+  // MPI Window used for weight. Mainly used for push-sum algorithm.
+  std::shared_ptr<MPI_Win> weight_win_;
+  std::unique_ptr<double> weight_mem_;
 };
 
 class MPIContext {
