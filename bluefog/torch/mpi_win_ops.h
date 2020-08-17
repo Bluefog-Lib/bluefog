@@ -66,29 +66,28 @@ class WinTorchStorageManager {
   bool GetDeviceByName(const std::string& name, int* device);
 
   // Sum the local tensor with all neighbor tensors.
-  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
-  
-  // Weighted Average the local tensor with neighbor tensors according to weights map.
-  // Weights map { rank: weights }. Rank has to be (in-)neighbor ranks. self_weight
-  // specifies the weight for self rank.
-  // The sum weights are not necessary to be 1.
-  // No matter the weights in the mpi_context class is set or not, weights provided in
-  // the argument will override it.
-  bool AvgWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      double self_weight,
-      const std::unordered_map<int, double>& neighbor_weights);
+  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       bool associated_with_weight);
 
-  
+  // Weighted Average the local tensor with neighbor tensors according to
+  // weights map. Weights map { rank: weights }. Rank has to be (in-)neighbor
+  // ranks. self_weight specifies the weight for self rank. The sum weights are
+  // not necessary to be 1. No matter the weights in the mpi_context class is
+  // set or not, weights provided in the argument will override it.
+  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       double self_weight,
+                       const std::unordered_map<int, double>& neighbor_weights,
+                       bool associated_with_weight);
+
   // This is just utility functions and never used the weights defined in the
   // the mpi_context.
-  bool SumWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      const std::vector<int>& source_ranks);
-  bool AvgWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      const std::vector<int>& source_ranks);
-  
+  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       const std::vector<int>& source_ranks,
+                       bool associated_with_weight);
+  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       const std::vector<int>& source_ranks,
+                       bool associated_with_weight);
+
   // Clear all storage/reference to neighbor TorchTensor.
   void ClearAll();
 

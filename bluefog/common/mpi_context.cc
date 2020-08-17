@@ -86,11 +86,6 @@ bool WindowManager::InitializeWeightWin(const MPI_Comm& mpi_comm) {
   int global_size = 1;
   MPI_Comm_rank(mpi_comm, &self_rank);
   MPI_Comm_size(mpi_comm, &global_size);
-  if (global_size <= 1) {
-    // We don't need any mutex for this case.
-    return false;
-  }
-
   if (!weight_win_) {
      weight_win_  = std::make_shared<MPI_Win>();
   }
@@ -101,7 +96,7 @@ bool WindowManager::InitializeWeightWin(const MPI_Comm& mpi_comm) {
   int element_size = 0;
   MPI_Type_size(MPI_DOUBLE, &element_size);
   int win_size = global_size * element_size;
-  MPI_Win_create((void *)weight_win_.get(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
+  MPI_Win_create((void *)weight_mem_.data(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
                  weight_win_.get());
   return true;
 }
@@ -263,8 +258,6 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   int local_rank, world_rank;
   MPI_Comm_rank(mpi_comm, &world_rank);
   MPI_Comm_rank(local_comm, &local_rank);
-
-
 
   // Create cross node communicator.
   MPI_Comm_split(mpi_comm, local_rank, world_rank, &cross_comm);

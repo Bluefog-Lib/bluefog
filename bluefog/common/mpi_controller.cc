@@ -696,12 +696,10 @@ void MPIController::WinPut(TensorTableEntry& entry) {
       std::shared_ptr<MPI_Win> weight_win = win_mananger->GetWeightWin();
       MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
       // Unlike data window, weight window is just a raw "world size" vector.
-      int target_disp =
-          target_rank * mpi_ctx_.GetMPITypeSize(DataType::BLUEFOG_FLOAT64);
+      int target_disp = mpi_ctx_.rank_;
       double* weight_memory = win_mananger->GetUnderlyingWeightMemory();
-      const void* self_weight_start =
-          (const void*)(weight_memory + mpi_ctx_.rank_);
-      int ret_code = MPI_Put(self_weight_start, 1, MPI_DOUBLE, target_rank,
+      double self_weighted_p = (*(weight_memory + mpi_ctx_.rank_)) * weight;
+      int ret_code = MPI_Put(&self_weighted_p, 1, MPI_DOUBLE, target_rank,
                              target_disp, 1, MPI_DOUBLE, *weight_win);
       if (ret_code != MPI_SUCCESS) {
         throw std::runtime_error("MPI_Put failed, see MPI output for details.");
@@ -778,19 +776,18 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     }
     MPI_Win_unlock(target_rank, mpi_win);
-
     timeline_ptr->ActivityEnd(entry.tensor_name);
+
     if (entry.win_ops_with_associated_weight) {
       std::shared_ptr<MPI_Win> weight_win = win_mananger->GetWeightWin();
       MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
       // Unlike data window, weight window is just a raw "world size" vector.
-      int target_disp =
-          target_rank * mpi_ctx_.GetMPITypeSize(DataType::BLUEFOG_FLOAT64);
+      int target_disp = mpi_ctx_.rank_;
       double* weight_memory = win_mananger->GetUnderlyingWeightMemory();
-      const void* self_weight_start =
-          (const void*)(weight_memory + mpi_ctx_.rank_);
+      double self_weighted_p = (*(weight_memory + mpi_ctx_.rank_)) * weight;
+      BFLOG(WARNING, mpi_ctx_.rank_) << "self_weighted_p: " << self_weighted_p;
       int ret_code =
-          MPI_Accumulate(self_weight_start, 1, MPI_DOUBLE, target_rank,
+          MPI_Accumulate(&self_weighted_p, 1, MPI_DOUBLE, target_rank,
                          target_disp, 1, MPI_DOUBLE, MPI_SUM, *weight_win);
       if (ret_code != MPI_SUCCESS) {
         throw std::runtime_error(
