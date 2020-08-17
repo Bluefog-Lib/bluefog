@@ -175,15 +175,15 @@ Status WindowMutexAcquire(const std::string& name,
 Status WindowMutexRelease(const std::string& name,
                           const std::vector<int>& release_ranks, bool is_sync);
 
-Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
+Status GetWinAssociatedPByNameAndRank(const std::string& name,
                                            const int rank, double* weight);
 
-Status SetAssociatedWinWeightByNameAndRank(const std::string& name,
+Status SetWinAssociatedPByNameAndRank(const std::string& name,
                                            const int rank, double weight);
 
-void SetWinOpsWithAssociatedWeightState(bool value);
+void SetWinOpsWithAssociatedPState(bool value);
 
-bool GetWinOpsWithAssociatedWeightState();
+bool GetWinOpsWithAssociatedPState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
 

@@ -81,53 +81,53 @@ bool WindowManager::DestroyMutexWin() {
   return true;
 }
 
-bool WindowManager::InitializeWeightWin(const MPI_Comm& mpi_comm) {
+bool WindowManager::InitializePWin(const MPI_Comm& mpi_comm) {
   int self_rank = 0;
   int global_size = 1;
   MPI_Comm_rank(mpi_comm, &self_rank);
   MPI_Comm_size(mpi_comm, &global_size);
-  if (!weight_win_) {
-     weight_win_  = std::make_shared<MPI_Win>();
+  if (!p_win_) {
+    p_win_ = std::make_shared<MPI_Win>();
   }
-  weight_mem_ .resize(global_size);
-  std::fill_n(weight_mem_.data(), global_size, 0.0);
-  weight_mem_[self_rank] = 1.0;
+  p_mem_.resize(global_size);
+  std::fill_n(p_mem_.data(), global_size, 0.0);
+  p_mem_[self_rank] = 1.0;
 
   int element_size = 0;
   MPI_Type_size(MPI_DOUBLE, &element_size);
   int win_size = global_size * element_size;
-  MPI_Win_create((void *)weight_mem_.data(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
-                 weight_win_.get());
+  MPI_Win_create((void*)p_mem_.data(), win_size, element_size, MPI_INFO_NULL,
+                 mpi_comm, p_win_.get());
   return true;
 }
 
-bool WindowManager::DestroyWeightWin() {
-  if (!weight_win_) {
-    weight_mem_.clear();
+bool WindowManager::DestroyPWin() {
+  if (!p_win_) {
+    p_mem_.clear();
     return false;
   }
-  MPI_Win_free(weight_win_.get());
-  weight_win_.reset();
-  weight_mem_.clear();
+  MPI_Win_free(p_win_.get());
+  p_win_.reset();
+  p_mem_.clear();
   return true;
 }
 
-double WindowManager::GetAssociatedWeight(int rank) {
-  if (!weight_win_) {
+double WindowManager::GetAssociatedP(int rank) {
+  if (!p_win_) {
     std::runtime_error(
         "Try to get the weight but associated window has been destroyed or has "
         "not initialized yet.");
   }
-  return weight_mem_[rank];
+  return p_mem_[rank];
 }
 
-void WindowManager::SetAssociatedWeight(int rank, double weight) {
-  if (!weight_win_) {
+void WindowManager::SetAssociatedP(int rank, double weight) {
+  if (!p_win_) {
     std::runtime_error(
         "Try to set the weight but associated window has been destroyed or has "
         "not initialized yet.");
   }
-  weight_mem_[rank] = weight;
+  p_mem_[rank] = weight;
 }
 
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {
@@ -321,7 +321,7 @@ bool MPIContext::RegisterWindowName(const std::string& name) {
   }
   auto win_manager_ptr = std::make_shared<WindowManager>();
   win_manager_ptr->InitializeMutexWin(mpi_comm);
-  win_manager_ptr->InitializeWeightWin(mpi_comm);
+  win_manager_ptr->InitializePWin(mpi_comm);
   named_win_map[name] = win_manager_ptr;
   return true;
 }
@@ -341,7 +341,7 @@ bool MPIContext::UnregisterWindowName(const std::string& name) {
   }
   it->second->FreeAllWins();
   it->second->DestroyMutexWin();
-  it->second->DestroyWeightWin();
+  it->second->DestroyPWin();
   named_win_map.erase(it);
   return true;
 }
@@ -350,7 +350,7 @@ bool MPIContext::UnregisterAllWindowName() {
   for (auto& kv : named_win_map) {
     kv.second->FreeAllWins();
     kv.second->DestroyMutexWin();
-    kv.second->DestroyWeightWin();
+    kv.second->DestroyPWin();
   }
   named_win_map.clear();
   return true;

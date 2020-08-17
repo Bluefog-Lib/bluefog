@@ -238,9 +238,9 @@ struct TensorTableEntry {
   // The ops requires the mutex.
   bool require_mutex = false;
 
-  // If set, the associate weight window will do same
+  // If set, the associated p window will do same
   // ops as win_ops.
-  bool win_ops_with_associated_weight = false;
+  bool win_ops_with_associated_p = false;
 
   // A callback to call with the status.
   StatusCallback callback;

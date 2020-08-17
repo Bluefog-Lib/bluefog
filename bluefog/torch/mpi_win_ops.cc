@@ -64,18 +64,18 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
   return CPU_DEVICE_ID;
 }
 
-double GetWinAssociateWeight(const std::string& name) {
+double GetWinAssociatedP(const std::string& name) {
   ThrowIfError(common::CheckInitialized());
   double weight = 0.0;
-  Status status = common::GetAssociatedWinWeightByNameAndRank(
+  Status status = common::GetWinAssociatedPByNameAndRank(
       name, common::bluefog_rank(), &weight);
   ThrowIfError(status);
   return weight;
 }
 
-void SetWinAssociateWeight(const std::string& name, const double value) {
+void SetWinAssociatedP(const std::string& name, const double value) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::SetAssociatedWinWeightByNameAndRank(
+  Status status = common::SetWinAssociatedPByNameAndRank(
       name, common::bluefog_rank(), value);
   ThrowIfError(status);
 }
@@ -186,7 +186,7 @@ bool WinTorchStorageManager::SetSelfStorageByName(
 
 bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
                                              ::torch::Tensor local_tensor,
-                                             bool associated_with_weight) {
+                                             bool associated_with_p) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
     return false;
@@ -195,15 +195,15 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
     std::shared_ptr<TorchTensor> t = kv.second;
     local_tensor.add_(t->GetUnderlyingTensor());
   }
-  if (associated_with_weight) {
-    double sum_weight = GetWinAssociateWeight(name); // self value
+  if (associated_with_p) {
+    double sum_p = GetWinAssociatedP(name);  // self value
     for (auto& kv : it->second) {
       int neighbor_rank = kv.first;
-      double neighbor_weight = 0.0;
-      common::GetAssociatedWinWeightByNameAndRank(name, neighbor_rank, &neighbor_weight);
-      sum_weight += neighbor_weight;
+      double neighbor_p = 0.0;
+      common::GetWinAssociatedPByNameAndRank(name, neighbor_rank, &neighbor_p);
+      sum_p += neighbor_p;
     }
-    SetWinAssociateWeight(name, sum_weight);
+    SetWinAssociatedP(name, sum_p);
   }
   return true;
 }
@@ -211,7 +211,7 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
 bool WinTorchStorageManager::AvgWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor, double self_weight,
     const std::unordered_map<int, double>& neighbor_weights,
-    bool associated_with_weight) {
+    bool associated_with_p) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
     return false;
@@ -225,31 +225,24 @@ bool WinTorchStorageManager::AvgWithNeighbor(
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul(weight));
   }
-  if (associated_with_weight) {
-    double avg_weight =
-        GetWinAssociateWeight(name) * self_weight;  // self value
+  if (associated_with_p) {
+    double avg_p = GetWinAssociatedP(name) * self_weight;  // self value
     int self_rank = common::bluefog_rank();
-    BFLOG(WARNING, self_rank)
-        << " self_weight " << self_weight << " Associated weight after timing"
-        << avg_weight;
     for (auto& kv : neighbor_weights) {
       int neighbor_rank = kv.first;
       double weight = kv.second;
-      double associate_weight = 0.0;
-      common::GetAssociatedWinWeightByNameAndRank(name, neighbor_rank,
-                                                  &associate_weight);
-      BFLOG(WARNING, self_rank) << " Neighbor Weight " << weight
-                                << " Associated weight " << associate_weight;
-      avg_weight += (associate_weight * weight);
+      double associated_p = 0.0;
+      common::GetWinAssociatedPByNameAndRank(name, neighbor_rank, &associated_p);
+      avg_p += (associated_p * weight);
     }
-    SetWinAssociateWeight(name, avg_weight);
+    SetWinAssociatedP(name, avg_p);
   }
   return true;
 }
 
 bool WinTorchStorageManager::SumWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor,
-    const std::vector<int>& source_ranks, bool associated_with_weight) {
+    const std::vector<int>& source_ranks, bool associated_with_p) {
   if (tensors_map_.find(name) == tensors_map_.end()) {
     return false;
   }
@@ -258,33 +251,32 @@ bool WinTorchStorageManager::SumWithNeighbor(
   for (int rank : source_ranks) {
     local_tensor.add_(neighbor_map.at(rank)->GetUnderlyingTensor());
   }
-  if (associated_with_weight) {
-    double sum_weight = GetWinAssociateWeight(name); // self value
+  if (associated_with_p) {
+    double sum_p = GetWinAssociatedP(name);  // self value
     for (int neighbor_rank : source_ranks) {
       double neighbor_weight = 0.0;
-      common::GetAssociatedWinWeightByNameAndRank(name, neighbor_rank, &neighbor_weight);
-      sum_weight += neighbor_weight;
+      common::GetWinAssociatedPByNameAndRank(name, neighbor_rank,
+                                             &neighbor_weight);
+      sum_p += neighbor_weight;
     }
-    SetWinAssociateWeight(name, sum_weight);
+    SetWinAssociatedP(name, sum_p);
   }
   return true;
 }
 
 bool WinTorchStorageManager::AvgWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor,
-    const std::vector<int>& source_ranks, bool associated_with_weight) {
-  if (!SumWithNeighbor(name, local_tensor, source_ranks,
-                       associated_with_weight)) {
+    const std::vector<int>& source_ranks, bool associated_with_p) {
+  if (!SumWithNeighbor(name, local_tensor, source_ranks, associated_with_p)) {
     return false;
   }
   // +1 here because source_ranks doesn't include self rank.
   double neighbor_cnt_with_self =
       static_cast<double>(source_ranks.size()) + 1.0;
   local_tensor.div_(neighbor_cnt_with_self);
-  if (associated_with_weight) {
-    double self_associated_weight = GetWinAssociateWeight(name);
-    SetWinAssociateWeight(name,
-                          self_associated_weight / neighbor_cnt_with_self);
+  if (associated_with_p) {
+    double self_associated_p = GetWinAssociatedP(name);
+    SetWinAssociatedP(name, self_associated_p / neighbor_cnt_with_self);
   }
   return true;
 }
@@ -321,7 +313,7 @@ namespace {
 
 int ResetNeighborTensor(const std::string& name,
         const std::unordered_map<int, double>& neighbor_map, 
-        bool associated_with_weight) {
+        bool associated_with_p) {
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
   for (auto& kv : neighbor_map) {
     int rank = kv.first;
@@ -332,8 +324,8 @@ int ResetNeighborTensor(const std::string& name,
       return 0;
     }
     bf_neighbor_tensor->GetUnderlyingTensor().fill_(0.0);
-    if (associated_with_weight) {
-      common::SetAssociatedWinWeightByNameAndRank(name, rank, 0.0);
+    if (associated_with_p) {
+      common::SetWinAssociatedPByNameAndRank(name, rank, 0.0);
     }
   }
   return 1;
@@ -361,7 +353,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     BFLOG(ERROR) << "Cannot get device of win " << name;
     return 0;
   }
-  bool associated_with_weight = common::GetWinOpsWithAssociatedWeightState();
+  bool associated_with_p = common::GetWinOpsWithAssociatedPState();
   Status status = common::WindowSync(name, device);
 
   ::torch::Tensor cpu_buffer = tensor;
@@ -377,26 +369,26 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   if (internal_avg) {
     // Weighted averaging with neighbors' tensors happens in-place.
     if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight,
-                                             neighbor_weights, associated_with_weight)) {
+                                             neighbor_weights, associated_with_p)) {
       if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
-    if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer, associated_with_weight)) {
+    if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer, associated_with_p)) {
       if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
     double neighbor_size = neighbor_weights.size() + 1.0;
     cpu_buffer.div_(neighbor_size);
-    if (associated_with_weight) {
-      double self_associated_weight = GetWinAssociateWeight(name);
-      SetWinAssociateWeight(name, self_associated_weight / neighbor_size);
+    if (associated_with_p) {
+      double associated_p = GetWinAssociatedP(name);
+      SetWinAssociatedP(name, associated_p / neighbor_size);
     }
   }
 
-  if (reset && !ResetNeighborTensor(name, neighbor_weights, associated_with_weight)) {
+  if (reset && !ResetNeighborTensor(name, neighbor_weights, associated_with_p)) {
     if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
     return 0;
   }
@@ -454,7 +446,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto handle = win_handle_manager.AllocateHandle();
   // Have to get that value here since it will be used in callback, of which
   // might change will wait for communication.
-  bool associate_with_weight = false; // common::GetWinOpsWithAssociatedWeightState();
+  bool associated_with_p = common::GetWinOpsWithAssociatedPState();
 
   std::shared_ptr<TorchTensor> bf_tensor;
 
@@ -473,14 +465,14 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto enqueue_result = EnqueueTensorWindowPut(
       bf_tensor, name, dst_weights, device, require_mutex,
       [handle, name, timeline_ptr, tid, tensor, self_weight,
-       associate_with_weight](const Status& status) {
+       associated_with_p](const Status& status) {
         if (status.ok()) {
           if (self_weight != 1.0) {
             tensor.mul_(self_weight);
           }
-          if (associate_with_weight) {
-            double old_value = GetWinAssociateWeight(name);
-            SetWinAssociateWeight(name, old_value * self_weight);
+          if (associated_with_p) {
+            double old_value = GetWinAssociatedP(name);
+            SetWinAssociatedP(name, old_value * self_weight);
           }
         }
         win_handle_manager.MarkDone(handle, status);
@@ -505,7 +497,7 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   auto handle = win_handle_manager.AllocateHandle();
   // Have to get that value here since it will be used in callback, of which
   // might change will wait for communication.
-  bool associate_with_weight = common::GetWinOpsWithAssociatedWeightState();
+  bool associated_with_p = common::GetWinOpsWithAssociatedPState();
 
   std::shared_ptr<TorchTensor> bf_tensor;
 
@@ -523,14 +515,14 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
       [handle, name, timeline_ptr, tid, tensor, self_weight,
-       associate_with_weight](const Status& status) {
+       associated_with_p](const Status& status) {
         if (status.ok()) {
           if (self_weight != 1.0) {
             tensor.mul_(self_weight);
           }
-          if (associate_with_weight) {
-            double old_value = GetWinAssociateWeight(name);
-            SetWinAssociateWeight(name, old_value * self_weight);
+          if (associated_with_p) {
+            double old_value = GetWinAssociatedP(name);
+            SetWinAssociatedP(name, old_value * self_weight);
           }
         }
         win_handle_manager.MarkDone(handle, status);
@@ -623,8 +615,8 @@ void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
   ThrowIfError(status);
 }
 
-void SetWinOpsWithAssociatedWeightState(bool value) {
-  common::SetWinOpsWithAssociatedWeightState(value);
+void SetWinOpsWithAssociatedPState(bool value) {
+  common::SetWinOpsWithAssociatedPState(value);
 }
 
 void AddWinOpsIntoPybind(py::module& m) {
@@ -688,8 +680,8 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_mutex_acquire", &DoWinMutexAcquire);
   m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
 
-  m.def("bluefog_torch_win_associated_weight", &GetWinAssociateWeight);
-  m.def("bluefog_torch_set_win_ops_with_associated_weight_state", &SetWinOpsWithAssociatedWeightState);
+  m.def("bluefog_torch_win_associated_p", &GetWinAssociatedP);
+  m.def("bluefog_torch_set_win_ops_with_associated_p_state", &SetWinOpsWithAssociatedPState);
 }
 
 }  // namespace torch

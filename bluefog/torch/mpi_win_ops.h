@@ -67,7 +67,7 @@ class WinTorchStorageManager {
 
   // Sum the local tensor with all neighbor tensors.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
-                       bool associated_with_weight);
+                       bool associated_with_p);
 
   // Weighted Average the local tensor with neighbor tensors according to
   // weights map. Weights map { rank: weights }. Rank has to be (in-)neighbor
@@ -77,16 +77,16 @@ class WinTorchStorageManager {
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
                        double self_weight,
                        const std::unordered_map<int, double>& neighbor_weights,
-                       bool associated_with_weight);
+                       bool associated_with_p);
 
   // This is just utility functions and never used the weights defined in the
   // the mpi_context.
   bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
                        const std::vector<int>& source_ranks,
-                       bool associated_with_weight);
+                       bool associated_with_p);
   bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
                        const std::vector<int>& source_ranks,
-                       bool associated_with_weight);
+                       bool associated_with_p);
 
   // Clear all storage/reference to neighbor TorchTensor.
   void ClearAll();
@@ -194,9 +194,8 @@ extern "C" void bluefog_torch_win_wait(int handle);
 extern "C" void bluefog_torch_win_lock(char* name);
 extern "C" void bluefog_torch_win_unlock(char* name);
 
-extern "C" double bluefog_torch_win_associated_weight(char* name);
-extern "C" void bluefog_torch_set_win_ops_with_associated_weight_state(
-    bool value);
+extern "C" double bluefog_torch_win_associated_p(char* name);
+extern "C" void bluefog_torch_set_win_ops_with_associated_p_state(bool value);
 
 extern "C" void bluefog_torch_win_mutex_acquire(char* name,
                                                 const std::vector<int>& ranks,

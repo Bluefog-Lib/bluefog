@@ -83,8 +83,7 @@ class MPIController {
                    const std::string& name, int device);
   Status WinFree(const std::string& name, int device);
   Status WinFreeAll();
-  Status WinSync(const std::string& name, int device,
-                 bool with_associated_weight);
+  Status WinSync(const std::string& name, int device, bool with_associated_p);
   Status WinFence(const std::string& name);
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
@@ -102,10 +101,10 @@ class MPIController {
   Status WinMutexRelease(const std::string& name,
                          const std::vector<int>& release_ranks, bool is_sync);
 
-  Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
-                                             const int rank, double* weight);
-  Status SetAssociatedWinWeightByNameAndRank(const std::string& name,
-                                             const int rank, double weight);
+  Status GetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
+                                        double* weight);
+  Status SetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
+                                        double weight);
 
  protected:
   // Outside dependencies

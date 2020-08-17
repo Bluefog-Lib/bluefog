@@ -52,8 +52,8 @@ MPIContext mpi_context;
 NCCLContext nccl_context;
 #endif
 
-// If set, win_ops will execute the same ops on associated_weight as well.
-static bool global_with_associated_weight_state = false;
+// If set, win_ops will execute the same ops on associated p as well.
+static bool global_with_associated_p_state = false;
 
 }  // namespace
 
@@ -614,7 +614,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
   e.dst_weights = dst_weights;
-  e.win_ops_with_associated_weight = global_with_associated_weight_state;
+  e.win_ops_with_associated_p = global_with_associated_p_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -635,7 +635,7 @@ Status EnqueueTensorWindowAccumulate(
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
-  e.win_ops_with_associated_weight = global_with_associated_weight_state;
+  e.win_ops_with_associated_p = global_with_associated_p_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -695,7 +695,7 @@ Status WindowSync(const std::string& name, int device) {
     return SHUT_DOWN_ERROR;
   }
   Status status = bluefog_global.controller->WinSync(
-      name, device, global_with_associated_weight_state);
+      name, device, global_with_associated_p_state);
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -796,30 +796,30 @@ Status GetBluefogTimeline(Timeline*& timeline) {
   return Status::OK();
 }
 
-Status GetAssociatedWinWeightByNameAndRank(const std::string& name,
+Status GetWinAssociatedPByNameAndRank(const std::string& name,
                                            const int rank, double* weight) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  return bluefog_global.controller->GetAssociatedWinWeightByNameAndRank(
+  return bluefog_global.controller->GetWinAssociatedPByNameAndRank(
       name, rank, weight);
 }
 
-Status SetAssociatedWinWeightByNameAndRank(const std::string& name,
+Status SetWinAssociatedPByNameAndRank(const std::string& name,
                                            const int rank, const double weight) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  return bluefog_global.controller->SetAssociatedWinWeightByNameAndRank(
+  return bluefog_global.controller->SetWinAssociatedPByNameAndRank(
       name, rank, weight);
 }
 
-void SetWinOpsWithAssociatedWeightState(bool value) {
-  global_with_associated_weight_state = value;
+void SetWinOpsWithAssociatedPState(bool value) {
+  global_with_associated_p_state = value;
 }
 
-bool GetWinOpsWithAssociatedWeightState() {
-  return global_with_associated_weight_state;
+bool GetWinOpsWithAssociatedPState() {
+  return global_with_associated_p_state;
 }
 
 }  // namespace common
