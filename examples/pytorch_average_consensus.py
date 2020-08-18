@@ -100,10 +100,8 @@ else:
     outdegree = len(bf.out_neighbor_ranks())
     indegree = len(bf.in_neighbor_ranks())
     # For push-sum algorithm we need extra scalar p to associated with data x.
-    p = torch.DoubleTensor([1.0]).to(x.device)
-    x_ext = torch.cat([x, p], 0)
-
-    bf.win_create(x_ext, name="x_ext", zero_init=True)
+    bf.turn_on_win_ops_with_associated_p()
+    bf.win_create(x, name="x", zero_init=True)
     for i in range(args.max_iters):
         if args.enable_dynamic_topology:
             num_out_neighbors = len(bf.out_neighbor_ranks())
@@ -114,22 +112,24 @@ else:
             dst_weights = {rank: 1.0 / (outdegree + 1)
                            for rank in bf.out_neighbor_ranks()}
             self_weight = 1/(1+outdegree)
-
-        bf.win_accumulate(x_ext, name="x_ext", self_weight=self_weight,
+        bf.win_accumulate(x, name="x", self_weight=self_weight,
                           dst_weights=dst_weights, require_mutex=True)
-
-        bf.win_update_then_collect(name="x_ext")
-        mse.append(torch.norm(x_ext[:-1]/x_ext[-1]-x_bar, p=2) / torch.norm(x_bar, p=2))
+        # bf.barrier()
+        bf.win_update_then_collect(name="x")
+        associated_p = bf.win_associated_p(name="x")
+        mse.append(torch.norm(x/associated_p-x_bar, p=2) / torch.norm(x_bar, p=2))
 
     # Do not forget to sync at last!
     bf.barrier()
-    bf.win_update_then_collect(name="x_ext")
-
-    mse.append(torch.norm(x_ext[:-1]/x_ext[-1]-x_bar, p=2) / torch.norm(x_bar, p=2))
-    p_push_sum = bf.allreduce(x_ext[-1], average=True)
+    bf.win_update_then_collect(name="x")
+    associated_p = bf.win_associated_p(name="x")
+    print(f"associated p at {bf.rank()} is {associated_p}")
+    bf.turn_off_win_ops_with_associated_p()
+    mse.append(torch.norm(x/associated_p - x_bar, p=2) / torch.norm(x_bar, p=2))
+    p_push_sum = bf.allreduce(torch.DoubleTensor([associated_p]), average=True)
     if bf.rank() == 0:
-        print("Total Sum of p should be 1, always", p_push_sum)
-    bf.win_free(name="x_ext")
+        print("Average of p should be the 1 always. Actuall value is ", p_push_sum)
+    bf.win_free(name="x")
 
 
 print("MSE at last iteration: ", mse[-1])

@@ -547,8 +547,6 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}  # store parameter -> handle
-        self._named_ps_weights = {}
-        self._named_extension_parameters = {}
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
@@ -566,13 +564,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                     raise KeyError(
                         "Cannot find parameter {} in the _parameter_names dictionary".format(name))
 
-                ps_weights = torch.Tensor([1.0]).to(p.data.dtype).to(p.data.device)
-                self._named_ps_weights[name] = ps_weights
-                # If do not modify in the C level, it is inevitable to copy
-                # the parameter once in the cat ops.
-                extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
-                self._named_extension_parameters[name] = extended_parameter
-                if not bf.win_create(extended_parameter, name, zero_init=True):
+                if not bf.win_create(p.data, name, zero_init=True):
                     raise ValueError(
                         "Cannot allocate MPI window for the parameter {}".format(name))
 
@@ -591,14 +583,13 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                 if not module.training:
                     continue
                 if p.requires_grad:
-                    ps_weights = self._named_ps_weights[full_name]
-                    extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
-                    self._named_extension_parameters[name] = extended_parameter
+                    bf.turn_on_win_ops_with_associated_p()
                     handle = bf.win_accumulate_nonblocking(
-                        tensor=extended_parameter, name=full_name,
+                        tensor=p.data, name=full_name,
+                        self_weight=self.self_weight,
                         dst_weights=self.dst_weights,
                         require_mutex=True)
-
+                    bf.turn_off_win_ops_with_associated_p()
                     self._handles[p] = handle
         return hook
 
@@ -640,14 +631,11 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
             for p, handle in self._handles.items():
                 _ = bf.win_wait(handle)
                 name = self._parameter_names.get(p)
-                extended_parameter = self._named_extension_parameters[name]
-                extended_parameter.mul_(self.self_weight)
-                # Last dimension is the push_sum weights and we want parameter / weight
-                extended_parameter = bf.win_update_then_collect(name=name)
-                corrected_parameter = (
-                    extended_parameter[:-1] / extended_parameter[-1]).reshape(p.shape)
-                # Update p to the average of neighbors.
-                p.set_(corrected_parameter)
+                bf.turn_on_win_ops_with_associated_p()
+                p.set_(bf.win_update_then_collect(name=name))
+                bf.turn_off_win_ops_with_associated_p()
+                associated_p = bf.win_associated_p(name)
+                p.data.div_(associated_p)
 
         self._handles.clear()
         self._synchronized = True
