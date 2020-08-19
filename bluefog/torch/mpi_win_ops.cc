@@ -356,9 +356,9 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   bool associated_with_p = common::GetWinOpsWithAssociatedPState();
   Status status = common::WindowSync(name, device);
 
-  ::torch::Tensor tensor_buffer = tensor;
+  ::torch::Tensor cpu_buffer = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    tensor_buffer =
+    cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
@@ -368,20 +368,20 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   // weights are 1/(neighbor size+1).
   if (internal_avg) {
     // Weighted averaging with neighbors' tensors happens in-place.
-    if (!win_storage_manager.AvgWithNeighbor(name, tensor_buffer, self_weight,
+    if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight,
                                              neighbor_weights, associated_with_p)) {
       if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
-    if (!win_storage_manager.SumWithNeighbor(name, tensor_buffer, associated_with_p)) {
+    if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer, associated_with_p)) {
       if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
     double neighbor_size = neighbor_weights.size() + 1.0;
-    tensor_buffer.div_(neighbor_size);
+    cpu_buffer.div_(neighbor_size);
     if (associated_with_p) {
       double associated_p = GetWinAssociatedP(name);
       SetWinAssociatedP(name, associated_p / neighbor_size);
@@ -397,7 +397,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
     with_device device_guard(device);
-    tensor.copy_(tensor_buffer);
+    tensor.copy_(cpu_buffer);
     // TODO(ybc) When pull_get is used in GPU, we need to copy twice here. Optimizer it.
     // win_storage_manager.SetSelfStorageByName(name, tensor);
   }
