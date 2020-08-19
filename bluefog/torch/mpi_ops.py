@@ -816,7 +816,7 @@ def win_put_nonblocking(tensor: torch.Tensor, name: str,
         self_weight = 1.0
     if not set(dst_weights.keys()).issubset(set(out_neighbor_ranks())):
         raise ValueError(
-            "The key of dst_weights should only containranks that "
+            "The key of dst_weights should only contain ranks that "
             " belong to out-neighbors (self-rank is not allowed).")
     handle = getattr(mpi_lib, function)(
         tensor, name, self_weight, dst_weights, require_mutex)
