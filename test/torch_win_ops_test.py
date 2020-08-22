@@ -17,15 +17,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import inspect
+import itertools
+import time
+import warnings
+import unittest
+
 from bluefog.common import topology_util
 import bluefog.torch as bf
 import torch
 import numpy as np
-import inspect
-import itertools
-import time
-import unittest
-import warnings
 warnings.simplefilter("ignore")
 
 
@@ -51,8 +52,7 @@ class WinOpsTests(unittest.TestCase):
     @staticmethod
     def cast_and_place(tensor, dtype):
         if dtype.is_cuda:
-            device_id = bf.local_rank()
-            device_id = 0
+            device_id = bf.local_rank() % torch.cuda.device_count()
             return tensor.cuda(device_id).type(dtype)
         return tensor.type(dtype)
 
@@ -68,7 +68,7 @@ class WinOpsTests(unittest.TestCase):
 
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         dims = [1, 2, 3]
@@ -98,7 +98,7 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
         if size <= 1:
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
@@ -124,7 +124,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -194,7 +194,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         indegree = int(np.ceil(np.log2(size)))
         expected_result = rank * (indegree+1)
@@ -229,7 +229,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -270,7 +270,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -314,7 +314,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -355,7 +355,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
@@ -391,7 +391,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
@@ -433,7 +433,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         avg_value = rank + ((rank-1) % size) * 1.23 / 2.0
 
@@ -468,7 +468,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -503,7 +503,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         indegree = int(np.ceil(np.log2(size)))
@@ -541,7 +541,7 @@ class WinOpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # We use given destination to form a (right-)ring.
         avg_value = (rank + 1.23*((rank-1) % size)) / float(2)
@@ -577,20 +577,24 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test over at least 3 nodes".format(fname))
             return
         bf.set_topology(topology_util.FullyConnectedGraph(size))
+        tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+        window_name = "win_mutex_full"
+        bf.win_create(tensor, window_name)
+
         if rank == 0:
-            with bf.win_mutex():
+            with bf.win_mutex(window_name):
                 bf.barrier()
-                time.sleep(2.01)
+                time.sleep(1.01)
         else:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex():
+            with bf.win_mutex(window_name):
                 time.sleep(0.001)
             t_end = time.time()
-            assert (t_end - t_start) > 2, \
-                "The mutex acquire time should be longer than 2 second"
-            assert (t_end - t_start) < 3, \
-                "The mutex acquire time should be shorter than 3 second"
+            assert (t_end - t_start) > 1, \
+                "The mutex acquire time should be longer than 1 second"
+            assert (t_end - t_start) < 2, \
+                "The mutex acquire time should be shorter than 2 second"
 
     def test_win_mutex_given_ranks(self):
         size = bf.size()
@@ -601,24 +605,27 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test above 4 nodes".format(fname))
             return
 
+        tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+        window_name = "win_mutex_given_ranks"
+        bf.win_create(tensor, window_name)
         if rank == 0:
-            with bf.win_mutex([0]):
+            with bf.win_mutex(window_name, [0]):
                 bf.barrier()
-                time.sleep(2.01)
+                time.sleep(1.01)
         elif rank == 1:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex([1]):
+            with bf.win_mutex(window_name, [1]):
                 time.sleep(0.001)
             t_end = time.time()
             assert (t_end - t_start) < 0.1
         elif rank == 2:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex([0]):
+            with bf.win_mutex(window_name, [0]):
                 time.sleep(0.001)
             t_end = time.time()
-            assert (t_end - t_start) > 2
+            assert (t_end - t_start) > 1
         else:
             bf.barrier()
 

@@ -28,7 +28,7 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
-from bluefog.common.topology_util import PowerTwoRingGraph, RingGraph, RingGraph
+from bluefog.common.topology_util import PowerGraph, RingGraph, RingGraph
 from bluefog.common.topology_util import IsTopologyEquivalent
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
@@ -87,7 +87,7 @@ class BasicsTests(unittest.TestCase):
 
         topology = bf.load_topology()
         assert isinstance(topology, nx.DiGraph)
-        assert IsTopologyEquivalent(topology, PowerTwoRingGraph(size))
+        assert IsTopologyEquivalent(topology, PowerGraph(size))
 
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
@@ -103,7 +103,7 @@ class BasicsTests(unittest.TestCase):
         elif size == 1:
             expected_topology = nx.DiGraph(np.array([[1.0]]))
         else:
-            expected_topology = PowerTwoRingGraph(size)
+            expected_topology = PowerGraph(size)
         topology = bf.load_topology()
         assert isinstance(topology, nx.DiGraph)
         assert IsTopologyEquivalent(expected_topology, topology)
@@ -112,7 +112,7 @@ class BasicsTests(unittest.TestCase):
         bf.init()
         rank = bf.rank()
         size = bf.size()
-        bf.set_topology(PowerTwoRingGraph(size))
+        bf.set_topology(PowerGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 

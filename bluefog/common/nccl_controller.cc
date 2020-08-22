@@ -136,6 +136,14 @@ void NCCLController::Initialize() {
 #if NCCL_MINOR < 7
   InitPeerCommunicator();
 #endif
+  const char* bluefog_num_finalizer_threads =
+      std::getenv("BLUEFOG_NUM_FINALIZER_THREADS");
+  const int num_finalizer_threads =
+      bluefog_num_finalizer_threads == nullptr
+          ? 50
+          : std::strtol(bluefog_num_finalizer_threads, nullptr, 10);
+
+  finalizer_thread_pool.create(num_finalizer_threads);
   Status timeline_status = GetBluefogTimeline(timeline_ptr_);
   if (!timeline_status.ok()) {
     BFLOG(INFO) << "Timeline is not used because " << timeline_status.reason();
@@ -248,8 +256,7 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   }
 
   auto tid = std::this_thread::get_id();
-  // TODO: use thread pool or single thread for callbacks
-  std::thread finalizer_thread([this, entry, tid]() mutable {
+  finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -260,8 +267,6 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
     entry.callback(Status::OK());
   });
-
-  finalizer_thread.detach();
 
   delete[] recvcounts;
   delete[] displcmnts;
@@ -284,8 +289,7 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   }
 
   auto tid = std::this_thread::get_id();
-  // TODO: use thread pool or single thread for callbacks
-  std::thread finalizer_thread([this, entry, tid]() mutable {
+  finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -296,8 +300,6 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
     entry.callback(Status::OK());
   });
-
-  finalizer_thread.detach();
 }
 
 void NCCLController::Broadcast(TensorTableEntry& entry) {
@@ -323,8 +325,7 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   }
 
   auto tid = std::this_thread::get_id();
-  // TODO: use thread pool or single thread for callbacks
-  std::thread finalizer_thread([this, entry, tid]() mutable {
+  finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -335,8 +336,6 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
     entry.callback(Status::OK());
   });
-
-  finalizer_thread.detach();
 }
 
 void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
@@ -390,8 +389,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
-  // TODO: use thread pool or single thread for callbacks
-  std::thread finalizer_thread([this, entry, tid]() mutable {
+  finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -404,7 +402,6 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
     entry.callback(Status::OK());
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
   });
-  finalizer_thread.detach();
 
 #else
   ncclGroupStart();
@@ -498,8 +495,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   timeline_ptr->ActivityEnd(entry.tensor_name);
 
-  void* buffer_data = (void*)entry.output->data();
-
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
@@ -531,6 +526,20 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
     }
   } else {
+    int rank = mpi_ctx_.rank_;
+    int size = mpi_ctx_.size_;
+    std::sort(entry.send_neighbors->begin(), entry.send_neighbors->end(),
+              [rank, size](int a, int b) {
+                int a_index = a >= rank ? a - rank : a - rank + size;
+                int b_index = b >= rank ? b - rank : b - rank + size;
+                return a_index - b_index;
+              });
+    std::sort(entry.recv_neighbors->begin(), entry.recv_neighbors->end(),
+              [rank, size](int a, int b) {
+                int a_index = a >= rank ? a - rank : a - rank + size;
+                int b_index = b >= rank ? b - rank : b - rank + size;
+                return b_index - a_index;
+              });
     for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
       int recv_rank = entry.recv_neighbors->at(i);
       void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
@@ -546,8 +555,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
-  // TODO: use thread pool or single thread for callbacks
-  std::thread finalizer_thread([this, entry, tid]() mutable {
+  finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -560,7 +568,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     entry.callback(Status::OK());
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
   });
-  finalizer_thread.detach();
 #else
   ncclGroupStart();
   uint recv_rank_index = 0;

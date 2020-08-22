@@ -989,6 +989,7 @@ def win_wait(handle: int) -> bool:
     return True
 
 
+# Lock for MPI Open a passive RMA epcoh, which has nothing to do with mutex.
 @contextmanager
 def win_lock(name: str):
     """ win_lock context manager. Within the context, an RMA access epoch
@@ -1020,33 +1021,35 @@ def _win_unlock(name: str):
 
 
 @contextmanager
-def win_mutex(ranks: List[int] = None, exclusive=True):
+def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
     """ A win object implemented mutex context manager. Note, there are N distributed
     mutex over N corresponding processes.
 
     Args:
-        ranks: The mutex associated with the ranks will be acquired.
-            If not presented, out_neighbor ranks will be used.
-        exclusive: If not exclusive, multiple processes can hold the mutex for the ranks
-            but it cannot hold with one exclusive one.
+        name: Used to get the mutex for the window that registered by name.
+        ranks: The mutex associated with the specified ranks is acquired.
+            If not presented, the mutex with all out_neighbor ranks are acquired.
+        exclusive: If not exclusive, multiple (inclusive) processes can hold the mutex for
+            the ranks. While only one exclusive processes (no other inclusive ones) can
+            acquire the mutex.
 
     Example:
         >>> bf.win_create(tensor, name)
-        >>> with win_mutex():
+        >>> with win_mutex(name):
                 tensor = bf.win_update_then_collect(name)
         >>> win_put(tensor, name)
     """
     _ranks = out_neighbor_ranks() if ranks is None else ranks
-    _win_mutex_acquire(_ranks, exclusive)
+    _win_mutex_acquire(name, _ranks, exclusive)
     try:
         yield
     finally:
-        _win_mutex_release(_ranks, exclusive)
+        _win_mutex_release(name, _ranks, exclusive)
 
 
-def _win_mutex_acquire(ranks, exclusive):
-    mpi_lib.bluefog_torch_win_mutex_acquire(ranks, exclusive)
+def _win_mutex_acquire(name, ranks, exclusive):
+    mpi_lib.bluefog_torch_win_mutex_acquire(name, ranks, exclusive)
 
 
-def _win_mutex_release(ranks, exclusive):
-    mpi_lib.bluefog_torch_win_mutex_release(ranks, exclusive)
+def _win_mutex_release(name, ranks, exclusive):
+    mpi_lib.bluefog_torch_win_mutex_release(name, ranks, exclusive)

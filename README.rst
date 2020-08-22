@@ -98,7 +98,7 @@ how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
    bf.init()
 
    # Setup the topology for communication
-   bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+   bf.set_topology(topology_util.PowerGraph(bf.size()))
    outdegree = len(bf.out_neighbor_ranks())
    indegree = len(bf.in_neighbor_ranks())
 

@@ -46,6 +46,41 @@ void WindowManager::FreeAllWins() {
   wins_tensor_vec_.clear();
 }
 
+bool WindowManager::InitializeMutexWin(const MPI_Comm& mpi_comm) {
+  int self_rank = 0;
+  int global_size = 1;
+  MPI_Comm_rank(mpi_comm, &self_rank);
+  MPI_Comm_size(mpi_comm, &global_size);
+  if (global_size <= 1) {
+    // We don't need any mutex for this case.
+    return false;
+  }
+
+  if (!mutex_win_) {
+     mutex_win_  = std::make_shared<MPI_Win>();
+  }
+  // We only need one value for self mutex.
+  mutex_mem_ = std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
+
+  int element_size = 0;
+  MPI_Type_size(MPI_INT, &element_size);
+  int win_size = 1 * element_size;
+  MPI_Win_create((void *)mutex_mem_.get(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
+                 mutex_win_.get());
+  return true;
+}
+
+bool WindowManager::DestroyMutexWin() {
+  if (!mutex_win_) {
+    mutex_mem_.reset();
+    return false;
+  }
+  MPI_Win_free(mutex_win_.get());
+  mutex_win_.reset();
+  mutex_mem_.reset();
+  return true;
+}
+
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {
   return GetMPIDataType(tensor->dtype());
 }
@@ -192,7 +227,6 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
   if (graph_comm != MPI_COMM_NULL) {
     UnregisterAllWindowName();
-    DestroyWinMutex();
     DisableTopoWeights();
     MPI_Comm_free(&graph_comm);
   }
@@ -239,6 +273,7 @@ bool MPIContext::RegisterWindowName(const std::string& name) {
     return false;
   }
   auto win_manager_ptr = std::make_shared<WindowManager>();
+  win_manager_ptr->InitializeMutexWin(mpi_comm);
   named_win_map[name] = win_manager_ptr;
   return true;
 }
@@ -257,6 +292,7 @@ bool MPIContext::UnregisterWindowName(const std::string& name) {
     return false;
   }
   it->second->FreeAllWins();
+  it->second->DestroyMutexWin();
   named_win_map.erase(it);
   return true;
 }
@@ -264,63 +300,9 @@ bool MPIContext::UnregisterWindowName(const std::string& name) {
 bool MPIContext::UnregisterAllWindowName() {
   for (auto& kv : named_win_map) {
     kv.second->FreeAllWins();
+    kv.second->DestroyMutexWin();
   }
   named_win_map.clear();
-  return true;
-}
-
-bool MPIContext::InitializeWinMutex() {
-  BFLOG(TRACE) << "InitializeWinMutex is called";
-  if (!win_mutex.empty()) {
-    return false;
-  }
-
-  int self_rank = 0;
-  int global_size = 1;
-  MPI_Comm_rank(mpi_comm, &self_rank);
-  MPI_Comm_size(mpi_comm, &global_size);
-  if (global_size <= 1) {
-    // We don't need any mutex for this case.
-    return false;
-  }
-
-  // We only need one value for self mutex.
-  self_mutex_mem = std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
-
-  int element_size = 0;
-  int win_size = 0;
-  void* data_buf;
-
-  for (int rank = 0; rank < global_size; rank++) {
-    auto mpi_win_ptr = std::make_shared<MPI_Win>();
-    if (rank == self_rank) {
-      data_buf = self_mutex_mem.get();
-      MPI_Type_size(MPI_INT, &element_size);
-      win_size = 1 * element_size;
-    } else {
-      data_buf = nullptr;
-      element_size = 1;
-      win_size = 0;
-    }
-    MPI_Win_create(data_buf, win_size, element_size, MPI_INFO_NULL,
-                   GetMPICommunicator(Communicator::GLOBAL),
-                   mpi_win_ptr.get());
-    win_mutex.push_back(mpi_win_ptr);
-  }
-  return true;
-}
-
-bool MPIContext::DestroyWinMutex() {
-  BFLOG(TRACE) << "DestroyWinMutex is called";
-  if (win_mutex.empty()) {
-    return false;
-  } 
-
-  for (auto mpi_win_ptr : win_mutex) {
-    MPI_Win_free(mpi_win_ptr.get());
-  }
-  win_mutex.clear();
-  self_mutex_mem.reset();
   return true;
 }
 

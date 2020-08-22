@@ -75,6 +75,11 @@ define this number as the maximum size of win_ops can send.
 
 * BLUEFOG_MAX_WIN_SENT_LENGTH (Default: 2000)
 
+When the NCCL implementation is used, the callback functions are executed through
+a thread pool. The size of thread pool can be controlled by following:
+
+* BLUEFOG_NUM_FINALIZER_THREADS (Default: 50)
+
 Installation
 ------------
 
