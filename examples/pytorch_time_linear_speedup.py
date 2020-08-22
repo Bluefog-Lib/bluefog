@@ -18,6 +18,7 @@ import torch
 import matplotlib.pyplot as plt
 import argparse
 import time
+import numpy as np
 
 import bluefog.torch as bf
 from bluefog.common import topology_util
@@ -33,8 +34,13 @@ parser.add_argument(
 parser.add_argument(
     "--plot-interactive", action='store_true', help="Use plt.show() to present the plot."
 )
+parser.add_argument('--no-autograd', action='store_true', default=False,
+                    help='calculate gradient by hand')
 parser.add_argument(
     "--non-blocking", action='store_true', help="use non-blocking operations"
+)
+parser.add_argument(
+    "--use-Abar", action='store_true', help="use Abar in exact diffusion algorithm"
 )
 parser.add_argument('--enable-dynamic-topology', action='store_true',
                     default=False, help=('Enable each iteration to transmit one neighbor ' +
@@ -66,8 +72,14 @@ parser.add_argument(
     default='logistic_regression'
 )
 parser.add_argument(
-    "--topology", help="this example supports mesh, star, ring, and power_two_ring",
+    "--topology", help="this example supports mesh, star, ring, power_two_ring and symmetric_power_two_ring",
     default='ring'
+)
+parser.add_argument(
+    "--centralized-lr", action='store', type=float, default=1e-1, help="learning rate"
+)
+parser.add_argument(
+    "--centralized-max-iter", action='store', type=int, default=5000, help="maximum iteration number."
 )
 
 args = parser.parse_args()
@@ -102,11 +114,25 @@ def generate_data(m, n, task='logistic_regression'):
 
 def _loss_step(X, y, x_, loss='logistic_regression', **kwargs):
     """Calculate gradient via pytorch autograd."""
-    
+
+    calculate_by_hand = kwargs.get('calculate_by_hand', False)
+
     if loss == 'logistic_regression':
         rho = kwargs.get('rho', 1e-1)
-        loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
-                    0.5*rho*torch.norm(x_, p=2)
+
+        if not calculate_by_hand:
+            loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
+                        0.5*rho*torch.norm(x_, p=2)
+
+        else:
+            loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
+                        0.5*rho*torch.norm(x_, p=2)
+                        
+            prob = torch.exp( -y * torch.matmul(X, x_.data))
+            alpha = prob / (1+prob)
+            x_.grad = rho * x_.data - torch.mean(alpha*y*X, dim = 0).reshape(-1,1)
+            return loss_
+
     elif loss == 'linear_regression':
         loss_ = 0.5*torch.mean(torch.norm(X.mm(x_) - y, p=2))
 
@@ -153,7 +179,7 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
     for _ in range(maxite):
         # calculate gradient via pytorch autograd
         loss_step(X, y, w_opt, tensor_name='allreduce.gradient', \
-                            loss=loss, rho=rho)
+                            loss=loss, rho=rho, calculate_by_hand=args.no_autograd)
         # global gradient
         grad = bf.allreduce(w_opt.grad.data, name='gradient')
 
@@ -162,7 +188,7 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
         w_opt.grad.data.zero_()
 
     loss_step(X, y, w_opt, tensor_name='allreduce.gradient', \
-                        loss=loss, rho=rho)
+                        loss=loss, rho=rho, calculate_by_hand=args.no_autograd)
     grad = bf.allreduce(w_opt.grad.data, name='gradient')  # global gradient
 
     # evaluate the convergence of distributed logistic regression
@@ -210,7 +236,7 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
         loss_step(X, y, w, \
-            tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
+            tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho, calculate_by_hand=args.no_autograd)
 
         # diffusion
         phi = w - alpha * w.grad.data
@@ -242,6 +268,10 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 # ================================================================================
 def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, **kwargs):
 
+    time_start = time.time()
+    tol_reached = False
+    tol = kwargs.get('tol', 1e-6)
+
     if loss == 'logistic_regression':
         rho = kwargs.get('rho', 1e-1)
     elif loss == 'linear_regression':
@@ -253,7 +283,9 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
         )
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(
+    # self_weight, neighbor_weights = topology_util.GetWeights(
+    #     topology, bf.rank())
+    self_weight, neighbor_weights = topology_util.GetRecvWeights(
         topology, bf.rank())
 
     if bf.rank() == 0:
@@ -275,7 +307,8 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
     for i in range(maxite):
         # calculate loccal gradient via pytorch autograd
         loss_step(X, y, w, tensor_name='neighbor.allreduce.local_variable', \
-                            loss=loss, rho=rho)
+                            loss=loss, rho=rho,
+                            calculate_by_hand=args.no_autograd)
 
         # exact diffusion
         psi = w - alpha * w.grad.data
@@ -287,6 +320,18 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
         # record convergence
         if bf.rank() == 0:
             mse.append(torch.norm(w.data - w_opt.data, p=2))
+
+    # record convergence
+    if bf.rank() == 0:
+        mse_at_current_point = torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2)
+        mse.append(mse_at_current_point)
+    if torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2) < tol and not tol_reached:
+        time_end = time.time()
+        print('rank:{}, tol:{}, bluefog iterations:{}, time collapsed:{}'.format(bf.rank(),
+                torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2), i, time_end - time_start))
+        tol_reached = True
+
+    i += 1
 
     return w, mse
 
@@ -328,7 +373,8 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
-                        loss=loss, rho=rho)
+                        loss=loss, rho=rho,
+                        calculate_by_hand=args.no_autograd)
     q = w.grad.data.clone()  # q^0 = grad(w^0)
     w.grad.data.zero_()
 
@@ -354,7 +400,8 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 
                 # calculate local gradient
                 loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
-                                loss=loss, rho=rho)
+                                loss=loss, rho=rho,
+                                calculate_by_hand=args.no_autograd)
                 grad = w.grad.data.clone()
                 # q = bf.synchronize(q_handle) + grad - grad_prev
                 q = q + grad - grad_prev
@@ -379,7 +426,8 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
                 # q = bf.synchronize(q_handle)
                 # calculate local gradient
                 loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w', \
-                                loss=loss, rho=rho)
+                                loss=loss, rho=rho,
+                                calculate_by_hand=args.no_autograd)
                 grad = w.grad.data.clone()
                 q = grad - grad_prev + bf.synchronize(q_handle)
                 grad_prev = grad
@@ -392,7 +440,8 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
             if torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2) < tol and not tol_reached:
                 time_end = time.time()
                 print('rank:{}, tol:{}, bluefog iterations:{}, time collapsed:{}'.format(bf.rank(),
-                        torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2), i, time_end - time_start))
+                        torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2), i, time_end - time_start),
+                        flush=True)
                 tol_reached = True
 
             i += 1
@@ -438,7 +487,7 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     # push_diging.
     w = torch.zeros(2*n+1, 1).to(torch.double)
     x = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
-    loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
+    loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho, calculate_by_hand=args.no_autograd)
 
     grad = x.grad.data.clone()
     w[n:2*n] = grad
@@ -465,7 +514,7 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         w = bf.win_update_then_collect(name="w_buff")
 
         x.data = w[:n]/w[-1]
-        loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho)
+        loss_step(X, y, x, tensor_name='w_buff',loss=loss, rho=rho, calculate_by_hand=args.no_autograd)
         grad = x.grad.data.clone()
         x.grad.data.zero_()
 
@@ -488,6 +537,8 @@ if args.topology == 'mesh':
     bf.set_topology(topology_util.MeshGrid2DGraph(bf.size()), is_weighted=True)
 elif args.topology == 'power_two_ring':
     bf.set_topology(topology_util.PowerTwoRingGraph(bf.size()))
+elif args.topology == 'symmetric_power_two_ring':
+    bf.set_topology(topology_util.SymmetricPowerGraph(bf.size()))
 elif args.topology == 'star':
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
 elif args.topology == 'ring':
@@ -519,11 +570,13 @@ rho = 1e-2
 X_total, y_total = generate_data(m_total, n, task=args.task)
 X = X_total[bf.rank()*m:(bf.rank()+1)*m]
 y = y_total[bf.rank()*m:(bf.rank()+1)*m]
-print("rank {}: data size {} and dims {}".format(bf.rank(), m, n))
+X_np = X.numpy()
+print("rank {}: data size {}, dims {}, Lipschitz constant {}".format(bf.rank(), m, n, np.linalg.norm(X_np,ord=2)))
 
 # calculate the global solution w_opt via distributed gradient descent
-w_opt = distributed_grad_descent(X, y, loss=args.task, \
-                                    maxite=args.max_iter, alpha=args.lr, rho=rho)
+w_opt = distributed_grad_descent(X, y, loss=args.task,
+                                    maxite=args.centralized_max_iter,
+                                    alpha=args.centralized_lr, rho=rho)
 
 # solve the logistic regression with indicated decentralized algorithms
 print('max iteration is:', args.max_iter)
@@ -533,7 +586,7 @@ if args.method == 'diffusion':
 elif args.method == 'exact_diffusion':
     w, mse = exact_diffusion(X, y, w_opt, loss=args.task, \
                                 maxite=args.max_iter, alpha=args.lr, \
-                                use_Abar=True, rho=rho)
+                                use_Abar=args.use_Abar, rho=rho, tol=args.tol)
 elif args.method == 'gradient_tracking':
     w, mse = gradient_tracking(X, y, w_opt, loss=args.task, \
                 maxite=args.max_iter, alpha=args.lr, rho=rho, non_blocking=args.non_blocking, tol=args.tol)
@@ -552,7 +605,7 @@ if bf.rank() == 0:
     finalize_plot()
 
 # calculate local and global gradient
-loss_step(X, y, w, tensor_name='w_buff', loss=args.task, rho=rho)
+loss_step(X, y, w, tensor_name='w_buff', loss=args.task, rho=rho, calculate_by_hand=args.no_autograd)
 grad = bf.allreduce(w.grad.data, name='gradient')  # global gradient
 
 # evaluate the convergence of gradient tracking for logistic regression
