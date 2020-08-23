@@ -20,6 +20,7 @@
 #include "logging.h"
 #include "operations.h"
 #include "timeline.h"
+#include "half.h"
 
 namespace bluefog {
 namespace common {
@@ -99,6 +100,8 @@ MPI_Datatype MPIContext::GetMPIDataType(const DataType dtype) {
       return MPI_INT32_T;
     case DataType::BLUEFOG_INT64:
       return MPI_INT64_T;
+    case DataType::BLUEFOG_FLOAT16:
+      return mpi_float16_t;
     case DataType::BLUEFOG_FLOAT32:
       return MPI_FLOAT;
     case DataType::BLUEFOG_FLOAT64:
@@ -111,6 +114,10 @@ MPI_Datatype MPIContext::GetMPIDataType(const DataType dtype) {
       throw std::logic_error("Type " + DataType_Name(dtype) +
                              " is not supported in MPI mode.");
   }
+}
+
+MPI_Op MPIContext::GetMPISumOp(DataType dtype) {
+  return dtype == DataType::BLUEFOG_FLOAT16 ? mpi_float16_sum : MPI_SUM;
 }
 
 MPI_Comm MPIContext::GetMPICommunicator(Communicator comm) {
@@ -210,14 +217,19 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   MPI_Comm_rank(mpi_comm, &world_rank);
   MPI_Comm_rank(local_comm, &local_rank);
 
-
-
   // Create cross node communicator.
   MPI_Comm_split(mpi_comm, local_rank, world_rank, &cross_comm);
 
   // The real graph communicator creatation is late.
   graph_comm = MPI_COMM_NULL;
   DisableTopoWeights();
+
+  // Create custom MPI float16 data type.
+  MPI_Type_contiguous(2, MPI_BYTE, &mpi_float16_t);
+  MPI_Type_commit(&mpi_float16_t);
+
+  // Create custom MPI float16 summation op.
+  MPI_Op_create(&float16_sum, 1, &mpi_float16_sum);
 }
 
 void MPIContext::Finalize(MPIContextManager& ctx_manager) {
@@ -241,6 +253,14 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
   if (cross_comm != MPI_COMM_NULL) {
     MPI_Comm_free(&cross_comm);
+  }
+
+  if (mpi_float16_t != MPI_DATATYPE_NULL) {
+    MPI_Type_free(&mpi_float16_t);
+  }
+
+  if (mpi_float16_sum != MPI_OP_NULL) {
+    MPI_Op_free(&mpi_float16_sum);
   }
 
   if (should_finalize) {

@@ -32,6 +32,7 @@ from bluefog.common import topology_util
 
 
 EPSILON = 1e-5
+LOOSE_EPSILON = 1e-3
 TEST_ON_GPU = torch.cuda.is_available()
 
 class OpsTests(unittest.TestCase):
@@ -45,6 +46,17 @@ class OpsTests(unittest.TestCase):
 
     def setUp(self):
         bf.init()
+
+    def convert_cpu_fp16_to_fp32(self, *values):
+        # PyTorch doesn't support any CPU ops on FP16 tensors.
+        # In case we need to do ops, we will convert tensor to FP32 here.
+        result = []
+        for value in values:
+            if value.dtype in [torch.float16, torch.HalfTensor] and not value.is_cuda:
+                result.append(value.float())
+            else:
+                result.append(value)
+        return result
 
     def cast_and_place(self, tensor, dtype):
         if dtype.is_cuda:
@@ -60,7 +72,7 @@ class OpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
-                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -80,8 +92,8 @@ class OpsTests(unittest.TestCase):
                 output = bf.broadcast(
                     zero_tensor, root_rank=root_rank, name=name
                 )
-                max_difference = output.data.sub(tensor).max()
-                assert max_difference <= 1e-4
+                output, tensor = self.convert_cpu_fp16_to_fp32(output, tensor)
+                assert torch.allclose(output, tensor)
 
     def test_broadcast_inplace(self):
         """Test that the broadcast correctly broadcasts 1D, 2D, 3D tensors."""
@@ -92,7 +104,7 @@ class OpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
-                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -111,12 +123,15 @@ class OpsTests(unittest.TestCase):
 
             broadcasted_tensor = bf.broadcast_(tensor, root_rank=root_rank, name=name)
 
+            tensor, broadcasted_tensor, root_tensor = self.convert_cpu_fp16_to_fp32(tensor,
+                    broadcasted_tensor, root_tensor)
+
             assert (
-                tensor == broadcasted_tensor
-            ).min() == 1, "bf.broadcast_ does not modify source tensor"
+                torch.allclose(tensor, broadcasted_tensor)
+            ), "bf.broadcast_ does not modify source tensor"
             assert (
-                broadcasted_tensor == root_tensor
-            ).min() == 1, "bf.broadcast_ produces incorrect broadcasted tensor"
+                torch.allclose(broadcasted_tensor, root_tensor)
+            ), "bf.broadcast_ produces incorrect broadcasted tensor"
 
     def test_allreduce_avg(self):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
@@ -125,7 +140,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -139,8 +154,10 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
 
             output = bf.allreduce(tensor, average=True, name=name)
-            max_difference = output.data.sub(tensor).max()
-            assert max_difference <= 1e-4, "bf.allreduce(avg) produces incorrect tensor"
+            tensor, output = self.convert_cpu_fp16_to_fp32(tensor, output)
+            assert (
+                torch.allclose(tensor, output)
+            ), "bf.allreduce(avg) produces incorrect tensor"
 
     def test_allreduce_sum(self):
         """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
@@ -149,7 +166,8 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.DoubleTensor,]
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.IntTensor, torch.DoubleTensor,
+                  torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -163,8 +181,10 @@ class OpsTests(unittest.TestCase):
             name = "allreduce_tensor_{}_{}".format(dim, dtype)
 
             output = bf.allreduce(tensor, average=False, name=name)
-            max_difference = output.data.sub(tensor.mul(size)).max()
-            assert max_difference <= 1e-4, "bf.allreduce(sum) produces incorrect tensor"
+            tensor, output = self.convert_cpu_fp16_to_fp32(tensor, output)
+            assert (
+                torch.allclose(output, tensor.mul(size))
+            ), "bf.allreduce(sum) produces incorrect tensor"
 
     def test_allgather(self):
         """Test that the allgather correctly gathers 1D, 2D, 3D tensors."""
@@ -175,7 +195,7 @@ class OpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
-                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -187,6 +207,8 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             name = "allgather_tensor_{}_{}".format(dim, dtype)
             gathered = bf.allgather(tensor, name=name)
+
+            tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
 
             assert list(gathered.shape) == [2 * size] + [2] * (dim - 1)
 
@@ -211,7 +233,7 @@ class OpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
-                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -231,6 +253,8 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             name = "allgather_tensor_{}_{}".format(dim, dtype)
             gathered = bf.allgather(tensor, name=name)
+
+            tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
 
             expected_size = sum(tensor_sizes)
             assert list(gathered.shape) == [expected_size] + [17] * (dim - 1)
@@ -322,7 +346,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -350,7 +374,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -369,11 +393,13 @@ class OpsTests(unittest.TestCase):
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
                 neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (move) produces incorrect reduced shape"
             assert (
-                (reduced_tensor.data - (rank-1) % size).abs().max() < EPSILON
+                (reduced_tensor.data - (rank-1) % size).abs().max() < eps
             ), "bf.neighbor_allreduce (move) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_dynamic_topo_avg(self):
@@ -384,7 +410,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -407,12 +433,14 @@ class OpsTests(unittest.TestCase):
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
                 neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
             assert (
                 (reduced_tensor.data.mul_(num_indegree+1) -
-                 sum_value).abs().max() < EPSILON
+                 sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg(self):
@@ -423,7 +451,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -440,12 +468,14 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(tensor, name=name)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
             assert (
                 (reduced_tensor.data.mul_(num_indegree+1) -
-                 sum_value).abs().max() < EPSILON
+                 sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_meshgrid_topo(self):
@@ -459,7 +489,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -479,12 +509,14 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             reduced_tensor = bf.neighbor_allreduce(tensor)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
             assert (
                 (reduced_tensor.data.mul_(num_indegree+1) -
-                 sum_value).abs().max() < EPSILON
+                 sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_biring_topo(self):
@@ -498,7 +530,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -519,12 +551,14 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             reduced_tensor = bf.neighbor_allreduce(tensor)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
             assert (
                 (reduced_tensor.data.mul_(num_indegree+1) -
-                 sum_value).abs().max() < EPSILON
+                 sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_ring_topo(self):
@@ -538,7 +572,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -558,12 +592,14 @@ class OpsTests(unittest.TestCase):
                 tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
                 tensor = self.cast_and_place(tensor, dtype)
                 reduced_tensor = bf.neighbor_allreduce(tensor)
+                eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+                tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
                 assert (
                     list(reduced_tensor.shape) == [23] * dim
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
                 assert (
                     (reduced_tensor.data.mul_(num_indegree+1) -
-                     sum_value).abs().max() < EPSILON
+                     sum_value).abs().max() < eps
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_star_topo(self):
@@ -577,7 +613,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -600,12 +636,14 @@ class OpsTests(unittest.TestCase):
                 tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
                 tensor = self.cast_and_place(tensor, dtype)
                 reduced_tensor = bf.neighbor_allreduce(tensor)
+                eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+                tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
                 assert (
                     list(reduced_tensor.shape) == [23] * dim
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
                 assert (
                     (reduced_tensor.data.mul_(num_indegree+1) -
-                     sum_value).abs().max() < EPSILON
+                     sum_value).abs().max() < eps
                 ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_sum(self):
@@ -616,7 +654,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -634,6 +672,7 @@ class OpsTests(unittest.TestCase):
             nw = {i: 1.0 for i in neighbor_ranks}
             reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
                                                    neighbor_weights=nw)
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (sum) produces incorrect reduced shape"
@@ -652,7 +691,7 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -669,11 +708,13 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             reduced_tensor = bf.neighbor_allreduce(tensor)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced shape"
             assert (
-                (reduced_tensor.data - expect_result).abs().max() < EPSILON
+                (reduced_tensor.data - expect_result).abs().max() < eps
             ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced tensor"
 
     def test_neighbor_allgather(self):
@@ -685,7 +726,7 @@ class OpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
-                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor]
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -700,6 +741,7 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             gathered = bf.neighbor_allgather(tensor)
+            tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
 
             assert list(gathered.shape) == [
                 23 * num_indegree] + [23] * (dim - 1)
@@ -727,7 +769,7 @@ class OpsTests(unittest.TestCase):
         if bf.size() % 2:
             warnings.warn("Pair gossip only run with even processes. Skipped.")
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
@@ -739,6 +781,8 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             gossiped_tensor = bf.pair_gossip(tensor, target_rank)
+            tensor, gossiped_tensor = self.convert_cpu_fp16_to_fp32(tensor, gossiped_tensor)
+
             assert (
                 list(gossiped_tensor.shape) == [23] * dim
             ), "bf.pair_gossip produces incorrect reduced shape"
@@ -754,21 +798,22 @@ class OpsTests(unittest.TestCase):
             warnings.warn(
                 "Pair gossip(weighted) only run with even processes. Skipped.")
             return
-        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
             dtypes += [torch.cuda.DoubleTensor]
 
-        expect_result = 0.3*rank + 0.7*target_rank
+        expect_result = 0.25*rank + 0.75*target_rank
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            tensor = torch.FloatTensor(*([2] * dim)).fill_(1).mul_(rank)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
             gossiped_tensor = bf.pair_gossip(
-                tensor, target_rank, self_weight=0.3, pair_weight=0.7)
+                tensor, target_rank, self_weight=0.25, pair_weight=0.75)
+            tensor, gossiped_tensor = self.convert_cpu_fp16_to_fp32(tensor, gossiped_tensor)
             assert (
-                list(gossiped_tensor.shape) == [2] * dim
+                list(gossiped_tensor.shape) == [23] * dim
             ), "bf.pair_gossip(weighted) produces incorrect reduced shape"
             assert (
                 (gossiped_tensor.data - expect_result).abs().max() < EPSILON

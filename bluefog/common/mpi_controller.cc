@@ -124,7 +124,8 @@ void MPIController::Allreduce(TensorTableEntry& entry) {
   with_device device_guard(entry.device);
   int ret_code = MPI_Allreduce(
       sendbuf, buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
-      MPI_SUM, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+      mpi_ctx_.GetMPISumOp(entry.tensor->dtype()),
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (ret_code != MPI_SUCCESS) {
     throw std::runtime_error(
         "MPI_AllReduce failed, see MPI output for details.");
