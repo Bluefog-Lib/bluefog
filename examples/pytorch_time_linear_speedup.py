@@ -310,12 +310,37 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
                             loss=loss, rho=rho,
                             calculate_by_hand=args.no_autograd)
 
-        # exact diffusion
-        psi = w - alpha * w.grad.data
-        phi = psi + w.data - psi_prev
-        w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
-        psi_prev = psi.clone()
-        w.grad.data.zero_()
+        if args.enable_dynamic_topology:
+            self_weight, neighbor_weights, send_neighbors, enable_topo_check = dynamic_topology_update() 
+
+            if bf.rank() == 0 and i < 4:
+                print('self weights with A: {}\n'.format(self_weight))
+                print('neighbor weights with A:\n')
+                for k, v in neighbor_weights.items():
+                    print(k, v)
+
+            # construct A_bar
+            # do we need to change send_neighbors?
+            if use_Abar:
+                self_weight = (self_weight+1)/2
+                for k, v in neighbor_weights.items():
+                    neighbor_weights[k] = v/2    
+
+            # exact diffusion
+            psi = w - alpha * w.grad.data
+            phi = psi + w.data - psi_prev
+            w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, 
+                      send_neighbors, enable_topo_check, name='local variable')
+            psi_prev = psi.clone()
+            w.grad.data.zero_()  
+
+        else:  
+            # exact diffusion
+            psi = w - alpha * w.grad.data
+            phi = psi + w.data - psi_prev
+            w.data = bf.neighbor_allreduce(phi, self_weight, neighbor_weights, name='local variable')
+            psi_prev = psi.clone()
+            w.grad.data.zero_()
 
         # record convergence
         if bf.rank() == 0:
