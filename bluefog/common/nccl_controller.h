@@ -108,6 +108,11 @@ class NCCLContext {
   int cuda_device = -1;
   bool is_initialized = false;
   bool is_peer_initialized = false;
+
+  // Mimic MPI Windows used for one-sided communication. (Although there is no window)
+  std::unordered_map<std::string, std::shared_ptr<NCCLWindowManager>> named_win_map;
+
+  NCCLWindowIdManager window_id_manager;
 };
 
 class NCCLController {
@@ -147,9 +152,6 @@ private:
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
-
-  // MPI Windows used for one-sided communication.
-  std::unordered_map<std::string, std::shared_ptr<NCCLWindowManager>> named_win_map_;
   
   Timeline* timeline_ptr_;
 
