@@ -689,5 +689,54 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
   return res;
 }
 
+Status NCCLController::WinCreate(
+    std::shared_ptr<Tensor> tensor,
+    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+    const std::string& name, const int device) {
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  timeline_ptr->ActivityStart(name, "WIN_CREATE");
+  // We need to explicitly set the device here.
+  with_device device_guard(device);
+  // 1. Check the name is used or not.
+  auto it = named_win_map_.find(name);
+  if (it != named_win_map_.end()) {
+    return Status::InvalidArgument(std::string("Win_create failed with ") +
+                                   name);
+  }
+  // 2. Create a NCCL Window Manager.
+  auto nccl_window = std::make_shared<NCCLWindowManager>();
+  nccl_window->InitializeWinMemory(tensor, neighbor_tensors, device);
+  nccl_window->InitializeMutexWin();
+
+  // 3. Registered NCCL window manager.
+  named_win_map_[name] = nccl_window;
+
+  timeline_ptr->ActivityEnd(name);
+
+  return Status::OK();
+}
+
+Status NCCLController::WinFree(const std::string& name, int device) {
+  auto it = named_win_map_.find(name);
+  if (it == named_win_map_.end()) {
+    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+  }
+  it->second->FreeWindow();
+  it->second->DestroyMutexWin();
+  return Status::OK();
+}
+
+Status NCCLController::WinFreeAll() {
+  for(auto& kv: named_win_map_) {
+    kv.second->FreeWindow();
+    kv.second->DestroyMutexWin();
+  }
+  BFLOG(DEBUG) << "All NCCL Win has been freed.";
+  return Status::OK();
+}
+
 }  // namespace common
 }  // namespace bluefog
