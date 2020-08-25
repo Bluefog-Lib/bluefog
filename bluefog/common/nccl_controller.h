@@ -27,6 +27,7 @@
 #include "common.h"
 #include "logging.h"
 #include "mpi_context.h"
+#include "nccl_win.h"
 #include "tensor_queue.h"
 #include "timeline.h"
 
@@ -128,6 +129,13 @@ class NCCLController {
   void NeighborAllgather(TensorTableEntry& entries);
   void NeighborAllreduce(TensorTableEntry& entries);
 
+  Status WinCreate(std::shared_ptr<Tensor> tensor,
+                   std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+                   const std::string& name, int device);
+
+  Status WinFree(const std::string& name, int device);
+  Status WinFreeAll();
+
  protected:
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
@@ -139,6 +147,9 @@ private:
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
+
+  // MPI Windows used for one-sided communication.
+  std::unordered_map<std::string, std::shared_ptr<NCCLWindowManager>> named_win_map_;
   
   Timeline* timeline_ptr_;
 
