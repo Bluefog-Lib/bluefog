@@ -18,6 +18,32 @@
 namespace bluefog {
 namespace common {
 
+int NCCLWindowIdManager::AllocateId() {
+  int id = last_id_.fetch_add(1) + 1;
+  return id;
+}
+
+Status NCCLWindowIdManager::RegisterIdAndName(int id, const std::string& name) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  name_to_id_[name] = id;
+  id_to_name_[id] = name;
+  return Status::OK();
+}
+
+Status NCCLWindowIdManager::UnregisterName(const std::string& name) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  auto it = name_to_id_.find(name);
+  if (it == name_to_id_.end()) {
+    return Status::InvalidArgument("Cannot find name " + name +
+                                   "in Window Id Manager");
+  }
+  int id = it->second;
+  name_to_id_.erase(it);
+  id_to_name_.erase(id_to_name_.find(id));
+
+  return Status::OK();
+}
+
 bool NCCLWindowManager::InitializeWinMemory(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors, const int device) {

@@ -16,7 +16,9 @@
 #ifndef BLUEFOG_COMMON_NCCL_WIN_H
 #define BLUEFOG_COMMON_NCCL_WIN_H
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include "common.h"
@@ -24,7 +26,36 @@
 namespace bluefog {
 namespace common {
 
-class NCCLWindowManager{
+struct NCCLWinRequest {
+  int source;
+  int length;
+  int tag;
+  int name_id;
+  DataType data_type;
+  MPIOpsType op_type;
+};
+
+std::vector<int> SerializeNCCLWinRequest(const NCCLWinRequest& req);
+
+NCCLWinRequest DeserializeNCCLWinRequest(const std::vector<int>& vec);
+
+class NCCLWindowIdManager {
+ public:
+  // Only Rank 0 will allocate Id.
+  int AllocateId();
+  Status RegisterIdAndName(int id, const std::string& name);
+  Status UnregisterName(const std::string& name);
+
+ private:
+  std::atomic_int last_id_;
+  // In order to identify the named win, each unique name is associated with an
+  // int;
+  std::unordered_map<std::string, int> name_to_id_;
+  std::unordered_map<int, std::string> id_to_name_;
+  std::mutex mutex_;
+};
+
+class NCCLWindowManager {
  public:
   NCCLWindowManager() = default;
 
@@ -59,4 +90,4 @@ class NCCLWindowManager{
 }  // namespace common
 }  // namespace bluefog
 
-#endif // BLUEFOG_COMMON_NCCL_CONTROLLER_H
+#endif  // BLUEFOG_COMMON_NCCL_CONTROLLER_H

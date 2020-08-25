@@ -701,18 +701,27 @@ Status NCCLController::WinCreate(
   // We need to explicitly set the device here.
   with_device device_guard(device);
   // 1. Check the name is used or not.
-  auto it = named_win_map_.find(name);
-  if (it != named_win_map_.end()) {
+  auto it = nccl_ctx_.named_win_map.find(name);
+  if (it != nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_create failed with ") +
                                    name);
   }
+
   // 2. Create a NCCL Window Manager.
   auto nccl_window = std::make_shared<NCCLWindowManager>();
   nccl_window->InitializeWinMemory(tensor, neighbor_tensors, device);
   nccl_window->InitializeMutexWin();
 
-  // 3. Registered NCCL window manager.
-  named_win_map_[name] = nccl_window;
+  // 3. Registered NCCL window manager and allocate unique id for them.
+  nccl_ctx_.named_win_map[name] = nccl_window;
+
+  int window_id;
+  if (mpi_ctx_.rank_ == 0) {
+    window_id = nccl_ctx_.window_id_manager.AllocateId();
+  }
+  MPICHECK(
+      MPI_Bcast((void*)&window_id, 1, MPI_INT, 0, MPI_COMM_WORLD));
+  nccl_ctx_.window_id_manager.RegisterIdAndName(window_id, name);
 
   timeline_ptr->ActivityEnd(name);
 
@@ -720,19 +729,25 @@ Status NCCLController::WinCreate(
 }
 
 Status NCCLController::WinFree(const std::string& name, int device) {
-  auto it = named_win_map_.find(name);
-  if (it == named_win_map_.end()) {
+  auto it = nccl_ctx_.named_win_map.find(name);
+  if (it == nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
   it->second->FreeWindow();
   it->second->DestroyMutexWin();
+  if(!nccl_ctx_.window_id_manager.UnregisterName(name).ok()) {
+    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+  }
   return Status::OK();
 }
 
 Status NCCLController::WinFreeAll() {
-  for(auto& kv: named_win_map_) {
+  for(auto& kv: nccl_ctx_.named_win_map) {
     kv.second->FreeWindow();
     kv.second->DestroyMutexWin();
+    if(!nccl_ctx_.window_id_manager.UnregisterName(kv.first).ok()) {
+      return Status::InvalidArgument(std::string("Win_free failed with ") + kv.first);
+    }
   }
   BFLOG(DEBUG) << "All NCCL Win has been freed.";
   return Status::OK();
