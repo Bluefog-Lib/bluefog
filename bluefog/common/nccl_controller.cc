@@ -702,8 +702,23 @@ void WinPassiveRecvRequest(const NCCLContext& nccl_ctx) {
   res_buf.reserve(1);
   while (!nccl_ctx.win_passive_recv_shutdown) {
     MPI_Status mpi_status;
+    MPI_Request mpi_request;
+    int mpi_flag;
     // receive message from any source
-    MPI_Recv(req_buf.data(), 4, MPI_INT, MPI_ANY_SOURCE, kWinPassiveRecvRequestTag, MPI_COMM_WORLD, &mpi_status);
+    MPI_Irecv(req_buf.data(), 4, MPI_INT, MPI_ANY_SOURCE,
+              kWinPassiveRecvRequestTag, MPI_COMM_WORLD, &mpi_request);
+    while (!nccl_ctx.win_passive_recv_shutdown) {
+      MPI_Test(&mpi_request, &mpi_flag, &mpi_status);
+      if (!mpi_flag) {
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      } else {
+        break;
+      }
+    }
+    if (nccl_ctx.win_passive_recv_shutdown) {
+      MPI_Cancel(&mpi_request);
+      break;
+    }
 
     NCCLWinRequest req = DeserializeNCCLWinRequest(req_buf);
     int source = mpi_status.MPI_SOURCE;
@@ -767,6 +782,7 @@ Status NCCLController::WinCreate(
 }
 
 Status NCCLController::WinFree(const std::string& name, int device) {
+  // TODO(ybc) Think about how to synchronize between processes?
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
