@@ -29,6 +29,8 @@
 namespace bluefog {
 namespace common {
 
+const int kWinPassiveRecvRequestTag = 20201234;
+
 ncclDataType_t GetNCCLDataType(const std::shared_ptr<Tensor> tensor) {
   switch (tensor->dtype()) {
     case DataType::BLUEFOG_INT32:
@@ -104,6 +106,10 @@ void NCCLContext::Finalize() {
 
   is_initialized = false;
   cuda_device = -1;
+
+  if (win_passive_recv_initialized) {
+    win_passive_recv_shutdown.store(true);
+  }
 }
 
 cudaError_t NCCLContext::GetCudaEvent(cudaEvent_t* event) {
@@ -689,10 +695,42 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
   return res;
 }
 
+void WinPassiveRecvRequest(const NCCLContext& nccl_ctx) {
+  std::vector<int> req_buf;
+  std::vector<int> res_buf;
+  req_buf.reserve(4);
+  res_buf.reserve(1);
+  while (!nccl_ctx.win_passive_recv_shutdown) {
+    MPI_Status mpi_status;
+    // receive message from any source
+    MPI_Recv(req_buf.data(), 4, MPI_INT, MPI_ANY_SOURCE, kWinPassiveRecvRequestTag, MPI_COMM_WORLD, &mpi_status);
+
+    NCCLWinRequest req = DeserializeNCCLWinRequest(req_buf);
+    int source = mpi_status.MPI_SOURCE;
+    BFLOG(TRACE) << "Recv request from " << source << ": " << req.to_string();
+    Status status = nccl_ctx.window_id_manager.CheckIdRegistered(req.name_id);
+    if (status.ok()) {
+      res_buf[0] = 1;
+      MPI_Send(res_buf.data(), 1, MPI_INT, source, kWinPassiveRecvRequestTag, MPI_COMM_WORLD);
+    } else {
+      res_buf[0] = 0;
+      MPI_Send(res_buf.data(), 1, MPI_INT, source, kWinPassiveRecvRequestTag, MPI_COMM_WORLD);
+      continue;
+    }
+    std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
+  }
+}
+
 Status NCCLController::WinCreate(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
     const std::string& name, const int device) {
+  
+  if (!nccl_ctx_.win_passive_recv_initialized) {
+    nccl_ctx_.win_passive_recv_thread = std::thread(WinPassiveRecvRequest, std::ref(nccl_ctx_));
+    nccl_ctx_.win_passive_recv_thread.detach();
+    nccl_ctx_.win_passive_recv_initialized = true;
+  }
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
