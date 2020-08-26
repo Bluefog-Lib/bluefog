@@ -13,35 +13,41 @@
 // limitations under the License.
 // ==============================================================================
 
+#include "mpi.h"
+
+#include "logging.h"
 #include "nccl_win.h"
 
 namespace bluefog {
 namespace common {
 
+std::string NCCLWinRequest::to_string() {
+  return "Request vector length " + std::to_string(length) + " window_id " +
+         std::to_string(name_id);
+}
+
 std::vector<int> SerializeNCCLWinRequest(const NCCLWinRequest& req) {
   std::vector<int> res;
-  res.push_back(req.source);
   res.push_back(req.length);
   res.push_back(req.name_id);
   res.push_back(to_underlying(req.data_type));
   res.push_back(to_underlying(req.op_type));
   return res;
-};
+}
 
 NCCLWinRequest DeserializeNCCLWinRequest(const std::vector<int>& vec) {
-  if (vec.size() != 5) {
+  if (vec.size() != 4) {
     throw std::runtime_error(
         "Try to deserialize NCCL win request. But the length of receiving "
         "vector is not 5");
   }
   NCCLWinRequest req;
-  req.source = vec[0];
-  req.length = vec[1];
-  req.name_id = vec[2];
-  req.data_type = static_cast<DataType>(vec[3]);
-  req.op_type = static_cast<MPIOpsType>(vec[4]);
+  req.length = vec[0];
+  req.name_id = vec[1];
+  req.data_type = static_cast<DataType>(vec[2]);
+  req.op_type = static_cast<MPIOpsType>(vec[3]);
   return req;
-};
+}
 
 int NCCLWindowIdManager::AllocateId() {
   int id = last_id_.fetch_add(1) + 1;
@@ -60,13 +66,35 @@ Status NCCLWindowIdManager::UnregisterName(const std::string& name) {
   auto it = name_to_id_.find(name);
   if (it == name_to_id_.end()) {
     return Status::InvalidArgument("Cannot find name " + name +
-                                   "in Window Id Manager");
+                                   " in Window Id Manager");
   }
   int id = it->second;
   name_to_id_.erase(it);
   id_to_name_.erase(id_to_name_.find(id));
 
   return Status::OK();
+}
+
+Status NCCLWindowIdManager::CheckNameRegistered(const std::string& name) {
+  auto it = name_to_id_.find(name);
+  if (it == name_to_id_.end()) {
+    return Status::InvalidArgument("Cannot find name " + name +
+                                   " in Window Id Manager");
+  }
+  return Status::OK();
+}
+
+Status NCCLWindowIdManager::CheckIdRegistered(int id) {
+  auto it = id_to_name_.find(id);
+  if (it == id_to_name_.end()) {
+    return Status::InvalidArgument("Cannot find id " + std::to_string(id) +
+                                   " in Window Id Manager");
+  }
+  return Status::OK();
+}
+
+std::string NCCLWindowIdManager::GetNameById(int id) {
+  return id_to_name_.at(id);
 }
 
 NCCLWindowManager::~NCCLWindowManager() { FreeWindow(); }

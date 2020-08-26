@@ -16,6 +16,7 @@
 #ifndef BLUEFOG_COMMON_NCCL_CONTROLLER_H
 #define BLUEFOG_COMMON_NCCL_CONTROLLER_H
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -109,12 +110,21 @@ class NCCLContext {
   bool is_initialized = false;
   bool is_peer_initialized = false;
 
-  // Mimic MPI Windows used for one-sided communication. (Although there is no window)
+  // Window related variables
+  std::atomic_bool win_passive_recv_initialized{false};
+  std::atomic_bool win_passive_recv_shutdown{false};
+  std::thread win_passive_recv_thread;
+
+  // Mimic MPI Windows used for one-sided communication. (Although there is no window). Manage
+  // the persistent memory mainly.
   std::unordered_map<std::string, std::shared_ptr<NCCLWindowManager>> named_win_map;
 
   // In charge of mapping unique window name to id and reversed way.
-  NCCLWindowIdManager window_id_manager;
+  mutable NCCLWindowIdManager window_id_manager;
 };
+
+// Function to implement Window 
+void WinPassiveRecvRequest(const NCCLContext& nccl_ctx);
 
 class NCCLController {
  public:

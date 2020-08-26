@@ -27,16 +27,18 @@ namespace bluefog {
 namespace common {
 
 struct NCCLWinRequest {
-  int source;          // Request rank;
   int length;          // the lenght of send vectors.
   int name_id;         // Used to identify which window to use.
   DataType data_type;  // Such as BLUEFOG_FLOAT32, BLUEFOG_FLOAT64, etc.
   MPIOpsType op_type;  // Such as win_put, win_get, or win_accumulate.
+
+  std::string to_string();
 };
 
 std::vector<int> SerializeNCCLWinRequest(const NCCLWinRequest& req);
 
 NCCLWinRequest DeserializeNCCLWinRequest(const std::vector<int>& vec);
+
 
 class NCCLWindowIdManager {
  public:
@@ -44,6 +46,9 @@ class NCCLWindowIdManager {
   int AllocateId();
   Status RegisterIdAndName(int id, const std::string& name);
   Status UnregisterName(const std::string& name);
+  Status CheckNameRegistered(const std::string& name);
+  Status CheckIdRegistered(int id);
+  std::string GetNameById(int id);
 
  private:
   std::atomic_int last_id_;
