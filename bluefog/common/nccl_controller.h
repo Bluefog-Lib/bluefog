@@ -90,7 +90,7 @@ class NCCLContext {
   cudaError_t GetCudaEvent(cudaEvent_t* event);
   cudaError_t ReleaseCudaEvent(cudaEvent_t event);
 
-  // TODO(ybc) Create e intra-comm to allow the ops lik in-node allreduce.
+  // TODO(ybc) Create intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
   cudaStream_t stream;
 
@@ -112,6 +112,7 @@ class NCCLContext {
   // Mimic MPI Windows used for one-sided communication. (Although there is no window)
   std::unordered_map<std::string, std::shared_ptr<NCCLWindowManager>> named_win_map;
 
+  // In charge of mapping unique window name to id and reversed way.
   NCCLWindowIdManager window_id_manager;
 };
 
@@ -140,6 +141,7 @@ class NCCLController {
 
   Status WinFree(const std::string& name, int device);
   Status WinFreeAll();
+  Status WinSync(const std::string& name, int device);
 
  protected:
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,

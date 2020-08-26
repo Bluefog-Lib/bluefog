@@ -18,6 +18,31 @@
 namespace bluefog {
 namespace common {
 
+std::vector<int> SerializeNCCLWinRequest(const NCCLWinRequest& req) {
+  std::vector<int> res;
+  res.push_back(req.source);
+  res.push_back(req.length);
+  res.push_back(req.name_id);
+  res.push_back(to_underlying(req.data_type));
+  res.push_back(to_underlying(req.op_type));
+  return res;
+};
+
+NCCLWinRequest DeserializeNCCLWinRequest(const std::vector<int>& vec) {
+  if (vec.size() != 5) {
+    throw std::runtime_error(
+        "Try to deserialize NCCL win request. But the length of receiving "
+        "vector is not 5");
+  }
+  NCCLWinRequest req;
+  req.source = vec[0];
+  req.length = vec[1];
+  req.name_id = vec[2];
+  req.data_type = static_cast<DataType>(vec[3]);
+  req.op_type = static_cast<MPIOpsType>(vec[4]);
+  return req;
+};
+
 int NCCLWindowIdManager::AllocateId() {
   int id = last_id_.fetch_add(1) + 1;
   return id;
@@ -43,6 +68,8 @@ Status NCCLWindowIdManager::UnregisterName(const std::string& name) {
 
   return Status::OK();
 }
+
+NCCLWindowManager::~NCCLWindowManager() { FreeWindow(); }
 
 bool NCCLWindowManager::InitializeWinMemory(
     std::shared_ptr<Tensor> tensor,

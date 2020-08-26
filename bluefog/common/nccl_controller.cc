@@ -753,5 +753,15 @@ Status NCCLController::WinFreeAll() {
   return Status::OK();
 }
 
+Status NCCLController::WinSync(const std::string& name, int device) {
+  auto it = nccl_ctx_.named_win_map.find(name);
+  if (it == nccl_ctx_.named_win_map.end()) {
+    return Status::InvalidArgument(std::string("Win_sync failed with ") + name);
+  }
+  // We don't need to do anything since our mimic window don't do anything on
+  // seperate memory.
+  return Status::OK();
+}
+
 }  // namespace common
 }  // namespace bluefog
