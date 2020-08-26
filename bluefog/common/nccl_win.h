@@ -27,12 +27,11 @@ namespace bluefog {
 namespace common {
 
 struct NCCLWinRequest {
-  int source;
-  int length;
-  int tag;
-  int name_id;
-  DataType data_type;
-  MPIOpsType op_type;
+  int source;          // Request rank;
+  int length;          // the lenght of send vectors.
+  int name_id;         // Used to identify which window to use.
+  DataType data_type;  // Such as BLUEFOG_FLOAT32, BLUEFOG_FLOAT64, etc.
+  MPIOpsType op_type;  // Such as win_put, win_get, or win_accumulate.
 };
 
 std::vector<int> SerializeNCCLWinRequest(const NCCLWinRequest& req);
@@ -58,6 +57,7 @@ class NCCLWindowIdManager {
 class NCCLWindowManager {
  public:
   NCCLWindowManager() = default;
+  ~NCCLWindowManager();
 
   bool InitializeWinMemory(
       std::shared_ptr<Tensor> tensor,
