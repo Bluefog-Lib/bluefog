@@ -676,8 +676,13 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+#if HAVE_NCCL
+  Status status = bluefog_global.nccl_controller->WinCreate(
+      tensor, neighbor_tensors, name, device);
+#else
   Status status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
                                                        name, device);
+#endif
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot create the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -689,7 +694,12 @@ Status WindowSync(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+
+#if HAVE_NCCL
+  Status status = bluefog_global.nccl_controller->WinSync(name, device);
+#else
   Status status = bluefog_global.controller->WinSync(name, device);
+#endif
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -702,11 +712,19 @@ Status WindowFree(const std::string& name, int device) {
     return SHUT_DOWN_ERROR;
   }
   Status status;
+#if HAVE_NCCL
+  if (name.empty()) {
+    status = bluefog_global.nccl_controller->WinFreeAll();
+  } else {
+    status = bluefog_global.nccl_controller->WinFree(name, device);
+  }
+#else
   if (name.empty()) {
     status = bluefog_global.controller->WinFreeAll();
   } else {
     status = bluefog_global.controller->WinFree(name, device);
   }
+#endif
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
