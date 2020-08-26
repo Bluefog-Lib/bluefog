@@ -49,6 +49,7 @@ class NCCLWindowIdManager {
   Status CheckNameRegistered(const std::string& name);
   Status CheckIdRegistered(int id);
   std::string GetNameById(int id);
+  int GetIdByName(const std::string& name);
 
  private:
   std::atomic_int last_id_;

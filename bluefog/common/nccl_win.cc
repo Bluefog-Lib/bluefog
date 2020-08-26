@@ -97,6 +97,10 @@ std::string NCCLWindowIdManager::GetNameById(int id) {
   return id_to_name_.at(id);
 }
 
+int NCCLWindowIdManager::GetIdByName(const std::string& name) {
+  return name_to_id_.at(name);
+}
+
 NCCLWindowManager::~NCCLWindowManager() { FreeWindow(); }
 
 bool NCCLWindowManager::InitializeWinMemory(
