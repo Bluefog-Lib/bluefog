@@ -64,6 +64,7 @@
 namespace bluefog {
 namespace common {
 
+ncclDataType_t GetNCCLDataType(const DataType bf_data_type);
 ncclDataType_t GetNCCLDataType(const std::shared_ptr<Tensor> tensor);
 
 struct pair_hash {
@@ -139,11 +140,13 @@ class NCCLController {
   void DestroyPeerCommunicator();
 #endif
 
-  void Allgather(TensorTableEntry& entries);
-  void Allreduce(TensorTableEntry& entries);
-  void Broadcast(TensorTableEntry& entries);
-  void NeighborAllgather(TensorTableEntry& entries);
-  void NeighborAllreduce(TensorTableEntry& entries);
+  void Allgather(TensorTableEntry& entry);
+  void Allreduce(TensorTableEntry& entry);
+  void Broadcast(TensorTableEntry& entry);
+  void NeighborAllgather(TensorTableEntry& entry);
+  void NeighborAllreduce(TensorTableEntry& entry);
+
+  void WinPut(TensorTableEntry& entry);
 
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,

@@ -58,15 +58,15 @@ class MPIController {
   bool IsMpiUnifiedModel();
 
   // TODO(ybc) Create Operation_manager class to control it.
-  void Allreduce(TensorTableEntry& entries);
-  void Allgather(TensorTableEntry& entries);
-  void Broadcast(TensorTableEntry& entries);
-  void NeighborAllgather(TensorTableEntry& entries);
-  void NeighborAllreduce(TensorTableEntry& entries);
+  void Allreduce(TensorTableEntry& entry);
+  void Allgather(TensorTableEntry& entry);
+  void Broadcast(TensorTableEntry& entry);
+  void NeighborAllgather(TensorTableEntry& entry);
+  void NeighborAllreduce(TensorTableEntry& entry);
   void PairGossip(TensorTableEntry& entry);
-  void WinPut(TensorTableEntry& entries);
-  void WinGet(TensorTableEntry& entries);
-  void WinAccumulate(TensorTableEntry& entries);
+  void WinPut(TensorTableEntry& entry);
+  void WinGet(TensorTableEntry& entry);
+  void WinAccumulate(TensorTableEntry& entry);
   void Barrier(TensorTableEntry& entry);
 
   int SetTopology(int indegree, const int* sources, int outdegree,
