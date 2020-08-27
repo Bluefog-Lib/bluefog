@@ -113,6 +113,9 @@ void NCCLContext::Finalize() {
 
   if (win_passive_recv_initialized) {
     win_passive_recv_shutdown.store(true);
+    while(!win_passive_recv_shutdown_done) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
   }
 }
 
@@ -476,7 +479,6 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   delete[] displcmnts;
 }
 
-// TODO(ybc) Support partial send and recieve for dyanmic topology usage.
 void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   const int num_elements = entry.tensor->shape().num_elements();
@@ -716,11 +718,12 @@ void WinPassiveRecvRequest(const NCCLContext& nccl_ctx) {
       if (!mpi_flag) {
         std::this_thread::sleep_for(std::chrono::microseconds(1));
       } else {
-        break;
+        break; // Successfully received somthing.
       }
     }
     if (nccl_ctx.win_passive_recv_shutdown) {
       MPI_Cancel(&mpi_request);
+        BFLOG(TRACE) << "WinPassiveRecvRequest is shutting down.";
       break;
     }
 
@@ -753,6 +756,7 @@ void WinPassiveRecvRequest(const NCCLContext& nccl_ctx) {
         "update NCCL version or use MPI instead.");
 #endif
   }
+  nccl_ctx.win_passive_recv_shutdown_done = true;
 }
 
 Status NCCLController::WinCreate(
@@ -806,21 +810,34 @@ Status NCCLController::WinFree(const std::string& name, int device) {
   if (it == nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
+  int window_id;
+  if (mpi_ctx_.rank_ == 0) {
+    window_id = nccl_ctx_.window_id_manager.GetIdByName(name);
+  }
+  MPICHECK(MPI_Bcast((void*)&window_id, 1, MPI_INT, 0, MPI_COMM_WORLD));
+  int my_window_id = nccl_ctx_.window_id_manager.GetIdByName(name);
+  if (my_window_id != window_id) {
+    return Status::InvalidArgument(
+        "Different processes tried to free different window name " + name);
+  }
   it->second->FreeWindow();
   it->second->DestroyMutexWin();
-  if(!nccl_ctx_.window_id_manager.UnregisterName(name).ok()) {
+  nccl_ctx_.named_win_map.erase(it);
+  if (!nccl_ctx_.window_id_manager.UnregisterName(name).ok()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
   }
   return Status::OK();
 }
 
 Status NCCLController::WinFreeAll() {
-  for(auto& kv: nccl_ctx_.named_win_map) {
-    kv.second->FreeWindow();
-    kv.second->DestroyMutexWin();
-    if(!nccl_ctx_.window_id_manager.UnregisterName(kv.first).ok()) {
-      return Status::InvalidArgument(std::string("Win_free failed with ") + kv.first);
-    }
+  std::vector<std::string> win_names;
+  win_names.reserve (nccl_ctx_.named_win_map.size());
+  for (auto& it : nccl_ctx_.named_win_map) {
+      win_names.push_back(it.first);
+  }
+  std::sort (win_names.begin(), win_names.end());
+  for(auto& name: win_names) {
+    WinFree(name, 0);
   }
   BFLOG(DEBUG) << "All NCCL Win has been freed.";
   return Status::OK();

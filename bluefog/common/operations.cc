@@ -99,6 +99,8 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
     cb(SHUT_DOWN_ERROR);
   }
 #if HAVE_NCCL
+  // NCCL context has to be finalized before MPI since it relied on
+  // several functions of MPI.
   if (nccl_context.is_initialized) {
     nccl_context.Finalize();
   }
@@ -137,6 +139,11 @@ Vendor DetermineController(const TensorTableEntry& entry) {
       break;
     case MPIOpsType::NEIGHBOR_ALLREDUCE:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::WIN_PUT:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_PUT_BY_MPI");
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
       nccl_impl_available = true;
       break;
@@ -257,7 +264,14 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_PUT on " << entry.tensor_name;
         state.timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
-        state.controller->WinPut(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->WinPut(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->NeighborAllreduce(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
@@ -390,6 +404,13 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
         << "Cannot set the topology because there are window object uncleared.";
     return -1;
   }
+#if HAVE_NCCL
+  if (!bluefog_global.nccl_controller->IsWinObjetEmpty()) {
+    BFLOG(ERROR)
+        << "Cannot set the topology because there are window object uncleared.";
+    return -1;
+  }
+#endif
   if (bluefog_global.tensor_queue.size() > 0) {
     BFLOG(ERROR)
         << "Cannot set the topology because there are unfinished MPI ops.";
@@ -677,6 +698,10 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
     return SHUT_DOWN_ERROR;
   }
 #if HAVE_NCCL
+  if (!nccl_context.is_initialized) {
+    bluefog_global.nccl_controller->Initialize();
+    BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
+  }
   Status status = bluefog_global.nccl_controller->WinCreate(
       tensor, neighbor_tensors, name, device);
 #else

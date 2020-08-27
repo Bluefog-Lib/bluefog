@@ -114,6 +114,7 @@ class NCCLContext {
   // Window related variables
   std::atomic_bool win_passive_recv_initialized{false};
   std::atomic_bool win_passive_recv_shutdown{false};
+  mutable std::atomic_bool win_passive_recv_shutdown_done{false};
   std::thread win_passive_recv_thread;
 
   // Mimic MPI Windows used for one-sided communication. (Although there is no window). Manage
@@ -139,6 +140,9 @@ class NCCLController {
   void InitPeerCommunicator();
   void DestroyPeerCommunicator();
 #endif
+  inline bool IsWinObjetEmpty() const {
+    return nccl_ctx_.named_win_map.size() == 0;
+  }
 
   void Allgather(TensorTableEntry& entry);
   void Allreduce(TensorTableEntry& entry);
