@@ -84,8 +84,9 @@ class NCCLWindowManager {
   bool DestroyMutexWin();
 
  private:
+  // A reference to the persistent memory for self and neighbor memory.
+  // The creation and destroy is happened at each library version's mpi_win_ops.
   std::vector<std::shared_ptr<Tensor>> wins_tensor_vec_;
-
   std::shared_ptr<Tensor> self_wins_tensor_;
 
   int device_;
