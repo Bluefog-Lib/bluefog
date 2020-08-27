@@ -861,7 +861,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   DataType data_type = entry.tensor->dtype();
   auto it = nccl_ctx_.named_win_map.find(entry.tensor_name);
   if (it == nccl_ctx_.named_win_map.end()) {
-    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (NCCL) registered win name.");
   }
   int window_name_id =
       nccl_ctx_.window_id_manager.GetIdByName(entry.tensor_name);

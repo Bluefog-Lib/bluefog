@@ -108,7 +108,9 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   mpi_context.Finalize(mpi_ctx_manager);
 }
 
-Vendor DetermineController(const TensorTableEntry& entry) {
+Vendor DetermineController(const MPIOpsType& op_type, int device) {
+  if (device == CPU_DEVICE_ID) return Vendor::MPI;
+
   bool nccl_impl_available = false;
   bool force_mpi = false;
   bool built_with_nccl = false;
@@ -116,7 +118,7 @@ Vendor DetermineController(const TensorTableEntry& entry) {
   built_with_nccl = true;
 #endif
   char* by_mpi_env;
-  switch (entry.mpi_ops_type) {
+  switch (op_type) {
     case MPIOpsType::ALLREDUCE:
       by_mpi_env = std::getenv("BLUEFOG_ALLREDUCE_BY_MPI");
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
@@ -147,18 +149,33 @@ Vendor DetermineController(const TensorTableEntry& entry) {
       force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
       nccl_impl_available = true;
       break;
+    case MPIOpsType::WIN_CREATE:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_CREATE_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::WIN_FREE:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_FREE_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
+    case MPIOpsType::WIN_SYNC:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_SYNC_BY_MPI");
+      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
+      nccl_impl_available = true;
+      break;
     default:
       nccl_impl_available = false;
   }
 
   if (!built_with_nccl || !nccl_impl_available || force_mpi) return Vendor::MPI;
-  return entry.device != CPU_DEVICE_ID ? Vendor::NCCL : Vendor::MPI;
+  return Vendor::NCCL;
 }
 
 bool RunLoopOnce(BluefogGlobalState& state) {
   try {
     auto entry = state.tensor_queue.PopMessagesFromQueue();
-    Vendor controller_vendor = DetermineController(entry);
+    Vendor controller_vendor = DetermineController(entry.mpi_ops_type, entry.device);
 #if HAVE_NCCL
     if(controller_vendor==Vendor::NCCL && !nccl_context.is_initialized) {
         state.nccl_controller->Initialize();
@@ -262,14 +279,15 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       // other, the order of allreduce request by them are undeterminisitc.
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_PUT on " << entry.tensor_name;
+            << "Processing WIN_PUT on " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
         state.timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
         if (controller_vendor == Vendor::MPI) {
           state.controller->WinPut(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->NeighborAllreduce(entry);
+          state.nccl_controller->WinPut(entry);
         }
 #endif
         state.timeline.ActivityEnd(entry.tensor_name);
@@ -697,17 +715,23 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
+  Status status;
 #if HAVE_NCCL
-  if (!nccl_context.is_initialized) {
-    bluefog_global.nccl_controller->Initialize();
-    BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
-  }
-  Status status = bluefog_global.nccl_controller->WinCreate(
-      tensor, neighbor_tensors, name, device);
-#else
-  Status status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
+  if (vendor == Vendor::NCCL) {
+    if (!nccl_context.is_initialized) {
+      bluefog_global.nccl_controller->Initialize();
+      BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
+    }
+    status = bluefog_global.nccl_controller->WinCreate(tensor, neighbor_tensors,
                                                        name, device);
+  }
 #endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
+                                                  name, device);
+  }
+
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot create the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -719,12 +743,17 @@ Status WindowSync(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-
+  Vendor vendor = DetermineController(MPIOpsType::WIN_SYNC, device);
+  Status status;
 #if HAVE_NCCL
-  Status status = bluefog_global.nccl_controller->WinSync(name, device);
-#else
-  Status status = bluefog_global.controller->WinSync(name, device);
+  if (vendor == Vendor::NCCL) {
+    status = bluefog_global.nccl_controller->WinSync(name, device);
+  }
 #endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinSync(name, device);
+  }
+
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -736,20 +765,25 @@ Status WindowFree(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  Vendor vendor = DetermineController(MPIOpsType::WIN_FREE, device);
   Status status;
 #if HAVE_NCCL
-  if (name.empty()) {
-    status = bluefog_global.nccl_controller->WinFreeAll();
-  } else {
-    status = bluefog_global.nccl_controller->WinFree(name, device);
-  }
-#else
-  if (name.empty()) {
-    status = bluefog_global.controller->WinFreeAll();
-  } else {
-    status = bluefog_global.controller->WinFree(name, device);
+  if (vendor == Vendor::NCCL) {
+    if (name.empty()) {
+      status = bluefog_global.nccl_controller->WinFreeAll();
+    } else {
+      status = bluefog_global.nccl_controller->WinFree(name, device);
+    }
   }
 #endif
+  if (vendor == Vendor::MPI) {
+    if (name.empty()) {
+      status = bluefog_global.controller->WinFreeAll();
+    } else {
+      status = bluefog_global.controller->WinFree(name, device);
+    }
+  }
+
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -757,6 +791,7 @@ Status WindowFree(const std::string& name, int device) {
   return status;
 }
 
+// Following ops do not have NCCL support.
 Status WindowFence(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
