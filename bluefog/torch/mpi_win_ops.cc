@@ -49,8 +49,14 @@ using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
+#if HAVE_NCCL
+// When there is NCCL always put win_memory on GPU.
+static const bool WIN_ON_CPU = false; 
+#else
 static const char* BLUEFOG_WIN_ON_GPU = std::getenv("BLUEFOG_WIN_ON_GPU");
-static const bool WIN_ON_CPU = !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
+static const bool WIN_ON_CPU =
+    !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
+#endif
 
 // A map store {name -> gpu_tensor}. Used only when BLUEFOG_WIN_ON_CPU is turned on.
 static std::unordered_map<std::string, ::torch::Tensor> win_gpu_tensor_map;
@@ -298,9 +304,9 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 
   Status status = common::WindowSync(name, device);
 
-  ::torch::Tensor cpu_buffer = tensor;
+  ::torch::Tensor bf_tensor = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    cpu_buffer =
+    bf_tensor =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
@@ -310,20 +316,20 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   // weights are 1/(neighbor size+1).
   if (internal_avg) {
     // Weighted averaging with neighbors' tensors happens in-place.
-    if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight,
+    if (!win_storage_manager.AvgWithNeighbor(name, bf_tensor, self_weight,
                                              neighbor_weights)) {
       if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
-    if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer)) {
+    if (!win_storage_manager.SumWithNeighbor(name, bf_tensor)) {
       if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
     double neighbor_size = neighbor_weights.size() + 1.0;
-    cpu_buffer.div_(neighbor_size);
+    bf_tensor.div_(neighbor_size);
   }
 
   if (reset && !ResetNeighborTensor(name, neighbor_weights)) {
@@ -335,7 +341,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
     with_device device_guard(device);
-    tensor.copy_(cpu_buffer);
+    tensor.copy_(bf_tensor);
     // TODO(ybc) When pull_get is used in GPU, we need to copy twice here. Optimizer it.
     // win_storage_manager.SetSelfStorageByName(name, tensor);
   }
