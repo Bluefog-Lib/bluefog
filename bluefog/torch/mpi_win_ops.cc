@@ -237,6 +237,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
     bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
+    device = CPU_DEVICE_ID;
   } else {
     bf_tensor = std::make_shared<TorchTensor>(tensor);
   }

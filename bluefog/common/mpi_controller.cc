@@ -636,7 +636,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
-    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (MPI) registered win name.");
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
@@ -705,7 +706,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
-    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (MPI) registered win name.");
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
@@ -775,7 +777,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
-                             std::string(" in registered win object name."));
+                             std::string(" in (MPI) registered win object name."));
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
   Timeline* timeline_ptr;

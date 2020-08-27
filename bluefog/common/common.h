@@ -76,11 +76,14 @@ enum class MPIOpsType {
   BROADCAST = 3,
   NEIGHBOR_ALLREDUCE = 4,
   NEIGHBOR_ALLGATHER = 5,
+  BARRIER=9,
   PAIR_GOSSIP = 10,
   WIN_PUT = 6,
   WIN_GET = 7,
   WIN_ACCUMULATE = 8,
-  BARRIER=9,
+  WIN_CREATE = 11,
+  WIN_SYNC = 12,
+  WIN_FREE = 13,
 };
 
 template <typename E>
@@ -104,6 +107,8 @@ inline std::string CommunicatorName(Communicator comm) {
 }
 
 const std::string& DataType_Name(DataType value);
+
+const std::string& Vendor_Name(Vendor vendor);
 
 std::size_t DataType_Size(DataType value);
 
