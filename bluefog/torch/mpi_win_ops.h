@@ -186,12 +186,8 @@ extern "C" int bluefog_torch_win_GET(
     const bool require_mutex);
 
 extern "C" int bluefog_torch_win_free(char* name);
-extern "C" int bluefog_torch_win_fence(char* name);
 extern "C" int bluefog_torch_win_poll(int handle);
 extern "C" void bluefog_torch_win_wait(int handle);
-
-extern "C" void bluefog_torch_win_lock(char* name);
-extern "C" void bluefog_torch_win_unlock(char* name);
 
 extern "C" void bluefog_torch_win_mutex_acquire(char* name,
                                                 const std::vector<int>& ranks,
@@ -199,6 +195,11 @@ extern "C" void bluefog_torch_win_mutex_acquire(char* name,
 extern "C" void bluefog_torch_win_mutex_release(char* name,
                                                 const std::vector<int>& ranks,
                                                 bool exclusive);
+
+// Do not have support in the NCCL implementation
+extern "C" int bluefog_torch_win_fence(char* name);
+extern "C" void bluefog_torch_win_lock(char* name);
+extern "C" void bluefog_torch_win_unlock(char* name);
 
 }  // namespace torch
 }  // namespace bluefog
