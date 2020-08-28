@@ -111,6 +111,8 @@ class NCCLContext {
   bool is_initialized = false;
   bool is_peer_initialized = false;
 
+  ThreadPool finalizer_thread_pool;
+
   // Window related variables
   std::atomic_bool win_passive_recv_initialized{false};
   std::atomic_bool win_passive_recv_shutdown{false};
@@ -173,8 +175,6 @@ private:
   MPIContext& mpi_ctx_;
   
   Timeline* timeline_ptr_;
-
-  ThreadPool finalizer_thread_pool;
 };
 
 }  // namespace common

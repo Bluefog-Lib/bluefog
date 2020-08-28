@@ -157,7 +157,7 @@ void NCCLController::Initialize() {
           ? 50
           : std::strtol(bluefog_num_finalizer_threads, nullptr, 10);
 
-  finalizer_thread_pool.create(num_finalizer_threads);
+  nccl_ctx_.finalizer_thread_pool.create(num_finalizer_threads);
   Status timeline_status = GetBluefogTimeline(timeline_ptr_);
   if (!timeline_status.ok()) {
     BFLOG(INFO) << "Timeline is not used because " << timeline_status.reason();
@@ -270,7 +270,7 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   }
 
   auto tid = std::this_thread::get_id();
-  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -303,7 +303,7 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   }
 
   auto tid = std::this_thread::get_id();
-  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -339,7 +339,7 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   }
 
   auto tid = std::this_thread::get_id();
-  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -403,7 +403,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
-  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -568,7 +568,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
-  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
@@ -929,7 +929,7 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
       << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
 
   auto tid = std::this_thread::get_id();
-  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
