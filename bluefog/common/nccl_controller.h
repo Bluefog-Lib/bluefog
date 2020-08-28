@@ -85,9 +85,13 @@ class NCCLContext {
   NCCLContext(const NCCLContext&) = delete;
   NCCLContext& operator=(NCCLContext other) = delete;
 
-  void Initialize(const int rank, const int size, const int local_rank);
-  void Finalize();
-  void CleanPeerCommunicator();
+  void Initialize(const int rank, const int size,
+                  const int local_rank);  // only initial nccl_comm etc.
+  void Finalize();  // nccl_comm, peer, window will all be cleaned.
+#if NCCL_MINOR < 7
+  void CleanPeerCommunicators();
+#endif
+  void CleanWindowCommunicators();
 
   cudaError_t GetCudaEvent(cudaEvent_t* event);
   cudaError_t ReleaseCudaEvent(cudaEvent_t event);
@@ -100,16 +104,24 @@ class NCCLContext {
   std::queue<cudaEvent_t> cuda_events;
   std::mutex cuda_events_mutex;
 
+  // Window Communicators. Because NCCL function is not thread-safe, each window
+  // communication will be seperate by communicators.
+  std::vector<ncclComm_t> nccl_win_comms;  // Same size as the world size.
+  std::vector<cudaStream_t> nccl_win_streams;
+
+#if NCCL_MINOR < 7
   // Communicators between two ranks used to mimic send/recv through broadcast.
   std::unordered_map<std::pair<int, int>, ncclComm_t, pair_hash>
       nccl_pair_comms = {};
   std::unordered_map<std::pair<int, int>, cudaStream_t, pair_hash>
       pair_streams = {};
   std::vector<std::pair<int, int>> pair_order = {};
+#endif
 
   int cuda_device = -1;
   bool is_initialized = false;
-  bool is_peer_initialized = false;
+  bool is_window_comm_initialized = false;
+  bool is_peer_comm_initialized = false;
 
   ThreadPool finalizer_thread_pool;
 
@@ -137,11 +149,17 @@ class NCCLController {
     BFLOG(DEBUG) << "NCCL Controller Initialized.";
   }
 
+  // InitPeerCommunicator is always initialized when Initialize() is called.
+  // But InitWindowCommunicator is independent since is only required when
+  // window ops is used.
   void Initialize();
 #if NCCL_MINOR < 7
   void InitPeerCommunicator();
   void DestroyPeerCommunicator();
 #endif
+  void InitWindowCommunicators();
+  void DestroyWindowCommunicators();
+
   inline bool IsWinObjetEmpty() const {
     return nccl_ctx_.named_win_map.size() == 0;
   }
@@ -163,17 +181,18 @@ class NCCLController {
   Status WinSync(const std::string& name, int device);
 
  protected:
+#if NCCL_MINOR < 7
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
-
-private:
+#endif
+ private:
   // Outside dependencies
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
-  
+
   Timeline* timeline_ptr_;
 };
 
