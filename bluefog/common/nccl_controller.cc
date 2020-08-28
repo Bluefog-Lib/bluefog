@@ -751,16 +751,16 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
     }
     std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
 #if NCCL_MINOR > 6
-    // if (req.op_type == MPIOpsType::WIN_PUT) {
-    //   std::shared_ptr<NCCLWindowManager> nccl_win_manager =
-    //       nccl_ctx.named_win_map.at(win_name);
-    //   with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
-    //   void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
-    //   NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
-    //                      source, nccl_ctx.nccl_comm, nccl_ctx.stream));
-    // }
-    // // Using thread pool instead???
-    // CUDACHECK(cudaStreamSynchronize(nccl_ctx.stream));
+    if (req.op_type == MPIOpsType::WIN_PUT) {
+      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
+          nccl_ctx.named_win_map.at(win_name);
+      with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
+      void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
+      NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
+                         source, nccl_ctx.nccl_comm, nccl_ctx.stream));
+    }
+    // Using thread pool instead???
+    CUDACHECK(cudaStreamSynchronize(nccl_ctx.stream));
 #else
     throw std::runtime_error(
         "Sorry. We don't support win ops with NCCL version <= 2.7. Please "
@@ -796,7 +796,7 @@ Status NCCLController::WinCreate(
 
   // 2. Create a NCCL Window Manager.
   auto nccl_window = std::make_shared<NCCLWindowManager>();
-  nccl_window->InitializeWinMemory(tensor, neighbor_tensors, device);
+  nccl_window->InitializeWinMemory(tensor, neighbor_tensors, device, mpi_ctx_);
   nccl_window->InitializeMutexWin();
 
   // 3. Registered NCCL window manager and allocate unique id for them.
@@ -918,8 +918,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
-    // NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-    //                    target_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                       target_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
 
     timeline_ptr->ActivityEnd(entry.tensor_name);
   }

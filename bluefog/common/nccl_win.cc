@@ -17,6 +17,7 @@
 
 #include "logging.h"
 #include "nccl_win.h"
+#include "operations.h"
 
 namespace bluefog {
 namespace common {
@@ -106,10 +107,24 @@ NCCLWindowManager::~NCCLWindowManager() { FreeWindow(); }
 
 bool NCCLWindowManager::InitializeWinMemory(
     std::shared_ptr<Tensor> tensor,
-    std::vector<std::shared_ptr<Tensor>> neighbor_tensors, const int device) {
+    std::vector<std::shared_ptr<Tensor>> neighbor_tensors, const int device,
+    const MPIContext& mpi_ctx) {
   self_wins_tensor_ = tensor;
-  wins_tensor_vec_ = neighbor_tensors;
   device_ = device;
+  int neighbor_tensor_index = 0;
+  for (int rank = 0; rank < mpi_ctx.size_; rank++) {
+    if (rank == mpi_ctx.rank_) {  // self
+      wins_tensor_vec_.push_back(tensor);
+    } else if (std::find(mpi_ctx.neighbor_in_ranks_.begin(),
+                         mpi_ctx.neighbor_in_ranks_.end(),
+                         rank) != mpi_ctx.neighbor_in_ranks_.end()) {
+      // Neighbor
+      wins_tensor_vec_.push_back(neighbor_tensors[neighbor_tensor_index++]);
+    } else {
+      // Just put as placeholder.
+      wins_tensor_vec_.push_back(nullptr);
+    }
+  }
 }
 
 void NCCLWindowManager::FreeWindow() {

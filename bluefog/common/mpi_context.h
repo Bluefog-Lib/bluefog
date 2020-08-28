@@ -171,6 +171,7 @@ class MPIContext {
   bool is_homogeneous_ = true;
 
   // Neighbor ranks should not include self.
+  // It is sorted with ascending order.
   std::vector<int> neighbor_in_ranks_;
   std::vector<int> neighbor_out_ranks_;
 

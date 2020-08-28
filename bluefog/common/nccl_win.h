@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "common.h"
+#include "mpi_context.h"
 
 namespace bluefog {
 namespace common {
@@ -67,13 +68,24 @@ class NCCLWindowManager {
 
   bool InitializeWinMemory(
       std::shared_ptr<Tensor> tensor,
-      std::vector<std::shared_ptr<Tensor>> neighbor_tensors, const int device);
+      std::vector<std::shared_ptr<Tensor>> neighbor_tensors, const int device,
+      const MPIContext& mpi_ctx);
 
   inline std::shared_ptr<Tensor> GetAssociateTensorByRank(int rank) {
     return wins_tensor_vec_[rank];
   }
 
   inline const void* GetWinMemoryByRank(int rank) {
+    if (rank > wins_tensor_vec_.size()) {
+      throw std::runtime_error(
+          "Try to get window memeory with rank larger than size. Request "
+          "rank: " + std::to_string(rank));
+    }
+    if (wins_tensor_vec_[rank] == nullptr) {
+      throw std::runtime_error(
+          "Try to get Win memory for not neighbor's tensor, which should never "
+          "happen.");
+    }
     return wins_tensor_vec_[rank]->data();
   }
 
