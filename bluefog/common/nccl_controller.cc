@@ -30,6 +30,7 @@ namespace bluefog {
 namespace common {
 
 const int kWinPassiveRecvRequestTag = 20201234;
+const int kWinPassiveRecvAckTag = 20200827;
 
 ncclDataType_t GetNCCLDataType(const std::shared_ptr<Tensor> tensor) {
   return GetNCCLDataType(tensor->dtype());
@@ -701,11 +702,9 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
   return res;
 }
 
-void WinPassiveRecvRequest(const NCCLContext& nccl_ctx) {
-  std::vector<int> req_buf;
-  std::vector<int> res_buf;
-  req_buf.reserve(4);
-  res_buf.reserve(1);
+void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
+  std::vector<int> req_buf(4, -1);
+  std::vector<int> res_buf(1, -1);
   while (!nccl_ctx.win_passive_recv_shutdown) {
     MPI_Status mpi_status;
     MPI_Request mpi_request;
@@ -723,33 +722,45 @@ void WinPassiveRecvRequest(const NCCLContext& nccl_ctx) {
     }
     if (nccl_ctx.win_passive_recv_shutdown) {
       MPI_Cancel(&mpi_request);
-        BFLOG(TRACE) << "WinPassiveRecvRequest is shutting down.";
+        BFLOG(TRACE, self_rank) << "WinPassiveRecvRequest is shutting down.";
       break;
     }
+    if(mpi_status.MPI_ERROR != MPI_SUCCESS) {
+      std::string error_message;
+      error_message += "MPI_Irecv from " + std::to_string(mpi_status.MPI_SOURCE);
+      error_message += "; with error code " + std::to_string(mpi_status.MPI_ERROR);
+      BFLOG(ERROR) << "Error encountered in WinPassiveRecvRequest: "
+                   << error_message;
+    }
 
-    NCCLWinRequest req = DeserializeNCCLWinRequest(req_buf);
+    // Received and succeed.
     int source = mpi_status.MPI_SOURCE;
-    BFLOG(TRACE) << "Recv request from " << source << ": " << req.to_string();
+    NCCLWinRequest req = DeserializeNCCLWinRequest(req_buf);
+    BFLOG(TRACE, self_rank) << "Recv request from " << source << ": " << req.to_string();
+
     Status status = nccl_ctx.window_id_manager.CheckIdRegistered(req.name_id);
-    if (status.ok()) {
-      res_buf[0] = 1;
+    if ((mpi_status.MPI_ERROR == MPI_SUCCESS) && status.ok()) {
+      res_buf[0] = 1;  // SUCCESS
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
-                        kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD));
     } else {
-      res_buf[0] = 0;
+      res_buf[0] = 0;  // Fail
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
-                        kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD));
       continue;
     }
     std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
 #if NCCL_MINOR > 6
-    if (req.op_type == MPIOpsType::WIN_PUT) {
-      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
-          nccl_ctx.named_win_map.at(win_name);
-      void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
-      NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
-                         source, nccl_ctx.nccl_comm, nccl_ctx.stream));
-    }
+    // if (req.op_type == MPIOpsType::WIN_PUT) {
+    //   std::shared_ptr<NCCLWindowManager> nccl_win_manager =
+    //       nccl_ctx.named_win_map.at(win_name);
+    //   with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
+    //   void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
+    //   NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
+    //                      source, nccl_ctx.nccl_comm, nccl_ctx.stream));
+    // }
+    // // Using thread pool instead???
+    // CUDACHECK(cudaStreamSynchronize(nccl_ctx.stream));
 #else
     throw std::runtime_error(
         "Sorry. We don't support win ops with NCCL version <= 2.7. Please "
@@ -763,11 +774,11 @@ Status NCCLController::WinCreate(
     std::shared_ptr<Tensor> tensor,
     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
     const std::string& name, const int device) {
-  
   if (!nccl_ctx_.win_passive_recv_initialized) {
-    nccl_ctx_.win_passive_recv_thread = std::thread(WinPassiveRecvRequest, std::ref(nccl_ctx_));
-    nccl_ctx_.win_passive_recv_thread.detach();
+    nccl_ctx_.win_passive_recv_thread =
+        std::thread(WinPassiveRecvRequest, mpi_ctx_.rank_, std::ref(nccl_ctx_));
     nccl_ctx_.win_passive_recv_initialized = true;
+    nccl_ctx_.win_passive_recv_thread.detach();
   }
 
   Timeline* timeline_ptr;
@@ -795,10 +806,9 @@ Status NCCLController::WinCreate(
   if (mpi_ctx_.rank_ == 0) {
     window_id = nccl_ctx_.window_id_manager.AllocateId();
   }
-  MPICHECK(
-      MPI_Bcast((void*)&window_id, 1, MPI_INT, 0, MPI_COMM_WORLD));
+  MPICHECK(MPI_Bcast((void*)&window_id, 1, MPI_INT, 0, MPI_COMM_WORLD));
   nccl_ctx_.window_id_manager.RegisterIdAndName(window_id, name);
-
+  MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
   timeline_ptr->ActivityEnd(name);
 
   return Status::OK();
@@ -824,19 +834,22 @@ Status NCCLController::WinFree(const std::string& name, int device) {
   it->second->DestroyMutexWin();
   nccl_ctx_.named_win_map.erase(it);
   if (!nccl_ctx_.window_id_manager.UnregisterName(name).ok()) {
+    MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+  } else {
+    MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
   }
   return Status::OK();
 }
 
 Status NCCLController::WinFreeAll() {
   std::vector<std::string> win_names;
-  win_names.reserve (nccl_ctx_.named_win_map.size());
+  win_names.reserve(nccl_ctx_.named_win_map.size());
   for (auto& it : nccl_ctx_.named_win_map) {
-      win_names.push_back(it.first);
+    win_names.push_back(it.first);
   }
-  std::sort (win_names.begin(), win_names.end());
-  for(auto& name: win_names) {
+  std::sort(win_names.begin(), win_names.end());
+  for (auto& name : win_names) {
     WinFree(name, 0);
   }
   BFLOG(DEBUG) << "All NCCL Win has been freed.";
@@ -869,6 +882,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  ncclGroupStart();
   // TODO(ybc) sort the dst_weights?
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
@@ -881,17 +896,19 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
                                        .name_id = window_name_id,
                                        .data_type = data_type,
                                        .op_type = MPIOpsType::WIN_PUT};
-    std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
+    const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
+    BFLOG(TRACE, mpi_ctx_.rank_) << "Send request to " << target_rank << ": "
+                 << DeserializeNCCLWinRequest(req_buf).to_string();
     MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
                       kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
-    std::vector<int> res_buf;
-    res_buf.reserve(1);
+    std::vector<int> res_buf(1, -1);
     MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
-                      kWinPassiveRecvRequestTag, MPI_COMM_WORLD,
+                      kWinPassiveRecvAckTag, MPI_COMM_WORLD,
                       MPI_STATUS_IGNORE));
-    if (res_buf[0] == 0) { // Failed
+    if (res_buf[0] == 0) {  // Failed
       // TODO(ybc) How to handle it??
-      throw std::runtime_error("Failed after the passive recv thread for NCCL Win_put.");
+      throw std::runtime_error(
+          "Failed after the passive recv thread for NCCL Win_put.");
     }
 
     // 2. Passive recv thread is ready to recv
@@ -901,17 +918,30 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
-    NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                       target_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    // NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+    //                    target_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
 
     timeline_ptr->ActivityEnd(entry.tensor_name);
   }
+  ncclGroupEnd();
 
-  BFLOG(TRACE, mpi_ctx_.rank_) << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
+  BFLOG(TRACE, mpi_ctx_.rank_)
+      << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
 
-  timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
-  entry.callback(Status::OK());
-  timeline_ptr->ActivityEnd(entry.tensor_name);
+  auto tid = std::this_thread::get_id();
+  finalizer_thread_pool.execute([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    entry.callback(Status::OK());
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  });
 }
 
 }  // namespace common
