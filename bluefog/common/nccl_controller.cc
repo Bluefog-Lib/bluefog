@@ -812,11 +812,14 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
           nccl_ctx.named_win_map.at(win_name);
       with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
+      auto& win_comm = nccl_ctx.nccl_win_comms[source];
+      auto& win_stream = nccl_ctx.nccl_win_streams[source];
       NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
-                         source, nccl_ctx.nccl_comm, nccl_ctx.stream));
+                         source, win_comm, win_stream));
+      // Using thread pool instead???
+      CUDACHECK(cudaStreamSynchronize(win_stream));
     }
-    // Using thread pool instead???
-    CUDACHECK(cudaStreamSynchronize(nccl_ctx.stream));
+    
 #else
     throw std::runtime_error(
         "Sorry. We don't support win ops with NCCL version <= 2.7. Please "
@@ -977,8 +980,10 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
+    auto& win_comm = nccl_ctx_.nccl_win_comms[mpi_ctx_.rank_];
+    auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
     NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                       target_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+                       target_rank, win_comm, win_stream));
 
     timeline_ptr->ActivityEnd(entry.tensor_name);
   }
@@ -991,8 +996,9 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
+    auto& win_stream = this->nccl_ctx_.nccl_win_streams[this->mpi_ctx_.rank_];
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventRecord(event, win_stream));
     CUDACHECK(cudaEventSynchronize(event));
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
 
