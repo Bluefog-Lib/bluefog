@@ -23,7 +23,8 @@ namespace common {
 
 std::string NCCLWinRequest::to_string() {
   return "Request vector length " + std::to_string(length) + " window_id " +
-         std::to_string(name_id);
+         std::to_string(name_id) + " " + DataType_Name(data_type) +
+         " OpType: " + std::to_string(to_underlying(op_type));
 }
 
 std::vector<int> SerializeNCCLWinRequest(const NCCLWinRequest& req) {
@@ -39,7 +40,7 @@ NCCLWinRequest DeserializeNCCLWinRequest(const std::vector<int>& vec) {
   if (vec.size() != 4) {
     throw std::runtime_error(
         "Try to deserialize NCCL win request. But the length of receiving "
-        "vector is not 5");
+        "vector is not 4");
   }
   NCCLWinRequest req;
   req.length = vec[0];

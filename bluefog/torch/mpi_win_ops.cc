@@ -58,9 +58,6 @@ static const bool WIN_ON_CPU =
     !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
 #endif
 
-// A map store {name -> gpu_tensor}. Used only when BLUEFOG_WIN_ON_CPU is turned on.
-static std::unordered_map<std::string, ::torch::Tensor> win_gpu_tensor_map;
-
 namespace {
 
 int GetDeviceID(const ::torch::Tensor& tensor) {
@@ -253,9 +250,6 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
   if (!win_storage_manager.RegisterWinName(name, device, bf_tensor, zero_init)) return 0;
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
     return 0;
-  if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    win_gpu_tensor_map[name] = tensor;
-  }
 
   Status status = WindowCreate(bf_tensor, bf_neighbor_tensors, name, device);
   return status.ok() ? 1 : 0;
@@ -343,7 +337,7 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     with_device device_guard(device);
     tensor.copy_(bf_tensor);
     // TODO(ybc) When pull_get is used in GPU, we need to copy twice here. Optimizer it.
-    // win_storage_manager.SetSelfStorageByName(name, tensor);
+    win_storage_manager.SetSelfStorageByName(name, tensor);
   }
   timeline_ptr->ActivityEnd(name);  // WIN_SYNC_COMPUTE_AVERAGE
 
@@ -356,7 +350,6 @@ int DoWinFree(const std::string& name) {
   int device = CPU_DEVICE_ID;
   if (name.empty()) {
     win_storage_manager.ClearAll();
-    if (WIN_ON_CPU) win_gpu_tensor_map.clear();
   } else {
     if(!win_storage_manager.GetDeviceByName(name, &device)) {
       BFLOG(ERROR) << "Cannot get device of win " << name;
@@ -366,9 +359,6 @@ int DoWinFree(const std::string& name) {
     if (!res) {
       BFLOG(ERROR) << "Cannot unregister win " << name;
       return 0;
-    }
-    if (WIN_ON_CPU) {
-      win_gpu_tensor_map.erase(name);
     }
   }
 

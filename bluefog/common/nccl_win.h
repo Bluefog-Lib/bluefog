@@ -77,6 +77,8 @@ class NCCLWindowManager {
     return wins_tensor_vec_[rank]->data();
   }
 
+  inline int GetWinMemoryDevice() { return device_; }
+
   // Manually free the win memory.
   void FreeWindow();
 
