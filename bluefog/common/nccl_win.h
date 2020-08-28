@@ -76,11 +76,6 @@ class NCCLWindowManager {
   }
 
   inline const void* GetWinMemoryByRank(int rank) {
-    if (rank > wins_tensor_vec_.size()) {
-      throw std::runtime_error(
-          "Try to get window memeory with rank larger than size. Request "
-          "rank: " + std::to_string(rank));
-    }
     if (wins_tensor_vec_[rank] == nullptr) {
       throw std::runtime_error(
           "Try to get Win memory for not neighbor's tensor, which should never "

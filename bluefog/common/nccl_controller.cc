@@ -86,7 +86,7 @@ void NCCLContext::Initialize(const int rank, const int size,
 }
 
 #if NCCL_MINOR < 7
-void NCCLContext::CleanPeerCommunicator() {
+void NCCLContext::CleanPeerCommunicators() {
   for (const auto& pair : pair_order) {
     BFLOG(DEBUG) << "Destory comm for pair (" << pair.first << ", "
                  << pair.second << ")";
@@ -98,8 +98,19 @@ void NCCLContext::CleanPeerCommunicator() {
   pair_order.clear();
   pair_streams.clear();
   nccl_pair_comms.clear();
+  is_peer_comm_initialized = false;
 }
 #endif
+
+void NCCLContext::CleanWindowCommunicators() {
+  for (int i = 0; i < (int)nccl_win_comms.size(); i++) {
+    CUDACHECK(cudaStreamDestroy(nccl_win_streams[i]));
+    NCCLCHECK(ncclCommDestroy(nccl_win_comms[i]));
+  }
+  nccl_win_streams.clear();
+  nccl_win_comms.clear();
+  is_window_comm_initialized = false;
+}
 
 void NCCLContext::Finalize() {
   NCCLCHECK(ncclCommDestroy(nccl_comm));
@@ -108,6 +119,7 @@ void NCCLContext::Finalize() {
 #if NCCL_MINOR < 7
   CleanPeerCommunicator();
 #endif
+  CleanWindowCommunicators();
 
   is_initialized = false;
   cuda_device = -1;
@@ -220,14 +232,56 @@ void NCCLController::InitPeerCommunicator() {
     nccl_ctx_.pair_order.push_back(pair);
   }
   if (mpi_ctx_.rank_ == 2) BFLOG(DEBUG, mpi_ctx_.rank_) << "pairs end!";
-  nccl_ctx_.is_peer_initialized = true;
+  nccl_ctx_.is_peer_comm_initialized = true;
 }
 
-void NCCLController::DestroyPeerCommunicator() {
-  BFLOG(DEBUG) << "Destroy peer communicator";
-  nccl_ctx_.CleanPeerCommunicator();
+void NCCLController::DestroyPeerCommunicators() {
+  BFLOG(DEBUG) << "Destroy peer communicators";
+  nccl_ctx_.CleanPeerCommunicators();
 }
 #endif
+
+void NCCLController::InitWindowCommunicators() {
+  if (nccl_ctx_.is_window_comm_initialized) {
+    BFLOG(DEBUG)
+        << "NCCL context for window communicator has been initialized but"
+        << "InitWindowCommunicators is called again";
+    return;
+  }
+  BFLOG(DEBUG) << "Initiate window communicators";
+  // Assume one device per process
+  int nDevices = 0;
+  CUDACHECK(cudaGetDeviceCount(&nDevices));
+  CUDACHECK(cudaSetDevice(mpi_ctx_.local_rank_ % nDevices));
+
+  int greatest_priority;
+  CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
+
+  for (int i = 0; i < mpi_ctx_.size_; i++) {
+    // A single rank will create a unique ID and send it to all other ranks to
+    // make sure everyone has it.
+    ncclUniqueId nccl_id;
+    if (mpi_ctx_.rank_ == 0) ncclGetUniqueId(&nccl_id);
+    MPICHECK(MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0,
+                       MPI_COMM_WORLD));
+    ncclComm_t new_window_nccl_comm;
+    cudaStream_t new_window_stream;
+    CUDACHECK(cudaStreamCreateWithPriority(
+        &new_window_stream, cudaStreamNonBlocking, greatest_priority));
+    NCCLCHECK(
+        ncclCommInitRank(&new_window_nccl_comm, mpi_ctx_.size_, nccl_id, mpi_ctx_.rank_));
+    nccl_ctx_.nccl_win_comms.push_back(new_window_nccl_comm);
+    nccl_ctx_.nccl_win_streams.push_back(new_window_stream);
+  }
+  assert(nccl_ctx_.nccl_win_comms.size() == mpi_ctx_.size_);
+  assert(nccl_ctx_.nccl_win_streams.size() == mpi_ctx_.size_);
+  nccl_ctx_.is_peer_comm_initialized = true;
+}
+
+void NCCLController::DestroyWindowCommunicators() {
+  BFLOG(DEBUG) << "Destroy window communicators";
+  nccl_ctx_.CleanWindowCommunicators();
+}
 
 bool CheckSameRecvSize(const int* recvcounts, const int size) {
   int first_recv_count;
@@ -649,6 +703,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 #endif
 }
 
+#if NCCL_MINOR < 7
 ncclResult_t NCCLController::ncclSendByBcast(const void* sendbuf,
                                              const int count,
                                              ncclDataType_t data_type,
@@ -701,6 +756,7 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
                                comm_it->second, stream_it->second);
   return res;
 }
+#endif
 
 void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
   std::vector<int> req_buf(4, -1);
@@ -779,6 +835,9 @@ Status NCCLController::WinCreate(
         std::thread(WinPassiveRecvRequest, mpi_ctx_.rank_, std::ref(nccl_ctx_));
     nccl_ctx_.win_passive_recv_initialized = true;
     nccl_ctx_.win_passive_recv_thread.detach();
+  }
+  if (!nccl_ctx_.is_window_comm_initialized) {
+    InitWindowCommunicators();
   }
 
   Timeline* timeline_ptr;
