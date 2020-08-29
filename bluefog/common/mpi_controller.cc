@@ -642,8 +642,6 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
 
-  std::vector<int> mutex_ranks = {};  // used in mutex only.
-
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
@@ -657,10 +655,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     BFLOG(TRACE, mpi_ctx_.rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
 
     if (entry.require_mutex) {
-      mutex_ranks.clear();
-      mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -687,7 +683,7 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     timeline_ptr->ActivityEnd(entry.tensor_name);
 
     if (entry.require_mutex) {
-      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
 
@@ -714,7 +710,6 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   std::vector<std::pair<int, double>> sorted_dst_weights =
       GetSortedDstWeights(mpi_ctx_.rank_, mpi_ctx_.size_, entry.dst_weights);
@@ -726,10 +721,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
 
     if (entry.require_mutex) {
-      mutex_ranks.clear();
-      mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
     auto tensor = entry.tensor->data_weight(weight);
@@ -748,7 +741,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
           MPI_Accumulate(sendbuf_start, sent_size, data_type, target_rank,
                          target_disp, sent_size, data_type, MPI_SUM, mpi_win);
       if (ret_code != MPI_SUCCESS) {
-        if (entry.require_mutex) WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+        if (entry.require_mutex)
+          WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
         throw std::runtime_error(
             "MPI_Accumulate failed, see MPI output for details.");
       }
@@ -759,7 +753,7 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
 
     timeline_ptr->ActivityEnd(entry.tensor_name);
     if (entry.require_mutex) {
-      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
   BFLOG(TRACE, mpi_ctx_.rank_) << "MPI_Accmulate for " << entry.tensor_name
@@ -782,7 +776,6 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   std::shared_ptr<WindowManager> win_mananger = it->second;
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
   for (auto kv : entry.src_weights) {
@@ -791,10 +784,8 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
 
     if (entry.require_mutex) {
-      mutex_ranks.clear();
-      mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
 
@@ -826,7 +817,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
 
     if (entry.require_mutex) {
-      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
 

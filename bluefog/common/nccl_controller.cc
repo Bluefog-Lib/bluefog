@@ -831,7 +831,7 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
       // TODO(ybc) How to make a copy and then add upon it?
-      // NO need to worry about the conflict, since only one processes will manipulate
+      // NO need to worry about the conflict since only one process will manipulate
       // this memeory.
     } else {
       BFLOG(ERROR) << "Receive wrong ops types in WinPassiveRecvRequest: "
@@ -1043,7 +1043,7 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
 
   ncclGroupStart();
   // TODO(ybc) sort the src_weights?
-  for (auto kv : entry.src_weights) {
+  for (auto& kv : entry.src_weights) {
     int target_rank = kv.first;
     with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
     std::shared_ptr<Tensor> tensor =
@@ -1089,14 +1089,22 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
     with_device device_guard(entry.device);
-    cudaEvent_t event;
-    auto& win_stream = this->nccl_ctx_.nccl_win_streams[this->mpi_ctx_.rank_];
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, win_stream));
-    CUDACHECK(cudaEventSynchronize(event));
+    std::vector<cudaEvent_t> events;
+    for (auto& kv : entry.src_weights) {
+      int target_rank = kv.first;
+      cudaEvent_t event;
+      CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+      events.push_back(event);
+      auto& win_stream = this->nccl_ctx_.nccl_win_streams[target_rank];
+      CUDACHECK(cudaEventRecord(event, win_stream));
+    }
+    for (auto& event : events) {
+      CUDACHECK(cudaEventSynchronize(event));
+      CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    }
+    events.clear();
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
     this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
     BFLOG(TRACE, this->mpi_ctx_.rank_)
         << "Win_Get(NCCL) for " << entry.tensor_name << " is done.";

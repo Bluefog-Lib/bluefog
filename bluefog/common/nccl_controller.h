@@ -106,7 +106,8 @@ class NCCLContext {
 
   // Window Communicators. Because NCCL function is not thread-safe, each window
   // communication will be seperate by communicators.
-  std::vector<ncclComm_t> nccl_win_comms;  // Same size as the world size.
+  std::vector<ncclComm_t> nccl_win_comms;        // Same size as the world size.
+  std::vector<ncclComm_t> nccl_win_accum_comms;  // We use Reduce instead of Send/Recv to implement.
   std::vector<cudaStream_t> nccl_win_streams;
 
 #if NCCL_MINOR < 7
