@@ -132,17 +132,43 @@ void NCCLWindowManager::FreeWindow() {
   mutex_mem_.reset();
 }
 
+// TODO(ybc) Following code is duplicated from MPI version.
 bool NCCLWindowManager::InitializeMutexWin() {
+  int self_rank = 0;
+  int global_size = 1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &self_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &global_size);
+  if (global_size <= 1) {
+    // We don't need any mutex for this case.
+    return false;
+  }
+
+  if (!mutex_win_) {
+     mutex_win_  = std::make_shared<MPI_Win>();
+  }
   // We only need one value for self mutex.
-  mutex_mem_ =
-      std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
+  mutex_mem_ = std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
+
+  int element_size = 0;
+  MPI_Type_size(MPI_INT, &element_size);
+  int win_size = 1 * element_size;
+  MPI_Win_create((void *)mutex_mem_.get(), win_size, element_size, MPI_INFO_NULL, MPI_COMM_WORLD,
+                 mutex_win_.get());
   return true;
 }
 
 bool NCCLWindowManager::DestroyMutexWin() {
+  if (!mutex_win_) {
+    mutex_mem_.reset();
+    return false;
+  }
+  MPI_Win_free(mutex_win_.get());
+  mutex_win_.reset();
   mutex_mem_.reset();
   return true;
 }
+
+std::shared_ptr<MPI_Win> NCCLWindowManager::GetMutexWin() { return mutex_win_; }
 
 }  // namespace common
 }  // namespace bluefog

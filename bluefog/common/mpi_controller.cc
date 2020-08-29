@@ -909,7 +909,11 @@ Status MPIController::WinMutexAcquire(const std::string& name,
                                      ". The data window for that name is found"
                                      "but the mutex window is not.");
   }
+  return WinMutexAcquire(mutex_win, acquire_ranks, is_sync);
+}
 
+Status MPIController::WinMutexAcquire(std::shared_ptr<MPI_Win> mutex_win,
+                       const std::vector<int>& acquire_ranks, bool is_sync) {
   // TODO(ybc) Try better implementation than Spin Lock.
   // Recall that we build N windows across all N processes.
   // The spin value is stored in the rank i for i-th window.
@@ -952,9 +956,6 @@ Status MPIController::WinMutexRelease(const std::string& name,
                                       const std::vector<int>& release_ranks,
                                       bool is_sync) {
   BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex for " << name << " is released.";
-  int one = 1;
-  int minus_one = -1;
-  int target_disp = 0;
 
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
@@ -969,7 +970,15 @@ Status MPIController::WinMutexRelease(const std::string& name,
                                      ". The data window for that name is found"
                                      "but mutex window is not.");
   }
+  return WinMutexRelease(mutex_win, release_ranks, is_sync);
+}
 
+Status MPIController::WinMutexRelease(std::shared_ptr<MPI_Win> mutex_win,
+                                      const std::vector<int>& release_ranks,
+                                      bool is_sync) {
+  int one = 1;
+  int minus_one = -1;
+  int target_disp = 0;
   for (int rank : release_ranks) {
     BFLOG(TRACE, mpi_ctx_.rank_) << "Release Win Mutex for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);

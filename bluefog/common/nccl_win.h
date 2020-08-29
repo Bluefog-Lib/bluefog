@@ -91,6 +91,7 @@ class NCCLWindowManager {
 
   bool InitializeMutexWin();
   bool DestroyMutexWin();
+  std::shared_ptr<MPI_Win> GetMutexWin();
 
  private:
   // A reference to the persistent memory for self and neighbor memory.
@@ -100,7 +101,9 @@ class NCCLWindowManager {
 
   int device_;
 
+  // We still use MPI implementation of distributed Mutex.
   std::unique_ptr<int> mutex_mem_;
+  std::shared_ptr<MPI_Win> mutex_win_;
 };
 
 }  // namespace common

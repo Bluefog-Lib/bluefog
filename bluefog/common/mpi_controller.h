@@ -96,9 +96,9 @@ class MPIController {
   // However, Win_sync (i.e update setup) will read it, which conflicted with
   // other writting process. When WinMutexAcquire is called, we typically lock
   // for all out-neighbors.
-  Status WinMutexAcquire(const std::string& name,
+  Status WinMutexAcquire(std::shared_ptr<MPI_Win> mutex_win,
                          const std::vector<int>& acquire_ranks, bool is_sync);
-  Status WinMutexRelease(const std::string& name,
+  Status WinMutexRelease(std::shared_ptr<MPI_Win> mutex_win,
                          const std::vector<int>& release_ranks, bool is_sync);
 
  protected:
@@ -107,6 +107,13 @@ class MPIController {
 
   // flag indicating whether MPI multi-threading is supported.
   bool mpi_threads_supported_ = false;
+
+  // This should be used by MPI Controller only.
+  // Because NCCL controller uses MPI as mutex implementation as well.
+  Status WinMutexAcquire(const std::string& name,
+                         const std::vector<int>& acquire_ranks, bool is_sync);
+  Status WinMutexRelease(const std::string& name,
+                         const std::vector<int>& release_ranks, bool is_sync);
 };
 
 class WinMutexGuard {
