@@ -818,8 +818,27 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
                          source, win_comm, win_stream));
       // Using thread pool instead???
       CUDACHECK(cudaStreamSynchronize(win_stream));
+    } else if (req.op_type == MPIOpsType::WIN_GET) {
+      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
+          nccl_ctx.named_win_map.at(win_name);
+      with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
+      void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
+      auto& win_comm = nccl_ctx.nccl_win_comms[self_rank];
+      auto& win_stream = nccl_ctx.nccl_win_streams[self_rank];
+      NCCLCHECK(ncclSend(sendbuf, req.length, GetNCCLDataType(req.data_type),
+                         source, win_comm, win_stream));
+      // Using thread pool instead???
+      CUDACHECK(cudaStreamSynchronize(win_stream));
+    } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
+      // TODO(ybc) How to make a copy and then add upon it?
+      // NO need to worry about the conflict, since only one processes will manipulate
+      // this memeory.
+    } else {
+      BFLOG(ERROR) << "Receive wrong ops types in WinPassiveRecvRequest: "
+                   << to_underlying(req.op_type)
+                   << ". Supporting types are WIN_PUT = 6,WIN_GET = 7, and "
+                      "WIN_ACCUMULATE = 8,";
     }
-    
 #else
     throw std::runtime_error(
         "Sorry. We don't support win ops with NCCL version <= 2.7. Please "
@@ -951,16 +970,15 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     int target_rank = kv.first;
     double weight = kv.second;
 
-    BFLOG(TRACE, mpi_ctx_.rank_) << "Start Win_Put(NCCL) for "
-                                 << entry.tensor_name << " to " << target_rank;
     // 1. Talk with passive recv thread to open the request first.
     NCCLWinRequest nccl_win_request = {.length = num_elements,
                                        .name_id = window_name_id,
                                        .data_type = data_type,
                                        .op_type = MPIOpsType::WIN_PUT};
     const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
-    BFLOG(TRACE, mpi_ctx_.rank_) << "Send request to " << target_rank << ": "
-                 << DeserializeNCCLWinRequest(req_buf).to_string();
+    BFLOG(TRACE, mpi_ctx_.rank_)
+        << "Send request to " << target_rank << ": "
+        << DeserializeNCCLWinRequest(req_buf).to_string();
     MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
                       kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
     std::vector<int> res_buf(1, -1);
@@ -984,13 +1002,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
     NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
                        target_rank, win_comm, win_stream));
-
-    timeline_ptr->ActivityEnd(entry.tensor_name);
   }
   ncclGroupEnd();
-
-  BFLOG(TRACE, mpi_ctx_.rank_)
-      << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
@@ -1000,10 +1013,93 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
     CUDACHECK(cudaEventRecord(event, win_stream));
     CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
     this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    BFLOG(TRACE, this->mpi_ctx_.rank_)
+        << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
+    entry.callback(Status::OK());
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  });
+}
+
+void NCCLController::WinGet(TensorTableEntry& entry) {
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
+  auto it = nccl_ctx_.named_win_map.find(entry.tensor_name);
+  if (it == nccl_ctx_.named_win_map.end()) {
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (NCCL) registered win name.");
+  }
+  int window_name_id =
+      nccl_ctx_.window_id_manager.GetIdByName(entry.tensor_name);
+  std::shared_ptr<NCCLWindowManager> nccl_win_manager =
+      nccl_ctx_.named_win_map.at(entry.tensor_name);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  ncclGroupStart();
+  // TODO(ybc) sort the src_weights?
+  for (auto kv : entry.src_weights) {
+    int target_rank = kv.first;
+    with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
+    std::shared_ptr<Tensor> tensor =
+        nccl_win_manager->GetAssociateTensorByRank(target_rank);
+    void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(target_rank);
+    int num_elements = tensor->shape().num_elements();
+    DataType data_type = tensor->dtype();
+
+    // avoid getting the tensor for itself.
+    if (target_rank == mpi_ctx_.rank_) continue;
+
+    // 1. Talk with passive recv thread to open the request first.
+    NCCLWinRequest nccl_win_request = {.length = num_elements,
+                                       .name_id = window_name_id,
+                                       .data_type = data_type,
+                                       .op_type = MPIOpsType::WIN_GET};
+    const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
+    BFLOG(TRACE, mpi_ctx_.rank_)
+        << "Send request to " << target_rank << ": "
+        << DeserializeNCCLWinRequest(req_buf).to_string();
+    MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
+                      kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+    std::vector<int> res_buf(1, -1);
+    MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
+                      kWinPassiveRecvAckTag, MPI_COMM_WORLD,
+                      MPI_STATUS_IGNORE));
+    if (res_buf[0] == 0) {  // Failed
+      // TODO(ybc) How to handle it??
+      throw std::runtime_error(
+          "Failed after the passive recv thread for NCCL Win_get.");
+    }
+
+    // 2. Passive recv thread is ready to recv
+    // TODO(ybc) implement mutex for nccl window
+    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+    auto& win_comm = nccl_ctx_.nccl_win_comms[target_rank];
+    auto& win_stream = nccl_ctx_.nccl_win_streams[target_rank];
+    NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(tensor),
+                       target_rank, win_comm, win_stream));
+  }
+  ncclGroupEnd();
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    auto& win_stream = this->nccl_ctx_.nccl_win_streams[this->mpi_ctx_.rank_];
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, win_stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    BFLOG(TRACE, this->mpi_ctx_.rank_)
+        << "Win_Get(NCCL) for " << entry.tensor_name << " is done.";
     entry.callback(Status::OK());
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
   });

@@ -111,7 +111,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 Vendor DetermineController(const MPIOpsType& op_type, int device) {
   if (device == CPU_DEVICE_ID) return Vendor::MPI;
 
-  bool nccl_impl_available = false;
+  bool nccl_impl_available = true;
   bool force_mpi = false;
   bool built_with_nccl = false;
 #if HAVE_NCCL
@@ -121,53 +121,38 @@ Vendor DetermineController(const MPIOpsType& op_type, int device) {
   switch (op_type) {
     case MPIOpsType::ALLREDUCE:
       by_mpi_env = std::getenv("BLUEFOG_ALLREDUCE_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::BROADCAST:
       by_mpi_env = std::getenv("BLUEFOG_BROADCAST_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::ALLGATHER:
       by_mpi_env = std::getenv("BLUEFOG_ALLGATHER_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::NEIGHBOR_ALLGATHER:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::NEIGHBOR_ALLREDUCE:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::WIN_PUT:
       by_mpi_env = std::getenv("BLUEFOG_WIN_PUT_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
+      break;
+    case MPIOpsType::WIN_GET:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_GET_BY_MPI");
       break;
     case MPIOpsType::WIN_CREATE:
       by_mpi_env = std::getenv("BLUEFOG_WIN_CREATE_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::WIN_FREE:
       by_mpi_env = std::getenv("BLUEFOG_WIN_FREE_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::WIN_SYNC:
       by_mpi_env = std::getenv("BLUEFOG_WIN_SYNC_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     default:
       nccl_impl_available = false;
   }
-
+  force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
   if (!built_with_nccl || !nccl_impl_available || force_mpi) return Vendor::MPI;
   return Vendor::NCCL;
 }
@@ -294,9 +279,17 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_GET on " << entry.tensor_name;
+            << "Processing WIN_GET on " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
         state.timeline.ActivityStart(entry.tensor_name, "WIN_GET");
-        state.controller->WinGet(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->WinGet(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->WinGet(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
@@ -681,11 +674,12 @@ Status EnqueueTensorWindowAccumulate(
 
 Status EnqueueTensorWindowGet(const std::string& name,
                               const std::unordered_map<int, double>& src_weights,
-                              const bool require_mutex,
+                              const int device, const bool require_mutex,
                               StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.callback = callback;
+  e.device = device;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
   e.src_weights = src_weights;
   e.require_mutex = require_mutex;
