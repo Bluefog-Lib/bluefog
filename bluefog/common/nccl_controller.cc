@@ -1105,5 +1105,29 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   });
 }
 
+Status NCCLController::WinMutexAcquire(const std::string& name,
+                                       const std::vector<int>& acquire_ranks,
+                                       bool is_sync) {
+  auto it = nccl_ctx_.named_win_map.find(name);
+  if (it == nccl_ctx_.named_win_map.end()) {
+    throw std::runtime_error(std::string("Cannot find ") + name +
+                             " in (NCCL) registered win name.");
+  }
+  std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
+  MPIWinMutexAcquireImpl(mutex_win, acquire_ranks, is_sync);
+}
+
+Status NCCLController::WinMutexRelease(const std::string& name,
+                                       const std::vector<int>& release_ranks,
+                                       bool is_sync) {
+  auto it = nccl_ctx_.named_win_map.find(name);
+  if (it == nccl_ctx_.named_win_map.end()) {
+    throw std::runtime_error(std::string("Cannot find ") + name +
+                             " in (NCCL) registered win name.");
+  }
+  std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
+  MPIWinMutexReleaseImpl(mutex_win, acquire_ranks, is_sync);
+}
+
 }  // namespace common
 }  // namespace bluefog

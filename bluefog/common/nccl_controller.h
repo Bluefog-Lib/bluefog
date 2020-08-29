@@ -181,6 +181,11 @@ class NCCLController {
   Status WinFreeAll();
   Status WinSync(const std::string& name, int device);
 
+  Status WinMutexAcquire(const std::string& name,
+                         const std::vector<int>& acquire_ranks, bool is_sync);
+  Status WinMutexRelease(const std::string& name,
+                         const std::vector<int>& release_ranks, bool is_sync);
+
  protected:
 #if NCCL_MINOR < 7
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
