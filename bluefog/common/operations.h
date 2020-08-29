@@ -165,19 +165,24 @@ Status WindowSync(const std::string& name, int device);
 
 Status WindowFree(const std::string& name, int device);
 
+Status WindowMutexAcquire(const std::string& name,
+                          const std::vector<int>& acquire_ranks, int device,
+                          bool is_sync);
+
+Status WindowMutexRelease(const std::string& name,
+                          const std::vector<int>& release_ranks, int device,
+                          bool is_sync);
+
+
+Status GetBluefogTimeline(Timeline*& timeline);
+
+// Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name);
 
 Status WindowLock(const std::string& name);
 
 Status WindowUnlock(const std::string& name);
 
-Status WindowMutexAcquire(const std::string& name,
-                          const std::vector<int>& acquire_ranks, bool is_sync);
-
-Status WindowMutexRelease(const std::string& name,
-                          const std::vector<int>& release_ranks, bool is_sync);
-
-Status GetBluefogTimeline(Timeline*& timeline);
 
 }  // namespace common
 }  // namespace bluefog

@@ -577,24 +577,31 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test over at least 3 nodes".format(fname))
             return
         bf.set_topology(topology_util.FullyConnectedGraph(size))
-        tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
-        window_name = "win_mutex_full"
-        bf.win_create(tensor, window_name)
 
-        if rank == 0:
-            with bf.win_mutex(window_name):
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        for dtype in dtypes:
+            tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_mutex_full_{}".format(dtype)
+            bf.win_create(tensor, window_name)
+
+            if rank == 0:
+                with bf.win_mutex(window_name):
+                    bf.barrier()
+                    time.sleep(1.01)
+            else:
                 bf.barrier()
-                time.sleep(1.01)
-        else:
-            bf.barrier()
-            t_start = time.time()
-            with bf.win_mutex(window_name):
-                time.sleep(0.001)
-            t_end = time.time()
-            assert (t_end - t_start) > 1, \
-                "The mutex acquire time should be longer than 1 second"
-            assert (t_end - t_start) < 2, \
-                "The mutex acquire time should be shorter than 2 second"
+                t_start = time.time()
+                with bf.win_mutex(window_name):
+                    time.sleep(0.001)
+                t_end = time.time()
+                assert (t_end - t_start) > 1, \
+                    "The mutex acquire time should be longer than 1 second"
+                assert (t_end - t_start) < 2, \
+                    "The mutex acquire time should be shorter than 2 second"
 
     def test_win_mutex_given_ranks(self):
         size = bf.size()
@@ -605,29 +612,35 @@ class WinOpsTests(unittest.TestCase):
                 "Skip {} because it only supports test above 4 nodes".format(fname))
             return
 
-        tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
-        window_name = "win_mutex_given_ranks"
-        bf.win_create(tensor, window_name)
-        if rank == 0:
-            with bf.win_mutex(window_name, [0]):
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        for dtype in dtypes:
+            tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_mutex_given_ranks_{}".format(dtype)
+            bf.win_create(tensor, window_name)
+            if rank == 0:
+                with bf.win_mutex(window_name, [0]):
+                    bf.barrier()
+                    time.sleep(1.01)
+            elif rank == 1:
                 bf.barrier()
-                time.sleep(1.01)
-        elif rank == 1:
-            bf.barrier()
-            t_start = time.time()
-            with bf.win_mutex(window_name, [1]):
-                time.sleep(0.001)
-            t_end = time.time()
-            assert (t_end - t_start) < 0.1
-        elif rank == 2:
-            bf.barrier()
-            t_start = time.time()
-            with bf.win_mutex(window_name, [0]):
-                time.sleep(0.001)
-            t_end = time.time()
-            assert (t_end - t_start) > 1
-        else:
-            bf.barrier()
+                t_start = time.time()
+                with bf.win_mutex(window_name, [1]):
+                    time.sleep(0.001)
+                t_end = time.time()
+                assert (t_end - t_start) < 0.1
+            elif rank == 2:
+                bf.barrier()
+                t_start = time.time()
+                with bf.win_mutex(window_name, [0]):
+                    time.sleep(0.001)
+                t_end = time.time()
+                assert (t_end - t_start) > 1
+            else:
+                bf.barrier()
 
 
 if __name__ == "__main__":

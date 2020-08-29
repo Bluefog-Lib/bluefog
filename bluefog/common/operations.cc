@@ -785,7 +785,74 @@ Status WindowFree(const std::string& name, int device) {
   return status;
 }
 
-// Following ops do not have NCCL support.
+Status WindowMutexAcquire(const std::string& name,
+                          const std::vector<int>& acquire_ranks, int device,
+                          bool is_sync) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  // Because mutex is always associated with each win_create ops, it is safe to
+  // use the vendor of win_create for window mutex.
+  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
+  Status status;
+#if HAVE_NCCL
+  if (vendor == Vendor::NCCL) {
+    status = bluefog_global.nccl_controller->WinMutexAcquire(
+        name, acquire_ranks, is_sync);
+  }
+#endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinMutexAcquire(name, acquire_ranks,
+                                                        is_sync);
+  }
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot acquire window mutex";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowMutexRelease(const std::string& name,
+                          const std::vector<int>& release_ranks, int device,
+                          bool is_sync) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  // Because mutex is always associated with each win_create ops, it is safe to
+  // use the vendor of win_create for window mutex.
+  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
+  Status status;
+#if HAVE_NCCL
+  if (vendor == Vendor::NCCL) {
+    status = bluefog_global.nccl_controller->WinMutexRelease(
+        name, release_ranks, is_sync);
+  }
+#endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinMutexRelease(name, release_ranks,
+                                                        is_sync);
+  }
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot release window mutex";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status GetBluefogTimeline(Timeline*& timeline) {
+  timeline = &(bluefog_global.timeline);
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  if (!bluefog_global.timeline_enabled) {
+    return Status::Aborted("timeline is not enabled.");
+  }
+  return Status::OK();
+}
+
+// Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -823,43 +890,6 @@ Status WindowUnlock(const std::string& name) {
     BFLOG(ERROR) << status.reason();
   }
   return status;
-}
-
-Status WindowMutexAcquire(const std::string& name, const std::vector<int>& acquire_ranks, bool is_sync) {
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Status status = bluefog_global.controller->WinMutexAcquire(name, acquire_ranks, is_sync);
-
-  if (!status.ok()) {
-    BFLOG(ERROR) << "Cannot acquire window mutex";
-    BFLOG(ERROR) << status.reason();
-  }
-  return status;
-}
-
-Status WindowMutexRelease(const std::string& name, const std::vector<int>& release_ranks, bool is_sync) {
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Status status = bluefog_global.controller->WinMutexRelease(name, release_ranks, is_sync);
-
-  if (!status.ok()) {
-    BFLOG(ERROR) << "Cannot release window mutex"; 
-    BFLOG(ERROR) << status.reason();
-  }
-  return status;
-}
-
-Status GetBluefogTimeline(Timeline*& timeline) {
-  timeline = &(bluefog_global.timeline);
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  if (!bluefog_global.timeline_enabled) {
-    return Status::Aborted("timeline is not enabled.");
-  }
-  return Status::OK();
 }
 
 }  // namespace common
