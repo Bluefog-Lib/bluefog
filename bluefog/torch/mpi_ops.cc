@@ -316,14 +316,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
         mutable {
-          if (bluefog_neighbor_size() > 0) {
-            with_device device_guard(device);
-            output.resize_(cpu_output.sizes());
-            output.copy_(cpu_output);
-
-            int recv_size = bluefog_neighbor_size();
-            if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
-            
+          with_device device_guard(device);
+          // output needs to be resized before copying in the CPU tensor.
+          output.resize_(cpu_output.sizes());
+          output.copy_(cpu_output);
+          int recv_size = bluefog_neighbor_size();
+          if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
+          if (recv_size > 0) {
             int first_dim = output.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
