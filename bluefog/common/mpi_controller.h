@@ -88,19 +88,19 @@ class MPIController {
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
 
- protected:
-  // Outside dependencies
-  MPIContext& mpi_ctx_;
-
-  // flag indicating whether MPI multi-threading is supported.
-  bool mpi_threads_supported_ = false;
-
   // This should be used by MPI Controller only.
   // Because NCCL controller uses MPI as mutex implementation as well.
   Status WinMutexAcquire(const std::string& name,
                          const std::vector<int>& acquire_ranks, bool is_sync);
   Status WinMutexRelease(const std::string& name,
                          const std::vector<int>& release_ranks, bool is_sync);
+
+ protected:
+  // Outside dependencies
+  MPIContext& mpi_ctx_;
+
+  // flag indicating whether MPI multi-threading is supported.
+  bool mpi_threads_supported_ = false;
 };
 
 // Our distributed mutex definition is different from the parallel computation
