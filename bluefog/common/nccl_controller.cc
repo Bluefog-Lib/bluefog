@@ -969,7 +969,11 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
-
+    if (entry.require_mutex) {
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
     // 1. Talk with passive recv thread to open the request first.
     NCCLWinRequest nccl_win_request = {.length = num_elements,
                                        .name_id = window_name_id,
@@ -1015,6 +1019,14 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     CUDACHECK(cudaEventSynchronize(event));
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
+    if (entry.require_mutex) {
+      std::vector<int> dst_ranks;
+      for(auto& kv : entry.dst_weights){
+        dst_ranks.push_back(kv.first);
+      }
+      WinMutexRelease(entry.tensor_name, dst_ranks, /*is_sync=*/false);
+    }
+
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
     this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
     BFLOG(TRACE, this->mpi_ctx_.rank_)
@@ -1045,6 +1057,12 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   // TODO(ybc) sort the src_weights?
   for (auto& kv : entry.src_weights) {
     int target_rank = kv.first;
+    if (entry.require_mutex) {
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
+
     with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
     std::shared_ptr<Tensor> tensor =
         nccl_win_manager->GetAssociateTensorByRank(target_rank);
@@ -1105,6 +1123,14 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
     events.clear();
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
+    if (entry.require_mutex) {
+      std::vector<int> src_ranks;
+      for(auto& kv : entry.src_weights){
+        src_ranks.push_back(kv.first);
+      }
+      WinMutexRelease(entry.tensor_name, src_ranks, /*is_sync=*/false);
+    }
+
     this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
     BFLOG(TRACE, this->mpi_ctx_.rank_)
         << "Win_Get(NCCL) for " << entry.tensor_name << " is done.";
@@ -1122,7 +1148,7 @@ Status NCCLController::WinMutexAcquire(const std::string& name,
                              " in (NCCL) registered win name.");
   }
   std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
-  MPIWinMutexAcquireImpl(mutex_win, acquire_ranks, is_sync);
+  return MPIWinMutexAcquireImpl(mutex_win, acquire_ranks, is_sync);
 }
 
 Status NCCLController::WinMutexRelease(const std::string& name,
@@ -1134,7 +1160,7 @@ Status NCCLController::WinMutexRelease(const std::string& name,
                              " in (NCCL) registered win name.");
   }
   std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
-  MPIWinMutexReleaseImpl(mutex_win, release_ranks, is_sync);
+  return MPIWinMutexReleaseImpl(mutex_win, release_ranks, is_sync);
 }
 
 }  // namespace common

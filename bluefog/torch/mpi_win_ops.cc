@@ -289,16 +289,17 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
 
-  // We need to lock self avoid updating and win_put/win_accumulate happen at
-  // simultaneous time.
-  const std::vector<int> self_rank = {common::bluefog_rank()};
-  if (require_mutex) common::WindowMutexAcquire(name, self_rank, /*is_sync=*/true);
-
   int device = CPU_DEVICE_ID;
   if (!win_storage_manager.GetDeviceByName(name, &device)) {
     BFLOG(ERROR) << "Cannot get device of win " << name;
     return 0;
   }
+
+  // We need to lock self avoid updating and win_put/win_accumulate happen at
+  // simultaneous time.
+  const std::vector<int> self_rank = {common::bluefog_rank()};
+  if (require_mutex)
+    common::WindowMutexAcquire(name, self_rank, device, /*is_sync=*/true);
 
   Status status = common::WindowSync(name, device);
 
@@ -316,13 +317,15 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     // Weighted averaging with neighbors' tensors happens in-place.
     if (!win_storage_manager.AvgWithNeighbor(name, bf_tensor, self_weight,
                                              neighbor_weights)) {
-      if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+      if (require_mutex)
+        common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
     if (!win_storage_manager.SumWithNeighbor(name, bf_tensor)) {
-      if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+      if (require_mutex)
+        common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
@@ -331,10 +334,12 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   }
 
   if (reset && !ResetNeighborTensor(name, neighbor_weights)) {
-    if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+    if (require_mutex)
+      common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
     return 0;
   }
-  if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+  if (require_mutex)
+    common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
@@ -515,16 +520,24 @@ void DoWinUnlock(const std::string& name) {
 void DoWinMutexAcquire(const std::string& name, const std::vector<int>& ranks,
                        bool exclusive) {
   ThrowIfError(common::CheckInitialized());
+  int device = CPU_DEVICE_ID;
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
+    ThrowIfError(Status::InvalidArgument("Cannot get device of win " + name));
+  }
   Status status =
-      common::WindowMutexAcquire(name, ranks, /*is_sync=*/exclusive);
+      common::WindowMutexAcquire(name, ranks, device, /*is_sync=*/exclusive);
   ThrowIfError(status);
 }
 
 void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
                        bool exclusive) {
   ThrowIfError(common::CheckInitialized());
+  int device = CPU_DEVICE_ID;
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
+    ThrowIfError(Status::InvalidArgument("Cannot get device of win " + name));
+  }
   Status status =
-      common::WindowMutexRelease(name, ranks, /*is_sync=*/exclusive);
+      common::WindowMutexRelease(name, ranks, device, /*is_sync=*/exclusive);
   ThrowIfError(status);
 }
 
