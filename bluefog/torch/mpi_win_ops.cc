@@ -452,11 +452,15 @@ int DoWinGet(const std::string& name,
   timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_GET");
 
   auto handle = win_handle_manager.AllocateHandle();
-
+  int device = CPU_DEVICE_ID;
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
+    BFLOG(ERROR) << "Cannot get device of win " << name;
+    return 0;
+  }
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowGet(
-      name, src_weights, require_mutex,
+      name, src_weights, device, require_mutex,
       [handle, name, src_weights, timeline_ptr,
        tid](const Status& status) mutable {
         std::shared_ptr<TorchTensor> bf_neighbor_tensor;

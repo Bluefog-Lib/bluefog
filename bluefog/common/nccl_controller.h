@@ -171,6 +171,7 @@ class NCCLController {
   void NeighborAllreduce(TensorTableEntry& entry);
 
   void WinPut(TensorTableEntry& entry);
+  void WinGet(TensorTableEntry& entry);
 
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,

@@ -141,14 +141,15 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const int device, const bool require_mutex,
                               StatusCallback callback);
 
-Status EnqueueTensorWindowAccumulate(
-    std::shared_ptr<Tensor> tensor, const std::string& name,
-    const std::unordered_map<int, double>& dst_ranks, const int device,
-    const bool require_mutex, StatusCallback callback);
+Status EnqueueTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
+                                     const std::string& name,
+                                     const std::unordered_map<int, double>& dst_ranks,
+                                     const int device, const bool require_mutex,
+                                     StatusCallback callback);
 
 Status EnqueueTensorWindowGet(const std::string& name,
                               const std::unordered_map<int, double>& src_ranks,
-                              const bool require_mutex,
+                              const int device, const bool require_mutex,
                               StatusCallback callback);
 
 Status EnqueueBarrier(StatusCallback callback);
