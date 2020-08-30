@@ -140,6 +140,9 @@ Vendor DetermineController(const MPIOpsType& op_type, int device) {
     case MPIOpsType::WIN_GET:
       by_mpi_env = std::getenv("BLUEFOG_WIN_GET_BY_MPI");
       break;
+    case MPIOpsType::WIN_ACCUMULATE:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_ACCUMULATE_BY_MPI");
+      break;
     case MPIOpsType::WIN_CREATE:
       by_mpi_env = std::getenv("BLUEFOG_WIN_CREATE_BY_MPI");
       break;
@@ -294,9 +297,17 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         break;
       case MPIOpsType::WIN_ACCUMULATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
+            << "Processing WIN_ACCUMULATE on " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
         state.timeline.ActivityStart(entry.tensor_name, "WIN_ACCUMULATE");
-        state.controller->WinAccumulate(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->WinAccumulate(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->WinAccumulate(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       default:
