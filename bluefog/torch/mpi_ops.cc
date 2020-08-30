@@ -76,7 +76,7 @@ std::function<std::function<void(const Status&)>(std::function<void()>)>
               func();
             }
             handle_manager.MarkDone(handle, status);
-            timeline_ptr->ActivityEnd(op_name, &tid);
+            timeline_ptr->ActivityEnd(op_name, &tid); // For End Activity ENQUEUE
         };
     };
 }
@@ -181,7 +181,7 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
 
     auto enqueue_result = EnqueueTensorBroadcast(
         bf_tensor, bf_output, root_rank, op_name, device,
-        callback_wrapper([](){}));
+        callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -226,7 +226,7 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto enqueue_result = EnqueueTensorAllgather(
         bf_tensor, bf_context, op_name, device,
-        callback_wrapper([](){}));
+        callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -272,7 +272,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto enqueue_result = EnqueueTensorNeighborAllgather(
         bf_tensor, bf_context, op_name, device,
-        callback_wrapper([](){}));
+        callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
   return handle;
