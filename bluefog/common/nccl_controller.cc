@@ -206,12 +206,7 @@ void NCCLController::InitPeerCommunicator() {
   // deduplicate them.
   std::sort(pairs.begin(), pairs.end());
   pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
-  if (mpi_ctx_.rank_ == 2)
-    BFLOG(DEBUG, mpi_ctx_.rank_) << "pairs: " << pairs.size();
   for (const auto& pair : pairs) {
-    if (mpi_ctx_.rank_ == 2)
-      BFLOG(DEBUG, mpi_ctx_.rank_)
-          << "pairs: (" << pair.first << "." << pair.second << ")";
     int my_pair_rank = pair.first == mpi_ctx_.rank_ ? 0 : 1;
     int tag = pair.first + pair.second * mpi_ctx_.size_;
     ncclUniqueId nccl_id;
@@ -231,7 +226,6 @@ void NCCLController::InitPeerCommunicator() {
     nccl_ctx_.pair_streams[pair] = new_pair_stream;
     nccl_ctx_.pair_order.push_back(pair);
   }
-  if (mpi_ctx_.rank_ == 2) BFLOG(DEBUG, mpi_ctx_.rank_) << "pairs end!";
   nccl_ctx_.is_peer_comm_initialized = true;
 }
 
@@ -275,6 +269,31 @@ void NCCLController::InitWindowCommunicators() {
   }
   assert(nccl_ctx_.nccl_win_comms.size() == mpi_ctx_.size_);
   assert(nccl_ctx_.nccl_win_streams.size() == mpi_ctx_.size_);
+
+  // For WinAccumulate, we will use ncclReduce that required to built
+  // pair communicator for all.
+  BFLOG(DEBUG) << "Initiate pair window communicator for ncclReduce usage.";
+  for (int i = 0; i < mpi_ctx_.size_; i++) {
+    ncclUniqueId nccl_id;
+    ncclComm_t nccl_win_accum_comm;
+    if (i == mpi_ctx_.rank_) {
+      // Self to self, so just an empty one.
+    } else if (i < mpi_ctx_.rank_) {
+      int tag = i + mpi_ctx_.rank_ * mpi_ctx_.size_;
+      ncclGetUniqueId(&nccl_id);
+      MPICHECK(MPI_Send((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, i,
+                        tag, MPI_COMM_WORLD));
+      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, 0));
+    } else {
+      int tag = mpi_ctx_.rank_ + i * mpi_ctx_.size_;
+      MPICHECK(MPI_Recv((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, i,
+                        tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE));
+      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, 1));
+    }
+    nccl_ctx_.nccl_win_accum_comms.push_back(nccl_win_accum_comm);
+  }
+  assert(nccl_ctx_.nccl_win_accum_comms.size() == mpi_ctx_.size_);
+
   nccl_ctx_.is_peer_comm_initialized = true;
 }
 
@@ -1034,6 +1053,10 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     entry.callback(Status::OK());
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
   });
+}
+
+void WinAccumulate(TensorTableEntry& entry) {
+  //TODO
 }
 
 void NCCLController::WinGet(TensorTableEntry& entry) {
