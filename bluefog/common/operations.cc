@@ -773,22 +773,22 @@ Status WindowFree(const std::string& name, int device) {
   Vendor vendor = DetermineController(MPIOpsType::WIN_FREE, device);
   Status status;
 #if HAVE_NCCL
-  if (vendor == Vendor::NCCL) {
-    if (name.empty()) {
-      status = bluefog_global.nccl_controller->WinFreeAll();
-    } else {
+  // No specified name. So both nccl and mpi will Free win.
+  if (nccl_context.is_initialized && name.empty()) {
+    status = bluefog_global.nccl_controller->WinFreeAll();
+  } else {
+    if (vendor == Vendor::NCCL) {
       status = bluefog_global.nccl_controller->WinFree(name, device);
     }
   }
 #endif
-  if (vendor == Vendor::MPI) {
-    if (name.empty()) {
-      status = bluefog_global.controller->WinFreeAll();
-    } else {
+  if (name.empty()) {
+    status = bluefog_global.controller->WinFreeAll();
+  } else {
+    if (vendor == Vendor::MPI) {
       status = bluefog_global.controller->WinFree(name, device);
     }
   }
-
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
