@@ -859,7 +859,6 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       continue;
     }
     std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
-#if NCCL_MINOR > 6
     if (req.op_type == MPIOpsType::WIN_PUT) {
       std::shared_ptr<NCCLWindowManager> nccl_win_manager =
           nccl_ctx.named_win_map.at(win_name);
@@ -867,9 +866,16 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
       auto& win_stream = nccl_ctx.nccl_win_streams[source];
+
+#if NCCL_MINOR > 6
       // Self_rank for passive is always 1 so that source is always 0.
       NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
                          /*source=*/0, win_comm, win_stream));
+#else
+      NCCLCHECK(ncclBroadcast(/*sendbuf=*/nullptr, /*recvbuf=*/recvbuf,
+                              num_elements, GetNCCLDataType(entry.tensor),
+                              /*root=*/0, win_comm, win_stream));
+#endif
       // Using thread pool instead and use sperate stream???
       CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_GET) {
@@ -879,9 +885,15 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
       auto& win_stream = nccl_ctx.nccl_win_streams[self_rank];
+#if NCCL_MINOR > 6
       // Self_rank for passive is always 1 so that destination is always 0.
       NCCLCHECK(ncclSend(sendbuf, req.length, GetNCCLDataType(req.data_type),
                          /*dest=*/0, win_comm, win_stream));
+#else
+      NCCLCHECK(ncclBroadcast(/*sendbuf=*/sendbuf, /*recvbuf=*/nullptr,
+                              num_elements, GetNCCLDataType(entry.tensor),
+                              /*root=*/1, win_comm, win_stream));
+#endif
       // Using thread pool instead and use sperate stream???
       CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
@@ -902,11 +914,6 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
                    << ". Supporting types are WIN_PUT = 6,WIN_GET = 7, and "
                       "WIN_ACCUMULATE = 8,";
     }
-#else
-    throw std::runtime_error(
-        "Sorry. We don't support win ops with NCCL version <= 2.7. Please "
-        "update NCCL version or use MPI instead.");
-#endif
   }
   nccl_ctx.win_passive_recv_shutdown_done = true;
 }
@@ -996,7 +1003,7 @@ Status NCCLController::WinFreeAll() {
   for (auto& name : win_names) {
     WinFree(name, 0);
   }
-  BFLOG(DEBUG) << "All NCCL Win has been freed.";
+  BFLOG(DEBUG) << "All NCCL Wins have been freed.";
   return Status::OK();
 }
 
@@ -1067,9 +1074,15 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     void* sendbuf = (void*)tensor->data();
     auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
     auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
+#if NCCL_MINOR > 6
     // Self rank in active comms is always 0 and pair rank is 1.
     NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
                        /*dest=*/1, win_comm, win_stream));
+#else
+    NCCLCHECK(ncclBroadcast(sendbuf, /*recvbuf=*/nullptr, num_elements,
+                            GetNCCLDataType(entry.tensor),
+                            /*root=*/0, win_comm, win_stream));
+#endif
   }
   ncclGroupEnd();
 
@@ -1255,9 +1268,15 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
     auto& win_stream = nccl_ctx_.nccl_win_streams[target_rank];
+#if NCCL_MINOR > 6
     // Self rank in active comms is always 0 and pair rank is 1.
     NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(tensor),
                        /*dest=*/1, win_comm, win_stream));
+#else
+    NCCLCHECK(ncclBroadcast(nullptr, /*recvbuf=*/recvbuf, num_elements,
+                            GetNCCLDataType(entry.tensor),
+                            /*root=*/1, win_comm, win_stream));
+#endif
   }
   ncclGroupEnd();
 
