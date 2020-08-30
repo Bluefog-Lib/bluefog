@@ -107,8 +107,11 @@ class NCCLContext {
   // Window Communicators. Because NCCL function is not thread-safe, each window
   // communication will be seperate by communicators.
   std::vector<ncclComm_t> nccl_win_comms;        // Same size as the world size.
-  std::vector<ncclComm_t> nccl_win_accum_comms;  // We use Reduce instead of Send/Recv to implement.
   std::vector<cudaStream_t> nccl_win_streams;
+  // We use Reduce instead of Send/Recv to implement, i-th element of vector represents
+  // the pari communicator between (i, self_rank) or (self_rank, i). Smaller rank
+  // is always the first.
+  std::vector<ncclComm_t> nccl_win_accum_comms;  
 
 #if NCCL_MINOR < 7
   // Communicators between two ranks used to mimic send/recv through broadcast.
@@ -173,6 +176,7 @@ class NCCLController {
 
   void WinPut(TensorTableEntry& entry);
   void WinGet(TensorTableEntry& entry);
+  void WinAccumulate(TensorTableEntry& entry);
 
   Status WinCreate(std::shared_ptr<Tensor> tensor,
                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
