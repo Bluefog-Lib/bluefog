@@ -106,12 +106,11 @@ class NCCLContext {
 
   // Window Communicators. Because NCCL function is not thread-safe, each window
   // communication will be seperate by communicators.
-  std::vector<ncclComm_t> nccl_win_comms;        // Same size as the world size.
+  // New rank for self is always 0 in acitive comm and 1 in passive comm.
+  std::vector<ncclComm_t> nccl_win_active_comms;  // Connect self is active and peer is passive.
+  std::vector<ncclComm_t> nccl_win_passive_comms; // Connect self is passive and peer is active.
+
   std::vector<cudaStream_t> nccl_win_streams;
-  // We use Reduce instead of Send/Recv to implement, i-th element of vector represents
-  // the pari communicator between (i, self_rank) or (self_rank, i). Smaller rank
-  // is always the first.
-  std::vector<ncclComm_t> nccl_win_accum_comms;  
 
 #if NCCL_MINOR < 7
   // Communicators between two ranks used to mimic send/recv through broadcast.
@@ -123,6 +122,8 @@ class NCCLContext {
 #endif
 
   int cuda_device = -1;
+  int self_rank = -1;
+  int self_local_rank = -1;
   bool is_initialized = false;
   bool is_window_comm_initialized = false;
   bool is_peer_comm_initialized = false;

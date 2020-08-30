@@ -62,6 +62,8 @@ void NCCLContext::Initialize(const int rank, const int size,
         << "is called again";
     return;
   }
+  self_rank = rank;
+  self_local_rank = local_rank;
 
   // A single rank will create a unique ID and send it to all other ranks to
   // make sure everyone has it.
@@ -103,12 +105,16 @@ void NCCLContext::CleanPeerCommunicators() {
 #endif
 
 void NCCLContext::CleanWindowCommunicators() {
-  for (int i = 0; i < (int)nccl_win_comms.size(); i++) {
+  for (int i = 0; i < (int)nccl_win_active_comms.size(); i++) {
     CUDACHECK(cudaStreamDestroy(nccl_win_streams[i]));
-    NCCLCHECK(ncclCommDestroy(nccl_win_comms[i]));
+    if (i != self_rank) {
+      NCCLCHECK(ncclCommDestroy(nccl_win_active_comms[i]));
+      NCCLCHECK(ncclCommDestroy(nccl_win_passive_comms[i]));
+    }
   }
   nccl_win_streams.clear();
-  nccl_win_comms.clear();
+  nccl_win_active_comms.clear();
+  nccl_win_passive_comms.clear();
   is_window_comm_initialized = false;
 }
 
@@ -252,48 +258,72 @@ void NCCLController::InitWindowCommunicators() {
   CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
 
   for (int i = 0; i < mpi_ctx_.size_; i++) {
-    // A single rank will create a unique ID and send it to all other ranks to
-    // make sure everyone has it.
-    ncclUniqueId nccl_id;
-    if (mpi_ctx_.rank_ == 0) ncclGetUniqueId(&nccl_id);
-    MPICHECK(MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0,
-                       MPI_COMM_WORLD));
-    ncclComm_t new_window_nccl_comm;
     cudaStream_t new_window_stream;
     CUDACHECK(cudaStreamCreateWithPriority(
         &new_window_stream, cudaStreamNonBlocking, greatest_priority));
-    NCCLCHECK(
-        ncclCommInitRank(&new_window_nccl_comm, mpi_ctx_.size_, nccl_id, mpi_ctx_.rank_));
-    nccl_ctx_.nccl_win_comms.push_back(new_window_nccl_comm);
     nccl_ctx_.nccl_win_streams.push_back(new_window_stream);
   }
-  assert(nccl_ctx_.nccl_win_comms.size() == mpi_ctx_.size_);
   assert(nccl_ctx_.nccl_win_streams.size() == mpi_ctx_.size_);
 
-  // For WinAccumulate, we will use ncclReduce that required to built
-  // pair communicator for all.
+  // Each active/passive communicator is connected with two nodes only.
+  // New rank for self is always 0 in acitive comm and 1 in passive comm.
+  // First loop will buid  (X for null, A for active, and P for passive)
+  //    0  1  2
+  // 0  X  P  P
+  // 1  A  X  P
+  // 2  A  A  X
+  // Each A and P is connected in off-diagonal direction.
+  // Second loop build in a reverse way
+  //    0  1  2
+  // 0  X  A  A
+  // 1  P  X  A
+  // 2  P  P  X
+  // When it finished, rank 1 will have two vectors looks like [A X A] and [P X P].
   BFLOG(DEBUG) << "Initiate pair window communicator for ncclReduce usage.";
+  nccl_ctx_.nccl_win_active_comms.resize(mpi_ctx_.size_);
+  nccl_ctx_.nccl_win_passive_comms.resize(mpi_ctx_.size_);
   for (int i = 0; i < mpi_ctx_.size_; i++) {
     ncclUniqueId nccl_id;
     ncclComm_t nccl_win_accum_comm;
-    if (i == mpi_ctx_.rank_) {
+    if (mpi_ctx_.rank_ == i) {
       // Self to self, so just an empty one.
-    } else if (i < mpi_ctx_.rank_) {
+    } else if (mpi_ctx_.rank_ > i) {
       int tag = i + mpi_ctx_.rank_ * mpi_ctx_.size_;
       ncclGetUniqueId(&nccl_id);
       MPICHECK(MPI_Send((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, i,
                         tag, MPI_COMM_WORLD));
-      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, 0));
+      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, /*rank=*/1));
+      nccl_ctx_.nccl_win_passive_comms[i] = nccl_win_accum_comm;
     } else {
       int tag = mpi_ctx_.rank_ + i * mpi_ctx_.size_;
       MPICHECK(MPI_Recv((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, i,
                         tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE));
-      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, 1));
+      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, /*rank=*/0));
+      nccl_ctx_.nccl_win_active_comms[i] = nccl_win_accum_comm;
     }
-    nccl_ctx_.nccl_win_accum_comms.push_back(nccl_win_accum_comm);
   }
-  assert(nccl_ctx_.nccl_win_accum_comms.size() == mpi_ctx_.size_);
-
+  // Second time, make it in a reverse way.
+  for (int i = 0; i < mpi_ctx_.size_; i++) {
+    ncclUniqueId nccl_id;
+    ncclComm_t nccl_win_accum_comm;
+    if (mpi_ctx_.rank_ == i) {
+      // Self to self, so just an empty one.
+    } else if (mpi_ctx_.rank_ > i) {
+      // Whoever has bigger rank number, the new rank is 1 in accum_comm.
+      int tag = i + mpi_ctx_.rank_ * mpi_ctx_.size_;
+      ncclGetUniqueId(&nccl_id);
+      MPICHECK(MPI_Send((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, i,
+                        tag, MPI_COMM_WORLD));
+      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, /*rank=*/0));
+      nccl_ctx_.nccl_win_active_comms[i] = nccl_win_accum_comm;
+    } else {
+      int tag = mpi_ctx_.rank_ + i * mpi_ctx_.size_;
+      MPICHECK(MPI_Recv((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, i,
+                        tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE));
+      NCCLCHECK(ncclCommInitRank(&nccl_win_accum_comm, 2, nccl_id, /*rank=*/1));
+      nccl_ctx_.nccl_win_passive_comms[i] = nccl_win_accum_comm;
+    }
+  }
   nccl_ctx_.is_peer_comm_initialized = true;
 }
 
@@ -812,9 +842,13 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
     int source = mpi_status.MPI_SOURCE;
     NCCLWinRequest req = DeserializeNCCLWinRequest(req_buf);
     BFLOG(TRACE, self_rank) << "Recv request from " << source << ": " << req.to_string();
+    bool self_processing = source == self_rank;
+    if (self_processing) {
+      BFLOG(ERROR) << "WinPassiveRecvRequest recieved request to process self memeory.";
+    }
 
     Status status = nccl_ctx.window_id_manager.CheckIdRegistered(req.name_id);
-    if ((mpi_status.MPI_ERROR == MPI_SUCCESS) && status.ok()) {
+    if ((mpi_status.MPI_ERROR == MPI_SUCCESS) && status.ok() && !self_processing) {
       res_buf[0] = 1;  // SUCCESS
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD));
@@ -831,27 +865,37 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
           nccl_ctx.named_win_map.at(win_name);
       with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
-      auto& win_comm = nccl_ctx.nccl_win_comms[source];
+      auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
       auto& win_stream = nccl_ctx.nccl_win_streams[source];
+      // Self_rank for passive is always 1 so that source is always 0.
       NCCLCHECK(ncclRecv(recvbuf, req.length, GetNCCLDataType(req.data_type),
-                         source, win_comm, win_stream));
-      // Using thread pool instead???
+                         /*source=*/0, win_comm, win_stream));
+      // Using thread pool instead and use sperate stream???
       CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_GET) {
       std::shared_ptr<NCCLWindowManager> nccl_win_manager =
           nccl_ctx.named_win_map.at(win_name);
       with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
-      auto& win_comm = nccl_ctx.nccl_win_comms[self_rank];
+      auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
       auto& win_stream = nccl_ctx.nccl_win_streams[self_rank];
+      // Self_rank for passive is always 1 so that destination is always 0.
       NCCLCHECK(ncclSend(sendbuf, req.length, GetNCCLDataType(req.data_type),
-                         source, win_comm, win_stream));
-      // Using thread pool instead???
+                         /*dest=*/0, win_comm, win_stream));
+      // Using thread pool instead and use sperate stream???
       CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
-      // TODO(ybc) How to make a copy and then add upon it?
-      // NO need to worry about the conflict since only one process will manipulate
-      // this memeory.
+      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
+          nccl_ctx.named_win_map.at(win_name);
+      with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
+      void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
+      auto& win_comm = nccl_ctx.nccl_win_passive_comms[source]; // Self_rank for passive is always 1
+      auto& win_stream = nccl_ctx.nccl_win_streams[source]; 
+      NCCLCHECK(ncclReduce(/*sendbuf=*/recvbuf, /*recv=*/recvbuf, req.length,
+                           GetNCCLDataType(req.data_type), ncclSum, 
+                           /*root=*/1, win_comm, win_stream));
+      // Using thread pool instead and use sperate stream???
+      CUDACHECK(cudaStreamSynchronize(win_stream));
     } else {
       BFLOG(ERROR) << "Receive wrong ops types in WinPassiveRecvRequest: "
                    << to_underlying(req.op_type)
@@ -1021,10 +1065,11 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
     auto tensor = entry.tensor->data_weight(weight);
     void* sendbuf = (void*)tensor->data();
-    auto& win_comm = nccl_ctx_.nccl_win_comms[mpi_ctx_.rank_];
+    auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
     auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
+    // Self rank in active comms is always 0 and pair rank is 1.
     NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                       target_rank, win_comm, win_stream));
+                       /*dest=*/1, win_comm, win_stream));
   }
   ncclGroupEnd();
 
@@ -1055,8 +1100,96 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   });
 }
 
-void WinAccumulate(TensorTableEntry& entry) {
-  //TODO
+void NCCLController::WinAccumulate(TensorTableEntry& entry) {
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
+  int num_elements = entry.tensor->shape().num_elements();
+  DataType data_type = entry.tensor->dtype();
+  auto it = nccl_ctx_.named_win_map.find(entry.tensor_name);
+  if (it == nccl_ctx_.named_win_map.end()) {
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (NCCL) registered win name.");
+  }
+  int window_name_id =
+      nccl_ctx_.window_id_manager.GetIdByName(entry.tensor_name);
+
+  Timeline* timeline_ptr;
+  Status timeline_status = GetBluefogTimeline(timeline_ptr);
+
+  ncclGroupStart();
+  // TODO(ybc) sort the dst_weights?
+  for (auto kv : entry.dst_weights) {
+    int target_rank = kv.first;
+    double weight = kv.second;
+    if (entry.require_mutex) {
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
+    // 1. Talk with passive recv thread to open the request first.
+    NCCLWinRequest nccl_win_request = {.length = num_elements,
+                                       .name_id = window_name_id,
+                                       .data_type = data_type,
+                                       .op_type = MPIOpsType::WIN_ACCUMULATE};
+    const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
+    BFLOG(TRACE, mpi_ctx_.rank_)
+        << "Send request to " << target_rank << ": "
+        << DeserializeNCCLWinRequest(req_buf).to_string();
+    MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
+                      kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+    std::vector<int> res_buf(1, -1);
+    MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
+                      kWinPassiveRecvAckTag, MPI_COMM_WORLD,
+                      MPI_STATUS_IGNORE));
+    if (res_buf[0] == 0) {  // Failed
+      // TODO(ybc) How to handle it??
+      throw std::runtime_error(
+          "Failed after the passive recv thread for NCCL Win_put.");
+    }
+
+    // 2. Passive recv thread is ready to recv
+    // TODO(ybc) implement mutex for nccl window
+    timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+    // avoid putting the tensor for itself (NOT valid).
+    if (target_rank == mpi_ctx_.rank_) continue;
+    auto tensor = entry.tensor->data_weight(weight);
+    void* sendbuf = (void*)tensor->data();
+    auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
+    auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
+    // Self rank in active comms is always 0 and pair rank is 1.
+    // We use ncclReduce to mimic Accumulate, hence, root is 1 (pair rank).
+    NCCLCHECK(ncclReduce(sendbuf, /*recv=*/nullptr, num_elements,
+                         GetNCCLDataType(entry.tensor), ncclSum,
+                         /*root=*/1, win_comm, win_stream));
+  }
+  ncclGroupEnd();
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
+    with_device device_guard(entry.device);
+    cudaEvent_t event;
+    auto& win_stream = this->nccl_ctx_.nccl_win_streams[this->mpi_ctx_.rank_];
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, win_stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
+
+    if (entry.require_mutex) {
+      std::vector<int> dst_ranks;
+      for(auto& kv : entry.dst_weights){
+        dst_ranks.push_back(kv.first);
+      }
+      WinMutexRelease(entry.tensor_name, dst_ranks, /*is_sync=*/false);
+    }
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+    BFLOG(TRACE, this->mpi_ctx_.rank_)
+        << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
+    entry.callback(Status::OK());
+    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  });
 }
 
 void NCCLController::WinGet(TensorTableEntry& entry) {
@@ -1120,10 +1253,11 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
-    auto& win_comm = nccl_ctx_.nccl_win_comms[target_rank];
+    auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
     auto& win_stream = nccl_ctx_.nccl_win_streams[target_rank];
+    // Self rank in active comms is always 0 and pair rank is 1.
     NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(tensor),
-                       target_rank, win_comm, win_stream));
+                       /*dest=*/1, win_comm, win_stream));
   }
   ncclGroupEnd();
 
