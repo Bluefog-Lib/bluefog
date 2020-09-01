@@ -102,7 +102,7 @@ class NCCLContext {
 
   // We reuse CUDA events as it appears that their creation carries non-zero cost.
   std::queue<cudaEvent_t> cuda_events;
-  std::mutex cuda_events_mutex;
+  mutable std::mutex cuda_events_mutex;
 
   // Window Communicators. Because NCCL function is not thread-safe, each window
   // communication will be seperate by communicators.
@@ -110,7 +110,9 @@ class NCCLContext {
   std::vector<ncclComm_t> nccl_win_active_comms;  // Connect self is active and peer is passive.
   std::vector<ncclComm_t> nccl_win_passive_comms; // Connect self is passive and peer is active.
 
-  std::vector<cudaStream_t> nccl_win_streams;
+  std::vector<cudaStream_t> nccl_win_active_streams;
+  std::vector<cudaStream_t> nccl_win_passive_streams;
+
 
 #if NCCL_MINOR < 7
   // Communicators between two ranks used to mimic send/recv through broadcast.
@@ -128,7 +130,7 @@ class NCCLContext {
   bool is_window_comm_initialized = false;
   bool is_peer_comm_initialized = false;
 
-  ThreadPool finalizer_thread_pool;
+  mutable ThreadPool finalizer_thread_pool;
 
   // Window related variables
   std::atomic_bool win_passive_recv_initialized{false};

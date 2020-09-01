@@ -80,9 +80,11 @@ std::shared_ptr<common::Tensor> TorchTensor::data_weight(float weight) {
   if (weight == 1.0) {
     return std::make_shared<TorchTensor>(tensor_);
   } else {
+    int device =
+        tensor_.device().is_cuda() ? tensor_.device().index() : CPU_DEVICE_ID;
+    with_device device_context(device);
     // Note we call mul instead of mul_
-    auto t = tensor_.mul(weight);
-    return std::make_shared<TorchTensor>(t);
+    return std::make_shared<TorchTensor>(tensor_.mul(weight));
   }
 }
 

@@ -153,6 +153,7 @@ Vendor DetermineController(const MPIOpsType& op_type, int device) {
       by_mpi_env = std::getenv("BLUEFOG_WIN_SYNC_BY_MPI");
       break;
     default:
+      by_mpi_env = nullptr;
       nccl_impl_available = false;
   }
   force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
