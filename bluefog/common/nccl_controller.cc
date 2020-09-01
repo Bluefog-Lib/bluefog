@@ -814,7 +814,7 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
 }
 #endif
 
-void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
+void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
   std::vector<int> req_buf(4, -1);
   std::vector<int> res_buf(1, -1);
   cudaStream_t win_stream;
@@ -872,10 +872,10 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       continue;
     }
     std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
+    std::shared_ptr<NCCLWindowManager> nccl_win_manager =
+        nccl_ctx.named_win_map.at(win_name);
+    with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
     if (req.op_type == MPIOpsType::WIN_PUT) {
-      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
-          nccl_ctx.named_win_map.at(win_name);
-      with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
       win_stream = nccl_ctx.nccl_win_passive_streams[source];
@@ -890,9 +890,6 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
                               /*root=*/0, win_comm, win_stream));
 #endif
     } else if (req.op_type == MPIOpsType::WIN_GET) {
-      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
-          nccl_ctx.named_win_map.at(win_name);
-      with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
       win_stream = nccl_ctx.nccl_win_passive_streams[self_rank];
@@ -906,9 +903,6 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
                               /*root=*/1, win_comm, win_stream));
 #endif
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
-      std::shared_ptr<NCCLWindowManager> nccl_win_manager =
-          nccl_ctx.named_win_map.at(win_name);
-      with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source]; // Self_rank for passive is always 1
       win_stream = nccl_ctx.nccl_win_passive_streams[source]; 
@@ -1193,7 +1187,6 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
     auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
     auto& win_stream = nccl_ctx_.nccl_win_active_streams[mpi_ctx_.rank_];
 
-    BFLOG(TRACE) << "Start ncclReduce for WinAccumulate";
     // Self rank in active comms is always 0 and pair rank is 1.
     // We use ncclReduce to mimic Accumulate, hence, root is 1 (pair rank).
     NCCLCHECK(ncclReduce(sendbuf, /*recv=*/nullptr, num_elements,
