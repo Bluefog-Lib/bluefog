@@ -81,6 +81,20 @@ void copy_buffer_back(::torch::Tensor tensor, ::torch::Tensor buffer, bool is_cp
 
 }  // namespace
 
+std::function<std::function<void(const Status&)>(std::function<void()>)>
+    GetCallbackWrapper(int handle, Timeline* timeline_ptr, const std::string& op_name,
+    std::thread::id tid) {
+    return [=](const std::function<void()>& func) {
+        return [=] (const Status& status) {
+            if (status.ok()) {
+              func();
+            }
+            handle_manager.MarkDone(handle, status);
+            timeline_ptr->ActivityEnd(op_name, &tid); // For End Activity ENQUEUE
+        };
+    };
+}
+
 int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
                 const std::string& name) {
   ThrowIfError(common::CheckInitialized());
@@ -96,6 +110,8 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
+
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
@@ -106,11 +122,10 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto bf_output = bf_tensor;
 
+
     auto enqueue_result = EnqueueTensorAllreduce(
         bf_tensor, bf_tensor, ready_event, op_name, CPU_DEVICE_ID,
-        [handle, average, output, cpu_buffer, device, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
-          if (status.ok()) {
+        callback_wrapper([average, output, cpu_buffer, device]() mutable {
             with_device device_guard(device);
             output.copy_(cpu_buffer);
 
@@ -124,7 +139,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
           }
           handle_manager.MarkDone(handle, status);
           timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        }));
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
@@ -133,7 +148,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
 
     auto enqueue_result = EnqueueTensorAllreduce(
         bf_tensor, bf_output, ready_event, op_name, device,
-        [handle, average, output, op_name, tid, timeline_ptr](const Status& status) mutable {
+        callback_wrapper([average, output]() mutable {
           // Will execute in the `device` context.
           if (status.ok()) {
             bool cpu_half_converted = is_cpu_half_tensor(output);
@@ -142,10 +157,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
               output_buffer.div_(bluefog_size());
             }
             copy_buffer_back(output, output_buffer, cpu_half_converted);
-          }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+          }));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -165,6 +177,8 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
+
   auto bf_tensor = std::make_shared<TorchTensor>(tensor);
   std::shared_ptr<common::Tensor> bf_output = nullptr;
 
@@ -175,15 +189,10 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
 
     auto enqueue_result = EnqueueTensorBroadcast(
         bf_tensor, bf_tensor, root_rank, op_name, CPU_DEVICE_ID,
-        [handle, output, cpu_buffer, device, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
-          if (status.ok()) {
-            with_device device_guard(device);
-            output.copy_(cpu_buffer);
-          }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        callback_wrapper([output, cpu_buffer, device]() mutable {
+          with_device device_guard(device);
+          output.copy_(cpu_buffer);
+        }));
     ThrowIfError(enqueue_result);
   } else {
     if (bluefog_rank() == root_rank) {
@@ -197,10 +206,7 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
 
     auto enqueue_result = EnqueueTensorBroadcast(
         bf_tensor, bf_output, root_rank, op_name, device,
-        [handle, op_name, tid, timeline_ptr](const Status& status) {
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -219,6 +225,8 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
+
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
@@ -229,17 +237,12 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
 
     auto enqueue_result = EnqueueTensorAllgather(
         bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
-        [handle, cpu_output, device, output, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
-          if (status.ok()) {
-            with_device device_guard(device);
-            // output needs to be resized before copying in the CPU tensor.
-            output.resize_(cpu_output.sizes());
-            output.copy_(cpu_output);
-          }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        callback_wrapper([cpu_output, device, output]() mutable {
+          with_device device_guard(device);
+          // output needs to be resized before copying in the CPU tensor.
+          output.resize_(cpu_output.sizes());
+          output.copy_(cpu_output);
+        }));
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
@@ -248,10 +251,7 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto enqueue_result = EnqueueTensorAllgather(
         bf_tensor, bf_context, op_name, device,
-        [handle, op_name, tid, timeline_ptr](const Status& status) {
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -271,6 +271,8 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
+
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
@@ -281,17 +283,12 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorNeighborAllgather(
         bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
-        [handle, cpu_output, device, output, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
-          if (status.ok()) {
-            with_device device_guard(device);
-            // output needs to be resized before copying in the CPU tensor.
-            output.resize_(cpu_output.sizes());
-            output.copy_(cpu_output);
-          }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        callback_wrapper([cpu_output, device, output]() mutable {
+          with_device device_guard(device);
+          // output needs to be resized before copying in the CPU tensor.
+          output.resize_(cpu_output.sizes());
+          output.copy_(cpu_output);
+        }));
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
@@ -300,10 +297,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto enqueue_result = EnqueueTensorNeighborAllgather(
         bf_tensor, bf_context, op_name, device,
-        [handle, op_name, tid, timeline_ptr](const Status& status) {
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -325,6 +319,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
+
   std::vector<int> recv_neighbors;
   for (auto kv : neighbor_weights)
       recv_neighbors.push_back(kv.first);
@@ -342,11 +338,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        enable_topo_check, op_name, CPU_DEVICE_ID, [handle, self_weight, neighbor_weights,
-        avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device,
-        op_name, tid, timeline_ptr]
-        (const Status& status) mutable {
-          if (status.ok() && bluefog_neighbor_size() > 0) {
+        enable_topo_check, op_name, CPU_DEVICE_ID, 
+        callback_wrapper([self_weight, neighbor_weights,
+          avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output,
+          device]() mutable {
+          if (bluefog_neighbor_size() > 0) {
             with_device device_guard(device);
             output.resize_(cpu_output.sizes());
             output.copy_(cpu_output);
@@ -420,10 +416,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             output.resize_(shape_vector);
             copy_buffer_back(output, output_buffer, is_output_cpu_half);
           }
-
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        }));
 
     ThrowIfError(enqueue_result);
   } else {
@@ -436,12 +429,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        enable_topo_check, op_name, device, [handle, self_weight, neighbor_weights, avg_computation,
-        recv_neighbors, send_neighbors, tensor, output, op_name, tid, timeline_ptr]
-        (const Status& status) mutable {
+        enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
+        avg_computation, recv_neighbors, send_neighbors, tensor, output] () mutable {
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
-          if (status.ok() && recv_size > 0) {
+          if (recv_size > 0) {
             bool is_output_cpu_half = is_cpu_half_tensor(output);
             ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
             bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
@@ -508,9 +500,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             output.resize_(shape_vector);
             copy_buffer_back(output, output_buffer, is_output_cpu_half);
           }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        }));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -531,6 +521,8 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
 
+  auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
+
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
@@ -541,14 +533,11 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorPairGossip(
         bf_tensor, bf_output, target_rank, op_name, CPU_DEVICE_ID,
-        [handle, tensor, output, cpu_buffer_output, device, self_weight,
-         pair_weight, avg_computation, op_name, tid,
-         timeline_ptr](const Status& status) mutable {
+        callback_wrapper([tensor, output, cpu_buffer_output, device, self_weight,
+         pair_weight, avg_computation]() mutable {
           // Will execute in the `device` context.
-          if (status.ok()) {
-            with_device device_guard(device);
-            output.copy_(cpu_buffer_output);
-
+          with_device device_guard(device);
+          output.copy_(cpu_buffer_output);
             bool is_output_cpu_half = is_cpu_half_tensor(output);
             ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
             bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
@@ -560,9 +549,7 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
             }
             copy_buffer_back(output, output_buffer, is_output_cpu_half);
           }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+        }));
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
@@ -570,24 +557,19 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorPairGossip(
         bf_tensor, bf_output, target_rank, op_name, device,
-        [handle, tensor, output, self_weight, pair_weight, avg_computation,
-         op_name, tid, timeline_ptr](const Status& status) mutable {
+        callback_wrapper([tensor, output, self_weight, pair_weight, avg_computation]() mutable {
           // Will execute in the `device` context.
-          if (status.ok()) {
-            bool is_output_cpu_half = is_cpu_half_tensor(output);
-            ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
-            bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
-            ::torch::Tensor tensor_buffer = get_tensor_buffer(tensor, is_tensor_cpu_half);
-            if (avg_computation) {
-              output_buffer.add_(tensor_buffer).div_(2);
-            } else {
-              output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
-            }
-            copy_buffer_back(output, output_buffer, is_output_cpu_half);
+          bool is_output_cpu_half = is_cpu_half_tensor(output);
+          ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
+          bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
+          ::torch::Tensor tensor_buffer = get_tensor_buffer(tensor, is_tensor_cpu_half);
+          if (avg_computation) {
+            output_buffer.add_(tensor_buffer).div_(2);
+          } else {
+            output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
           }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
-        });
+          copy_buffer_back(output, output_buffer, is_output_cpu_half);
+        }));
     ThrowIfError(enqueue_result);
   }
 
