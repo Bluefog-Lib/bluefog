@@ -147,7 +147,7 @@ class NCCLContext {
 };
 
 // Function to implement Window 
-void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx);
+void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx);
 
 class NCCLController {
  public:
