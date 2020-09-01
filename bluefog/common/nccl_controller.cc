@@ -106,13 +106,15 @@ void NCCLContext::CleanPeerCommunicators() {
 
 void NCCLContext::CleanWindowCommunicators() {
   for (int i = 0; i < (int)nccl_win_active_comms.size(); i++) {
-    CUDACHECK(cudaStreamDestroy(nccl_win_streams[i]));
+    CUDACHECK(cudaStreamDestroy(nccl_win_active_streams[i]));
+    CUDACHECK(cudaStreamDestroy(nccl_win_passive_streams[i]));
     if (i != self_rank) {
       NCCLCHECK(ncclCommDestroy(nccl_win_active_comms[i]));
       NCCLCHECK(ncclCommDestroy(nccl_win_passive_comms[i]));
     }
   }
-  nccl_win_streams.clear();
+  nccl_win_active_streams.clear();
+  nccl_win_passive_streams.clear();
   nccl_win_active_comms.clear();
   nccl_win_passive_comms.clear();
   is_window_comm_initialized = false;
@@ -258,12 +260,17 @@ void NCCLController::InitWindowCommunicators() {
   CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
 
   for (int i = 0; i < mpi_ctx_.size_; i++) {
-    cudaStream_t new_window_stream;
+    cudaStream_t new_window_active_stream;
+    cudaStream_t new_window_passive_stream;
     CUDACHECK(cudaStreamCreateWithPriority(
-        &new_window_stream, cudaStreamNonBlocking, greatest_priority));
-    nccl_ctx_.nccl_win_streams.push_back(new_window_stream);
+        &new_window_active_stream, cudaStreamNonBlocking, greatest_priority));
+    CUDACHECK(cudaStreamCreateWithPriority(
+        &new_window_passive_stream, cudaStreamNonBlocking, greatest_priority));
+    nccl_ctx_.nccl_win_active_streams.push_back(new_window_active_stream);
+    nccl_ctx_.nccl_win_passive_streams.push_back(new_window_passive_stream);
   }
-  assert(nccl_ctx_.nccl_win_streams.size() == mpi_ctx_.size_);
+  assert(nccl_ctx_.nccl_win_active_streams.size() == mpi_ctx_.size_);
+  assert(nccl_ctx_.nccl_win_passive_streams.size() == mpi_ctx_.size_);
 
   // Each active/passive communicator is connected with two nodes only.
   // New rank for self is always 0 in acitive comm and 1 in passive comm.
@@ -810,6 +817,7 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
 void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
   std::vector<int> req_buf(4, -1);
   std::vector<int> res_buf(1, -1);
+  cudaStream_t win_stream;
   while (!nccl_ctx.win_passive_recv_shutdown) {
     MPI_Status mpi_status;
     MPI_Request mpi_request;
@@ -856,6 +864,11 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       res_buf[0] = 0;  // Fail
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+      if (status.ok()) {
+        BFLOG(DEBUG) << "WinPassiveRecvRequest request refused due be previous show error";
+      } else {
+        BFLOG(DEBUG) << "WinPassiveRecvRequest request refused because " << status.reason();
+      }
       continue;
     }
     std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
@@ -865,7 +878,7 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
       with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
-      auto& win_stream = nccl_ctx.nccl_win_streams[source];
+      win_stream = nccl_ctx.nccl_win_passive_streams[source];
 
 #if NCCL_MINOR > 6
       // Self_rank for passive is always 1 so that source is always 0.
@@ -876,15 +889,13 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
                               num_elements, GetNCCLDataType(entry.tensor),
                               /*root=*/0, win_comm, win_stream));
 #endif
-      // Using thread pool instead and use sperate stream???
-      CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_GET) {
       std::shared_ptr<NCCLWindowManager> nccl_win_manager =
           nccl_ctx.named_win_map.at(win_name);
       with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
-      auto& win_stream = nccl_ctx.nccl_win_streams[self_rank];
+      win_stream = nccl_ctx.nccl_win_passive_streams[self_rank];
 #if NCCL_MINOR > 6
       // Self_rank for passive is always 1 so that destination is always 0.
       NCCLCHECK(ncclSend(sendbuf, req.length, GetNCCLDataType(req.data_type),
@@ -894,26 +905,25 @@ void WinPassiveRecvRequest(int self_rank, const NCCLContext& nccl_ctx) {
                               num_elements, GetNCCLDataType(entry.tensor),
                               /*root=*/1, win_comm, win_stream));
 #endif
-      // Using thread pool instead and use sperate stream???
-      CUDACHECK(cudaStreamSynchronize(win_stream));
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
       std::shared_ptr<NCCLWindowManager> nccl_win_manager =
           nccl_ctx.named_win_map.at(win_name);
       with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
       void* recvbuf = (void*)nccl_win_manager->GetWinMemoryByRank(source);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source]; // Self_rank for passive is always 1
-      auto& win_stream = nccl_ctx.nccl_win_streams[source]; 
+      win_stream = nccl_ctx.nccl_win_passive_streams[source]; 
       NCCLCHECK(ncclReduce(/*sendbuf=*/recvbuf, /*recv=*/recvbuf, req.length,
                            GetNCCLDataType(req.data_type), ncclSum, 
                            /*root=*/1, win_comm, win_stream));
-      // Using thread pool instead and use sperate stream???
-      CUDACHECK(cudaStreamSynchronize(win_stream));
     } else {
       BFLOG(ERROR) << "Receive wrong ops types in WinPassiveRecvRequest: "
                    << to_underlying(req.op_type)
                    << ". Supporting types are WIN_PUT = 6,WIN_GET = 7, and "
                       "WIN_ACCUMULATE = 8,";
     }
+    nccl_ctx.finalizer_thread_pool.execute([win_stream]() mutable {
+      CUDACHECK(cudaStreamSynchronize(win_stream));
+    });
   }
   nccl_ctx.win_passive_recv_shutdown_done = true;
 }
@@ -1034,6 +1044,11 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
+  // Because the weighted tensor is a tempory memory that won't be hold by entry
+  // and the callback will be finish in another thread. Hence, if we didn't make
+  // it an copy of shared ptr into callback. thess tensors will be destroyed.
+  std::vector<std::shared_ptr<Tensor>> weight_tensor_holder;
+
   ncclGroupStart();
   // TODO(ybc) sort the dst_weights?
   for (auto kv : entry.dst_weights) {
@@ -1070,10 +1085,11 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == mpi_ctx_.rank_) continue;
-    auto tensor = entry.tensor->data_weight(weight);
+    std::shared_ptr<Tensor> tensor = entry.tensor->data_weight(weight);
+    weight_tensor_holder.push_back(tensor);
     void* sendbuf = (void*)tensor->data();
     auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
-    auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
+    auto& win_stream = nccl_ctx_.nccl_win_active_streams[mpi_ctx_.rank_];
 #if NCCL_MINOR > 6
     // Self rank in active comms is always 0 and pair rank is 1.
     NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
@@ -1087,10 +1103,11 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid,
+                                           weight_tensor_holder]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
-    auto& win_stream = this->nccl_ctx_.nccl_win_streams[this->mpi_ctx_.rank_];
+    auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
     CUDACHECK(cudaEventRecord(event, win_stream));
     CUDACHECK(cudaEventSynchronize(event));
@@ -1130,6 +1147,10 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
+  // Because the weighted tensor is a tempory memory that won't be hold by entry
+  // and the callback will be finish in another thread. Hence, if we didn't make
+  // it an copy of shared ptr into callback. thess tensors will be destroyed.
+  std::vector<std::shared_ptr<Tensor>> weight_tensor_holder;
   ncclGroupStart();
   // TODO(ybc) sort the dst_weights?
   for (auto kv : entry.dst_weights) {
@@ -1166,10 +1187,13 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     // avoid putting the tensor for itself (NOT valid).
     if (target_rank == mpi_ctx_.rank_) continue;
-    auto tensor = entry.tensor->data_weight(weight);
+    std::shared_ptr<Tensor> tensor = entry.tensor->data_weight(weight);
+    weight_tensor_holder.push_back(tensor);
     void* sendbuf = (void*)tensor->data();
     auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
-    auto& win_stream = nccl_ctx_.nccl_win_streams[mpi_ctx_.rank_];
+    auto& win_stream = nccl_ctx_.nccl_win_active_streams[mpi_ctx_.rank_];
+
+    BFLOG(TRACE) << "Start ncclReduce for WinAccumulate";
     // Self rank in active comms is always 0 and pair rank is 1.
     // We use ncclReduce to mimic Accumulate, hence, root is 1 (pair rank).
     NCCLCHECK(ncclReduce(sendbuf, /*recv=*/nullptr, num_elements,
@@ -1179,10 +1203,11 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid,
+                                           weight_tensor_holder]() mutable {
     with_device device_guard(entry.device);
     cudaEvent_t event;
-    auto& win_stream = this->nccl_ctx_.nccl_win_streams[this->mpi_ctx_.rank_];
+    auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
     CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
     CUDACHECK(cudaEventRecord(event, win_stream));
     CUDACHECK(cudaEventSynchronize(event));
@@ -1267,7 +1292,7 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
     // TODO(ybc) implement mutex for nccl window
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
     auto& win_comm = nccl_ctx_.nccl_win_active_comms[target_rank];
-    auto& win_stream = nccl_ctx_.nccl_win_streams[target_rank];
+    auto& win_stream = nccl_ctx_.nccl_win_active_streams[target_rank];
 #if NCCL_MINOR > 6
     // Self rank in active comms is always 0 and pair rank is 1.
     NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(tensor),
@@ -1289,7 +1314,7 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
       cudaEvent_t event;
       CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
       events.push_back(event);
-      auto& win_stream = this->nccl_ctx_.nccl_win_streams[target_rank];
+      auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[target_rank];
       CUDACHECK(cudaEventRecord(event, win_stream));
     }
     for (auto& event : events) {
