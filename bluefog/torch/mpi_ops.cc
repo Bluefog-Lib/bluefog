@@ -310,6 +310,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
+    // TODO(ybc) Figure out why ready_event may encounter signal abort (6) problem.
     // auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_context, bf_tensor, bf_output, nullptr, bf_recv_neighbors, bf_send_neighbors,
