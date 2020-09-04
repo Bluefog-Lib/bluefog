@@ -29,6 +29,10 @@
 namespace bluefog {
 namespace common {
 
+constexpr int BFWinPassiveSuccess = 0;
+constexpr int BFWinPassiveFail = 1;
+constexpr int BFWinPassiveRetry = 2;
+
 const int kWinPassiveRecvRequestTag = 20201234;
 const int kWinPassiveRecvAckTag = 20200827;
 
@@ -404,6 +408,20 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   with_device device_guard(entry.device);
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
+  std::string send_name = entry.tensor_name;
+  char* recv_name = new char[send_name.size() + 1];
+  if (mpi_ctx_.rank_ == 0) {
+    MPI_Bcast((void*)send_name.c_str(), send_name.size() + 1, MPI_CHAR, 0,
+              MPI_COMM_WORLD);
+  } else {
+    MPI_Bcast((void*)recv_name, send_name.size() + 1, MPI_CHAR, 0,
+              MPI_COMM_WORLD);
+    if (strcmp(recv_name, send_name.c_str()) != 0) {
+      BFLOG(ERROR) << "Mismatch the send and receive name: recieved "
+                   << recv_name << " and self name is " << send_name;
+    }
+  }
+
   ncclResult_t ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
                                         GetNCCLDataType(entry.tensor), ncclSum,
                                         nccl_ctx_.nccl_comm, nccl_ctx_.stream);
@@ -857,11 +875,18 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
 
     Status status = nccl_ctx.window_id_manager.CheckIdRegistered(req.name_id);
     if ((mpi_status.MPI_ERROR == MPI_SUCCESS) && status.ok() && !self_processing) {
-      res_buf[0] = 1;  // SUCCESS
-      MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
-                        kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+      if (nccl_ctx.nccl_win_mutex.try_lock()) {
+        res_buf[0] = BFWinPassiveSuccess;
+        MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
+                          kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+      } else {
+        res_buf[0] = BFWinPassiveRetry;
+        MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
+                          kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+        continue;
+      }
     } else {
-      res_buf[0] = 0;  // Fail
+      res_buf[0] = BFWinPassiveFail;
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD));
       if (status.ok()) {
@@ -915,6 +940,8 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                    << ". Supporting types are WIN_PUT = 6,WIN_GET = 7, and "
                       "WIN_ACCUMULATE = 8,";
     }
+    nccl_ctx.nccl_win_mutex.unlock();
+
     nccl_ctx.finalizer_thread_pool.execute([win_stream]() mutable {
       CUDACHECK(cudaStreamSynchronize(win_stream));
     });
@@ -1043,6 +1070,7 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   // it an copy of shared ptr into callback. thess tensors will be destroyed.
   std::vector<std::shared_ptr<Tensor>> weight_tensor_holder;
 
+  std::unique_lock<std::mutex> lock_win_passive(nccl_ctx_.nccl_win_mutex);
   ncclGroupStart();
   // TODO(ybc) sort the dst_weights?
   for (auto kv : entry.dst_weights) {
@@ -1059,20 +1087,34 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
                                        .data_type = data_type,
                                        .op_type = MPIOpsType::WIN_PUT};
     const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
-    BFLOG(TRACE, mpi_ctx_.rank_)
-        << "Send request to " << target_rank << ": "
-        << DeserializeNCCLWinRequest(req_buf).to_string();
-    MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
-                      kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
     std::vector<int> res_buf(1, -1);
-    MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
-                      kWinPassiveRecvAckTag, MPI_COMM_WORLD,
-                      MPI_STATUS_IGNORE));
-    if (res_buf[0] == 0) {  // Failed
-      // TODO(ybc) How to handle it??
-      throw std::runtime_error(
-          "Failed after the passive recv thread for NCCL Win_put.");
-    }
+
+    // To avoid dead lock, we will use mutex to exclude the order of active thread
+    // and passive thread on nccl communication ops. An exclusive communication can
+    // be established only when self active thread get lock and peer passive thread
+    // get the lock as well.
+    // Note the live lock may NOT be able to avoid in thic approach.
+    do {
+      BFLOG(TRACE, mpi_ctx_.rank_)
+          << "Send request to " << target_rank << ": "
+          << DeserializeNCCLWinRequest(req_buf).to_string();
+      MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
+                        kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+      MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD,
+                        MPI_STATUS_IGNORE));
+      if (res_buf[0] == BFWinPassiveFail) {  // Failed
+        // TODO(ybc) How to handle it??
+        throw std::runtime_error(
+            "Failed after the passive recv thread for NCCL Win_put.");
+      }
+      if (res_buf[0] == BFWinPassiveRetry) {
+        lock_win_passive.unlock();
+        int random_usec = (rand() + mpi_ctx_.rank_) % 100;
+        std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
+        lock_win_passive.lock();
+      }
+    } while (res_buf[0] != BFWinPassiveSuccess);
 
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
@@ -1095,6 +1137,7 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
 #endif
   }
   ncclGroupEnd();
+  lock_win_passive.unlock();
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid,
@@ -1145,6 +1188,8 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   // and the callback will be finish in another thread. Hence, if we didn't make
   // it an copy of shared ptr into callback. thess tensors will be destroyed.
   std::vector<std::shared_ptr<Tensor>> weight_tensor_holder;
+  std::unique_lock<std::mutex> lock_win_passive(nccl_ctx_.nccl_win_mutex);
+
   ncclGroupStart();
   // TODO(ybc) sort the dst_weights?
   for (auto kv : entry.dst_weights) {
@@ -1161,20 +1206,33 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
                                        .data_type = data_type,
                                        .op_type = MPIOpsType::WIN_ACCUMULATE};
     const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
-    BFLOG(TRACE, mpi_ctx_.rank_)
-        << "Send request to " << target_rank << ": "
-        << DeserializeNCCLWinRequest(req_buf).to_string();
-    MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
-                      kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
     std::vector<int> res_buf(1, -1);
-    MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
-                      kWinPassiveRecvAckTag, MPI_COMM_WORLD,
-                      MPI_STATUS_IGNORE));
-    if (res_buf[0] == 0) {  // Failed
-      // TODO(ybc) How to handle it??
-      throw std::runtime_error(
-          "Failed after the passive recv thread for NCCL Win_put.");
-    }
+    // To avoid dead lock, we will use mutex to exclude the order of active thread
+    // and passive thread on nccl communication ops. An exclusive communication can
+    // be established only when self active thread get lock and peer passive thread
+    // get the lock as well.
+    // Note the live lock may NOT be able to avoid in thic approach.
+    do {
+      BFLOG(TRACE, mpi_ctx_.rank_)
+          << "Send request to " << target_rank << ": "
+          << DeserializeNCCLWinRequest(req_buf).to_string();
+      MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
+                        kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+      MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD,
+                        MPI_STATUS_IGNORE));
+      if (res_buf[0] == BFWinPassiveFail) {
+        // TODO(ybc) How to handle it??
+        throw std::runtime_error(
+            "Failed after the passive recv thread for NCCL Win_put.");
+      }
+      if (res_buf[0] == BFWinPassiveRetry) {  // Retry?
+        lock_win_passive.unlock();
+        int random_usec = (rand() + mpi_ctx_.rank_) % 100;
+        std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
+        lock_win_passive.lock();
+      }
+    } while (res_buf[0] != BFWinPassiveSuccess);
 
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
@@ -1194,6 +1252,7 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
                          /*root=*/1, win_comm, win_stream));
   }
   ncclGroupEnd();
+  lock_win_passive.unlock();
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid,
@@ -1240,6 +1299,7 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
+  std::unique_lock<std::mutex> lock_win_passive(nccl_ctx_.nccl_win_mutex);
   ncclGroupStart();
   // TODO(ybc) sort the src_weights?
   for (auto& kv : entry.src_weights) {
@@ -1266,20 +1326,34 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
                                        .data_type = data_type,
                                        .op_type = MPIOpsType::WIN_GET};
     const std::vector<int> req_buf = SerializeNCCLWinRequest(nccl_win_request);
-    BFLOG(TRACE, mpi_ctx_.rank_)
-        << "Send request to " << target_rank << ": "
-        << DeserializeNCCLWinRequest(req_buf).to_string();
-    MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
-                      kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
     std::vector<int> res_buf(1, -1);
-    MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
-                      kWinPassiveRecvAckTag, MPI_COMM_WORLD,
-                      MPI_STATUS_IGNORE));
-    if (res_buf[0] == 0) {  // Failed
-      // TODO(ybc) How to handle it??
-      throw std::runtime_error(
-          "Failed after the passive recv thread for NCCL Win_get.");
-    }
+
+    // To avoid dead lock, we will use mutex to exclude the order of active thread
+    // and passive thread on nccl communication ops. An exclusive communication can
+    // be established only when self active thread get lock and peer passive thread
+    // get the lock as well.
+    // Note the live lock may NOT be able to avoid in thic approach.
+    do {
+      BFLOG(TRACE, mpi_ctx_.rank_)
+          << "Send request to " << target_rank << ": "
+          << DeserializeNCCLWinRequest(req_buf).to_string();
+      MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
+                        kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
+      MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD,
+                        MPI_STATUS_IGNORE));
+      if (res_buf[0] == BFWinPassiveFail) {
+        // TODO(ybc) How to handle it??
+        throw std::runtime_error(
+            "Failed after the passive recv thread for NCCL Win_get.");
+      }
+      if (res_buf[0] == BFWinPassiveRetry) {
+        lock_win_passive.unlock();
+        int random_usec = (rand() + mpi_ctx_.rank_) % 100;
+        std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
+        lock_win_passive.lock();
+      }
+    } while (res_buf[0] != BFWinPassiveSuccess);
 
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
@@ -1297,6 +1371,7 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
 #endif
   }
   ncclGroupEnd();
+  lock_win_passive.unlock();
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {

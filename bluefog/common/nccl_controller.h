@@ -112,7 +112,7 @@ class NCCLContext {
 
   std::vector<cudaStream_t> nccl_win_active_streams;
   std::vector<cudaStream_t> nccl_win_passive_streams;
-
+  mutable std::mutex nccl_win_mutex;
 
 #if NCCL_MINOR < 7
   // Communicators between two ranks used to mimic send/recv through broadcast.
