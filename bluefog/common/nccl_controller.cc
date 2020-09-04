@@ -408,20 +408,6 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   with_device device_guard(entry.device);
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
-  std::string send_name = entry.tensor_name;
-  char* recv_name = new char[send_name.size() + 1];
-  if (mpi_ctx_.rank_ == 0) {
-    MPI_Bcast((void*)send_name.c_str(), send_name.size() + 1, MPI_CHAR, 0,
-              MPI_COMM_WORLD);
-  } else {
-    MPI_Bcast((void*)recv_name, send_name.size() + 1, MPI_CHAR, 0,
-              MPI_COMM_WORLD);
-    if (strcmp(recv_name, send_name.c_str()) != 0) {
-      BFLOG(ERROR) << "Mismatch the send and receive name: recieved "
-                   << recv_name << " and self name is " << send_name;
-    }
-  }
-
   ncclResult_t ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
                                         GetNCCLDataType(entry.tensor), ncclSum,
                                         nccl_ctx_.nccl_comm, nccl_ctx_.stream);
@@ -1012,8 +998,8 @@ Status NCCLController::WinFree(const std::string& name, int device) {
     return Status::InvalidArgument(
         "Different processes tried to free different window name " + name);
   }
-  it->second->FreeWindow();
   it->second->DestroyMutexWin();
+  it->second->FreeWindow();
   nccl_ctx_.named_win_map.erase(it);
   if (!nccl_ctx_.window_id_manager.UnregisterName(name).ok()) {
     MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
@@ -1032,7 +1018,7 @@ Status NCCLController::WinFreeAll() {
   }
   std::sort(win_names.begin(), win_names.end());
   for (auto& name : win_names) {
-    WinFree(name, 0);
+    WinFree(name, /*device=*/0);  //device is never used.
   }
   BFLOG(DEBUG) << "All NCCL Wins have been freed.";
   return Status::OK();
@@ -1411,6 +1397,7 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
 Status NCCLController::WinMutexAcquire(const std::string& name,
                                        const std::vector<int>& acquire_ranks,
                                        bool is_sync) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex (NCCL) for " << name << " is acquired.";
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + name +
@@ -1423,6 +1410,7 @@ Status NCCLController::WinMutexAcquire(const std::string& name,
 Status NCCLController::WinMutexRelease(const std::string& name,
                                        const std::vector<int>& release_ranks,
                                        bool is_sync) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex (NCCL) for " << name << " is released.";
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + name +
