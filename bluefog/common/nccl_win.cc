@@ -129,7 +129,6 @@ bool NCCLWindowManager::InitializeWinMemory(
 
 void NCCLWindowManager::FreeWindow() {
   wins_tensor_vec_.clear();
-  mutex_mem_.reset();
 }
 
 // TODO(ybc) Following code is duplicated from MPI version.
