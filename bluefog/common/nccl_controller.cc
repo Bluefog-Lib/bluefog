@@ -335,7 +335,6 @@ void NCCLController::InitWindowCommunicators() {
       nccl_ctx_.nccl_win_passive_comms[i] = nccl_win_accum_comm;
     }
   }
-  nccl_ctx_.is_peer_comm_initialized = true;
 }
 
 void NCCLController::DestroyWindowCommunicators() {
@@ -819,6 +818,7 @@ ncclResult_t NCCLController::ncclRecvByBcast(void* recvbuf, const int count,
 #endif
 
 void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
+  BFLOG(TRACE, self_rank) << "WinPassiveRecvRequest thread initialized";
   std::vector<int> req_buf(4, -1);
   std::vector<int> res_buf(1, -1);
   cudaStream_t win_stream;
@@ -947,6 +947,7 @@ Status NCCLController::WinCreate(
   }
   if (!nccl_ctx_.is_window_comm_initialized) {
     InitWindowCommunicators();
+    nccl_ctx_.is_window_comm_initialized = true;
   }
 
   Timeline* timeline_ptr;
@@ -1089,7 +1090,7 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
       MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD,
                         MPI_STATUS_IGNORE));
-      if (res_buf[0] == BFWinPassiveFail) {  // Failed
+      if (res_buf[0] == BFWinPassiveFail) {
         // TODO(ybc) How to handle it??
         throw std::runtime_error(
             "Failed after the passive recv thread for NCCL Win_put.");
