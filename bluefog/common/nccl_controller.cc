@@ -29,6 +29,12 @@
 namespace bluefog {
 namespace common {
 
+static const char* BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE = std::getenv("BLUEFOG_SLEEP_USEC_FOR_WIN_PASSIVE");
+static const int MAX_SLEEP_USEC_FOR_WIN_PASSIVE =
+    BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE == nullptr
+        ? 100
+        : std::strtol(BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE, nullptr, 10);
+
 constexpr int BFWinPassiveSuccess = 0;
 constexpr int BFWinPassiveFail = 1;
 constexpr int BFWinPassiveRetry = 2;
@@ -1063,11 +1069,6 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
-    if (entry.require_mutex) {
-      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
-      timeline_ptr->ActivityEnd(entry.tensor_name);
-    }
     // 1. Talk with passive recv thread to open the request first.
     NCCLWinRequest nccl_win_request = {.length = num_elements,
                                        .name_id = window_name_id,
@@ -1097,12 +1098,17 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec = (rand() + mpi_ctx_.rank_) % 100;
+        int random_usec = (rand() + mpi_ctx_.rank_) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
     } while (res_buf[0] != BFWinPassiveSuccess);
 
+    if (entry.require_mutex) {
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -1127,31 +1133,27 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   lock_win_passive.unlock();
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid,
-                                           weight_tensor_holder]() mutable {
-    with_device device_guard(entry.device);
-    cudaEvent_t event;
-    auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, win_stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
+  cudaEvent_t event;
+  auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
+  CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+  CUDACHECK(cudaEventRecord(event, win_stream));
+  CUDACHECK(cudaEventSynchronize(event));
+  this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
-    if (entry.require_mutex) {
-      std::vector<int> dst_ranks;
-      for(auto& kv : entry.dst_weights){
-        dst_ranks.push_back(kv.first);
-      }
-      WinMutexRelease(entry.tensor_name, dst_ranks, /*is_sync=*/false);
+  if (entry.require_mutex) {
+    std::vector<int> dst_ranks;
+    for(auto& kv : entry.dst_weights){
+      dst_ranks.push_back(kv.first);
     }
+    WinMutexRelease(entry.tensor_name, dst_ranks, /*is_sync=*/false);
+  }
 
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
-    BFLOG(TRACE, this->mpi_ctx_.rank_)
-        << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
-    entry.callback(Status::OK());
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-  });
+  CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+  this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+  BFLOG(TRACE, this->mpi_ctx_.rank_)
+      << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
+  entry.callback(Status::OK());
+  this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
 }
 
 void NCCLController::WinAccumulate(TensorTableEntry& entry) {
@@ -1182,11 +1184,6 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
-    if (entry.require_mutex) {
-      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
-      timeline_ptr->ActivityEnd(entry.tensor_name);
-    }
     // 1. Talk with passive recv thread to open the request first.
     NCCLWinRequest nccl_win_request = {.length = num_elements,
                                        .name_id = window_name_id,
@@ -1213,14 +1210,19 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
         throw std::runtime_error(
             "Failed after the passive recv thread for NCCL Win_put.");
       }
-      if (res_buf[0] == BFWinPassiveRetry) {  // Retry?
+      if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec = (rand() + mpi_ctx_.rank_) % 100;
+        int random_usec = (rand() + mpi_ctx_.rank_) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
     } while (res_buf[0] != BFWinPassiveSuccess);
 
+    if (entry.require_mutex) {
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -1242,31 +1244,27 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   lock_win_passive.unlock();
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid,
-                                           weight_tensor_holder]() mutable {
-    with_device device_guard(entry.device);
-    cudaEvent_t event;
-    auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, win_stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
+  cudaEvent_t event;
+  auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
+  CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+  CUDACHECK(cudaEventRecord(event, win_stream));
+  CUDACHECK(cudaEventSynchronize(event));
+  this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
-    if (entry.require_mutex) {
-      std::vector<int> dst_ranks;
-      for(auto& kv : entry.dst_weights){
-        dst_ranks.push_back(kv.first);
-      }
-      WinMutexRelease(entry.tensor_name, dst_ranks, /*is_sync=*/false);
+  if (entry.require_mutex) {
+    std::vector<int> dst_ranks;
+    for(auto& kv : entry.dst_weights){
+      dst_ranks.push_back(kv.first);
     }
+    WinMutexRelease(entry.tensor_name, dst_ranks, /*is_sync=*/false);
+  }
 
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
-    BFLOG(TRACE, this->mpi_ctx_.rank_)
-        << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
-    entry.callback(Status::OK());
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-  });
+  CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+  this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+  BFLOG(TRACE, this->mpi_ctx_.rank_)
+      << "Win_Put(NCCL) for " << entry.tensor_name << " is done.";
+  entry.callback(Status::OK());
+  this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
 }
 
 void NCCLController::WinGet(TensorTableEntry& entry) {
@@ -1291,11 +1289,6 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   // TODO(ybc) sort the src_weights?
   for (auto& kv : entry.src_weights) {
     int target_rank = kv.first;
-    if (entry.require_mutex) {
-      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
-      timeline_ptr->ActivityEnd(entry.tensor_name);
-    }
 
     with_device device_guard(nccl_win_manager->GetWinMemoryDevice());
     std::shared_ptr<Tensor> tensor =
@@ -1336,12 +1329,17 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec = (rand() + mpi_ctx_.rank_) % 100;
+        int random_usec = (rand() + mpi_ctx_.rank_) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
     } while (res_buf[0] != BFWinPassiveSuccess);
 
+    if (entry.require_mutex) {
+      timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
+      timeline_ptr->ActivityEnd(entry.tensor_name);
+    }
     // 2. Passive recv thread is ready to recv
     // TODO(ybc) implement mutex for nccl window
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -1361,38 +1359,35 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   lock_win_passive.unlock();
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
-    with_device device_guard(entry.device);
-    std::vector<cudaEvent_t> events;
-    for (auto& kv : entry.src_weights) {
-      int target_rank = kv.first;
-      cudaEvent_t event;
-      CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-      events.push_back(event);
-      auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[target_rank];
-      CUDACHECK(cudaEventRecord(event, win_stream));
-    }
-    for (auto& event : events) {
-      CUDACHECK(cudaEventSynchronize(event));
-      CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    }
-    events.clear();
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
+  std::vector<cudaEvent_t> events;
+  for (auto& kv : entry.src_weights) {
+    int target_rank = kv.first;
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    events.push_back(event);
+    auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[target_rank];
+    CUDACHECK(cudaEventRecord(event, win_stream));
+  }
+  for (auto& event : events) {
+    CUDACHECK(cudaEventSynchronize(event));
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+  }
+  events.clear();
+  this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
-    if (entry.require_mutex) {
-      std::vector<int> src_ranks;
-      for(auto& kv : entry.src_weights){
-        src_ranks.push_back(kv.first);
-      }
-      WinMutexRelease(entry.tensor_name, src_ranks, /*is_sync=*/false);
+  if (entry.require_mutex) {
+    std::vector<int> src_ranks;
+    for(auto& kv : entry.src_weights){
+      src_ranks.push_back(kv.first);
     }
+    WinMutexRelease(entry.tensor_name, src_ranks, /*is_sync=*/false);
+  }
 
-    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
-    BFLOG(TRACE, this->mpi_ctx_.rank_)
-        << "Win_Get(NCCL) for " << entry.tensor_name << " is done.";
-    entry.callback(Status::OK());
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-  });
+  this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+  BFLOG(TRACE, this->mpi_ctx_.rank_)
+      << "Win_Get(NCCL) for " << entry.tensor_name << " is done.";
+  entry.callback(Status::OK());
+  this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
 }
 
 Status NCCLController::WinMutexAcquire(const std::string& name,
