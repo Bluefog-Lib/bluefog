@@ -238,7 +238,7 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
-        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     device = CPU_DEVICE_ID;
   } else {
