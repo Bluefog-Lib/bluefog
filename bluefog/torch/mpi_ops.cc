@@ -136,9 +136,6 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
               output_buffer.div_(bluefog_size());
             }
             copy_buffer_back(output, output_buffer, cpu_half_converted);
-          }
-          handle_manager.MarkDone(handle, status);
-          timeline_ptr->ActivityEnd(op_name, &tid);  // ENQUEUE
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -150,13 +147,12 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
         bf_tensor, bf_output, nullptr, op_name, device,
         callback_wrapper([average, output]() mutable {
           // Will execute in the `device` context.
-          if (status.ok()) {
-            bool cpu_half_converted = is_cpu_half_tensor(output);
-            ::torch::Tensor output_buffer = get_tensor_buffer(output, cpu_half_converted);
-            if (average && bluefog_size() > 1) {
-              output_buffer.div_(bluefog_size());
-            }
-            copy_buffer_back(output, output_buffer, cpu_half_converted);
+          bool cpu_half_converted = is_cpu_half_tensor(output);
+          ::torch::Tensor output_buffer = get_tensor_buffer(output, cpu_half_converted);
+          if (average && bluefog_size() > 1) {
+            output_buffer.div_(bluefog_size());
+          }
+          copy_buffer_back(output, output_buffer, cpu_half_converted);
           }));
     ThrowIfError(enqueue_result);
   }
@@ -547,7 +543,6 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
             }
             copy_buffer_back(output, output_buffer, is_output_cpu_half);
-          }
         }));
     ThrowIfError(enqueue_result);
   } else {
