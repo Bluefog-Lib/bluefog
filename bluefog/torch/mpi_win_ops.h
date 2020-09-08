@@ -195,10 +195,10 @@ extern "C" void bluefog_torch_win_unlock(char* name);
 
 extern "C" void bluefog_torch_win_mutex_acquire(char* name,
                                                 const std::vector<int>& ranks,
-                                                bool exclusive);
+                                                bool for_self);
 extern "C" void bluefog_torch_win_mutex_release(char* name,
                                                 const std::vector<int>& ranks,
-                                                bool exclusive);
+                                                bool for_self);
 
 }  // namespace torch
 }  // namespace bluefog
