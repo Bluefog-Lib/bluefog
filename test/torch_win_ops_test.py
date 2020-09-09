@@ -31,7 +31,7 @@ warnings.simplefilter("ignore")
 
 
 EPSILON = 1e-5
-TEST_ON_GPU = False and torch.cuda.is_available()
+TEST_ON_GPU = torch.cuda.is_available()
 
 
 class WinOpsTests(unittest.TestCase):
