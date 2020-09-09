@@ -102,7 +102,7 @@ class NCCLWindowManager {
   int device_;
 
   // We still use MPI implementation of distributed Mutex.
-  std::unique_ptr<int> mutex_mem_;
+  std::vector<int> mutex_mem_;
   std::shared_ptr<MPI_Win> mutex_win_;
 };
 
