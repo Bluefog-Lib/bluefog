@@ -191,10 +191,10 @@ extern "C" void bluefog_torch_win_wait(int handle);
 
 extern "C" void bluefog_torch_win_mutex_acquire(char* name,
                                                 const std::vector<int>& ranks,
-                                                bool exclusive);
+                                                bool is_sync);
 extern "C" void bluefog_torch_win_mutex_release(char* name,
                                                 const std::vector<int>& ranks,
-                                                bool exclusive);
+                                                bool is_sync);
 
 // Do not have support in the NCCL implementation
 extern "C" int bluefog_torch_win_fence(char* name);

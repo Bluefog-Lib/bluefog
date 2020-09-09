@@ -518,26 +518,26 @@ void DoWinUnlock(const std::string& name) {
 }
 
 void DoWinMutexAcquire(const std::string& name, const std::vector<int>& ranks,
-                       bool exclusive) {
+                       bool is_sync) {
   ThrowIfError(common::CheckInitialized());
   int device = CPU_DEVICE_ID;
   if (!win_storage_manager.GetDeviceByName(name, &device)) {
     ThrowIfError(Status::InvalidArgument("Cannot get device of win " + name));
   }
   Status status =
-      common::WindowMutexAcquire(name, ranks, device, /*is_sync=*/exclusive);
+      common::WindowMutexAcquire(name, ranks, device, /*is_sync=*/is_sync);
   ThrowIfError(status);
 }
 
 void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
-                       bool exclusive) {
+                       bool is_sync) {
   ThrowIfError(common::CheckInitialized());
   int device = CPU_DEVICE_ID;
   if (!win_storage_manager.GetDeviceByName(name, &device)) {
     ThrowIfError(Status::InvalidArgument("Cannot get device of win " + name));
   }
   Status status =
-      common::WindowMutexRelease(name, ranks, device, /*is_sync=*/exclusive);
+      common::WindowMutexRelease(name, ranks, device, /*is_sync=*/is_sync);
   ThrowIfError(status);
 }
 

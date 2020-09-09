@@ -1400,7 +1400,7 @@ Status NCCLController::WinMutexAcquire(const std::string& name,
                              " in (NCCL) registered win name.");
   }
   std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
-  return MPIWinMutexAcquireImpl(mutex_win, acquire_ranks, is_sync);
+  return MPIWinMutexAcquireImpl(mutex_win, acquire_ranks, mpi_ctx_.rank_, is_sync);
 }
 
 Status NCCLController::WinMutexRelease(const std::string& name,
@@ -1413,7 +1413,7 @@ Status NCCLController::WinMutexRelease(const std::string& name,
                              " in (NCCL) registered win name.");
   }
   std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
-  return MPIWinMutexReleaseImpl(mutex_win, release_ranks, is_sync);
+  return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
 }
 
 }  // namespace common

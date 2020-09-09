@@ -57,27 +57,28 @@ bool WindowManager::InitializeMutexWin(const MPI_Comm& mpi_comm) {
   }
 
   if (!mutex_win_) {
-     mutex_win_  = std::make_shared<MPI_Win>();
+    mutex_win_ = std::make_shared<MPI_Win>();
   }
   // We only need one value for self mutex.
-  mutex_mem_ = std::unique_ptr<int>(new int(0));  // make_unique is c++14 feature.
+  mutex_mem_.resize(global_size);
+  std::fill_n(mutex_mem_.data(), global_size, 0);
 
   int element_size = 0;
   MPI_Type_size(MPI_INT, &element_size);
-  int win_size = 1 * element_size;
-  MPI_Win_create((void *)mutex_mem_.get(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
-                 mutex_win_.get());
+  int win_size = global_size * element_size;
+  MPI_Win_create((void*)mutex_mem_.data(), win_size, element_size,
+                 MPI_INFO_NULL, mpi_comm, mutex_win_.get());
   return true;
 }
 
 bool WindowManager::DestroyMutexWin() {
   if (!mutex_win_) {
-    mutex_mem_.reset();
+    mutex_mem_.clear();
     return false;
   }
   MPI_Win_free(mutex_win_.get());
   mutex_win_.reset();
-  mutex_mem_.reset();
+  mutex_mem_.clear();
   return true;
 }
 

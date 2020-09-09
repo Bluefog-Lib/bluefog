@@ -113,10 +113,10 @@ class MPIController {
 // for all out-neighbors.
 Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& acquire_ranks,
-                              bool is_sync);
+                              int self_rank, bool is_sync);
 Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& release_ranks,
-                              bool is_sync);
+                              int self_rank, bool is_sync);
 
 }  // namespace common
 }  // namespace bluefog
