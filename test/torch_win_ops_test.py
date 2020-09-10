@@ -237,7 +237,7 @@ class WinOpsTests(unittest.TestCase):
                           size for i in range(indegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(indegree+1)
 
-        dims = [1, 2]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
@@ -278,7 +278,7 @@ class WinOpsTests(unittest.TestCase):
                           size for i in range(indegree)]  # in-neighbor
         avg_value = (rank + np.sum(neighbor_ranks)) / float(indegree+1)
 
-        dims = [1, 2]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             base_tensor = torch.arange(23**dim).view_as(tensor)/1000
@@ -322,7 +322,7 @@ class WinOpsTests(unittest.TestCase):
         avg_value = (rank*indegree + 1.23*((rank-1) %
                                            size)) / float(indegree+1)
 
-        dims = [1, 2]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
@@ -363,7 +363,7 @@ class WinOpsTests(unittest.TestCase):
                           size for i in range(outdegree)]  # in-neighbor
         avg_value = rank + np.sum(neighbor_ranks) / float(outdegree+1)
 
-        dims = [1, 2]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
@@ -399,7 +399,7 @@ class WinOpsTests(unittest.TestCase):
                           size for i in range(outdegree)]  # in-neighbor
         avg_value = rank + np.sum(neighbor_ranks) / float(outdegree+1)
 
-        dims = [1, 2]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             base_tensor = torch.arange(23**dim).view_as(tensor)/1000
@@ -437,7 +437,7 @@ class WinOpsTests(unittest.TestCase):
 
         avg_value = rank + ((rank-1) % size) * 1.23 / 2.0
 
-        dims = [1, 2]
+        dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
@@ -596,6 +596,7 @@ class WinOpsTests(unittest.TestCase):
             assert (t_end - t_start) < 2, \
                 "The mutex acquire time should be shorter than 2 second"
 
+    @unittest.skip
     def test_win_mutex_given_ranks(self):
         size = bf.size()
         rank = bf.rank()

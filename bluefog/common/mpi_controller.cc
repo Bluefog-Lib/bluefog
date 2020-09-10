@@ -37,7 +37,7 @@ namespace common {
 static const char* BLUEFOG_MAX_WIN_SENT = std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
 static const int MAX_WIN_SENT =
     BLUEFOG_MAX_WIN_SENT == nullptr
-        ? 2000
+        ? 1000
         : std::strtol(BLUEFOG_MAX_WIN_SENT, nullptr, 10);
 
 // MPIController
