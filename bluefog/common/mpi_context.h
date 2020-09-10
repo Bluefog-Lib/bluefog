@@ -85,7 +85,7 @@ class WindowManager {
 
   // MPI Window used for mutex.
   std::shared_ptr<MPI_Win> mutex_win_;
-  std::vector<int> mutex_mem_;
+  std::unique_ptr<int> mutex_mem_;
 };
 
 class MPIContext {

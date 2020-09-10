@@ -582,7 +582,7 @@ class WinOpsTests(unittest.TestCase):
         bf.win_create(tensor, window_name)
 
         if rank == 0:
-            with bf.win_mutex(window_name, for_self=True):
+            with bf.win_mutex(window_name):
                 bf.barrier()
                 time.sleep(1.01)
         else:
@@ -609,20 +609,20 @@ class WinOpsTests(unittest.TestCase):
         window_name = "win_mutex_given_ranks"
         bf.win_create(tensor, window_name)
         if rank == 0:
-            with bf.win_mutex(window_name, for_self=True, ranks=[0]):
+            with bf.win_mutex(window_name, [0]):
                 bf.barrier()
                 time.sleep(1.01)
         elif rank == 1:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex(window_name, ranks=[1]):
+            with bf.win_mutex(window_name, [1]):
                 time.sleep(0.001)
             t_end = time.time()
             assert (t_end - t_start) < 0.1
         elif rank == 2:
             bf.barrier()
             t_start = time.time()
-            with bf.win_mutex(window_name, ranks=[0]):
+            with bf.win_mutex(window_name, [0]):
                 time.sleep(0.001)
             t_end = time.time()
             assert (t_end - t_start) > 1

@@ -508,16 +508,18 @@ void DoWinUnlock(const std::string& name) {
 }
 
 void DoWinMutexAcquire(const std::string& name, const std::vector<int>& ranks,
-                       bool for_self) {
+                       bool exclusive) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::WindowMutexAcquire(name, ranks, /*is_sync=*/for_self);
+  Status status =
+      common::WindowMutexAcquire(name, ranks, /*is_sync=*/exclusive);
   ThrowIfError(status);
 }
 
 void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
-                       bool for_self) {
+                       bool exclusive) {
   ThrowIfError(common::CheckInitialized());
-  Status status = common::WindowMutexRelease(name, ranks, /*is_sync=*/for_self);
+  Status status =
+      common::WindowMutexRelease(name, ranks, /*is_sync=*/exclusive);
   ThrowIfError(status);
 }
 
