@@ -756,8 +756,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
-  BFLOG(TRACE, mpi_ctx_.rank_) << "MPI_Accmulate for " << entry.tensor_name
-                      << " is done.";
+  BFLOG(TRACE, mpi_ctx_.rank_)
+      << "MPI_Accmulate for " << entry.tensor_name << " is done.";
 
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
@@ -936,9 +936,8 @@ Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
   int oldval = 0;
 
   for (int rank : acquire_ranks) {
-    BFLOG(TRACE) << "Acquire Win Mutex for rank " << rank;
     if (is_sync) {
-      MPI_Win_lock(MPI_LOCK_EXCLUSIVE, self_rank, 0, *mutex_win);
+      MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
     } else {
       MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
     }
@@ -969,6 +968,7 @@ Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
     } else {
       MPI_Win_unlock(rank, *mutex_win);
     }
+    BFLOG(TRACE, self_rank) << "Acquired Win Mutex for rank " << rank;
   }
 
   return Status::OK();
@@ -980,7 +980,6 @@ Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
   int one = 1;
   int minus_one = -1;
   for (int rank : release_ranks) {
-    BFLOG(TRACE) << "Release Win Mutex for rank " << rank;
     if (is_sync) {
       // TODO(ybc) Notice the following accumulate may cause the value to be
       // negative, i.e. more release ops is called than acquire.
@@ -994,6 +993,7 @@ Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
                      MPI_SUM, *mutex_win);
       MPI_Win_unlock(rank, *mutex_win);
     }
+    BFLOG(TRACE, self_rank) << "Released Win Mutex for rank " << rank;
   }
   return Status::OK();
 }

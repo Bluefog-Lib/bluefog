@@ -297,9 +297,13 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 
   // We need to lock self avoid updating and win_put/win_accumulate happen at
   // simultaneous time.
-  const std::vector<int> self_rank = {common::bluefog_rank()};
+  std::vector<int> neighbor_ranks;
+  neighbor_ranks.reserve(neighbor_weights.size());
+  for (auto& kv : neighbor_weights) {
+    neighbor_ranks.push_back(kv.first);
+  }
   if (require_mutex)
-    common::WindowMutexAcquire(name, self_rank, device, /*is_sync=*/true);
+    common::WindowMutexAcquire(name, neighbor_ranks, device, /*is_sync=*/true);
 
   Status status = common::WindowSync(name, device);
 
@@ -318,14 +322,14 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
     if (!win_storage_manager.AvgWithNeighbor(name, bf_tensor, self_weight,
                                              neighbor_weights)) {
       if (require_mutex)
-        common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
+        common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
     if (!win_storage_manager.SumWithNeighbor(name, bf_tensor)) {
       if (require_mutex)
-        common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
+        common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
@@ -335,11 +339,11 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
 
   if (reset && !ResetNeighborTensor(name, neighbor_weights)) {
     if (require_mutex)
-      common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
+      common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
     return 0;
   }
   if (require_mutex)
-    common::WindowMutexRelease(name, self_rank, device, /*is_sync=*/true);
+    common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);

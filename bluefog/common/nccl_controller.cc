@@ -131,6 +131,14 @@ void NCCLContext::CleanWindowCommunicators() {
 }
 
 void NCCLContext::Finalize() {
+  if (win_passive_recv_initialized) {
+    win_passive_recv_shutdown.store(true);
+    while(!win_passive_recv_shutdown_done) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+  }
+  finalizer_thread_pool.reset();
+
   NCCLCHECK(ncclCommDestroy(nccl_comm));
   CUDACHECK(cudaStreamDestroy(stream));
 
@@ -141,13 +149,6 @@ void NCCLContext::Finalize() {
 
   is_initialized = false;
   cuda_device = -1;
-
-  if (win_passive_recv_initialized) {
-    win_passive_recv_shutdown.store(true);
-    while(!win_passive_recv_shutdown_done) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-    }
-  }
 }
 
 cudaError_t NCCLContext::GetCudaEvent(cudaEvent_t* event) {
@@ -845,7 +846,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
     }
     if (nccl_ctx.win_passive_recv_shutdown) {
       MPI_Cancel(&mpi_request);
-        BFLOG(TRACE, self_rank) << "WinPassiveRecvRequest is shutting down.";
+      BFLOG(TRACE, self_rank) << "WinPassiveRecvRequest is shutting down.";
       break;
     }
     if(mpi_status.MPI_ERROR != MPI_SUCCESS) {
@@ -866,18 +867,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
     }
 
     Status status = nccl_ctx.window_id_manager.CheckIdRegistered(req.name_id);
-    if ((mpi_status.MPI_ERROR == MPI_SUCCESS) && status.ok() && !self_processing) {
-      if (nccl_ctx.nccl_win_mutex.try_lock()) {
-        res_buf[0] = BFWinPassiveSuccess;
-        MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
-                          kWinPassiveRecvAckTag, MPI_COMM_WORLD));
-      } else {
-        res_buf[0] = BFWinPassiveRetry;
-        MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
-                          kWinPassiveRecvAckTag, MPI_COMM_WORLD));
-        continue;
-      }
-    } else {
+    if ((mpi_status.MPI_ERROR != MPI_SUCCESS) || !status.ok() || self_processing) {
       res_buf[0] = BFWinPassiveFail;
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD));
@@ -888,6 +878,17 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
       }
       continue;
     }
+    if (nccl_ctx.nccl_win_mutex.try_lock()) {
+      res_buf[0] = BFWinPassiveSuccess;
+      MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+    } else {
+      res_buf[0] = BFWinPassiveRetry;
+      MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
+                        kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+      continue;
+    }
+  
     std::string win_name = nccl_ctx.window_id_manager.GetNameById(req.name_id);
     std::shared_ptr<NCCLWindowManager> nccl_win_manager =
         nccl_ctx.named_win_map.at(win_name);
@@ -938,6 +939,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
       CUDACHECK(cudaStreamSynchronize(win_stream));
     });
   }
+  nccl_ctx.finalizer_thread_pool.reset(); // Need to wait until all finalizer_thread_pool stopped.
   nccl_ctx.win_passive_recv_shutdown_done = true;
 }
 
