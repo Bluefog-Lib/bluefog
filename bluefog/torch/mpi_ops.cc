@@ -65,6 +65,8 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
   return CPU_DEVICE_ID;
 }
 
+// As PyTorch doesn't support any computation of HalfTensor on CPU, therefore the
+// following three function is used to convert HalfTensor to normal Tensor.
 bool IsCPUHalfTensor(::torch::Tensor tensor) {
   return tensor.dtype() == ::torch::kFloat16 && tensor.device() == ::torch::kCPU;
 }
