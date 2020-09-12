@@ -116,6 +116,8 @@ class MPIContext {
 
   MPI_Datatype GetMPIDataType(DataType dtype);
 
+  MPI_Op GetMPISumOp(DataType dtype);
+
   MPI_Comm GetMPICommunicator(Communicator comm);
 
   int GetMPITypeSize(DataType dtype);
@@ -182,6 +184,10 @@ class MPIContext {
 
   double self_weight_;
   std::unordered_map<int, double> neighbor_weights_;
+
+  // MPI Custom  data type for float16.
+  MPI_Datatype mpi_float16_t;
+  MPI_Op mpi_float16_sum;
 };
 
 }  // namespace common

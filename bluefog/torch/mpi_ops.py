@@ -79,8 +79,9 @@ def _allreduce_function_factory(tensor):
 def _allreduce_nonblocking(tensor, output, average, name):
     function = _check_function(_allreduce_function_factory, tensor)
     if average:
-        assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor,
-                                   torch.cuda.FloatTensor, torch.cuda.DoubleTensor)), \
+        assert isinstance(tensor, (torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor,
+                                   torch.cuda.FloatTensor, torch.cuda.DoubleTensor,
+                                   torch.cuda.HalfTensor)), \
             "If average is set in allreduce, only float or double tensor is allowed."
 
     handle = getattr(mpi_lib, function)(tensor, output, average,
