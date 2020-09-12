@@ -23,8 +23,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-#ifndef BLUEFOG_HALF_H
-#define BLUEFOG_HALF_H
+#ifndef BLUEFOG_COMMON_HALF_H
+#define BLUEFOG_COMMON_HALF_H
 
 #include <stdint.h>
 

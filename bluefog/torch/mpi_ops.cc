@@ -65,18 +65,18 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
   return CPU_DEVICE_ID;
 }
 
-bool is_cpu_half_tensor(::torch::Tensor tensor) {
+bool IsCPUHalfTensor(::torch::Tensor tensor) {
   return tensor.dtype() == ::torch::kFloat16 && tensor.device() == ::torch::kCPU;
 }
 
-::torch::Tensor get_tensor_buffer(::torch::Tensor tensor, bool is_cpu_half_tensor) {
+::torch::Tensor MaybeCopyToTensorBuffer(::torch::Tensor tensor) {
   ::torch::Tensor buffer = tensor;
-  if (is_cpu_half_tensor) buffer = buffer.to(::torch::kFloat32);
+  if (IsCPUHalfTensor(tensor)) buffer = buffer.to(::torch::kFloat32);
   return buffer;
 }
 
-void copy_buffer_back(::torch::Tensor tensor, ::torch::Tensor buffer, bool is_cpu_half_tensor) {
-  if (is_cpu_half_tensor) tensor.copy_(buffer.to(::torch::kFloat16));
+void MaybeCopyBufferBack(::torch::Tensor tensor, ::torch::Tensor buffer) {
+  if (IsCPUHalfTensor(tensor)) tensor.copy_(buffer.to(::torch::kFloat16));
 }
 
 }  // namespace
@@ -130,12 +130,11 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
             output.copy_(cpu_buffer);
 
             // Will execute in the `device` context.
-            bool cpu_half_converted = is_cpu_half_tensor(output);
-            ::torch::Tensor output_buffer = get_tensor_buffer(output, cpu_half_converted);
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
             if (average && bluefog_size() > 1) {
               output_buffer.div_(bluefog_size());
             }
-            copy_buffer_back(output, output_buffer, cpu_half_converted);
+            MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -147,12 +146,11 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
         bf_tensor, bf_output, nullptr, op_name, device,
         callback_wrapper([average, output]() mutable {
           // Will execute in the `device` context.
-          bool cpu_half_converted = is_cpu_half_tensor(output);
-          ::torch::Tensor output_buffer = get_tensor_buffer(output, cpu_half_converted);
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
           if (average && bluefog_size() > 1) {
             output_buffer.div_(bluefog_size());
           }
-          copy_buffer_back(output, output_buffer, cpu_half_converted);
+          MaybeCopyBufferBack(output, output_buffer);
           }));
     ThrowIfError(enqueue_result);
   }
@@ -345,10 +343,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
-            bool is_output_cpu_half = is_cpu_half_tensor(output);
-            ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
-            bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
-            ::torch::Tensor tensor_buffer = get_tensor_buffer(tensor, is_tensor_cpu_half);
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
             
             int first_dim = output_buffer.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
@@ -409,7 +405,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.div_(bluefog_neighbor_size() + 1);
             }
             output.resize_(shape_vector);
-            copy_buffer_back(output, output_buffer, is_output_cpu_half);
+            MaybeCopyBufferBack(output, output_buffer);
           }
         }));
 
@@ -429,10 +425,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
-            bool is_output_cpu_half = is_cpu_half_tensor(output);
-            ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
-            bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
-            ::torch::Tensor tensor_buffer = get_tensor_buffer(tensor, is_tensor_cpu_half);
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
 
             int first_dim = output_buffer.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
@@ -493,7 +487,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.div_(bluefog_neighbor_size() + 1);
             }
             output.resize_(shape_vector);
-            copy_buffer_back(output, output_buffer, is_output_cpu_half);
+            MaybeCopyBufferBack(output, output_buffer);
           }
         }));
     ThrowIfError(enqueue_result);
@@ -533,16 +527,14 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
           // Will execute in the `device` context.
           with_device device_guard(device);
           output.copy_(cpu_buffer_output);
-            bool is_output_cpu_half = is_cpu_half_tensor(output);
-            ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
-            bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
-            ::torch::Tensor tensor_buffer = get_tensor_buffer(tensor, is_tensor_cpu_half);
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
             if (avg_computation) {
               output_buffer.add_(tensor_buffer).div_(2);
             } else {
               output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
             }
-            copy_buffer_back(output, output_buffer, is_output_cpu_half);
+            MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -553,16 +545,14 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
         bf_tensor, bf_output, target_rank, op_name, device,
         callback_wrapper([tensor, output, self_weight, pair_weight, avg_computation]() mutable {
           // Will execute in the `device` context.
-          bool is_output_cpu_half = is_cpu_half_tensor(output);
-          ::torch::Tensor output_buffer = get_tensor_buffer(output, is_output_cpu_half);
-          bool is_tensor_cpu_half = is_cpu_half_tensor(tensor);
-          ::torch::Tensor tensor_buffer = get_tensor_buffer(tensor, is_tensor_cpu_half);
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+          ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
           if (avg_computation) {
             output_buffer.add_(tensor_buffer).div_(2);
           } else {
             output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
           }
-          copy_buffer_back(output, output_buffer, is_output_cpu_half);
+          MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   }
