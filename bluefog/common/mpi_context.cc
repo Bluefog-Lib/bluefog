@@ -20,6 +20,7 @@
 #include "logging.h"
 #include "operations.h"
 #include "timeline.h"
+#include "half.h"
 
 namespace bluefog {
 namespace common {
@@ -82,6 +83,55 @@ bool WindowManager::DestroyMutexWin() {
   return true;
 }
 
+bool WindowManager::InitializePWin(const MPI_Comm& mpi_comm) {
+  int self_rank = 0;
+  int global_size = 1;
+  MPI_Comm_rank(mpi_comm, &self_rank);
+  MPI_Comm_size(mpi_comm, &global_size);
+  if (!p_win_) {
+    p_win_ = std::make_shared<MPI_Win>();
+  }
+  p_mem_.resize(global_size);
+  std::fill_n(p_mem_.data(), global_size, 0.0);
+  p_mem_[self_rank] = 1.0;
+
+  int element_size = 0;
+  MPI_Type_size(MPI_DOUBLE, &element_size);
+  int win_size = global_size * element_size;
+  MPI_Win_create((void*)p_mem_.data(), win_size, element_size, MPI_INFO_NULL,
+                 mpi_comm, p_win_.get());
+  return true;
+}
+
+bool WindowManager::DestroyPWin() {
+  if (!p_win_) {
+    p_mem_.clear();
+    return false;
+  }
+  MPI_Win_free(p_win_.get());
+  p_win_.reset();
+  p_mem_.clear();
+  return true;
+}
+
+double WindowManager::GetAssociatedP(int rank) {
+  if (!p_win_) {
+    std::runtime_error(
+        "Try to get the weight but associated window has been destroyed or has "
+        "not initialized yet.");
+  }
+  return p_mem_[rank];
+}
+
+void WindowManager::SetAssociatedP(int rank, double weight) {
+  if (!p_win_) {
+    std::runtime_error(
+        "Try to set the weight but associated window has been destroyed or has "
+        "not initialized yet.");
+  }
+  p_mem_[rank] = weight;
+}
+
 MPI_Datatype MPIContext::GetMPIDataType(const std::shared_ptr<Tensor> tensor) {
   return GetMPIDataType(tensor->dtype());
 }
@@ -100,6 +150,8 @@ MPI_Datatype MPIContext::GetMPIDataType(const DataType dtype) {
       return MPI_INT32_T;
     case DataType::BLUEFOG_INT64:
       return MPI_INT64_T;
+    case DataType::BLUEFOG_FLOAT16:
+      return mpi_float16_t;
     case DataType::BLUEFOG_FLOAT32:
       return MPI_FLOAT;
     case DataType::BLUEFOG_FLOAT64:
@@ -112,6 +164,10 @@ MPI_Datatype MPIContext::GetMPIDataType(const DataType dtype) {
       throw std::logic_error("Type " + DataType_Name(dtype) +
                              " is not supported in MPI mode.");
   }
+}
+
+MPI_Op MPIContext::GetMPISumOp(DataType dtype) {
+  return dtype == DataType::BLUEFOG_FLOAT16 ? mpi_float16_sum : MPI_SUM;
 }
 
 MPI_Comm MPIContext::GetMPICommunicator(Communicator comm) {
@@ -211,14 +267,19 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   MPI_Comm_rank(mpi_comm, &world_rank);
   MPI_Comm_rank(local_comm, &local_rank);
 
-
-
   // Create cross node communicator.
   MPI_Comm_split(mpi_comm, local_rank, world_rank, &cross_comm);
 
   // The real graph communicator creatation is late.
   graph_comm = MPI_COMM_NULL;
   DisableTopoWeights();
+
+  // Create custom MPI float16 data type.
+  MPI_Type_contiguous(2, MPI_BYTE, &mpi_float16_t);
+  MPI_Type_commit(&mpi_float16_t);
+
+  // Create custom MPI float16 summation op.
+  MPI_Op_create(&float16_sum, 1, &mpi_float16_sum);
 }
 
 void MPIContext::Finalize(MPIContextManager& ctx_manager) {
@@ -242,6 +303,14 @@ void MPIContext::Finalize(MPIContextManager& ctx_manager) {
 
   if (cross_comm != MPI_COMM_NULL) {
     MPI_Comm_free(&cross_comm);
+  }
+
+  if (mpi_float16_t != MPI_DATATYPE_NULL) {
+    MPI_Type_free(&mpi_float16_t);
+  }
+
+  if (mpi_float16_sum != MPI_OP_NULL) {
+    MPI_Op_free(&mpi_float16_sum);
   }
 
   if (should_finalize) {
@@ -275,6 +344,7 @@ bool MPIContext::RegisterWindowName(const std::string& name) {
   }
   auto win_manager_ptr = std::make_shared<WindowManager>();
   win_manager_ptr->InitializeMutexWin(mpi_comm);
+  win_manager_ptr->InitializePWin(mpi_comm);
   named_win_map[name] = win_manager_ptr;
   return true;
 }
@@ -294,6 +364,7 @@ bool MPIContext::UnregisterWindowName(const std::string& name) {
   }
   it->second->FreeAllWins();
   it->second->DestroyMutexWin();
+  it->second->DestroyPWin();
   named_win_map.erase(it);
   return true;
 }
@@ -302,6 +373,7 @@ bool MPIContext::UnregisterAllWindowName() {
   for (auto& kv : named_win_map) {
     kv.second->FreeAllWins();
     kv.second->DestroyMutexWin();
+    kv.second->DestroyPWin();
   }
   named_win_map.clear();
   return true;

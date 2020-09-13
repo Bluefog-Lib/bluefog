@@ -302,6 +302,7 @@ def get_common_options(build_ext):
     ]
     SOURCES = ["bluefog/common/common.cc",
                "bluefog/common/cuda_util.cc",
+               "bluefog/common/half.cc",
                "bluefog/common/logging.cc",
                "bluefog/common/mpi_context.cc",
                "bluefog/common/mpi_controller.cc",

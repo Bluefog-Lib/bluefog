@@ -35,12 +35,14 @@ namespace torch {
 
 ALLREDUCE_H(torch_IntTensor, THIntTensor)
 ALLREDUCE_H(torch_LongTensor, THLongTensor)
+ALLREDUCE_H(torch_HalfTensor, THHalfTensor)
 ALLREDUCE_H(torch_FloatTensor, THFloatTensor)
 ALLREDUCE_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
 ALLREDUCE_H(torch_cuda_IntTensor, THCudaIntTensor)
 ALLREDUCE_H(torch_cuda_LongTensor, THCudaLongTensor)
+ALLREDUCE_H(torch_cuda_HalfTensor, THCudaHalfTensor)
 ALLREDUCE_H(torch_cuda_FloatTensor, THCudaTensor)
 ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
@@ -54,12 +56,14 @@ BROADCAST_H(torch_CharTensor, THCharTensor)
 BROADCAST_H(torch_ShortTensor, THShortTensor)
 BROADCAST_H(torch_IntTensor, THIntTensor)
 BROADCAST_H(torch_LongTensor, THLongTensor)
+BROADCAST_H(torch_HalfTensor, THHalfTensor)
 BROADCAST_H(torch_FloatTensor, THFloatTensor)
 BROADCAST_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
 BROADCAST_H(torch_cuda_IntTensor, THCudaIntTensor)
 BROADCAST_H(torch_cuda_LongTensor, THCudaLongTensor)
+BROADCAST_H(torch_cuda_HalfTensor, THCudaHalfTensor)
 BROADCAST_H(torch_cuda_FloatTensor, THCudaTensor)
 BROADCAST_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
@@ -73,12 +77,14 @@ ALLGATHER_H(torch_CharTensor, THCharTensor)
 ALLGATHER_H(torch_ShortTensor, THShortTensor)
 ALLGATHER_H(torch_IntTensor, THIntTensor)
 ALLGATHER_H(torch_LongTensor, THLongTensor)
+ALLGATHER_H(torch_HalfTensor, THHalfTensor)
 ALLGATHER_H(torch_FloatTensor, THFloatTensor)
 ALLGATHER_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
 ALLGATHER_H(torch_cuda_IntTensor, THCudaIntTensor)
 ALLGATHER_H(torch_cuda_LongTensor, THCudaLongTensor)
+ALLGATHER_H(torch_cuda_HalfTensor, THCudaHalfTensor)
 ALLGATHER_H(torch_cuda_FloatTensor, THCudaTensor)
 ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
@@ -92,12 +98,14 @@ NEIGHBOR_ALLGATHER_H(torch_CharTensor, THCharTensor)
 NEIGHBOR_ALLGATHER_H(torch_ShortTensor, THShortTensor)
 NEIGHBOR_ALLGATHER_H(torch_IntTensor, THIntTensor)
 NEIGHBOR_ALLGATHER_H(torch_LongTensor, THLongTensor)
+NEIGHBOR_ALLGATHER_H(torch_HalfTensor, THHalfTensor)
 NEIGHBOR_ALLGATHER_H(torch_FloatTensor, THFloatTensor)
 NEIGHBOR_ALLGATHER_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
 NEIGHBOR_ALLGATHER_H(torch_cuda_IntTensor, THCudaIntTensor)
 NEIGHBOR_ALLGATHER_H(torch_cuda_LongTensor, THCudaLongTensor)
+NEIGHBOR_ALLGATHER_H(torch_cuda_HalfTensor, THCudaHalfTensor)
 NEIGHBOR_ALLGATHER_H(torch_cuda_FloatTensor, THCudaTensor)
 NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
@@ -109,10 +117,12 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
       const std::vector<int>& send_neighbors, bool enable_topo_check,            \
       bool avg_computation, char* name);
 
+NEIGHBOR_ALLREDUCE_H(torch_HalfTensor, THHalfTensor)
 NEIGHBOR_ALLREDUCE_H(torch_FloatTensor, THFloatTensor)
 NEIGHBOR_ALLREDUCE_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
+NEIGHBOR_ALLREDUCE_H(torch_cuda_HalfTensor, THCudaHalfTensor)
 NEIGHBOR_ALLREDUCE_H(torch_cuda_FloatTensor, THCudaTensor)
 NEIGHBOR_ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
@@ -123,10 +133,12 @@ NEIGHBOR_ALLREDUCE_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
       double self_weight,  double pair_weight,  bool avg_computation,     \
       char* name);
 
+PAIR_GOSSIP_H(torch_HalfTensor, THHalfTensor)
 PAIR_GOSSIP_H(torch_FloatTensor, THFloatTensor)
 PAIR_GOSSIP_H(torch_DoubleTensor, THDoubleTensor)
 
 #if HAVE_CUDA
+PAIR_GOSSIP_H(torch_cuda_HalfTensor, THCudaHalfTensor)
 PAIR_GOSSIP_H(torch_cuda_FloatTensor, THCudaTensor)
 PAIR_GOSSIP_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif

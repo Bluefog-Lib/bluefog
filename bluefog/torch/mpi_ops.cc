@@ -65,6 +65,22 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
   return CPU_DEVICE_ID;
 }
 
+// As PyTorch doesn't support any computation of HalfTensor on CPU, therefore the
+// following three function is used to convert HalfTensor to normal Tensor.
+bool IsCPUHalfTensor(::torch::Tensor tensor) {
+  return tensor.dtype() == ::torch::kFloat16 && tensor.device() == ::torch::kCPU;
+}
+
+::torch::Tensor MaybeCopyToTensorBuffer(::torch::Tensor tensor) {
+  ::torch::Tensor buffer = tensor;
+  if (IsCPUHalfTensor(tensor)) buffer = buffer.to(::torch::kFloat32);
+  return buffer;
+}
+
+void MaybeCopyBufferBack(::torch::Tensor tensor, ::torch::Tensor buffer) {
+  if (IsCPUHalfTensor(tensor)) tensor.copy_(buffer.to(::torch::kFloat16));
+}
+
 }  // namespace
 
 std::function<std::function<void(const Status&)>(std::function<void()>)>
@@ -116,9 +132,11 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
             output.copy_(cpu_buffer);
 
             // Will execute in the `device` context.
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
             if (average && bluefog_size() > 1) {
-              output.div_(bluefog_size());
+              output_buffer.div_(bluefog_size());
             }
+            MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -129,10 +147,13 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto enqueue_result = EnqueueTensorAllreduce(
         bf_tensor, bf_output, nullptr, op_name, device,
         callback_wrapper([average, output]() mutable {
+          // Will execute in the `device` context.
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
           if (average && bluefog_size() > 1) {
-            output.div_(bluefog_size());
+            output_buffer.div_(bluefog_size());
           }
-        }));
+          MaybeCopyBufferBack(output, output_buffer);
+          }));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -312,7 +333,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     // TODO(ybc) Figure out why ready_event may encounter signal abort (6) problem.
     // auto ready_event = RecordReadyEvent(device);
-    auto enqueue_result = EnqueueTensorNeighborAllreduce(
+    auto enqueue_result = EnqueueTensorNeighborAllreduce(            
         bf_context, bf_tensor, bf_output, nullptr, bf_recv_neighbors, bf_send_neighbors,
         enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
@@ -324,11 +345,14 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
-            int first_dim = output.size(0) / recv_size;
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
+            
+            int first_dim = output_buffer.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
-            for (int idx = 1; idx < tensor.dim(); ++idx) {
-              shape_vector.push_back(tensor.size(idx));
+            for (int idx = 1; idx < tensor_buffer.dim(); ++idx) {
+              shape_vector.push_back(tensor_buffer.size(idx));
             }
 
             // 1) For a distributed graph topology, created with
@@ -349,7 +373,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
             // if avg_computation is set to be False, sum computation will be taken place.
             if (avg_computation) {
-              auto output_reduced = output.slice(0, 0, first_dim);
+              auto output_reduced = output_buffer.slice(0, 0, first_dim);
               if (!send_neighbors.empty()) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
@@ -365,23 +389,25 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                   output_reduced.mul_(weight);
                 } else {
                   output_reduced.add_(
-                      output.slice(0, i * first_dim, (i + 1) * first_dim)
+                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim)
                           .mul_(weight));
                 }
               }
-              output.resize_(shape_vector);
-              output.add_(tensor.mul(self_weight));
+              output_buffer.resize_(shape_vector);
+              output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
-              auto output_reduced = output.slice(0, 0, first_dim);
+              auto output_reduced = output_buffer.slice(0, 0, first_dim);
               for (int i = 1; i < bluefog_neighbor_size(); i++) {
                 output_reduced.add_(
-                    output.slice(0, i * first_dim, (i + 1) * first_dim));
+                    output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
               }
-              output.resize_(shape_vector);
+              output_buffer.resize_(shape_vector);
               // Include self data as well.
-              output.add_(tensor);
-              output.div_(bluefog_neighbor_size() + 1);
+              output_buffer.add_(tensor_buffer);
+              output_buffer.div_(bluefog_neighbor_size() + 1);
             }
+            output.resize_(shape_vector);
+            MaybeCopyBufferBack(output, output_buffer);
           }
         }));
 
@@ -401,11 +427,14 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
-            int first_dim = output.size(0) / recv_size;
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
+
+            int first_dim = output_buffer.size(0) / recv_size;
             std::vector<int64_t> shape_vector;
             shape_vector.push_back(first_dim);
-            for (int idx = 1; idx < tensor.dim(); ++idx) {
-              shape_vector.push_back(tensor.size(idx));
+            for (int idx = 1; idx < tensor_buffer.dim(); ++idx) {
+              shape_vector.push_back(tensor_buffer.size(idx));
             }
 
             // 1) For a distributed graph topology, created with
@@ -423,9 +452,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             int* destinations_ptr = nullptr;
             bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                   destinations_ptr);
+
             // if avg_computation is set to be True, average computation will be taken place.
             if (avg_computation) {
-              auto output_reduced = output.slice(0, 0, first_dim);
+              auto output_reduced = output_buffer.slice(0, 0, first_dim);
               if (!send_neighbors.empty()) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
@@ -441,23 +471,25 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                   output_reduced.mul_(weight);
                 } else {
                   output_reduced.add_(
-                      output.slice(0, i * first_dim, (i + 1) * first_dim)
+                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim)
                           .mul_(weight));
                 }
               }
-              output.resize_(shape_vector);
-              output.add_(tensor.mul(self_weight));
+              output_buffer.resize_(shape_vector);
+              output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
-              auto output_reduced = output.slice(0, 0, first_dim);
+              auto output_reduced = output_buffer.slice(0, 0, first_dim);
               for (int i = 1; i < bluefog_neighbor_size(); i++) {
                 output_reduced.add_(
                     output.slice(0, i * first_dim, (i + 1) * first_dim));
               }
-              output.resize_(shape_vector);
+              output_buffer.resize_(shape_vector);
               // Include self data as well.
-              output.add_(tensor);
-              output.div_(bluefog_neighbor_size() + 1);
+              output_buffer.add_(tensor_buffer);
+              output_buffer.div_(bluefog_neighbor_size() + 1);
             }
+            output.resize_(shape_vector);
+            MaybeCopyBufferBack(output, output_buffer);
           }
         }));
     ThrowIfError(enqueue_result);
@@ -497,12 +529,14 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
           // Will execute in the `device` context.
           with_device device_guard(device);
           output.copy_(cpu_buffer_output);
-
-          if (avg_computation) {
-            output.add_(tensor).div_(2);
-          } else {
-            output.mul_(pair_weight).add_(tensor.mul(self_weight));
-          }
+            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
+            if (avg_computation) {
+              output_buffer.add_(tensor_buffer).div_(2);
+            } else {
+              output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
+            }
+            MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -513,11 +547,14 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
         bf_tensor, bf_output, target_rank, op_name, device,
         callback_wrapper([tensor, output, self_weight, pair_weight, avg_computation]() mutable {
           // Will execute in the `device` context.
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+          ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
           if (avg_computation) {
-            output.add_(tensor).div_(2);
+            output_buffer.add_(tensor_buffer).div_(2);
           } else {
-            output.mul_(pair_weight).add_(tensor.mul(self_weight));
+            output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
           }
+          MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   }
@@ -554,11 +591,13 @@ PYBIND11_MODULE(mpi_lib, m) {
   // allreduce
   m.def("bluefog_torch_allreduce_nonblocking_torch_IntTensor", &DoAllreduce);
   m.def("bluefog_torch_allreduce_nonblocking_torch_LongTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_HalfTensor", &DoAllreduce);
   m.def("bluefog_torch_allreduce_nonblocking_torch_FloatTensor", &DoAllreduce);
   m.def("bluefog_torch_allreduce_nonblocking_torch_DoubleTensor", &DoAllreduce);
 #if HAVE_CUDA
   m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_IntTensor", &DoAllreduce);
   m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_LongTensor", &DoAllreduce);
+  m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_HalfTensor", &DoAllreduce);
   m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_FloatTensor", &DoAllreduce);
   m.def("bluefog_torch_allreduce_nonblocking_torch_cuda_DoubleTensor", &DoAllreduce);
 #endif
@@ -569,11 +608,13 @@ PYBIND11_MODULE(mpi_lib, m) {
   m.def("bluefog_torch_broadcast_nonblocking_torch_ShortTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_IntTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_LongTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_HalfTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_FloatTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_DoubleTensor", &DoBroadcast);
 #if HAVE_CUDA
   m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_IntTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_LongTensor", &DoBroadcast);
+  m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_HalfTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_FloatTensor", &DoBroadcast);
   m.def("bluefog_torch_broadcast_nonblocking_torch_cuda_DoubleTensor", &DoBroadcast);
 #endif
@@ -584,11 +625,13 @@ PYBIND11_MODULE(mpi_lib, m) {
   m.def("bluefog_torch_allgather_nonblocking_torch_ShortTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_IntTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_LongTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_HalfTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_FloatTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_DoubleTensor", &DoAllgather);
 #if HAVE_CUDA
   m.def("bluefog_torch_allgather_nonblocking_torch_cuda_IntTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_cuda_LongTensor", &DoAllgather);
+  m.def("bluefog_torch_allgather_nonblocking_torch_cuda_HalfTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_cuda_FloatTensor", &DoAllgather);
   m.def("bluefog_torch_allgather_nonblocking_torch_cuda_DoubleTensor", &DoAllgather);
 #endif
@@ -604,6 +647,8 @@ PYBIND11_MODULE(mpi_lib, m) {
         &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_LongTensor",
         &DoNeighborAllgather);
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_HalfTensor",
+        &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_FloatTensor",
         &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_DoubleTensor",
@@ -613,6 +658,8 @@ PYBIND11_MODULE(mpi_lib, m) {
         &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_LongTensor",
         &DoNeighborAllgather);
+  m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_HalfTensor",
+        &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_FloatTensor",
         &DoNeighborAllgather);
   m.def("bluefog_torch_neighbor_allgather_nonblocking_torch_cuda_DoubleTensor",
@@ -620,11 +667,15 @@ PYBIND11_MODULE(mpi_lib, m) {
 #endif
 
   // neighbor_allreduce
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_HalfTensor",
+        &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_FloatTensor",
         &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_DoubleTensor",
         &DoNeighborAllreduce);
 #if HAVE_CUDA
+  m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_HalfTensor",
+        &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_FloatTensor",
         &DoNeighborAllreduce);
   m.def("bluefog_torch_neighbor_allreduce_nonblocking_torch_cuda_DoubleTensor",
@@ -632,11 +683,15 @@ PYBIND11_MODULE(mpi_lib, m) {
 #endif
 
   // Pair_gossip
+  m.def("bluefog_torch_pair_gossip_nonblocking_torch_HalfTensor",
+        &DoPairGossip);
   m.def("bluefog_torch_pair_gossip_nonblocking_torch_FloatTensor",
         &DoPairGossip);
   m.def("bluefog_torch_pair_gossip_nonblocking_torch_DoubleTensor",
         &DoPairGossip);
 #if HAVE_CUDA
+  m.def("bluefog_torch_pair_gossip_nonblocking_torch_cuda_HalfTensor",
+        &DoPairGossip);
   m.def("bluefog_torch_pair_gossip_nonblocking_torch_cuda_FloatTensor",
         &DoPairGossip);
   m.def("bluefog_torch_pair_gossip_nonblocking_torch_cuda_DoubleTensor",

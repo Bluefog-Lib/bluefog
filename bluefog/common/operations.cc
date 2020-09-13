@@ -52,6 +52,9 @@ MPIContext mpi_context;
 NCCLContext nccl_context;
 #endif
 
+// If set, win_ops will execute the same ops on associated p as well.
+static bool global_with_associated_p_state = false;
+
 }  // namespace
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -655,6 +658,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
   e.dst_weights = dst_weights;
+  e.win_ops_with_associated_p = global_with_associated_p_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -675,6 +679,7 @@ Status EnqueueTensorWindowAccumulate(
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
+  e.win_ops_with_associated_p = global_with_associated_p_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -753,11 +758,13 @@ Status WindowSync(const std::string& name, int device) {
   Status status;
 #if HAVE_NCCL
   if (vendor == Vendor::NCCL) {
-    status = bluefog_global.nccl_controller->WinSync(name, device);
+    status = bluefog_global.nccl_controller->WinSync(
+        name, device, global_with_associated_p_state);
   }
 #endif
   if (vendor == Vendor::MPI) {
-    status = bluefog_global.controller->WinSync(name, device);
+    status = bluefog_global.controller->WinSync(name, device,
+                                                global_with_associated_p_state);
   }
 
   if (!status.ok()) {
@@ -902,6 +909,33 @@ Status WindowUnlock(const std::string& name) {
     BFLOG(ERROR) << status.reason();
   }
   return status;
+}
+
+// TODO(ybc) Add NCCL version for this as well.
+Status GetWinAssociatedPByNameAndRank(const std::string& name,
+                                           const int rank, double* weight) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  return bluefog_global.controller->GetWinAssociatedPByNameAndRank(
+      name, rank, weight);
+}
+
+Status SetWinAssociatedPByNameAndRank(const std::string& name,
+                                           const int rank, const double weight) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  return bluefog_global.controller->SetWinAssociatedPByNameAndRank(
+      name, rank, weight);
+}
+
+void SetWinOpsWithAssociatedPState(bool value) {
+  global_with_associated_p_state = value;
+}
+
+bool GetWinOpsWithAssociatedPState() {
+  return global_with_associated_p_state;
 }
 
 }  // namespace common
