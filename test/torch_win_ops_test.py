@@ -686,13 +686,15 @@ class WinOpsTests(unittest.TestCase):
                 dim, dtype)
             bf.win_create(tensor, window_name, zero_init=True)
             for _ in range(10):
-                bf.win_put(tensor, name=window_name, require_mutex=True)
-                bf.win_update(name=window_name, require_mutex=True)
-                random_weights = np.random.rand(len(bf.out_neighbor_ranks()) + 1)
+                random_weights = np.random.rand(
+                    len(bf.out_neighbor_ranks()) + 1)
                 random_weights /= random_weights.sum()
                 self_weight = random_weights[-1]
                 dst_weights = {r: random_weights[i]
                                for i, r in enumerate(bf.out_neighbor_ranks())}
+                bf.win_put(tensor, self_weight=self_weight,
+                           dst_weights=dst_weights, name=window_name, require_mutex=True)
+                bf.win_update(name=window_name, require_mutex=True)
                 bf.win_accumulate(tensor, name=window_name, require_mutex=True,
                                   self_weight=self_weight, dst_weights=dst_weights)
                 bf.win_update_then_collect(name=window_name)
@@ -701,7 +703,7 @@ class WinOpsTests(unittest.TestCase):
             associated_p = bf.win_associated_p(name=window_name)
             # Because the associated p should operate the same as tensor always
             # the following assert should be true no matter what order is excuted.
-            assert abs(associated_p - tensor.data[0])< 0.1
+            assert abs(associated_p - tensor.data[0]) < EPSILON
 
         bf.turn_off_win_ops_with_associated_p()
 

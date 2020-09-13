@@ -1072,12 +1072,27 @@ def _win_mutex_release(name, ranks, exclusive):
 
 
 def win_associated_p(name: str) -> float:
+    """ Return the associated correction P, which is used in Push-Sum algorithm, for each named window.
+
+    Args:
+        name (str): The unique name to associate the window object.
+
+    Returns:
+        float: The p value. (Initialized as 1.)
+    """
     return mpi_lib.bluefog_torch_win_associated_p(name)
 
 
 def turn_on_win_ops_with_associated_p():
+    """Turn on the global state of win operations with associated p.
+    
+    If it is state is on, all win ops such as put, update, accumulate also apply on the
+    associated p value as well.
+    The default state is off.
+    """
     mpi_lib.bluefog_torch_set_win_ops_with_associated_p_state(True)
 
 
 def turn_off_win_ops_with_associated_p():
+    """Turn off the global state of win operations with associated p."""
     mpi_lib.bluefog_torch_set_win_ops_with_associated_p_state(False)
