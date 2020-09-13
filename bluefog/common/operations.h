@@ -88,7 +88,6 @@ int bluefog_load_topology(int* indegree, int*& sources,
 int bluefog_load_topology_weights(double& self_weight, 
                                   const std::unordered_map<int, double>*& neighbor_weights);
 
-
 // C interface to allow python to call timeline.
 // If start_activity == true, call ActivityStart, else call ActivityEnd.
 int bluefog_timeline(const bool start_activity, const char* tensor_name,
@@ -175,6 +174,16 @@ Status WindowMutexAcquire(const std::string& name,
 
 Status WindowMutexRelease(const std::string& name,
                           const std::vector<int>& release_ranks, bool is_sync);
+
+Status GetWinAssociatedPByNameAndRank(const std::string& name,
+                                           const int rank, double* weight);
+
+Status SetWinAssociatedPByNameAndRank(const std::string& name,
+                                           const int rank, double weight);
+
+void SetWinOpsWithAssociatedPState(bool value);
+
+bool GetWinOpsWithAssociatedPState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
 

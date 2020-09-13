@@ -66,29 +66,28 @@ class WinTorchStorageManager {
   bool GetDeviceByName(const std::string& name, int* device);
 
   // Sum the local tensor with all neighbor tensors.
-  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor);
-  
-  // Weighted Average the local tensor with neighbor tensors according to weights map.
-  // Weights map { rank: weights }. Rank has to be (in-)neighbor ranks. self_weight
-  // specifies the weight for self rank.
-  // The sum weights are not necessary to be 1.
-  // No matter the weights in the mpi_context class is set or not, weights provided in
-  // the argument will override it.
-  bool AvgWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      double self_weight,
-      const std::unordered_map<int, double>& neighbor_weights);
+  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       bool associated_with_p);
 
-  
+  // Weighted Average the local tensor with neighbor tensors according to
+  // weights map. Weights map { rank: weights }. Rank has to be (in-)neighbor
+  // ranks. self_weight specifies the weight for self rank. The sum weights are
+  // not necessary to be 1. No matter the weights in the mpi_context class is
+  // set or not, weights provided in the argument will override it.
+  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       double self_weight,
+                       const std::unordered_map<int, double>& neighbor_weights,
+                       bool associated_with_p);
+
   // This is just utility functions and never used the weights defined in the
   // the mpi_context.
-  bool SumWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      const std::vector<int>& source_ranks);
-  bool AvgWithNeighbor(
-      const std::string& name, ::torch::Tensor local_tensor,
-      const std::vector<int>& source_ranks);
-  
+  bool SumWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       const std::vector<int>& source_ranks,
+                       bool associated_with_p);
+  bool AvgWithNeighbor(const std::string& name, ::torch::Tensor local_tensor,
+                       const std::vector<int>& source_ranks,
+                       bool associated_with_p);
+
   // Clear all storage/reference to neighbor TorchTensor.
   void ClearAll();
 
@@ -148,6 +147,7 @@ WIN_SYNC_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #define WIN_PUT_H(torch_Tensor, THTensor)                             \
   extern "C" int bluefog_torch_win_put_##torch_Tensor(                \
       THTensor* tensor, char* name,                                   \
+      const double self_weight,                                       \
       const std::unordered_map<int, double>& dst_weights,             \
       const bool require_mutex);
 
@@ -166,6 +166,7 @@ WIN_PUT_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #define WIN_ACCUMULATE_H(torch_Tensor, THTensor)                         \
   extern "C" int bluefog_torch_win_accumulate_##torch_Tensor(            \
       THTensor* tensor, char* name,                                      \
+      const double self_weight,                                          \
       const std::unordered_map<int, double>& dst_weights,                \
       const bool require_mutex);
 
@@ -192,6 +193,9 @@ extern "C" void bluefog_torch_win_wait(int handle);
 
 extern "C" void bluefog_torch_win_lock(char* name);
 extern "C" void bluefog_torch_win_unlock(char* name);
+
+extern "C" double bluefog_torch_win_associated_p(char* name);
+extern "C" void bluefog_torch_set_win_ops_with_associated_p_state(bool value);
 
 extern "C" void bluefog_torch_win_mutex_acquire(char* name,
                                                 const std::vector<int>& ranks,

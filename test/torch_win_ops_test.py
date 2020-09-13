@@ -27,8 +27,6 @@ from bluefog.common import topology_util
 import bluefog.torch as bf
 import torch
 import numpy as np
-warnings.simplefilter("ignore")
-
 
 EPSILON = 1e-5
 TEST_ON_GPU = torch.cuda.is_available()
@@ -629,6 +627,86 @@ class WinOpsTests(unittest.TestCase):
             assert (t_end - t_start) > 1
         else:
             bf.barrier()
+
+    def test_asscoicated_with_p(self):
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 3:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn(
+                "Skip {} because it only supports test over at least 3 nodes".format(fname))
+            return
+
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        bf.set_topology(topology_util.RingGraph(size))
+        bf.turn_on_win_ops_with_associated_p()
+        for dtype, send_rank in itertools.product(dtypes, range(size)):
+            tensor = torch.FloatTensor([23]).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_asscoicate_with_p_{}_{}".format(dtype, send_rank)
+            bf.win_create(tensor, window_name)
+            left_neighbor_rank = (send_rank - 1) % size
+            right_neighbor_rank = (send_rank + 1) % size
+            if rank == send_rank:
+                bf.win_accumulate(tensor, name=window_name,
+                                  self_weight=0.5,
+                                  dst_weights={left_neighbor_rank: 0.5,
+                                               right_neighbor_rank: 0.5})
+            bf.barrier()
+            bf.win_update_then_collect(name=window_name)
+            associated_p = bf.win_associated_p(name=window_name)
+            if rank == send_rank:
+                assert associated_p == 0.5, (
+                    "associated_p for sender {} is wrong. Get {}".format(
+                        rank, associated_p))
+            elif (rank == left_neighbor_rank) or (rank == right_neighbor_rank):
+                assert (associated_p - 1.5) < EPSILON, (
+                    "associated_p for received neighbor {} is wrong. Get {}".format(
+                        rank, associated_p))
+            else:
+                assert associated_p == 1.0, (
+                    "associated_p for untouched node {} is wrong. Get {}".format(
+                        rank, associated_p))
+        bf.turn_off_win_ops_with_associated_p()
+
+    def test_asscoicated_with_p_random_test(self):
+        size = bf.size()
+        rank = bf.rank()
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+        dims = [1]
+        bf.turn_on_win_ops_with_associated_p()
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_asscoicate_with_p_random_{}_{}".format(
+                dim, dtype)
+            bf.win_create(tensor, window_name, zero_init=True)
+            for _ in range(10):
+                random_weights = np.random.rand(
+                    len(bf.out_neighbor_ranks()) + 1)
+                random_weights /= random_weights.sum()
+                self_weight = random_weights[-1]
+                dst_weights = {r: random_weights[i]
+                               for i, r in enumerate(bf.out_neighbor_ranks())}
+                bf.win_put(tensor, self_weight=self_weight,
+                           dst_weights=dst_weights, name=window_name, require_mutex=True)
+                bf.win_update(name=window_name, require_mutex=True)
+                bf.win_accumulate(tensor, name=window_name, require_mutex=True,
+                                  self_weight=self_weight, dst_weights=dst_weights)
+                bf.win_update_then_collect(name=window_name)
+            bf.barrier()
+            bf.win_update_then_collect(name=window_name)
+            associated_p = bf.win_associated_p(name=window_name)
+            # Because the associated p should operate the same as tensor always
+            # the following assert should be true no matter what order is excuted.
+            assert abs(associated_p - tensor.data[0]) < EPSILON
+
+        bf.turn_off_win_ops_with_associated_p()
 
 
 if __name__ == "__main__":

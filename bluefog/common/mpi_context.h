@@ -66,11 +66,16 @@ class WindowManager {
   // Manually free the win memory.
   void FreeAllWins();
 
-  // The design of WinMutex is flawed. For example, if we call set topology within
-  // the mutex acquire time, I don't know what will happen.
   bool InitializeMutexWin(const MPI_Comm& mpi_comm);
   bool DestroyMutexWin();
   inline std::shared_ptr<MPI_Win> GetMutexWin() { return mutex_win_; }
+
+  bool InitializePWin(const MPI_Comm& mpi_comm);
+  bool DestroyPWin();
+  inline std::shared_ptr<MPI_Win> GetPWin() { return p_win_; }
+  inline double* GetUnderlyingPMemory() { return p_mem_.data(); };
+  double GetAssociatedP(int rank);
+  void SetAssociatedP(int rank, double weight);
 
  private:
   // Store all the pointers to the MPI WIN and underlying tensor.
@@ -86,6 +91,10 @@ class WindowManager {
   // MPI Window used for mutex.
   std::shared_ptr<MPI_Win> mutex_win_;
   std::unique_ptr<int> mutex_mem_;
+
+  // MPI Window used for p. Mainly used for push-sum algorithm.
+  std::shared_ptr<MPI_Win> p_win_;
+  std::vector<double> p_mem_;
 };
 
 class MPIContext {
