@@ -982,7 +982,7 @@ It is equivalent to
 
 <dl class="py function">
 <dt id="bluefog.torch.win_put_nonblocking">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_put_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_put_nonblocking" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_put_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#bluefog.torch.win_put_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively put the tensor into neighbor’s shared window memory.
 This is a non-blocking function, which will return without waiting the
 win_put operation is really finished.</p>
@@ -991,6 +991,8 @@ win_put operation is really finished.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tesnor</strong> – The tensor that shares to neighbor.</p></li>
 <li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_put send
+tensor information to neigbors), Default is 1.0.</p></li>
 <li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
 Namely, {rank: weight} means put tensor * weight to the rank neighbor.
 If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -1009,7 +1011,7 @@ acquired.</p></li>
 
 <dl class="py function">
 <dt id="bluefog.torch.win_put">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_put</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_put" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_put</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_put" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively put the tensor into neighbor’s shared window memory.
 This is a blocking function, which will return until win_put operation
 is finished.</p>
@@ -1018,6 +1020,8 @@ is finished.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – The tensor that shares to neighbor.</p></li>
 <li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_put send
+tensor information to neigbors), Default is 1.0.</p></li>
 <li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
 Namely, {rank: weight} means put tensor * weight to the rank neighbor.
 If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -1093,7 +1097,7 @@ acquired.</p></li>
 
 <dl class="py function">
 <dt id="bluefog.torch.win_accumulate_nonblocking">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_accumulate_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_accumulate_nonblocking" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_accumulate_nonblocking</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_accumulate_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively accmulate the tensor into neighbor’s shared window memory.
 Only SUM ops is supported now.
 This is a non-blocking function, which will return without waiting the
@@ -1103,6 +1107,8 @@ win_accumulate operation is really finished.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tesnor</strong> – The tensor that shares to neighbor.</p></li>
 <li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_accumulate
+send tensor information to neigbors), Default is 1.0.</p></li>
 <li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
 Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
 If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -1121,7 +1127,7 @@ acquired.</p></li>
 
 <dl class="py function">
 <dt id="bluefog.torch.win_accumulate">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_accumulate</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_accumulate" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_accumulate</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em>, <em class="sig-param"><span class="n">self_weight</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">dst_weights</span><span class="p">:</span> <span class="n">Dict<span class="p">[</span>int<span class="p">, </span>float<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">require_mutex</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.win_accumulate" title="Permalink to this definition">¶</a></dt>
 <dd><p>Passively accmulate the tensor into neighbor’s shared window memory.
 Only SUM ops is supported now.
 This is a blocking function, which will return until win_accumulate operation
@@ -1131,6 +1137,8 @@ is finished.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tesnor</strong> – The tensor that shares to neighbor.</p></li>
 <li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_accumulate
+send tensor information to neigbors), Default is 1.0.</p></li>
 <li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
 Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
 If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -1182,6 +1190,38 @@ acquire the mutex.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">win_put</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_associated_p">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">win_associated_p</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">str</span></em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#bluefog.torch.win_associated_p" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the associated correction P, which is used in Push-Sum algorithm, for each named window.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The unique name to associate the window object.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The p value. (Initialized as 1.)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.turn_on_win_ops_with_associated_p">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">turn_on_win_ops_with_associated_p</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.turn_on_win_ops_with_associated_p" title="Permalink to this definition">¶</a></dt>
+<dd><p>Turn on the global state of win operations with associated p.</p>
+<p>If it is state is on, all win ops such as put, update, accumulate also apply on the
+associated p value as well.
+The default state is off.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.turn_off_win_ops_with_associated_p">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">turn_off_win_ops_with_associated_p</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.turn_off_win_ops_with_associated_p" title="Permalink to this definition">¶</a></dt>
+<dd><p>Turn off the global state of win operations with associated p.</p>
 </dd></dl>
 
 <dl class="py function">
