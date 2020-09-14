@@ -1017,7 +1017,6 @@ Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
 Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& release_ranks,
                               int self_rank, bool is_sync) {
-  int one = 1;
   int minus_one = -1;
   for (int rank : release_ranks) {
     if (is_sync) {

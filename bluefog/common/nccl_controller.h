@@ -187,7 +187,7 @@ class NCCLController {
 
   Status WinFree(const std::string& name, int device);
   Status WinFreeAll();
-  Status WinSync(const std::string& name, int device);
+  Status WinSync(const std::string& name, int device, bool with_associated_p);
 
   Status WinMutexAcquire(const std::string& name,
                          const std::vector<int>& acquire_ranks, bool is_sync);

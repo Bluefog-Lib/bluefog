@@ -652,7 +652,7 @@ class WinOpsTests(unittest.TestCase):
             return
 
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if TEST_ON_GPU:
+        if TEST_ON_GPU and not bf.nccl_built():
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         bf.set_topology(topology_util.RingGraph(size))
@@ -690,7 +690,8 @@ class WinOpsTests(unittest.TestCase):
         size = bf.size()
         rank = bf.rank()
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        if TEST_ON_GPU:
+        # Current, nccl version hasn't supported the associated with p yet.
+        if TEST_ON_GPU and not bf.nccl_built():
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
         dims = [1]
         bf.turn_on_win_ops_with_associated_p()

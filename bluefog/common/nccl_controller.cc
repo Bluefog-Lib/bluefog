@@ -1033,10 +1033,13 @@ Status NCCLController::WinFreeAll() {
   return Status::OK();
 }
 
-Status NCCLController::WinSync(const std::string& name, int device) {
+Status NCCLController::WinSync(const std::string& name, int device, bool with_associated_p) {
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_sync failed with ") + name);
+  }
+  if(with_associated_p) {
+    BFLOG(WARNING) << "With Associated P is not supported in NCCL implementation yet.";
   }
   // We don't need to do anything since our mimic window don't do anything on
   // seperate memory.
@@ -1183,6 +1186,7 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
 
   ncclGroupStart();
   // TODO(ybc) sort the dst_weights?
+  // Make it in parallel for loop??
   for (auto kv : entry.dst_weights) {
     int target_rank = kv.first;
     double weight = kv.second;
