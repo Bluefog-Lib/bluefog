@@ -41,6 +41,7 @@ constexpr int BFWinPassiveRetry = 2;
 
 const int kWinPassiveRecvRequestTag = 20201234;
 const int kWinPassiveRecvAckTag = 20200827;
+const int kWinPassiveDoneTag = 20200913;
 
 ncclDataType_t GetNCCLDataType(const std::shared_ptr<Tensor> tensor) {
   return GetNCCLDataType(tensor->dtype());
@@ -907,6 +908,9 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                               num_elements, GetNCCLDataType(entry.tensor),
                               /*root=*/0, win_comm, win_stream));
 #endif
+      int done = 1;
+      MPICHECK(MPI_Send(&done, 1, MPI_INT, source, kWinPassiveDoneTag,
+                        MPI_COMM_WORLD));
     } else if (req.op_type == MPIOpsType::WIN_GET) {
       void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
@@ -927,6 +931,9 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
       NCCLCHECK(ncclReduce(/*sendbuf=*/recvbuf, /*recv=*/recvbuf, req.length,
                            GetNCCLDataType(req.data_type), ncclSum, 
                            /*root=*/1, win_comm, win_stream));
+      int done = 1;
+      MPICHECK(MPI_Send(&done, 1, MPI_INT, source, kWinPassiveDoneTag,
+                        MPI_COMM_WORLD));
     } else {
       BFLOG(ERROR) << "Receive wrong ops types in WinPassiveRecvRequest: "
                    << to_underlying(req.op_type)
@@ -934,7 +941,6 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                       "WIN_ACCUMULATE = 8,";
     }
     nccl_ctx.nccl_win_mutex.unlock();
-
     nccl_ctx.finalizer_thread_pool.execute([win_stream]() mutable {
       CUDACHECK(cudaStreamSynchronize(win_stream));
     });
@@ -1249,12 +1255,25 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   ncclGroupEnd();
   lock_win_passive.unlock();
 
+  std::vector<MPI_Request> requests(entry.dst_weights.size());
+  std::vector<MPI_Status> statuses(entry.dst_weights.size());
+  std::vector<int> done(entry.dst_weights.size(), -1);
+  int count = 0;
+  for (auto kv : entry.dst_weights) {
+    int target_rank = kv.first;
+    MPICHECK(MPI_Irecv(done.data() + count, 1, MPI_INT, target_rank,
+                       kWinPassiveDoneTag, MPI_COMM_WORLD, &requests[count]));
+    count++;
+  }
+
   auto tid = std::this_thread::get_id();
   cudaEvent_t event;
   auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
   CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
   CUDACHECK(cudaEventRecord(event, win_stream));
   CUDACHECK(cudaEventSynchronize(event));
+  MPICHECK(
+      MPI_Waitall(entry.dst_weights.size(), requests.data(), statuses.data()));
   this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
   if (entry.require_mutex) {
@@ -1364,6 +1383,17 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   ncclGroupEnd();
   lock_win_passive.unlock();
 
+  std::vector<MPI_Request> requests(entry.dst_weights.size());
+  std::vector<MPI_Status> statuses(entry.dst_weights.size());
+  std::vector<int> done(entry.dst_weights.size(), -1);
+  int count = 0;
+  for (auto kv : entry.dst_weights) {
+    int target_rank = kv.first;
+    MPICHECK(MPI_Irecv(done.data() + count, 1, MPI_INT, target_rank,
+                       kWinPassiveDoneTag, MPI_COMM_WORLD, &requests[count]));
+    count++;
+  }
+
   auto tid = std::this_thread::get_id();
   std::vector<cudaEvent_t> events;
   for (auto& kv : entry.src_weights) {
@@ -1379,6 +1409,8 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
   }
   events.clear();
+  MPICHECK(
+      MPI_Waitall(entry.dst_weights.size(), requests.data(), statuses.data()));
   this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
   if (entry.require_mutex) {
