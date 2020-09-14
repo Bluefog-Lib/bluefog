@@ -92,6 +92,8 @@ void MPIController::Allgather(TensorTableEntry& entry) {
   Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
   if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     entry.callback(status);
     return;
   }
@@ -235,6 +237,8 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
   if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     entry.callback(status);
     return;
   }
@@ -358,11 +362,11 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
-  timeline_ptr->ActivityEnd(entry.tensor_name);
   if (!status.ok()) {
     entry.callback(status);
     return;
   }
+  timeline_ptr->ActivityEnd(entry.tensor_name);
 
   void* buffer_data = (void*)entry.output->data();
 

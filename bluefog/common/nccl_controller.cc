@@ -368,12 +368,16 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
   if (!CheckSameRecvSize(recvcounts, mpi_ctx_.size_)) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     entry.callback(Status::PreconditionError(
         "ncclAllGather doesn't support varying lenght of vector. Please make "
         "sure the size of tensors is the same among all processes."));
     return;
   }
   if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     entry.callback(status);
     return;
   }
@@ -494,6 +498,8 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
   if (!CheckSameRecvSize(recvcounts, mpi_ctx_.neighbor_indgree_)) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     entry.callback(Status::PreconditionError(
         "Neighbor_allgather/allreduce doesn't support varying lenght of "
         "vector. Please make "
@@ -501,6 +507,8 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
     return;
   }
   if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     entry.callback(status);
     return;
   }
