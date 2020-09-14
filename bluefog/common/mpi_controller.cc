@@ -89,8 +89,12 @@ int MPIController::GetTypeSize(DataType dtype) {
 void MPIController::Allgather(TensorTableEntry& entry) {
   int* recvcounts = new int[mpi_ctx_.size_];
   int* displcmnts = new int[mpi_ctx_.size_];
-  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
+  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
+  }
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -228,8 +232,12 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   if (!mpi_ctx_.IsTopoSetup()) {
     throw std::runtime_error("Topology of MPI has not been set yet.");
   }
-  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
+  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
+  }
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -351,6 +359,10 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   timeline_ptr->ActivityEnd(entry.tensor_name);
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
+  }
 
   void* buffer_data = (void*)entry.output->data();
 

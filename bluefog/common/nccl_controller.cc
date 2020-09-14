@@ -365,12 +365,17 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   // recvcounts and displacement but displacement is not used.
   int* recvcounts = new int[mpi_ctx_.size_];
   int* displcmnts = new int[mpi_ctx_.size_];
-  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
+  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
   if (!CheckSameRecvSize(recvcounts, mpi_ctx_.size_)) {
-    throw std::runtime_error(
+    entry.callback(Status::PreconditionError(
         "ncclAllGather doesn't support varying lenght of vector. Please make "
-        "sure the size of tensors is the same among all processes.");
+        "sure the size of tensors is the same among all processes."));
+    return;
+  }
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
   }
 
   const void* sendbuf = entry.tensor->data();
@@ -486,13 +491,18 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
     throw std::runtime_error(
         "Topology has not been set yet cannot run neighbor_allgather");
   }
-  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
+  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
   if (!CheckSameRecvSize(recvcounts, mpi_ctx_.neighbor_indgree_)) {
-    throw std::runtime_error(
+    entry.callback(Status::PreconditionError(
         "Neighbor_allgather/allreduce doesn't support varying lenght of "
         "vector. Please make "
-        "sure the size of tensors is the same among all processes.");
+        "sure the size of tensors is the same among all processes."));
+    return;
+  }
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
   }
 
   const void* sendbuf = entry.tensor->data();
@@ -610,7 +620,8 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
-  // MPI have no neighbor_allreduce API. So we will utilize neighbor_allgather.
+  // NCCL does not have neighbor_allreduce API. So neighbor_allgather 
+  // is implemented through Send/Recv first.
   // Allgather output will have shape of:
   // (sum of first dimension of every tensor) x (tensor slice shape).
   // For allreduce, the first dimension of every tensor should be the same.
@@ -628,6 +639,10 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
   timeline_ptr->ActivityEnd(entry.tensor_name);
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
+  }
 
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
@@ -1109,7 +1124,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec = (rand() + mpi_ctx_.rank_) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;;
+        int random_usec =
+            (rand() * (mpi_ctx_.rank_ + 7)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
@@ -1224,7 +1240,8 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec = (rand() + mpi_ctx_.rank_) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
+        int random_usec =
+            (rand() * (mpi_ctx_.rank_ + 7)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
@@ -1354,7 +1371,8 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec = (rand() + mpi_ctx_.rank_) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;;
+        int random_usec =
+            (rand() * (mpi_ctx_.rank_ + 7)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
