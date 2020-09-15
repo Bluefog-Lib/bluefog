@@ -1167,6 +1167,18 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   ncclGroupEnd();
   lock_win_passive.unlock();
 
+  // 3. Confirm the recv side is done as well. (Otherwise the mutex may be problematic)
+  std::vector<MPI_Request> requests(entry.dst_weights.size());
+  std::vector<MPI_Status> statuses(entry.dst_weights.size());
+  std::vector<int> done(entry.dst_weights.size(), -1);
+  int count = 0;
+  for (auto kv : entry.dst_weights) {
+    int target_rank = kv.first;
+    MPICHECK(MPI_Irecv(done.data() + count, 1, MPI_INT, target_rank,
+                       kWinPassiveDoneTag, MPI_COMM_WORLD, &requests[count]));
+    count++;
+  }
+
   auto tid = std::this_thread::get_id();
   cudaEvent_t event;
   auto& win_stream = this->nccl_ctx_.nccl_win_active_streams[this->mpi_ctx_.rank_];
@@ -1280,6 +1292,7 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
   ncclGroupEnd();
   lock_win_passive.unlock();
 
+  // 3. Confirm the recv side is done as well. (Otherwise the mutex may be problematic)
   std::vector<MPI_Request> requests(entry.dst_weights.size());
   std::vector<MPI_Status> statuses(entry.dst_weights.size());
   std::vector<int> done(entry.dst_weights.size(), -1);
@@ -1408,17 +1421,6 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
   }
   ncclGroupEnd();
   lock_win_passive.unlock();
-
-  std::vector<MPI_Request> requests(entry.dst_weights.size());
-  std::vector<MPI_Status> statuses(entry.dst_weights.size());
-  std::vector<int> done(entry.dst_weights.size(), -1);
-  int count = 0;
-  for (auto kv : entry.dst_weights) {
-    int target_rank = kv.first;
-    MPICHECK(MPI_Irecv(done.data() + count, 1, MPI_INT, target_rank,
-                       kWinPassiveDoneTag, MPI_COMM_WORLD, &requests[count]));
-    count++;
-  }
 
   auto tid = std::this_thread::get_id();
   std::vector<cudaEvent_t> events;
