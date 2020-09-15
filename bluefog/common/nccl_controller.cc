@@ -32,7 +32,7 @@ namespace common {
 static const char* BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE = std::getenv("BLUEFOG_SLEEP_USEC_FOR_WIN_PASSIVE");
 static const int MAX_SLEEP_USEC_FOR_WIN_PASSIVE =
     BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE == nullptr
-        ? 100
+        ? 1000
         : std::strtol(BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE, nullptr, 10);
 
 constexpr int BFWinPassiveSuccess = 0;
@@ -884,7 +884,6 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
     // Received and succeed.
     int source = mpi_status.MPI_SOURCE;
     NCCLWinRequest req = DeserializeNCCLWinRequest(req_buf);
-    BFLOG(TRACE, self_rank) << "Recv request from " << source << ": " << req.to_string();
     bool self_processing = source == self_rank;
     if (self_processing) {
       BFLOG(ERROR) << "WinPassiveRecvRequest recieved request to process self memeory.";
@@ -906,10 +905,14 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
       res_buf[0] = BFWinPassiveSuccess;
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+      BFLOG(TRACE, self_rank) << "Recv and be able to process request from "
+                              << source << ": " << req.to_string();
     } else {
       res_buf[0] = BFWinPassiveRetry;
       MPICHECK(MPI_Send(res_buf.data(), 1, MPI_INT, source,
                         kWinPassiveRecvAckTag, MPI_COMM_WORLD));
+      BFLOG(TRACE, self_rank) << "Due to lock, unable to process request from "
+                              << source << ": " << req.to_string();
       continue;
     }
   
@@ -931,9 +934,6 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                               num_elements, GetNCCLDataType(entry.tensor),
                               /*root=*/0, win_comm, win_stream));
 #endif
-      int done = 1;
-      MPICHECK(MPI_Send(&done, 1, MPI_INT, source, kWinPassiveDoneTag,
-                        MPI_COMM_WORLD));
     } else if (req.op_type == MPIOpsType::WIN_GET) {
       void* sendbuf = (void*)nccl_win_manager->GetWinMemoryByRank(self_rank);
       auto& win_comm = nccl_ctx.nccl_win_passive_comms[source];
@@ -954,9 +954,6 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
       NCCLCHECK(ncclReduce(/*sendbuf=*/recvbuf, /*recv=*/recvbuf, req.length,
                            GetNCCLDataType(req.data_type), ncclSum, 
                            /*root=*/1, win_comm, win_stream));
-      int done = 1;
-      MPICHECK(MPI_Send(&done, 1, MPI_INT, source, kWinPassiveDoneTag,
-                        MPI_COMM_WORLD));
     } else {
       BFLOG(ERROR) << "Receive wrong ops types in WinPassiveRecvRequest: "
                    << to_underlying(req.op_type)
@@ -964,8 +961,14 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                       "WIN_ACCUMULATE = 8,";
     }
     nccl_ctx.nccl_win_mutex.unlock();
-    nccl_ctx.finalizer_thread_pool.execute([win_stream]() mutable {
+    nccl_ctx.finalizer_thread_pool.execute([win_stream, req, source]() mutable {
       CUDACHECK(cudaStreamSynchronize(win_stream));
+      if (req.op_type == MPIOpsType::WIN_ACCUMULATE ||
+          req.op_type == MPIOpsType::WIN_PUT) {
+        int done = 1;
+        MPICHECK(MPI_Send(&done, 1, MPI_INT, source, kWinPassiveDoneTag,
+                          MPI_COMM_WORLD));
+      }
     });
   }
   nccl_ctx.finalizer_thread_pool.reset(); // Need to wait until all finalizer_thread_pool stopped.
@@ -1132,8 +1135,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec =
-            (rand() * (mpi_ctx_.rank_ + 7)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
+        unsigned int random_usec =
+            (rand() + (mpi_ctx_.rank_ * 123)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
@@ -1185,6 +1188,8 @@ void NCCLController::WinPut(TensorTableEntry& entry) {
   CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
   CUDACHECK(cudaEventRecord(event, win_stream));
   CUDACHECK(cudaEventSynchronize(event));
+  MPICHECK(
+      MPI_Waitall(entry.dst_weights.size(), requests.data(), statuses.data()));
   this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
   if (entry.require_mutex) {
@@ -1245,9 +1250,6 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
     // get the lock as well.
     // Note the live lock may NOT be able to avoid in thic approach.
     do {
-      BFLOG(TRACE, mpi_ctx_.rank_)
-          << "Send request to " << target_rank << ": "
-          << DeserializeNCCLWinRequest(req_buf).to_string();
       MPICHECK(MPI_Send(req_buf.data(), 4, MPI_INT, target_rank,
                         kWinPassiveRecvRequestTag, MPI_COMM_WORLD));
       MPICHECK(MPI_Recv(res_buf.data(), 1, MPI_INT, target_rank,
@@ -1260,10 +1262,18 @@ void NCCLController::WinAccumulate(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec =
-            (rand() * (mpi_ctx_.rank_ + 7)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
+        unsigned int random_usec =
+            (rand() + (mpi_ctx_.rank_ * 123)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
+        BFLOG(TRACE, mpi_ctx_.rank_)
+            << "Will retry request to " << target_rank << " in "
+            << std::to_string(random_usec)
+            << "usec: " << DeserializeNCCLWinRequest(req_buf).to_string();
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
+      } else {
+        BFLOG(TRACE, mpi_ctx_.rank_)
+            << "Send and accept request to " << target_rank << ": "
+            << DeserializeNCCLWinRequest(req_buf).to_string();
       }
     } while (res_buf[0] != BFWinPassiveSuccess);
 
@@ -1392,8 +1402,8 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
       }
       if (res_buf[0] == BFWinPassiveRetry) {
         lock_win_passive.unlock();
-        int random_usec =
-            (rand() * (mpi_ctx_.rank_ + 7)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
+        unsigned int random_usec =
+            (rand() + (mpi_ctx_.rank_ * 123)) % MAX_SLEEP_USEC_FOR_WIN_PASSIVE;
         std::this_thread::sleep_for(std::chrono::microseconds(random_usec));
         lock_win_passive.lock();
       }
@@ -1437,8 +1447,6 @@ void NCCLController::WinGet(TensorTableEntry& entry) {
     CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
   }
   events.clear();
-  MPICHECK(
-      MPI_Waitall(entry.dst_weights.size(), requests.data(), statuses.data()));
   this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);  // COMMUNICATE
 
   if (entry.require_mutex) {

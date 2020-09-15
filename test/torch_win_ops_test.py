@@ -29,8 +29,8 @@ import torch
 import numpy as np
 
 EPSILON = 1e-5
-TEST_ON_GPU = False and torch.cuda.is_available()
-DIM_SIZE = 3
+TEST_ON_GPU = torch.cuda.is_available()
+DIM_SIZE = 23
 
 
 class WinOpsTests(unittest.TestCase):
