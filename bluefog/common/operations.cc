@@ -138,22 +138,22 @@ Vendor DetermineController(const MPIOpsType& op_type, int device) {
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI");
       break;
     case MPIOpsType::WIN_PUT:
-      by_mpi_env = std::getenv("BLUEFOG_WIN_PUT_BY_MPI");
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     case MPIOpsType::WIN_GET:
-      by_mpi_env = std::getenv("BLUEFOG_WIN_GET_BY_MPI");
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     case MPIOpsType::WIN_ACCUMULATE:
-      by_mpi_env = std::getenv("BLUEFOG_WIN_ACCUMULATE_BY_MPI");
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     case MPIOpsType::WIN_CREATE:
-      by_mpi_env = std::getenv("BLUEFOG_WIN_CREATE_BY_MPI");
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     case MPIOpsType::WIN_FREE:
-      by_mpi_env = std::getenv("BLUEFOG_WIN_FREE_BY_MPI");
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     case MPIOpsType::WIN_SYNC:
-      by_mpi_env = std::getenv("BLUEFOG_WIN_SYNC_BY_MPI");
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     default:
       by_mpi_env = nullptr;
