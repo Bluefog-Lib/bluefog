@@ -67,7 +67,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   state.controller->Initialize();
 
   // We use Lazy initialized pattern. nccl_controller will be initialized only
-  // when it necessary. 
+  // when it is necessary. 
 
   // Signal that initialization is completed.
   state.initialization_done = true;
@@ -93,7 +93,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
       << "Shutting down background thread";
 
   // Signal that shutdown has been requested.
-  // state.shut_down = true;
+  state.shut_down = true;
   // Notify all outstanding operations that Bluefog has been shut down
   // and finalize tensor queue.
   std::vector<StatusCallback> callbacks;

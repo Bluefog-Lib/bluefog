@@ -49,14 +49,9 @@ using NeighborTable = std::unordered_map<int, std::shared_ptr<TorchTensor>>;
 static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
-#if HAVE_NCCL
-// When there is NCCL always put win_memory on GPU.
-static const bool WIN_ON_CPU = false; 
-#else
 static const char* BLUEFOG_WIN_ON_GPU = std::getenv("BLUEFOG_WIN_ON_GPU");
 static const bool WIN_ON_CPU =
     !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
-#endif
 
 namespace {
 

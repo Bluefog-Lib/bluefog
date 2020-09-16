@@ -93,8 +93,8 @@ void NCCLContext::Initialize(const int rank, const int size,
                                          greatest_priority));
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
 
-  is_initialized = true;
   cuda_device = local_rank % nDevices;
+  is_initialized = true;
   return;
 }
 
@@ -194,6 +194,9 @@ void NCCLController::Initialize() {
   if (!timeline_status.ok()) {
     BFLOG(INFO) << "Timeline is not used because " << timeline_status.reason();
   }
+  // Barrier helps NCCL to synchronize after initialization and avoid
+  // deadlock that we've been seeing without it.
+  MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
 }
 
 #if NCCL_MINOR < 7
@@ -428,8 +431,12 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
                                         GetNCCLDataType(entry.tensor), ncclSum,
                                         nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
-    throw std::runtime_error(
-        "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
+    std::string error_msg =
+        "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) "
+        "for details.";
+    BFLOG(ERROR) << error_msg;
+    entry.callback(Status::UnknownError(error_msg));
+    return;
   }
 
   auto tid = std::this_thread::get_id();
@@ -464,8 +471,12 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
       ncclBcast(data_ptr, num_elements, GetNCCLDataType(entry.tensor),
                 root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
-    throw std::runtime_error(
-        "ncclBroadcast failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
+    std::string error_msg =
+        "ncclBcast failed, see NCCL output (NCCL_DEBUG=INFO) "
+        "for details.";
+    BFLOG(ERROR) << error_msg;
+    entry.callback(Status::UnknownError(error_msg));
+    return;
   }
 
   auto tid = std::this_thread::get_id();
