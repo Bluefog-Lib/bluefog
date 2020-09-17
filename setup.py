@@ -305,6 +305,7 @@ def get_common_options(build_ext):
                "bluefog/common/cuda_util.cc",
                "bluefog/common/half.cc",
                "bluefog/common/logging.cc",
+               "bluefog/common/message.cc",
                "bluefog/common/mpi_context.cc",
                "bluefog/common/mpi_controller.cc",
                "bluefog/common/operations.cc",
