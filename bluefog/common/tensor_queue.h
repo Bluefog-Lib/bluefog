@@ -42,7 +42,7 @@ class TensorQueue {
 
   const TensorTableEntry& GetTensorEntry(const std::string& tensor_name) const;
 
-  void PopMessagesFromQueue(std::deque<Request>& message_queue_buffer);
+  void PopMessagesFromQueue(std::vector<Request>& message_queue_buffer);
 
   void PushMessageToQueue(Request& message);
 

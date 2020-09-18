@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstring>
 #include <map>
 #include <queue>
@@ -38,6 +39,7 @@
 
 // Bluefog knobs.
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
+#define BLUEFOG_CYCLE_TIME "BLUEFOG_CYCLE_TIME"
 
 namespace bluefog {
 namespace common {
@@ -76,14 +78,18 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 
   // Open the timeline file
   char* bluefog_timeline_loc = std::getenv(BLUEFOG_TIMELINE);
-
   if (bluefog_timeline_loc != nullptr) {
     std::string timeline_filename = std::string(bluefog_timeline_loc) +
                                     std::to_string(bluefog_rank()) +
                                     std::string(".json");
     state.timeline.Initialize(timeline_filename, bluefog_size());
-
     state.timeline_enabled = true;
+  }
+
+  // Override the cycle time.
+  char* bluefog_cycle_time = std::getenv(BLUEFOG_CYCLE_TIME);
+  if (bluefog_cycle_time != nullptr) {
+    state.cycle_time_ms = std::strtof(bluefog_cycle_time, nullptr);
   }
 
   // Iterate until shutdown.
@@ -324,25 +330,56 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
 }
 
 bool RunLoopOnce(BluefogGlobalState& state) {
-  std::deque<Request> message_queue_buffer;
+  // The coordinator sends a SHUTDOWN message to trigger shutdown.
+  bool should_shut_down = bluefog_global.shut_down;
+
+  // This delay determines thread frequency and MPI message latency
+  auto sleep_duration =
+      state.last_cycle_start +
+      std::chrono::microseconds(long(state.cycle_time_ms * 1000.)) -
+      std::chrono::steady_clock::now();
+  if (sleep_duration > std::chrono::steady_clock::duration::zero()) {
+    std::this_thread::sleep_for(sleep_duration);
+  }
+  state.last_cycle_start = std::chrono::steady_clock::now();
+
+  std::vector<Request> message_queue_buffer;
   state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
-  if (message_queue_buffer.size() == 0) {
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
-    return !bluefog_global.shut_down;
-  }
+
   std::vector<TensorTableEntry> entries;
+  auto IsRequestConvertToEntryDirectly = [](const Request& request) {
+    return (request.request_type() != Request::ALLREDUCE &&
+            request.request_type() != Request::ALLGATHER &&
+            request.request_type() != Request::BROADCAST &&
+            request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
+            request.request_type() != Request::NEIGHBOR_ALLGATHER);
+  };
+  // For these no need to coordinate, put them into entries directly.
   for (auto& request : message_queue_buffer) {
-    entries.push_back(state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+    if (IsRequestConvertToEntryDirectly(request)) {
+      entries.push_back(
+          state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+    }
   }
+  message_queue_buffer.erase(
+      std::remove_if(message_queue_buffer.begin(), message_queue_buffer.end(),
+                     IsRequestConvertToEntryDirectly),
+      message_queue_buffer.end());
+
+  // For the rest requests, they needs to coordinate and neogiate.
+  for (auto& request : message_queue_buffer) {
+    entries.push_back(
+        state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+  }
+
   PerformOperation(entries);
-  return !bluefog_global.shut_down;
+  return !should_shut_down;
 }
 
 // Start Bluefog background thread. Ensure that this is
 // only done once no matter how many times this function is called.
 void InitializeBluefogOnce() {
-  mpi_context
-      .Enable();  // We always enable mpi since we relied on MPI only now.
+  mpi_context.Enable();  // We always enable mpi since we relied on MPI only now.
   if (!bluefog_global.initialize_flag.test_and_set()) {
     bluefog_global.controller.reset(new MPIController(mpi_context));
 #if HAVE_NCCL

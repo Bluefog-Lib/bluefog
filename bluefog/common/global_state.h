@@ -58,6 +58,12 @@ struct BluefogGlobalState {
   // Flag indicating whether timeline enabled.
   bool timeline_enabled = false;
 
+  // Background thread cycle time in milliseconds.  Fractional numbers are permitted.
+  double cycle_time_ms = 3;
+
+  // Time point when last cycle started.
+  std::chrono::steady_clock::time_point last_cycle_start;
+
   std::shared_ptr<MPIController> controller;
 
   #if HAVE_NCCL

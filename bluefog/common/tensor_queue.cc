@@ -60,7 +60,8 @@ void TensorQueue::FinalizeTensorQueue(
 void TensorQueue::GetTensorEntriesFromResponse(
     const Response& response, std::vector<TensorTableEntry>& entries) {
   // Reserve to save re-allocation costs, as we know the size before.
-  entries.reserve(response.tensor_names().size());
+  // entries may not be empty due to win_ops is processed at first.
+  entries.reserve(entries.size() + response.tensor_names().size());
   {
     // Lock on the tensor table.
     std::lock_guard<std::mutex> guard(mutex_);
@@ -127,7 +128,7 @@ TensorQueue::GetTensorEntry(const std::string& tensor_name) const{
 
 // Pop out all the messages from the queue
 void TensorQueue::PopMessagesFromQueue(
-    std::deque<Request>& message_queue_buffer) {
+    std::vector<Request>& message_queue_buffer) {
   std::lock_guard<std::mutex> guard(mutex_);
   while (!message_queue_.empty()) {
     Request message = message_queue_.front();
