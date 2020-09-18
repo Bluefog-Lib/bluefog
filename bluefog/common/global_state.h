@@ -18,6 +18,8 @@
 #define BLUEFOG_COMMON_GLOBAL_STATE_H
 
 #include <atomic>
+#include <chrono>
+#include <memory>
 #include <queue>
 #include <thread>
 
@@ -71,6 +73,13 @@ struct BluefogGlobalState {
   #endif
 
   TensorQueue tensor_queue;
+
+  // Only exists on the coordinator node (rank zero). Maintains a vector of
+  // requests to allreduce every tensor (keyed by tensor name).
+  std::unique_ptr<std::unordered_map<
+      std::string,
+      std::tuple<std::vector<Request>, std::chrono::steady_clock::time_point>>>
+      message_table;
 
   ~BluefogGlobalState() {
     // Make sure that the destructor of the background thread is safe to

@@ -61,6 +61,156 @@ static bool global_with_associated_p_state = false;
 
 }  // namespace
 
+// Table for storing Tensor metadata on rank zero. This is used for error
+// checking, stall checking and size calculations, as well as determining
+// when a reduction is ready to be done (when all nodes are ready to do it).
+using MessageTable = std::unordered_map<
+    std::string,
+    std::tuple<std::vector<Request>, std::chrono::steady_clock::time_point>>;
+
+// Store the Request for a name, and return whether the total count of
+// Requests for that tensor is now equal to the MPI size (and thus we are
+// ready to reduce the tensor).
+bool IncrementTensorCount(MessageTable* message_table, const Request& msg,
+                          int mpi_size) {
+  auto& name = msg.tensor_name();
+  auto table_iter = message_table->find(name);
+  if (table_iter == message_table->end()) {
+    std::vector<Request> messages = {msg};
+    messages.reserve(static_cast<unsigned long>(mpi_size));
+
+    auto now = std::chrono::steady_clock::now();
+    message_table->emplace(name, std::make_tuple(std::move(messages), now));
+    table_iter = message_table->find(name);
+  } else {
+    std::vector<Request>& messages = std::get<0>(table_iter->second);
+    messages.push_back(msg);
+  }
+
+  std::vector<Request>& messages = std::get<0>(table_iter->second);
+  int count = (int)messages.size();
+  bool ready_to_reduce = count == mpi_size;
+  return ready_to_reduce;
+}
+
+// Once a tensor is ready to be reduced, the coordinator sends an MPIResponse
+// instructing all ranks to start the reduction to all ranks. The MPIResponse
+// also contains error messages in case the submitted MPIRequests were not
+// valid (for example, contained mismatched shapes or types).
+//
+// Constructing the MPIResponse, thus, requires a whole lot of error checking.
+Response ConstructResponse(MessageTable* message_table, std::string name) {
+  bool error = false;
+  auto it = message_table->find(name);
+  assert(it != message_table->end());
+
+  std::vector<Request>& requests = std::get<0>(it->second);
+  assert(requests.size() > 0);
+
+  std::ostringstream error_message_stream;
+
+  // Check that all data types of tensors are identical.
+  auto data_type = requests[0].tensor_type();
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    auto request_type = requests[i].tensor_type();
+    if (data_type != request_type) {
+      error = true;
+      error_message_stream << "Mismatched data types: One rank had type "
+                           << DataType_Name(data_type)
+                           << ", but another rank had type "
+                           << DataType_Name(request_type) << ".";
+      break;
+    }
+  }
+
+  // Check that all requested operations are the same
+  auto message_type = requests[0].request_type();
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    if (error) {
+      break;
+    }
+
+    auto request_type = requests[i].request_type();
+    if (message_type != request_type) {
+      error = true;
+      error_message_stream << "Mismatched MPI operations: One rank did an "
+                           << Request::RequestType_Name(message_type)
+                           << ", but another rank did an "
+                           << Request::RequestType_Name(request_type) << ".";
+      break;
+    }
+  }
+
+  // If we are doing a broadcast, check that all root ranks are identical.
+  if (message_type == Request::BROADCAST) {
+    int first_root_rank = requests[0].root_rank();
+    for (unsigned int i = 1; i < requests.size(); i++) {
+      if (error) {
+        break;
+      }
+
+      int this_root_rank = requests[i].root_rank();
+      if (first_root_rank != this_root_rank) {
+        error = true;
+        error_message_stream
+            << "Mismatched " << Request::RequestType_Name(message_type)
+            << " root ranks: One rank specified root rank " << first_root_rank
+            << ", but another rank specified root rank " << this_root_rank
+            << ".";
+        break;
+      }
+    }
+  }
+
+  bool first_device_is_cpu = requests[0].device() == CPU_DEVICE_ID;
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    if (error) {
+      break;
+    }
+
+    bool this_device_is_cpu = requests[i].device() == CPU_DEVICE_ID;
+    if (first_device_is_cpu != this_device_is_cpu) {
+      error = true;
+      error_message_stream
+          << "Mismatched " << Request::RequestType_Name(message_type)
+          << " CPU/GPU device selection: One rank specified device "
+          << (first_device_is_cpu ? "CPU" : "GPU")
+          << ", but another rank specified device "
+          << (this_device_is_cpu ? "CPU" : "GPU") << ".";
+      break;
+    }
+  }
+  std::vector<int32_t> devices(requests.size());
+  for (auto& request : requests) {
+    devices[request.request_rank()] = request.device();
+  }
+
+  Response response;
+  response.add_tensor_name(name);
+  if (error) {
+    std::string error_message = error_message_stream.str();
+    response.set_response_type(Response::ERROR);
+    response.set_error_message(error_message);
+  } else if (message_type == Request::ALLGATHER) {
+    response.set_response_type(Response::ALLGATHER);
+  } else if (message_type == Request::ALLREDUCE) {
+    response.set_response_type(Response::ALLREDUCE);
+  } else if (message_type == Request::BROADCAST) {
+    response.set_response_type(Response::BROADCAST);
+  } else if (message_type == Request::NEIGHBOR_ALLGATHER) {
+    response.set_response_type(Response::NEIGHBOR_ALLGATHER);
+  } else if (message_type == Request::NEIGHBOR_ALLREDUCE) {
+    response.set_response_type(Response::NEIGHBOR_ALLREDUCE);
+  }
+  response.set_devices(devices);
+
+  // Clear all queued up requests for this name. They are now taken care of
+  // by the constructed MPI response.
+  message_table->erase(it);
+
+  return response;
+}
+
 bool RunLoopOnce(BluefogGlobalState& state);
 
 void BackgroundThreadLoop(BluefogGlobalState& state) {
@@ -72,10 +222,6 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
 
   // We use Lazy initialized pattern. nccl_controller will be initialized only
   // when it is necessary. 
-
-  // Signal that initialization is completed.
-  state.initialization_done = true;
-  BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
 
   // Open the timeline file
   char* bluefog_timeline_loc = std::getenv(BLUEFOG_TIMELINE);
@@ -92,6 +238,15 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   if (bluefog_cycle_time != nullptr) {
     state.cycle_time_ms = std::strtof(bluefog_cycle_time, nullptr);
   }
+
+  // Initialize the tensor count table. No tensors are available yet.
+  if (bluefog_global.controller->GetRank() == COORDINATE_RANK) {
+    state.message_table = std::unique_ptr<MessageTable>(new MessageTable());
+  }
+
+  // Signal that initialization is completed.
+  state.initialization_done = true;
+  BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
 
   // Iterate until shutdown.
   while (RunLoopOnce(state))
@@ -367,14 +522,14 @@ bool RunLoopOnce(BluefogGlobalState& state) {
                      IsRequestConvertToEntryDirectly),
       message_queue_buffer.end());
 
-  // WILL BE DELETED!
-  for (auto& request : message_queue_buffer) {
-    entries.push_back(state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
-  }
-  if (message_queue_buffer.size() == 0) {
-    PerformOperation(entries);
-    return !should_shut_down;
-  }
+  // // WILL BE DELETED!
+  // for (auto& request : message_queue_buffer) {
+  //   entries.push_back(state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+  // }
+  // if (message_queue_buffer.size() == 0) {
+  //   PerformOperation(entries);
+  //   return !should_shut_down;
+  // }
 
   // For the rest requests, they needs to coordinate and neogiate.
   // Collect all tensors that are ready to be reduced. Record them in the
@@ -383,15 +538,21 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   std::vector<std::string> ready_to_reduce;
   if (bluefog_rank() == COORDINATE_RANK) {
     RequestList message_list;
-    message_list.set_shutdown(state.shut_down);
+    message_list.set_shutdown(should_shut_down);
     while (!message_queue_buffer.empty()) {
+      Request& message = message_queue_buffer.front(); 
       message_list.add_request(message_queue_buffer.front());
+      bool reduce =
+          IncrementTensorCount(state.message_table.get(), message, mpi_context.size_);
+      if (reduce) {
+        ready_to_reduce.push_back(message.tensor_name());
+      }
+
       message_queue_buffer.pop_front();
     }
     // Rank zero has put all its own tensors in the tensor count table.
     // Now, it should count all the tensors that are coming from other
     // ranks at this tick.
-
     // 1. Get message lengths from every rank.
     auto recvcounts = new int[bluefog_size()];
     recvcounts[0] = 0;
@@ -415,20 +576,25 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     MPI_Gatherv(nullptr, 0, MPI_BYTE, buffer, recvcounts, displcmnts, MPI_BYTE,
                 COORDINATE_RANK, mpi_context.mpi_comm);
 
-    // // 4. Process messages.
-    // for (int i = 1; i < bluefog_size(); i++) {
-    //   auto rank_buffer_ptr = buffer + displcmnts[i];
+    // 4. Process messages.
+    for (int i = 1; i < bluefog_size(); i++) {
+      auto rank_buffer_ptr = buffer + displcmnts[i];
 
-    //   RequestList received_message_list;
-    //   RequestList::ParseFromBytes(received_message_list, rank_buffer_ptr);
-    //   for (auto& received_message : received_message_list.requests()) {
-    //     auto& received_name = received_message.tensor_name();
-    //   }
-    //   if (received_message_list.shutdown()) {
-    //     // Received SHUTDOWN request from one of the workers.
-    //     state.shut_down = true;
-    //   }
-    // }
+      RequestList received_message_list;
+      RequestList::ParseFromBytes(received_message_list, rank_buffer_ptr);
+      for (auto& received_message : received_message_list.requests()) {
+        auto& received_name = received_message.tensor_name();
+        bool reduce = IncrementTensorCount(state.message_table.get(),
+                                           received_message, mpi_context.size_);
+        if (reduce) {
+          ready_to_reduce.push_back(received_name);
+        }
+      }
+      if (received_message_list.shutdown()) {
+        // Received SHUTDOWN request from one of the workers.
+        should_shut_down = true;
+      }
+    }
     // 5. Free buffers.
     delete[] recvcounts;
     delete[] displcmnts;
@@ -440,6 +606,38 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     // to rank zero. We can now do reductions and gathers; rank zero will
     // choose which ones and in what order, and will notify the other ranks
     // before doing each reduction.
+    std::deque<Response> responses;
+    for (auto& tensor_name : ready_to_reduce) {
+      Response response =
+          ConstructResponse(state.message_table.get(), tensor_name);
+      responses.push_back(std::move(response));
+    }
+
+    ResponseList response_list;
+    response_list.set_shutdown(should_shut_down);
+
+    while (!responses.empty()) {
+      auto response = responses.front();
+      assert(response.tensor_names().size() == 1);
+      responses.pop_front();
+      // TODO: Tensor Fusion Logics.
+      response_list.add_response(response);
+    }
+
+    // Notify all nodes which tensors we'd like to reduce at this step.
+    std::string encoded_response;
+    ResponseList::SerializeToString(response_list, encoded_response);
+    int encoded_response_length = (int)encoded_response.length() + 1;
+    MPI_Bcast(&encoded_response_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
+    MPI_Bcast((void*)encoded_response.c_str(), encoded_response_length,
+              MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
+    // Perform the collective operation. All nodes should end up performing
+    // the same operation.
+    for (auto& response : response_list.responses()) {
+      state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
+      // TODO: tensor fusion logics?
+    }
+    // TODO: Check for stalled tensors.
   } else {
     std::string encoded_message;
     RequestList message_list;
@@ -456,23 +654,24 @@ bool RunLoopOnce(BluefogGlobalState& state) {
                 MPI_BYTE, nullptr, nullptr, nullptr, MPI_BYTE, COORDINATE_RANK,
                 mpi_context.mpi_comm);
 
-    // int msg_length;
-    // MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
-    // auto buffer = new uint8_t[msg_length];
-    // MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
-    // ResponseList response_list;
-    // ResponseList::ParseFromBytes(response_list, buffer);
-    // delete[] buffer;
+    int msg_length;
+    MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
+    auto buffer = new uint8_t[msg_length];
+    MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
+    ResponseList response_list;
+    ResponseList::ParseFromBytes(response_list, buffer);
+    delete[] buffer;
 
-    // // Perform the collective operation. All nodes should end up performing
-    // // the same operation.
-    // for (auto& response : response_list.responses()) {
-    //   state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
-    // }
+    // Perform the collective operation. All nodes should end up performing
+    // the same operation.
+    for (auto& response : response_list.responses()) {
+      state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
+      // TODO: tensor fusion logics?
+    }
 
-    // if (response_list.shutdown()) {
-    //   should_shut_down = true;
-    // }
+    if (response_list.shutdown()) {
+      should_shut_down = true;
+    }
   }
 
   PerformOperation(entries);
