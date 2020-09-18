@@ -151,10 +151,10 @@ Status EnqueueTensorWindowGet(const std::string& name,
                               const int device, const bool require_mutex,
                               StatusCallback callback);
 
-Status EnqueueBarrier(StatusCallback callback);
-
 // Note all following ops are not proccessed through the communication thread.
 // it is executed throug the main thread. It may cause some mismatch.
+
+Status ExecuteBarrier(StatusCallback callback);
 
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,

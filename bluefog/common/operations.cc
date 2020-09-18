@@ -38,6 +38,7 @@
 #endif
 
 // Bluefog knobs.
+#define COORDINATE_RANK 0
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
 #define BLUEFOG_CYCLE_TIME "BLUEFOG_CYCLE_TIME"
 
@@ -331,7 +332,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
 
 bool RunLoopOnce(BluefogGlobalState& state) {
   // The coordinator sends a SHUTDOWN message to trigger shutdown.
-  bool should_shut_down = bluefog_global.shut_down;
+  bool should_shut_down = state.shut_down;
 
   // This delay determines thread frequency and MPI message latency
   auto sleep_duration =
@@ -343,7 +344,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   }
   state.last_cycle_start = std::chrono::steady_clock::now();
 
-  std::vector<Request> message_queue_buffer;
+  std::deque<Request> message_queue_buffer;
   state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
 
   std::vector<TensorTableEntry> entries;
@@ -366,10 +367,112 @@ bool RunLoopOnce(BluefogGlobalState& state) {
                      IsRequestConvertToEntryDirectly),
       message_queue_buffer.end());
 
-  // For the rest requests, they needs to coordinate and neogiate.
+  // WILL BE DELETED!
   for (auto& request : message_queue_buffer) {
-    entries.push_back(
-        state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+    entries.push_back(state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+  }
+  if (message_queue_buffer.size() == 0) {
+    PerformOperation(entries);
+    return !should_shut_down;
+  }
+
+  // For the rest requests, they needs to coordinate and neogiate.
+  // Collect all tensors that are ready to be reduced. Record them in the
+  // tensor count table (rank zero) or send them to rank zero to be
+  // recorded (everyone else).
+  std::vector<std::string> ready_to_reduce;
+  if (bluefog_rank() == COORDINATE_RANK) {
+    RequestList message_list;
+    message_list.set_shutdown(state.shut_down);
+    while (!message_queue_buffer.empty()) {
+      message_list.add_request(message_queue_buffer.front());
+      message_queue_buffer.pop_front();
+    }
+    // Rank zero has put all its own tensors in the tensor count table.
+    // Now, it should count all the tensors that are coming from other
+    // ranks at this tick.
+
+    // 1. Get message lengths from every rank.
+    auto recvcounts = new int[bluefog_size()];
+    recvcounts[0] = 0;
+    MPI_Gather(MPI_IN_PLACE, 1, MPI_INT, recvcounts, 1, MPI_INT, COORDINATE_RANK,
+               mpi_context.mpi_comm);
+
+    // 2. Compute displacements.
+    auto displcmnts = new int[bluefog_size()];
+    size_t total_size = 0;
+    for (int i = 0; i < bluefog_size(); i++) {
+      if (i == 0) {
+        displcmnts[i] = 0;
+      } else {
+        displcmnts[i] = recvcounts[i - 1] + displcmnts[i - 1];
+      }
+      total_size += recvcounts[i];
+    }
+
+    // 3. Collect messages from every rank.
+    auto buffer = new uint8_t[total_size];
+    MPI_Gatherv(nullptr, 0, MPI_BYTE, buffer, recvcounts, displcmnts, MPI_BYTE,
+                COORDINATE_RANK, mpi_context.mpi_comm);
+
+    // // 4. Process messages.
+    // for (int i = 1; i < bluefog_size(); i++) {
+    //   auto rank_buffer_ptr = buffer + displcmnts[i];
+
+    //   RequestList received_message_list;
+    //   RequestList::ParseFromBytes(received_message_list, rank_buffer_ptr);
+    //   for (auto& received_message : received_message_list.requests()) {
+    //     auto& received_name = received_message.tensor_name();
+    //   }
+    //   if (received_message_list.shutdown()) {
+    //     // Received SHUTDOWN request from one of the workers.
+    //     state.shut_down = true;
+    //   }
+    // }
+    // 5. Free buffers.
+    delete[] recvcounts;
+    delete[] displcmnts;
+    delete[] buffer;
+
+    // At this point, rank zero should have a fully updated tensor count
+    // table and should know all the tensors that need to be reduced or
+    // gathered, and everyone else should have sent all their information
+    // to rank zero. We can now do reductions and gathers; rank zero will
+    // choose which ones and in what order, and will notify the other ranks
+    // before doing each reduction.
+  } else {
+    std::string encoded_message;
+    RequestList message_list;
+    message_list.set_shutdown(state.shut_down);
+    while (!message_queue_buffer.empty()) {
+      message_list.add_request(message_queue_buffer.front());
+      message_queue_buffer.pop_front();
+    }
+    RequestList::SerializeToString(message_list, encoded_message);
+    int encoded_message_length = (int)encoded_message.length() + 1;
+    MPI_Gather(&encoded_message_length, 1, MPI_INT, nullptr, 1, MPI_INT,
+               COORDINATE_RANK, mpi_context.mpi_comm);
+    MPI_Gatherv((void*)encoded_message.c_str(), encoded_message_length,
+                MPI_BYTE, nullptr, nullptr, nullptr, MPI_BYTE, COORDINATE_RANK,
+                mpi_context.mpi_comm);
+
+    // int msg_length;
+    // MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
+    // auto buffer = new uint8_t[msg_length];
+    // MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
+    // ResponseList response_list;
+    // ResponseList::ParseFromBytes(response_list, buffer);
+    // delete[] buffer;
+
+    // // Perform the collective operation. All nodes should end up performing
+    // // the same operation.
+    // for (auto& response : response_list.responses()) {
+    //   state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
+    // }
+
+    // if (response_list.shutdown()) {
+    //   should_shut_down = true;
+    // }
   }
 
   PerformOperation(entries);
@@ -821,12 +924,7 @@ Status EnqueueTensorWindowGet(const std::string& name,
   return status;
 }
 
-Status EnqueueBarrier(StatusCallback callback) {
-  Request message;
-  message.set_request_rank(bluefog_global.controller->GetRank());
-  message.set_tensor_name("barrier");
-  message.set_request_type(Request::BARRIER);
-
+Status ExecuteBarrier(StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = "barrier";
   e.callback = callback;
@@ -835,8 +933,8 @@ Status EnqueueBarrier(StatusCallback callback) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
-  return status;
+  bluefog_global.controller->Barrier(e);
+  return Status::OK();
 }
 
 Status WindowCreate(std::shared_ptr<Tensor> tensor,

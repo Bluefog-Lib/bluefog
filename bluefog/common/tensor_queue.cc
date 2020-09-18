@@ -128,7 +128,7 @@ TensorQueue::GetTensorEntry(const std::string& tensor_name) const{
 
 // Pop out all the messages from the queue
 void TensorQueue::PopMessagesFromQueue(
-    std::vector<Request>& message_queue_buffer) {
+    std::deque<Request>& message_queue_buffer) {
   std::lock_guard<std::mutex> guard(mutex_);
   while (!message_queue_.empty()) {
     Request message = message_queue_.front();
