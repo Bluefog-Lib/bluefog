@@ -772,15 +772,6 @@ def win_update(name: str,
     return tensor
 
 
-def win_fence(name: str) -> bool:
-    """ A collective call to synchronization on MPI window with associated name.
-
-    Warning: The API win_get and win_put provied here is already wrapped by
-    MPI_Win_lock and MPI_Win_unlock. So you should not explicitly call win_fence there.
-    """
-    return mpi_lib.bluefog_torch_win_fence(name)
-
-
 def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 
@@ -1038,7 +1029,7 @@ def _win_unlock(name: str):
 
 
 @contextmanager
-def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
+def win_mutex(name: str, for_self=False, ranks: List[int] = None):
     """ A win object implemented mutex context manager. Note, there are N distributed
     mutex over N corresponding processes.
 
@@ -1046,9 +1037,8 @@ def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
         name: Used to get the mutex for the window that registered by name.
         ranks: The mutex associated with the specified ranks is acquired.
             If not presented, the mutex with all out_neighbor ranks are acquired.
-        exclusive: If not exclusive, multiple (inclusive) processes can hold the mutex for
-            the ranks. While only one exclusive processes (no other inclusive ones) can
-            acquire the mutex.
+        for_self: If it is false, it will require the remote mutexes at processes ranks, which
+            is specified by argument ranks). If it is true, it will require the self mutex.
 
     Example:
         >>> bf.win_create(tensor, name)
@@ -1057,19 +1047,19 @@ def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
         >>> win_put(tensor, name)
     """
     _ranks = out_neighbor_ranks() if ranks is None else ranks
-    _win_mutex_acquire(name, _ranks, exclusive)
+    _win_mutex_acquire(name, _ranks, for_self)
     try:
         yield
     finally:
-        _win_mutex_release(name, _ranks, exclusive)
+        _win_mutex_release(name, _ranks, for_self)
 
 
-def _win_mutex_acquire(name, ranks, exclusive):
-    mpi_lib.bluefog_torch_win_mutex_acquire(name, ranks, exclusive)
+def _win_mutex_acquire(name, ranks, for_self):
+    mpi_lib.bluefog_torch_win_mutex_acquire(name, ranks, for_self)
 
 
-def _win_mutex_release(name, ranks, exclusive):
-    mpi_lib.bluefog_torch_win_mutex_release(name, ranks, exclusive)
+def _win_mutex_release(name, ranks, for_self):
+    mpi_lib.bluefog_torch_win_mutex_release(name, ranks, for_self)
 
 
 def win_associated_p(name: str) -> float:

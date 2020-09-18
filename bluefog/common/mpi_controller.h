@@ -58,15 +58,15 @@ class MPIController {
   bool IsMpiUnifiedModel();
 
   // TODO(ybc) Create Operation_manager class to control it.
-  void Allreduce(TensorTableEntry& entries);
-  void Allgather(TensorTableEntry& entries);
-  void Broadcast(TensorTableEntry& entries);
-  void NeighborAllgather(TensorTableEntry& entries);
-  void NeighborAllreduce(TensorTableEntry& entries);
+  void Allreduce(TensorTableEntry& entry);
+  void Allgather(TensorTableEntry& entry);
+  void Broadcast(TensorTableEntry& entry);
+  void NeighborAllgather(TensorTableEntry& entry);
+  void NeighborAllreduce(TensorTableEntry& entry);
   void PairGossip(TensorTableEntry& entry);
-  void WinPut(TensorTableEntry& entries);
-  void WinGet(TensorTableEntry& entries);
-  void WinAccumulate(TensorTableEntry& entries);
+  void WinPut(TensorTableEntry& entry);
+  void WinGet(TensorTableEntry& entry);
+  void WinAccumulate(TensorTableEntry& entry);
   void Barrier(TensorTableEntry& entry);
 
   int SetTopology(int indegree, const int* sources, int outdegree,
@@ -88,14 +88,8 @@ class MPIController {
   Status WinLock(const std::string& name);
   Status WinUnlock(const std::string& name);
 
-  // Our distributed mutex definition is different from the parallel computation
-  // concept. For a world size is N application, N mutex is created. Each
-  // process associates with one mutex. For window memory, we create independent
-  // local copies for each neighbor processes, so there is no conflict between
-  // the writing process from the neighbors (like win_put and win_accumulate).
-  // However, Win_sync (i.e update setup) will read it, which conflicted with
-  // other writting process. When WinMutexAcquire is called, we typically lock
-  // for all out-neighbors.
+  // This should be used by MPI Controller only.
+  // Because NCCL controller uses MPI as mutex implementation as well.
   Status WinMutexAcquire(const std::string& name,
                          const std::vector<int>& acquire_ranks, bool is_sync);
   Status WinMutexRelease(const std::string& name,
@@ -114,20 +108,20 @@ class MPIController {
   bool mpi_threads_supported_ = false;
 };
 
-class WinMutexGuard {
- public:
-  explicit WinMutexGuard(MPIController* mpi_controller, const std::string& name,
-                         const std::vector<int>& acquire_ranks, bool is_sync);
-  virtual ~WinMutexGuard();
-  WinMutexGuard(const WinMutexGuard&) = delete;
-  WinMutexGuard& operator=(const WinMutexGuard&) = delete;
-
- private:
-  MPIController* const mpi_controller_;
-  std::string name_;
-  std::vector<int> acquire_ranks_;
-  bool is_sync_;
-};
+// Our distributed mutex definition is different from the parallel computation
+// concept. For a world size is N application, N mutex is created. Each
+// process associates with one mutex. For window memory, we create independent
+// local copies for each neighbor processes, so there is no conflict between
+// the writing process from the neighbors (like win_put and win_accumulate).
+// However, Win_sync (i.e update setup) will read it, which conflicted with
+// other writting process. When WinMutexAcquire is called, we typically lock
+// for all out-neighbors.
+Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
+                              const std::vector<int>& acquire_ranks,
+                              int self_rank, bool is_sync);
+Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
+                              const std::vector<int>& release_ranks,
+                              int self_rank, bool is_sync);
 
 }  // namespace common
 }  // namespace bluefog

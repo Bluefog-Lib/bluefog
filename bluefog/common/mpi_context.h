@@ -90,7 +90,7 @@ class WindowManager {
 
   // MPI Window used for mutex.
   std::shared_ptr<MPI_Win> mutex_win_;
-  std::unique_ptr<int> mutex_mem_;
+  std::vector<int> mutex_mem_;
 
   // MPI Window used for p. Mainly used for push-sum algorithm.
   std::shared_ptr<MPI_Win> p_win_;
@@ -182,6 +182,7 @@ class MPIContext {
   bool is_homogeneous_ = true;
 
   // Neighbor ranks should not include self.
+  // It is sorted with ascending order.
   std::vector<int> neighbor_in_ranks_;
   std::vector<int> neighbor_out_ranks_;
 
