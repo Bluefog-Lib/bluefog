@@ -40,6 +40,22 @@ const std::string& Request::RequestType_Name(RequestType value) {
     case RequestType::NEIGHBOR_ALLGATHER:
         static const std::string neighbor_allgather("NEIGHBOR_ALLGATHER");
         return neighbor_allgather;
+    case RequestType::WIN_PUT:
+        static const std::string win_put("WIN_PUT");
+        return win_put;
+    case RequestType::WIN_GET:
+        static const std::string win_get("WIN_GET");
+        return win_get;
+    case RequestType::WIN_ACCUMULATE:
+        static const std::string win_accumulate("WIN_ACCUMULATE");
+        return win_accumulate;
+    case RequestType::BARRIER:
+        static const std::string barrier("BARRIER");
+        return barrier;
+    case RequestType::PAIR_GOSSIP:
+        static const std::string pair_gossip("PAIR_GOSSIP");
+        return pair_gossip;
+
     default:
       static const std::string unknown("<unknown>");
       return unknown;

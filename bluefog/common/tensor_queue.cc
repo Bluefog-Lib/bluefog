@@ -23,9 +23,22 @@ namespace bluefog {
 namespace common {
 
 // Add a TensorTableEntry as well as its message to the queue.
-Status TensorQueue::AddToTensorQueue(TensorTableEntry& e) {
+Status TensorQueue::AddToTensorQueue(TensorTableEntry& e, Request& message) {
   std::lock_guard<std::mutex> guard(mutex_);
-  message_queue_.push(std::move(e));
+  if (tensor_table_.find(e.tensor_name) != tensor_table_.end()) {
+    return DUPLICATE_NAME_ERROR;
+  }
+  std::string name;
+  if (message.request_type() == Request::WIN_ACCUMULATE ||
+      message.request_type() == Request::WIN_GET ||
+      message.request_type() == Request::WIN_PUT ) {
+    name = message.RequestType_Name(message.request_type()) + "." +
+           message.tensor_name();
+  } else {
+    name = e.tensor_name;
+  }
+  tensor_table_.emplace(name, std::move(e));
+  message_queue_.push(message);
   return Status::OK();
 }
 
@@ -33,23 +46,100 @@ Status TensorQueue::AddToTensorQueue(TensorTableEntry& e) {
 void TensorQueue::FinalizeTensorQueue(
     std::vector<StatusCallback>& callbacks_buffer) {
   std::lock_guard<std::mutex> guard(mutex_);
+  for (auto& e : tensor_table_) {
+    callbacks_buffer.emplace_back(e.second.callback);
+  }
+  tensor_table_.clear();
   while (!message_queue_.empty()) {
-    TensorTableEntry message = message_queue_.front();
-    BFLOG(TRACE) << "Message " << message.tensor_name << " is still in the queue after shut down.";
     message_queue_.pop();
-    callbacks_buffer.emplace_back(message.callback);
   }
 }
 
-// Pop out the front messages from the queue
-TensorTableEntry TensorQueue::PopMessagesFromQueue() {
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (!message_queue_.empty()) {
-    TensorTableEntry message = message_queue_.front();
-    message_queue_.pop();
-    return message;
+// Parse tensor names from response and generate a vector of corresponding
+// tensor entries.
+void TensorQueue::GetTensorEntriesFromResponse(
+    const Response& response, std::vector<TensorTableEntry>& entries) {
+  // Reserve to save re-allocation costs, as we know the size before.
+  entries.reserve(response.tensor_names().size());
+  {
+    // Lock on the tensor table.
+    std::lock_guard<std::mutex> guard(mutex_);
+    for (auto& name : response.tensor_names()) {
+      // We should never fail at finding this key in the tensor table.
+      auto iter = tensor_table_.find(name);
+      assert(iter != tensor_table_.end());
+
+      assert(response.response_type() == Response::ALLREDUCE ||
+             response.response_type() == Response::ALLGATHER ||
+             response.response_type() == Response::BROADCAST ||
+             response.response_type() == Response::NEIGHBOR_ALLGATHER ||
+             response.response_type() == Response::NEIGHBOR_ALLREDUCE ||
+             response.response_type() == Response::ERROR);
+
+      entries.push_back(std::move(iter->second));
+
+      // Clear the tensor table of this tensor.
+      tensor_table_.erase(iter);
+    }
   }
-  throw std::length_error("Tensor Queue is empty. Cannot pop meesage.");
+}
+
+// It should be used for no-coordinate request operator only.
+TensorTableEntry TensorQueue::GetTensorEntriesFromRequestDirectly(
+    const Request& request) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  std::string name;
+  if (request.request_type() == Request::WIN_ACCUMULATE ||
+      request.request_type() == Request::WIN_GET ||
+      request.request_type() == Request::WIN_PUT ) {
+    name = request.RequestType_Name(request.request_type()) + "." +
+           request.tensor_name();
+  } else {
+    name = request.tensor_name();
+  }
+
+  auto iter = tensor_table_.find(name);
+  assert(iter != tensor_table_.end());
+
+  // After implementation of coordination, it should be added back.
+  // assert(request.request_type() != Request::ALLREDUCE ||
+  //        request.request_type() != Request::ALLGATHER ||
+  //        request.request_type() != Request::BROADCAST ||
+  //        request.request_type() != Request::NEIGHBOR_ALLGATHER ||
+  //        request.request_type() != Request::NEIGHBOR_ALLREDUCE ||
+  //        request.request_type() != Request::UNKNOWN);
+
+  TensorTableEntry e = iter->second;
+  // Clear the tensor table of this tensor.
+  tensor_table_.erase(iter);
+  return e;
+}
+
+// Get tensor entry given a tensor name
+const TensorTableEntry&
+TensorQueue::GetTensorEntry(const std::string& tensor_name) const{
+  // Lock on the tensor table.
+  std::lock_guard<std::mutex> guard(mutex_);
+  auto& iter = tensor_table_.at(tensor_name);
+
+  return iter;
+}
+
+// Pop out all the messages from the queue
+void TensorQueue::PopMessagesFromQueue(
+    std::deque<Request>& message_queue_buffer) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  while (!message_queue_.empty()) {
+    Request message = message_queue_.front();
+    message_queue_.pop();
+    message_queue_buffer.push_back(std::move(message));
+  }
+}
+
+// Push a message to massage queue
+void TensorQueue::PushMessageToQueue(Request& message) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  message_queue_.push(std::move(message));
 }
 
 

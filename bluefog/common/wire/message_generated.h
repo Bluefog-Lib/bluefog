@@ -86,37 +86,52 @@ enum RequestType {
   RequestType_BROADCAST = 3,
   RequestType_NEIGHBOR_ALLREDUCE = 4,
   RequestType_NEIGHBOR_ALLGATHER = 5,
+  RequestType_WIN_PUT = 6,
+  RequestType_WIN_GET = 7,
+  RequestType_WIN_ACCUMULATE = 8,
+  RequestType_BARRIER = 9,
+  RequestType_PAIR_GOSSIP = 10,
   RequestType_MIN = RequestType_UNKNOWN,
-  RequestType_MAX = RequestType_NEIGHBOR_ALLGATHER
+  RequestType_MAX = RequestType_PAIR_GOSSIP
 };
 
-inline const RequestType (&EnumValuesRequestType())[6] {
+inline const RequestType (&EnumValuesRequestType())[11] {
   static const RequestType values[] = {
     RequestType_UNKNOWN,
     RequestType_ALLREDUCE,
     RequestType_ALLGATHER,
     RequestType_BROADCAST,
     RequestType_NEIGHBOR_ALLREDUCE,
-    RequestType_NEIGHBOR_ALLGATHER
+    RequestType_NEIGHBOR_ALLGATHER,
+    RequestType_WIN_PUT,
+    RequestType_WIN_GET,
+    RequestType_WIN_ACCUMULATE,
+    RequestType_BARRIER,
+    RequestType_PAIR_GOSSIP
   };
   return values;
 }
 
 inline const char * const *EnumNamesRequestType() {
-  static const char * const names[7] = {
+  static const char * const names[12] = {
     "UNKNOWN",
     "ALLREDUCE",
     "ALLGATHER",
     "BROADCAST",
     "NEIGHBOR_ALLREDUCE",
     "NEIGHBOR_ALLGATHER",
+    "WIN_PUT",
+    "WIN_GET",
+    "WIN_ACCUMULATE",
+    "BARRIER",
+    "PAIR_GOSSIP",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameRequestType(RequestType e) {
-  if (flatbuffers::IsOutRange(e, RequestType_UNKNOWN, RequestType_NEIGHBOR_ALLGATHER)) return "";
+  if (flatbuffers::IsOutRange(e, RequestType_UNKNOWN, RequestType_PAIR_GOSSIP)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesRequestType()[index];
 }
