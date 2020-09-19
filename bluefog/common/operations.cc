@@ -776,13 +776,13 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
         << "Cannot set the topology because bluefog has not been initialized.";
     return -1;
   }
-  if (!bluefog_global.controller->IsWinObjetEmpty()) {
+  if (!bluefog_global.controller->IsWinObjectEmpty()) {
     BFLOG(ERROR)
         << "Cannot set the topology because there are window object uncleared.";
     return -1;
   }
 #if HAVE_NCCL
-  if (!bluefog_global.nccl_controller->IsWinObjetEmpty()) {
+  if (!bluefog_global.nccl_controller->IsWinObjectEmpty()) {
     BFLOG(ERROR)
         << "Cannot set the topology because there are window object uncleared.";
     return -1;

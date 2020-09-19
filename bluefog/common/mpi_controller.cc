@@ -980,6 +980,7 @@ Status MPIController::WinMutexRelease(const std::string& name,
   return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
 }
 
+// Extracted from book "Using Advanced MPI" Section 4.5
 Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& acquire_ranks,
                               int self_rank, bool is_sync) {
@@ -991,40 +992,37 @@ Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
   int minus_one = -1;
   int oldval = 0;
 
-  for (int rank : acquire_ranks) {
-    if (is_sync) {
-      MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
-    } else {
-      MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
+  if (is_sync) {  // Lock for self mutex
+    MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
+    for (int rank : acquire_ranks) {
+      do {
+        MPI_Fetch_and_op(&one, &oldval, MPI_INT, self_rank,
+                         /*target_disp=*/rank, MPI_SUM, *mutex_win);
+        MPI_Win_flush(self_rank, *mutex_win);
+        if (oldval == 0) break;
+        MPI_Accumulate(&minus_one, 1, MPI_INT, self_rank, /*target_disp=*/rank,
+                       1, MPI_INT, MPI_SUM, *mutex_win);
+        MPI_Win_flush(self_rank, *mutex_win);
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      } while (1);
     }
-    do {
-      if (is_sync) {
-        // Lock for self mutex
-        MPI_Fetch_and_op(&one, &oldval, MPI_INT, self_rank, /*target_disp=*/rank,
-                         MPI_SUM, *mutex_win);
-        MPI_Win_flush(self_rank, *mutex_win);
-        if (oldval == 0) break;
-        MPI_Accumulate(&minus_one, 1, MPI_INT, self_rank, /*target_disp=*/rank, 1,
-                       MPI_INT, MPI_SUM, *mutex_win);
-        MPI_Win_flush(self_rank, *mutex_win);
-      } else {
-        // Lock for remote mutex
-        MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank, /*target_disp=*/self_rank, MPI_SUM,
-                         *mutex_win);
+    MPI_Win_unlock(self_rank, *mutex_win);
+  } else {  // Lock for remote mutex
+    for (int rank : acquire_ranks) {
+      MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
+      do {
+        MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank,
+                         /*target_disp=*/self_rank, MPI_SUM, *mutex_win);
         MPI_Win_flush(rank, *mutex_win);
         if (oldval == 0) break;
-        MPI_Accumulate(&minus_one, 1, MPI_INT, rank, /*target_disp=*/self_rank, 1, MPI_INT,
-                       MPI_SUM, *mutex_win);
+        MPI_Accumulate(&minus_one, 1, MPI_INT, rank,
+                       /*target_disp=*/self_rank, 1, MPI_INT, MPI_SUM,
+                       *mutex_win);
         MPI_Win_flush(rank, *mutex_win);
-      }
-      std::this_thread::sleep_for(std::chrono::microseconds(1));
-    } while (1);
-    if (is_sync) {
-      MPI_Win_unlock(self_rank, *mutex_win);
-    } else {
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      } while (1);
       MPI_Win_unlock(rank, *mutex_win);
     }
-    BFLOG(TRACE, self_rank) << "Acquired Win Mutex for rank " << rank;
   }
 
   return Status::OK();
@@ -1034,21 +1032,22 @@ Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& release_ranks,
                               int self_rank, bool is_sync) {
   int minus_one = -1;
-  for (int rank : release_ranks) {
-    if (is_sync) {
-      // TODO(ybc) Notice the following accumulate may cause the value to be
-      // negative, i.e. more release ops is called than acquire.
-      MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
-      MPI_Accumulate(&minus_one, 1, MPI_INT, self_rank, /*target_disp=*/rank, 1, MPI_INT,
-                     MPI_SUM, *mutex_win);
-      MPI_Win_unlock(self_rank, *mutex_win);
-    } else {
+  // TODO(ybc) Notice the following accumulate may cause the value to be
+  // negative, i.e. more release ops is called than acquire.
+  if (is_sync) {
+    MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
+    for (int rank : release_ranks) {
+      MPI_Accumulate(&minus_one, 1, MPI_INT, self_rank, /*target_disp=*/rank, 1,
+                     MPI_INT, MPI_SUM, *mutex_win);
+    }
+    MPI_Win_unlock(self_rank, *mutex_win);
+  } else {
+    for (int rank : release_ranks) {
       MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
-      MPI_Accumulate(&minus_one, 1, MPI_INT, rank, /*target_disp=*/self_rank, 1, MPI_INT,
-                     MPI_SUM, *mutex_win);
+      MPI_Accumulate(&minus_one, 1, MPI_INT, rank, /*target_disp=*/self_rank, 1,
+                     MPI_INT, MPI_SUM, *mutex_win);
       MPI_Win_unlock(rank, *mutex_win);
     }
-    BFLOG(TRACE, self_rank) << "Released Win Mutex for rank " << rank;
   }
   return Status::OK();
 }
