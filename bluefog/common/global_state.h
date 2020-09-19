@@ -74,6 +74,12 @@ struct BluefogGlobalState {
 
   TensorQueue tensor_queue;
 
+  // Because setting topology happens in the main thread instead of communication
+  // thread. Following three variables are to sync between them.
+  std::atomic_bool setting_topology{false};
+  std::atomic_bool setting_topology_done{false};
+  std::atomic_bool ready_to_setting_topology{false};
+
   // Only exists on the coordinator node (rank zero). Maintains a vector of
   // requests to allreduce every tensor (keyed by tensor name).
   std::unique_ptr<std::unordered_map<

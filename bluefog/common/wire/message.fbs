@@ -71,6 +71,9 @@ table RequestList {
 
     // Flag indicating if worker is requesting a shutdown.
     shutdown:bool;
+
+    // Flag indicating if the underlying topology is requested to change.
+    change_topo:bool;
 }
 
 // An Response is a message sent from the coordinator (rank zero) to a rank
@@ -104,4 +107,7 @@ table ResponseList {
 
     // Flag indicating if worker is requested to shutdown.
     shutdown:bool;
+
+    // Flag indicating if the underlying topology is requested to change.
+    change_topo:bool;
 }

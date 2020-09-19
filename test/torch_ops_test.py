@@ -271,7 +271,7 @@ class OpsTests(unittest.TestCase):
                     "bf.allgather(var) produces incorrect gathered tensor"
 
     def test_neighbor_allreduce_sum_precision(self):
-        """Test that the neighbor all reduce precision (sum) 1D, 2D, 3D tensors correctly."""
+        """Test that the neighbor allreduce precision (sum) 1D, 2D, 3D tensors correctly."""
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -306,7 +306,7 @@ class OpsTests(unittest.TestCase):
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_avg_precision(self):
-        """Test that the neighbor all reduce precision (avg) 1D, 2D, 3D tensors correctly."""
+        """Test that the neighbor allreduce precision (avg) 1D, 2D, 3D tensors correctly."""
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -337,7 +337,7 @@ class OpsTests(unittest.TestCase):
             assert (
                 (reduced_tensor.data - sum_value).abs().max() == 0
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
-    @unittest.skip
+
     def test_neighbor_allreduce_dynamic_topo_check(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
         size = bf.size()

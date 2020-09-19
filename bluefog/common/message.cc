@@ -163,6 +163,10 @@ bool RequestList::shutdown() const { return shutdown_; }
 
 void RequestList::set_shutdown(bool value) { shutdown_ = value; }
 
+bool RequestList::change_topo() const { return change_topo_; }
+
+void RequestList::set_change_topo(bool value) { change_topo_ = value; }
+
 void RequestList::add_request(const Request& value) {
   requests_.push_back(value);
 }
@@ -180,6 +184,7 @@ void RequestList::ParseFromBytes(RequestList& request_list,
     request_list.emplace_request(std::move(request));
   }
   request_list.set_shutdown(obj->shutdown());
+  request_list.set_change_topo(obj->change_topo());
 }
 
 void RequestList::SerializeToString(const RequestList& request_list,
@@ -198,6 +203,7 @@ void RequestList::SerializeToString(const RequestList& request_list,
   wire::RequestListBuilder request_list_builder(builder);
   request_list_builder.add_requests(requests_wire);
   request_list_builder.add_shutdown(request_list.shutdown());
+  request_list_builder.add_change_topo(request_list.change_topo());
   auto obj = request_list_builder.Finish();
   builder.Finish(obj);
 
@@ -340,6 +346,10 @@ bool ResponseList::shutdown() const { return shutdown_; }
 
 void ResponseList::set_shutdown(bool value) { shutdown_ = value; }
 
+bool ResponseList::change_topo() const { return change_topo_; }
+
+void ResponseList::set_change_topo(bool value) { change_topo_ = value; }
+
 void ResponseList::add_response(const Response& value) {
   responses_.push_back(value);
 }
@@ -357,6 +367,7 @@ void ResponseList::ParseFromBytes(ResponseList& response_list,
     response_list.emplace_response(std::move(response));
   }
   response_list.set_shutdown(obj->shutdown());
+  response_list.set_change_topo(obj->change_topo());
 }
 
 void ResponseList::SerializeToString(const ResponseList& response_list,
@@ -375,6 +386,7 @@ void ResponseList::SerializeToString(const ResponseList& response_list,
   wire::ResponseListBuilder response_list_builder(builder);
   response_list_builder.add_responses(responses_wire);
   response_list_builder.add_shutdown(response_list.shutdown());
+  response_list_builder.add_change_topo(response_list.change_topo());
   auto obj = response_list_builder.Finish();
   builder.Finish(obj);
 

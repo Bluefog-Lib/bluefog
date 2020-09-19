@@ -581,6 +581,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
 bool RunLoopOnce(BluefogGlobalState& state) {
   // The coordinator sends a SHUTDOWN message to trigger shutdown.
   bool should_shut_down = state.shut_down;
+  bool should_change_topo = state.setting_topology;
 
   // This delay determines thread frequency and MPI message latency
   auto sleep_duration =
@@ -623,6 +624,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   if (bluefog_rank() == COORDINATE_RANK) {
     RequestList message_list;
     message_list.set_shutdown(should_shut_down);
+    message_list.set_change_topo(should_change_topo);
     while (!message_queue_buffer.empty()) {
       Request& message = message_queue_buffer.front(); 
       message_list.add_request(message_queue_buffer.front());
@@ -678,6 +680,9 @@ bool RunLoopOnce(BluefogGlobalState& state) {
         // Received SHUTDOWN request from one of the workers.
         should_shut_down = true;
       }
+      if (received_message_list.change_topo()) {
+        should_change_topo = true;
+      }
     }
     // 5. Free buffers.
     delete[] recvcounts;
@@ -699,6 +704,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
 
     ResponseList response_list;
     response_list.set_shutdown(should_shut_down);
+    response_list.set_change_topo(should_change_topo);
 
     while (!responses.empty()) {
       auto response = responses.front();
@@ -726,6 +732,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     std::string encoded_message;
     RequestList message_list;
     message_list.set_shutdown(state.shut_down);
+    message_list.set_change_topo(should_change_topo);
     while (!message_queue_buffer.empty()) {
       message_list.add_request(message_queue_buffer.front());
       message_queue_buffer.pop_front();
@@ -756,6 +763,17 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     if (response_list.shutdown()) {
       should_shut_down = true;
     }
+    if (response_list.change_topo()) {
+      should_change_topo = true;
+    }
+  }
+  // Seperate the setting topology and negotiate communnication.
+  if (should_change_topo) {
+    state.ready_to_setting_topology = true;
+    while (!state.setting_topology_done) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+    state.ready_to_setting_topology = false;
   }
 
   PerformOperation(entries);
@@ -872,6 +890,11 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
     return -1;
   }
 #endif
+  bluefog_global.setting_topology_done = false;
+  bluefog_global.setting_topology = true;
+  while (!bluefog_global.ready_to_setting_topology) {
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
+  }
   bluefog_global.tensor_queue.LockTensorQueue();
   if (bluefog_global.tensor_queue.size() > 0) {
     BFLOG(ERROR)
@@ -889,6 +912,14 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
   }
 #endif
   bluefog_global.tensor_queue.UnlockTensorQueue();
+
+  bluefog_global.setting_topology = false;
+  bluefog_global.setting_topology_done = true;
+  // Wait for the background thread receive the setting_topology_done and
+  // close the ready_to_setting_topology epoch.
+  while (bluefog_global.ready_to_setting_topology) {
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
+  }
   return mpi_result;
 }
 

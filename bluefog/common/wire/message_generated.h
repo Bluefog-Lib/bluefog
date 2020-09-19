@@ -308,7 +308,8 @@ struct RequestList FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef RequestListBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_REQUESTS = 4,
-    VT_SHUTDOWN = 6
+    VT_SHUTDOWN = 6,
+    VT_CHANGE_TOPO = 8
   };
   const flatbuffers::Vector<flatbuffers::Offset<bluefog::common::wire::Request>> *requests() const {
     return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<bluefog::common::wire::Request>> *>(VT_REQUESTS);
@@ -316,12 +317,16 @@ struct RequestList FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   bool shutdown() const {
     return GetField<uint8_t>(VT_SHUTDOWN, 0) != 0;
   }
+  bool change_topo() const {
+    return GetField<uint8_t>(VT_CHANGE_TOPO, 0) != 0;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_REQUESTS) &&
            verifier.VerifyVector(requests()) &&
            verifier.VerifyVectorOfTables(requests()) &&
            VerifyField<uint8_t>(verifier, VT_SHUTDOWN) &&
+           VerifyField<uint8_t>(verifier, VT_CHANGE_TOPO) &&
            verifier.EndTable();
   }
 };
@@ -335,6 +340,9 @@ struct RequestListBuilder {
   }
   void add_shutdown(bool shutdown) {
     fbb_.AddElement<uint8_t>(RequestList::VT_SHUTDOWN, static_cast<uint8_t>(shutdown), 0);
+  }
+  void add_change_topo(bool change_topo) {
+    fbb_.AddElement<uint8_t>(RequestList::VT_CHANGE_TOPO, static_cast<uint8_t>(change_topo), 0);
   }
   explicit RequestListBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -351,9 +359,11 @@ struct RequestListBuilder {
 inline flatbuffers::Offset<RequestList> CreateRequestList(
     flatbuffers::FlatBufferBuilder &_fbb,
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<bluefog::common::wire::Request>>> requests = 0,
-    bool shutdown = false) {
+    bool shutdown = false,
+    bool change_topo = false) {
   RequestListBuilder builder_(_fbb);
   builder_.add_requests(requests);
+  builder_.add_change_topo(change_topo);
   builder_.add_shutdown(shutdown);
   return builder_.Finish();
 }
@@ -361,12 +371,14 @@ inline flatbuffers::Offset<RequestList> CreateRequestList(
 inline flatbuffers::Offset<RequestList> CreateRequestListDirect(
     flatbuffers::FlatBufferBuilder &_fbb,
     const std::vector<flatbuffers::Offset<bluefog::common::wire::Request>> *requests = nullptr,
-    bool shutdown = false) {
+    bool shutdown = false,
+    bool change_topo = false) {
   auto requests__ = requests ? _fbb.CreateVector<flatbuffers::Offset<bluefog::common::wire::Request>>(*requests) : 0;
   return bluefog::common::wire::CreateRequestList(
       _fbb,
       requests__,
-      shutdown);
+      shutdown,
+      change_topo);
 }
 
 struct Response FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
@@ -466,7 +478,8 @@ struct ResponseList FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef ResponseListBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_RESPONSES = 4,
-    VT_SHUTDOWN = 6
+    VT_SHUTDOWN = 6,
+    VT_CHANGE_TOPO = 8
   };
   const flatbuffers::Vector<flatbuffers::Offset<bluefog::common::wire::Response>> *responses() const {
     return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<bluefog::common::wire::Response>> *>(VT_RESPONSES);
@@ -474,12 +487,16 @@ struct ResponseList FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   bool shutdown() const {
     return GetField<uint8_t>(VT_SHUTDOWN, 0) != 0;
   }
+  bool change_topo() const {
+    return GetField<uint8_t>(VT_CHANGE_TOPO, 0) != 0;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_RESPONSES) &&
            verifier.VerifyVector(responses()) &&
            verifier.VerifyVectorOfTables(responses()) &&
            VerifyField<uint8_t>(verifier, VT_SHUTDOWN) &&
+           VerifyField<uint8_t>(verifier, VT_CHANGE_TOPO) &&
            verifier.EndTable();
   }
 };
@@ -493,6 +510,9 @@ struct ResponseListBuilder {
   }
   void add_shutdown(bool shutdown) {
     fbb_.AddElement<uint8_t>(ResponseList::VT_SHUTDOWN, static_cast<uint8_t>(shutdown), 0);
+  }
+  void add_change_topo(bool change_topo) {
+    fbb_.AddElement<uint8_t>(ResponseList::VT_CHANGE_TOPO, static_cast<uint8_t>(change_topo), 0);
   }
   explicit ResponseListBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -509,9 +529,11 @@ struct ResponseListBuilder {
 inline flatbuffers::Offset<ResponseList> CreateResponseList(
     flatbuffers::FlatBufferBuilder &_fbb,
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<bluefog::common::wire::Response>>> responses = 0,
-    bool shutdown = false) {
+    bool shutdown = false,
+    bool change_topo = false) {
   ResponseListBuilder builder_(_fbb);
   builder_.add_responses(responses);
+  builder_.add_change_topo(change_topo);
   builder_.add_shutdown(shutdown);
   return builder_.Finish();
 }
@@ -519,12 +541,14 @@ inline flatbuffers::Offset<ResponseList> CreateResponseList(
 inline flatbuffers::Offset<ResponseList> CreateResponseListDirect(
     flatbuffers::FlatBufferBuilder &_fbb,
     const std::vector<flatbuffers::Offset<bluefog::common::wire::Response>> *responses = nullptr,
-    bool shutdown = false) {
+    bool shutdown = false,
+    bool change_topo = false) {
   auto responses__ = responses ? _fbb.CreateVector<flatbuffers::Offset<bluefog::common::wire::Response>>(*responses) : 0;
   return bluefog::common::wire::CreateResponseList(
       _fbb,
       responses__,
-      shutdown);
+      shutdown,
+      change_topo);
 }
 
 }  // namespace wire

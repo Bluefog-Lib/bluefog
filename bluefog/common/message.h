@@ -97,8 +97,10 @@ public:
   void emplace_request(Request&& value);
 
   bool shutdown() const;
-
   void set_shutdown(bool value);
+
+  bool change_topo() const;
+  void set_change_topo(bool value);
 
   static void ParseFromBytes(RequestList& request_list,
                              const uint8_t* input);
@@ -109,6 +111,7 @@ public:
 private:
   std::vector<Request> requests_;
   bool shutdown_ = false;
+  bool change_topo_ = false;
 };
 
 // A Response is a message sent from the coordinator (rank zero) to a rank
@@ -169,8 +172,10 @@ public:
   void emplace_response(Response&& value);
 
   bool shutdown() const;
-
   void set_shutdown(bool value);
+
+  bool change_topo() const;
+  void set_change_topo(bool value);
 
   static void ParseFromBytes(ResponseList& response_list,
                              const uint8_t* input);
@@ -181,6 +186,7 @@ public:
 private:
   std::vector<Response> responses_;
   bool shutdown_ = false;
+  bool change_topo_ = false;
 };
 
 } // namespace common
