@@ -779,6 +779,21 @@ Status WindowMutexRelease(const std::string& name, const std::vector<int>& relea
   return status;
 }
 
+Status GetWindowVersion(const std::string& name,
+                        std::vector<int>& versions) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+
+  Status status = bluefog_global.controller->GetWindowVersion(name, versions);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot get window version"; 
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
 Status GetBluefogTimeline(Timeline*& timeline) {
   timeline = &(bluefog_global.timeline);
   if (bluefog_global.shut_down) {

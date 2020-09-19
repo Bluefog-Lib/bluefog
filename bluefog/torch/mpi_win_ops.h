@@ -199,6 +199,9 @@ extern "C" void bluefog_torch_win_mutex_acquire(char* name,
 extern "C" void bluefog_torch_win_mutex_release(char* name,
                                                 const std::vector<int>& ranks,
                                                 bool exclusive);
+                                                
+extern "C" void bluefog_torch_get_win_version(char* name,
+                                              std::vector<int>& versions);
 
 }  // namespace torch
 }  // namespace bluefog

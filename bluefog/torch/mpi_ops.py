@@ -989,6 +989,13 @@ def win_wait(handle: int) -> bool:
     return True
 
 
+def get_win_version(name: str):
+    """Get the version of the window in each node."""
+    versions = []
+    mpi_lib.bluefog_torch_get_win_version(name, versions)
+    return versions
+
+
 # Lock for MPI Open a passive RMA epcoh, which has nothing to do with mutex.
 @contextmanager
 def win_lock(name: str):

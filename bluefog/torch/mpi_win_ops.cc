@@ -523,6 +523,22 @@ void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
   ThrowIfError(status);
 }
 
+void GetWinVersion(char* name,
+                  std::vector<int>& versions) {
+  ThrowIfError(common::CheckInitialized());
+  Status status =
+      common::GetWindowVersion(name, versions);
+  ThrowIfError(status);
+}
+
+void bluefog_torch_get_remote_win_version(char* name, int remote_rank,
+                  std::vector<int>& versions) {
+  ThrowIfError(common::CheckInitialized());
+  Status status =
+      common::GetRemoteWindowVersion(name, remote_rank, versions);
+  ThrowIfError(status);
+}
+
 void AddWinOpsIntoPybind(py::module& m) {
   // one-sided communication
   m.def("bluefog_torch_win_create_torch_IntTensor", &DoWinCreate);
@@ -583,6 +599,8 @@ void AddWinOpsIntoPybind(py::module& m) {
 
   m.def("bluefog_torch_win_mutex_acquire", &DoWinMutexAcquire);
   m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
+
+  m.def("bluefog_torch_get_win_version", &GetWinVersion);
 }
 
 }  // namespace torch

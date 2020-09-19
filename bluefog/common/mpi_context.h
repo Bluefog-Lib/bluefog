@@ -70,6 +70,13 @@ class WindowManager {
   // the mutex acquire time, I don't know what will happen.
   bool InitializeMutexWin(const MPI_Comm& mpi_comm);
   bool DestroyMutexWin();
+
+  bool InitializeVersionWin(const MPI_Comm& mpi_comm, const std::vector<int>& neighbor_in_ranks);
+  bool DestroyVersionWin();
+
+  std::vector<int> GetVersionMemory();
+
+  inline std::shared_ptr<MPI_Win> GetVersionWin() { return version_win_; }
   inline std::shared_ptr<MPI_Win> GetMutexWin() { return mutex_win_; }
 
  private:
@@ -86,6 +93,11 @@ class WindowManager {
   // MPI Window used for mutex.
   std::shared_ptr<MPI_Win> mutex_win_;
   std::unique_ptr<int> mutex_mem_;
+
+  // MPI Window usd for version.
+  std::shared_ptr<MPI_Win> version_win_;
+  // Each element represents the version of corresponding rank.
+  std::vector<int> version_mem_;
 };
 
 class MPIContext {

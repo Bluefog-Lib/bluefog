@@ -589,6 +589,8 @@ Status MPIController::WinSync(const std::string& name, int device) {
     MPI_Win_unlock(mpi_ctx_.rank_, *mpi_win_ptr);
   }
 
+  WinVersionClear(name);
+
   return Status::OK();
 }
 
@@ -684,6 +686,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityEnd(entry.tensor_name);
+
+    WinVersionPutUpdate(entry.tensor_name, mpi_ctx_.neighbor_out_ranks_);
 
     if (entry.require_mutex) {
       WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
@@ -822,6 +826,8 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     }
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+
+    WinVersionGetUpdate(entry.tensor_name, {target_rank});
 
     if (entry.require_mutex) {
       WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
@@ -981,6 +987,122 @@ Status MPIController::WinMutexRelease(const std::string& name,
                      *mutex_win);
     }
     MPI_Win_unlock(rank, *mutex_win);
+  }
+
+  return Status::OK();
+}
+
+Status MPIController::WinVersionGetUpdate(const std::string& name,
+                                          const std::vector<int>& ranks) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Update Win Version for " << name << ".";
+
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot accquire Version Win for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+  std::shared_ptr<MPI_Win> version_win = it->second->GetVersionWin();
+  if (!version_win) {
+    return Status::PreconditionError("Cannot accuire Version Win for " + name +
+                                     ". The data window for that name is found"
+                                     "but the version window is not.");
+  }
+
+  std::vector<int> version_data = it->second->GetVersionMemory();
+  MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
+                 *version_win);
+  for (int position : ranks) {
+    BFLOG(TRACE, mpi_ctx_.rank_)
+        << "Update Win Version for rank " << position;
+    version_data[position]++;
+  }
+  MPI_Win_sync(*version_win);
+  MPI_Win_unlock(mpi_ctx_.rank_, *version_win);
+
+  return Status::OK();
+}
+
+Status MPIController::WinVersionPutUpdate(const std::string& name,
+                                          const std::vector<int>& ranks) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Update Win Version for " << name << ".";
+
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot accquire Version Win for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+  std::shared_ptr<MPI_Win> version_win = it->second->GetVersionWin();
+  if (!version_win) {
+    return Status::PreconditionError("Cannot accuire Version Win for " + name +
+                                     ". The data window for that name is found"
+                                     "but the version window is not.");
+  }
+
+  int one = 1;
+
+  for (int rank : ranks) {
+    BFLOG(TRACE, mpi_ctx_.rank_) << "Update Win Version for rank " << rank;
+    MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *version_win);
+    MPI_Accumulate(&one, 1, MPI_INT, rank, /*target_disp=*/rank, 1, MPI_INT, MPI_SUM,
+                   *version_win);
+    MPI_Win_unlock(rank, *version_win);
+  }
+
+  return Status::OK();
+}
+
+Status MPIController::WinVersionClear(const std::string& name) {
+  BFLOG(TRACE, mpi_ctx_.rank_) << "Win Version for " << name << " is released.";
+  int initial_value = 0;
+
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot clear Version Win for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+  std::shared_ptr<MPI_Win> version_win = it->second->GetVersionWin();
+  if (!version_win) {
+    return Status::PreconditionError("Cannot release Version Win for " + name +
+                                     ". The data window for that name is found"
+                                     "but version window is not.");
+  }
+
+  std::vector<int> version_mem = it->second->GetVersionMemory();
+  MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
+               *version_win);
+  for (int position = 0; position < version_mem.size();
+       position++) {
+    BFLOG(TRACE, mpi_ctx_.rank_) << "Reset Win Version for rank " << position;
+    version_mem[position] = initial_value;
+  }
+  MPI_Win_sync(*version_win);
+  MPI_Win_unlock(mpi_ctx_.rank_, *version_win);
+
+  return Status::OK();
+}
+
+Status MPIController::GetWindowVersion(const std::string& name,
+                                       std::vector<int>& versions) {
+  BFLOG(TRACE, mpi_ctx_.rank_)
+      << "Get Win Version for " << name << " is released.";
+
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot get Version Win for " + name +
+        ". It may not be created or has "
+        "been destroyed or wrong name for associated window.");
+  }
+
+  std::vector<int> version_mem = it->second->GetVersionMemory();
+  for (int i = 0; i < version_mem.size(); i++) {
+    versions.push_back(version_mem[i]);
   }
 
   return Status::OK();

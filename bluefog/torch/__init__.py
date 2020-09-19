@@ -55,6 +55,7 @@ from bluefog.torch.mpi_ops import win_get_nonblocking, win_get
 from bluefog.torch.mpi_ops import win_accumulate_nonblocking, win_accumulate
 from bluefog.torch.mpi_ops import win_wait, win_poll
 from bluefog.torch.mpi_ops import win_mutex
+from bluefog.torch.mpi_ops import get_win_version
 
 from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
 from bluefog.torch.mpi_ops import timeline_context

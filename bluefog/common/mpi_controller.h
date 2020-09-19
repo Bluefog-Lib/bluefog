@@ -100,6 +100,11 @@ class MPIController {
                          const std::vector<int>& acquire_ranks, bool is_sync);
   Status WinMutexRelease(const std::string& name,
                          const std::vector<int>& release_ranks, bool is_sync);
+  Status WinVersionPutUpdate(const std::string& name, const std::vector<int>& ranks);
+  Status WinVersionGetUpdate(const std::string& name, const std::vector<int>& ranks);
+  Status WinVersionClear(const std::string& name);
+  Status GetWindowVersion(const std::string& name,
+                          std::vector<int>& versions);
 
  protected:
   // Outside dependencies

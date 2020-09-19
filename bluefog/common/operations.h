@@ -176,6 +176,9 @@ Status WindowMutexAcquire(const std::string& name,
 Status WindowMutexRelease(const std::string& name,
                           const std::vector<int>& release_ranks, bool is_sync);
 
+Status GetWindowVersion(const std::string& name,
+                        std::vector<int>& versions);
+
 Status GetBluefogTimeline(Timeline*& timeline);
 
 }  // namespace common
