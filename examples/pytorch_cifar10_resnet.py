@@ -419,6 +419,5 @@ class Metric(object):
 
 for epoch in range(resume_from_epoch, args.epochs):
     train(epoch)
-    if epoch % 3 == 0:
-        validate(epoch)
+    validate(epoch)
     save_checkpoint(epoch)

@@ -440,7 +440,8 @@ def build_torch_extension(build_ext, global_options):
         options['LIBRARY_DIRS'] += nccl_lib_dirs
         options['LIBRARIES'] += nccl_lib
         options['SOURCES'] += [
-            "bluefog/common/nccl_controller.cc"
+            "bluefog/common/nccl_controller.cc",
+            "bluefog/common/nccl_win.cc"
         ]
         print('INFO: Try PyTorch extension with NCCL.')
 

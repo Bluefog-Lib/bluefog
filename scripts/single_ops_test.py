@@ -49,7 +49,7 @@ elif args.virtual_topology == "full":
     bf.set_topology(topology_util.FullyConnectedGraph(bf.size()))
 else:
     raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                        "[power2(Default), ring, mesh, star].")
+                     "[power2(Default), ring, mesh, star].")
 
 def benchmark_step():
     global args, data
@@ -61,6 +61,7 @@ def log(s, nl=True):
     if bf.local_rank() != 0:
         return
     print(s, end='\n' if nl else '', flush=True)
+
 
 # Warm-up
 log('Running warmup...')

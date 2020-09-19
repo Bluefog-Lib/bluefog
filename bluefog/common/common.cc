@@ -60,6 +60,20 @@ const std::string& DataType_Name(DataType value) {
   }
 }
 
+const std::string& Vendor_Name(Vendor vendor) {
+  switch (vendor) {
+    case Vendor::MPI:
+      static const std::string mpi("MPI");
+      return mpi;
+    case Vendor::NCCL:
+      static const std::string nccl("NCCL");
+      return nccl;
+    default:
+      static const std::string unknown("<unknown>");
+      return unknown;
+  }
+}
+
 std::size_t DataType_Size(DataType value) {
   switch (value) {
     case DataType::BLUEFOG_UINT8:
