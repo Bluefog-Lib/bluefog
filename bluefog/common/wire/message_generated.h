@@ -186,7 +186,8 @@ struct Request FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_TENSOR_TYPE = 8,
     VT_TENSOR_NAME = 10,
     VT_ROOT_RANK = 12,
-    VT_DEVICE = 14
+    VT_DEVICE = 14,
+    VT_TENSOR_SHAPE = 16
   };
   int32_t request_rank() const {
     return GetField<int32_t>(VT_REQUEST_RANK, 0);
@@ -206,6 +207,9 @@ struct Request FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   int32_t device() const {
     return GetField<int32_t>(VT_DEVICE, 0);
   }
+  const flatbuffers::Vector<int64_t> *tensor_shape() const {
+    return GetPointer<const flatbuffers::Vector<int64_t> *>(VT_TENSOR_SHAPE);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_REQUEST_RANK) &&
@@ -215,6 +219,8 @@ struct Request FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            verifier.VerifyString(tensor_name()) &&
            VerifyField<int32_t>(verifier, VT_ROOT_RANK) &&
            VerifyField<int32_t>(verifier, VT_DEVICE) &&
+           VerifyOffset(verifier, VT_TENSOR_SHAPE) &&
+           verifier.VerifyVector(tensor_shape()) &&
            verifier.EndTable();
   }
 };
@@ -241,6 +247,9 @@ struct RequestBuilder {
   void add_device(int32_t device) {
     fbb_.AddElement<int32_t>(Request::VT_DEVICE, device, 0);
   }
+  void add_tensor_shape(flatbuffers::Offset<flatbuffers::Vector<int64_t>> tensor_shape) {
+    fbb_.AddOffset(Request::VT_TENSOR_SHAPE, tensor_shape);
+  }
   explicit RequestBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -260,8 +269,10 @@ inline flatbuffers::Offset<Request> CreateRequest(
     bluefog::common::wire::DataType tensor_type = bluefog::common::wire::DataType_BLUEFOG_UINT8,
     flatbuffers::Offset<flatbuffers::String> tensor_name = 0,
     int32_t root_rank = 0,
-    int32_t device = 0) {
+    int32_t device = 0,
+    flatbuffers::Offset<flatbuffers::Vector<int64_t>> tensor_shape = 0) {
   RequestBuilder builder_(_fbb);
+  builder_.add_tensor_shape(tensor_shape);
   builder_.add_device(device);
   builder_.add_root_rank(root_rank);
   builder_.add_tensor_name(tensor_name);
@@ -278,8 +289,10 @@ inline flatbuffers::Offset<Request> CreateRequestDirect(
     bluefog::common::wire::DataType tensor_type = bluefog::common::wire::DataType_BLUEFOG_UINT8,
     const char *tensor_name = nullptr,
     int32_t root_rank = 0,
-    int32_t device = 0) {
+    int32_t device = 0,
+    const std::vector<int64_t> *tensor_shape = nullptr) {
   auto tensor_name__ = tensor_name ? _fbb.CreateString(tensor_name) : 0;
+  auto tensor_shape__ = tensor_shape ? _fbb.CreateVector<int64_t>(*tensor_shape) : 0;
   return bluefog::common::wire::CreateRequest(
       _fbb,
       request_rank,
@@ -287,7 +300,8 @@ inline flatbuffers::Offset<Request> CreateRequestDirect(
       tensor_type,
       tensor_name__,
       root_rank,
-      device);
+      device,
+      tensor_shape__);
 }
 
 struct RequestList FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {

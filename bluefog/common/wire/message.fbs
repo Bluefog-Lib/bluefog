@@ -62,6 +62,9 @@ table Request {
 
     // Device this request is made on.
     device:int;
+
+    // We use a repeated integer to represent the tensor shape.
+    tensor_shape:[long];
 }
 table RequestList {
     requests:[Request];

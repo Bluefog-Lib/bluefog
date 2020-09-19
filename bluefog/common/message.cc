@@ -90,6 +90,18 @@ int32_t Request::device() const { return device_; }
 
 void Request::set_device(int32_t value) { device_ = value; }
 
+const std::vector<int64_t>& Request::tensor_shape() const {
+  return tensor_shape_;
+}
+
+void Request::set_tensor_shape(const std::vector<int64_t>& value) {
+  tensor_shape_ = value;
+}
+
+void Request::add_tensor_shape(int64_t value) {
+  tensor_shape_.push_back(value);
+}
+
 namespace {
 
 void Request_ParseFromWire(Request& request,

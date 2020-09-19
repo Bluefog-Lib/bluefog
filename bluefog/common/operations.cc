@@ -125,6 +125,11 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
 
   // Check that all requested operations are the same
   auto message_type = requests[0].request_type();
+  assert(message_type == Request::ALLREDUCE ||
+         message_type == Request::BROADCAST ||
+         message_type == Request::ALLGATHER ||
+         message_type == Request::NEIGHBOR_ALLGATHER ||
+         message_type == Request::NEIGHBOR_ALLREDUCE);
   for (unsigned int i = 1; i < requests.size(); i++) {
     if (error) {
       break;
@@ -157,6 +162,94 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
             << " root ranks: One rank specified root rank " << first_root_rank
             << ", but another rank specified root rank " << this_root_rank
             << ".";
+        break;
+      }
+    }
+  }
+
+  // If we are doing an (neighbor_)allreduce or broadcast, check that all tensor
+  // shapes are identical.
+  if (message_type == Request::ALLREDUCE ||
+      message_type == Request::BROADCAST ||
+      message_type == Request::NEIGHBOR_ALLREDUCE) {
+    TensorShape tensor_shape;
+    for (auto dim : requests[0].tensor_shape()) {
+      tensor_shape.AddDim(dim);
+    }
+    for (unsigned int i = 1; i < requests.size(); i++) {
+      if (error) {
+        break;
+      }
+
+      TensorShape request_shape;
+      for (auto dim : requests[i].tensor_shape()) {
+        request_shape.AddDim(dim);
+      }
+      if (tensor_shape != request_shape) {
+        error = true;
+        error_message_stream
+            << "Mismatched " << Request::RequestType_Name(message_type)
+            << " tensor shapes: One rank sent a tensor of shape "
+            << tensor_shape.DebugString()
+            << ", but another rank sent a tensor of shape "
+            << request_shape.DebugString() << ".";
+        break;
+      }
+    }
+  }
+
+  // If we are doing (neighbor_)allgather, make sure all but the first dimension
+  // are the same. The first dimension may be different and the output tensor is
+  // the sum of the first dimension.
+  if (message_type == Request::ALLGATHER ||
+      message_type == Request::NEIGHBOR_ALLGATHER) {
+    TensorShape tensor_shape;
+    for (auto dim : requests[0].tensor_shape()) {
+      tensor_shape.AddDim(dim);
+    }
+
+    if (tensor_shape.dims() == 0) {
+      error = true;
+      error_message_stream << "Rank zero tried to "
+                           << Request::RequestType_Name(message_type)
+                           << " a rank-zero tensor.";
+    }
+
+    for (unsigned int i = 1; i < requests.size(); i++) {
+      if (error) {
+        break;
+      }
+
+      TensorShape request_shape;
+      for (auto dim : requests[i].tensor_shape()) {
+        request_shape.AddDim(dim);
+      }
+      if (tensor_shape.dims() != request_shape.dims()) {
+        error = true;
+        error_message_stream
+            << "Mismatched " << Request::RequestType_Name(message_type)
+            << " tensor shapes: One rank sent a tensor of rank "
+            << tensor_shape.dims()
+            << ", but another rank sent a tensor of rank "
+            << request_shape.dims() << ".";
+        break;
+      }
+
+      bool dim_mismatch = false;
+      for (int dim = 1; dim < tensor_shape.dims(); dim++) {
+        if (tensor_shape.dim_size(dim) != request_shape.dim_size(dim)) {
+          error = true;
+          error_message_stream
+              << "Mismatched " << Request::RequestType_Name(message_type)
+              << " tensor shapes: One rank sent a tensor with dimension " << dim
+              << " equal to " << tensor_shape.dim_size(dim)
+              << ", but another rank sent a tensor with dimension " << dim
+              << " equal to " << request_shape.dim_size(dim) << ".";
+          dim_mismatch = true;
+          break;
+        }
+      }
+      if (dim_mismatch) {
         break;
       }
     }
@@ -522,15 +615,6 @@ bool RunLoopOnce(BluefogGlobalState& state) {
                      IsRequestConvertToEntryDirectly),
       message_queue_buffer.end());
 
-  // // WILL BE DELETED!
-  // for (auto& request : message_queue_buffer) {
-  //   entries.push_back(state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
-  // }
-  // if (message_queue_buffer.size() == 0) {
-  //   PerformOperation(entries);
-  //   return !should_shut_down;
-  // }
-
   // For the rest requests, they needs to coordinate and neogiate.
   // Collect all tensors that are ready to be reduced. Record them in the
   // tensor count table (rank zero) or send them to rank zero to be
@@ -547,9 +631,9 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       if (reduce) {
         ready_to_reduce.push_back(message.tensor_name());
       }
-
       message_queue_buffer.pop_front();
     }
+
     // Rank zero has put all its own tensors in the tensor count table.
     // Now, it should count all the tensors that are coming from other
     // ranks at this tick.
@@ -882,6 +966,9 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::ALLREDUCE);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
 
   TensorTableEntry e;
   e.tensor_name = name;
@@ -909,6 +996,9 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::BROADCAST);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
 
   TensorTableEntry e;
   e.tensor_name = name;
@@ -936,6 +1026,9 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::ALLGATHER);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
 
   TensorTableEntry e;
   e.tensor_name = name;
@@ -962,6 +1055,9 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::NEIGHBOR_ALLGATHER);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
 
   TensorTableEntry e;
   e.tensor_name = name;
@@ -993,6 +1089,9 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::NEIGHBOR_ALLREDUCE);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
 
   TensorTableEntry e;
   e.tensor_name = name;

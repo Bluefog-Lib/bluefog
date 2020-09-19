@@ -51,28 +51,26 @@ class Request {
   // for example in the allgather where the order of outputs should be sorted
   // by rank.
   int32_t request_rank() const;
-
   void set_request_rank(int32_t value);
 
   RequestType request_type() const;
-
   void set_request_type(RequestType value);
 
   DataType tensor_type() const;
-
   void set_tensor_type(DataType value);
 
   const std::string& tensor_name() const;
-
   void set_tensor_name(const std::string& value);
 
   int32_t root_rank() const;
-
   void set_root_rank(int32_t value);
 
   int32_t device() const;
-
   void set_device(int32_t value);
+
+  const std::vector<int64_t>& tensor_shape() const;
+  void set_tensor_shape(const std::vector<int64_t>& value);
+  void add_tensor_shape(int64_t value);
 
   static void ParseFromBytes(Request& request, const uint8_t* input);
 
@@ -85,6 +83,7 @@ private:
   int32_t root_rank_ = 0;
   int32_t device_ = 0;
   std::string tensor_name_;
+  std::vector<int64_t> tensor_shape_;
 };
 
 class RequestList {
@@ -136,22 +135,16 @@ public:
 
  // Empty if the type is DONE or SHUTDOWN.
  const std::vector<std::string>& tensor_names() const;
-
  const std::string tensor_names_string() const;
-
  void set_tensor_names(const std::vector<std::string>& value);
-
  void add_tensor_name(const std::string& value);
 
  // Empty unless response_type is ERROR.
  const std::string& error_message() const;
-
  void set_error_message(const std::string& value);
 
  const std::vector<int32_t>& devices() const;
-
  void set_devices(const std::vector<int32_t>& value);
-
  void add_device(int32_t value);
 
  static void ParseFromBytes(Response& response, const uint8_t* input);
