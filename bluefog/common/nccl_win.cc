@@ -70,9 +70,15 @@ Status NCCLWindowIdManager::UnregisterName(const std::string& name) {
     return Status::InvalidArgument("Cannot find name " + name +
                                    " in Window Id Manager");
   }
-  int id = it->second;
   name_to_id_.erase(it);
-  id_to_name_.erase(id_to_name_.find(id));
+
+  int id = it->second;
+  auto id_to_name_it = id_to_name_.find(id);
+  if (id_to_name_it == id_to_name_.end()) {
+    return Status::InvalidArgument("Cannot find id " + std::to_string(id) +
+                                   " to name in Window Id Manager");
+  }
+  id_to_name_.erase(id_to_name_it);
 
   return Status::OK();
 }
@@ -96,10 +102,21 @@ Status NCCLWindowIdManager::CheckIdRegistered(int id) {
 }
 
 std::string NCCLWindowIdManager::GetNameById(int id) {
+  auto it = id_to_name_.find(id);
+  if (it == id_to_name_.end()) {
+    throw std::runtime_error("Cannot get window name for id " +
+                             std::to_string(id) +
+                             " , which should never happen.");
+  }
   return id_to_name_.at(id);
 }
 
 int NCCLWindowIdManager::GetIdByName(const std::string& name) {
+  auto it = name_to_id_.find(name);
+  if (it == name_to_id_.end()) {
+    throw std::runtime_error("Cannot get window id for name " + name +
+                             " , which should never happen.");
+  }
   return name_to_id_.at(name);
 }
 

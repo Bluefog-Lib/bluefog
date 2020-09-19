@@ -52,7 +52,7 @@ class MPIController {
   };
 
   inline bool IsMpiThreadsSupported() const { return mpi_threads_supported_; }
-  inline bool IsWinObjetEmpty() const {
+  inline bool IsWinObjectEmpty() const {
     return mpi_ctx_.named_win_map.size() == 0;
   }
   bool IsMpiUnifiedModel();

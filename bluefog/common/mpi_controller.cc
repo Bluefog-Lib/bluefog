@@ -980,6 +980,7 @@ Status MPIController::WinMutexRelease(const std::string& name,
   return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
 }
 
+// Extracted from book "Using Advanced MPI" Section 4.5
 Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& acquire_ranks,
                               int self_rank, bool is_sync) {

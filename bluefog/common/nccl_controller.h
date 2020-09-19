@@ -167,7 +167,7 @@ class NCCLController {
   void InitWindowCommunicators();
   void DestroyWindowCommunicators();
 
-  inline bool IsWinObjetEmpty() const {
+  inline bool IsWinObjectEmpty() const {
     return nccl_ctx_.named_win_map.size() == 0;
   }
 
