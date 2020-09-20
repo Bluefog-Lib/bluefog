@@ -112,6 +112,8 @@ void Request_ParseFromWire(Request& request,
   request.set_tensor_name(obj->tensor_name()->str());
   request.set_root_rank(obj->root_rank());
   request.set_device(obj->device());
+  request.set_tensor_shape(std::vector<int64_t>(obj->tensor_shape()->begin(),
+                                                obj->tensor_shape()->end()));
 }
 
 void Request_SerializeToWire(const Request& request,
@@ -119,6 +121,7 @@ void Request_SerializeToWire(const Request& request,
                              flatbuffers::Offset<wire::Request>& obj) {
   // FlatBuffers must be built bottom-up.
   auto tensor_name_wire = builder.CreateString(request.tensor_name());
+  auto tensor_shape_wire = builder.CreateVector(request.tensor_shape());
 
   wire::RequestBuilder request_builder(builder);
   request_builder.add_request_rank(request.request_rank());
@@ -128,6 +131,7 @@ void Request_SerializeToWire(const Request& request,
   request_builder.add_tensor_name(tensor_name_wire);
   request_builder.add_root_rank(request.root_rank());
   request_builder.add_device(request.device());
+  request_builder.add_tensor_shape(tensor_shape_wire);
   obj = request_builder.Finish();
 }
 
