@@ -503,7 +503,7 @@ bool MPIController::IsMpiUnifiedModel() {
   return *memory_model == MPI_WIN_UNIFIED;
 }
 
-Status MPIController::WinCreate(TensorTableEntry& entry) {
+void MPIController::WinCreate(TensorTableEntry& entry) {
   with_device device_guard(entry.device);
 
   std::shared_ptr<Tensor>& tensor = entry.tensor;
@@ -516,8 +516,9 @@ Status MPIController::WinCreate(TensorTableEntry& entry) {
   // We need to explicitly set the device here.
   // 1. Regist a Name and create a window first.
   if (!mpi_ctx_.RegisterWindowName(name)) {
-    return Status::InvalidArgument(std::string("Win_create failed with ") +
-                                   name);
+    entry.callback(
+        Status::InvalidArgument(std::string("Win_create failed with ") + name));
+    return;
   }
   // 2. Get the registered window manager.
   std::shared_ptr<WindowManager> win_manager = mpi_ctx_.GetWindowByName(name);
@@ -573,22 +574,26 @@ Status MPIController::WinCreate(TensorTableEntry& entry) {
   }
   timeline_ptr->ActivityEnd(name);
 
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
-Status MPIController::WinFree(TensorTableEntry& entry) {
+void MPIController::WinFree(TensorTableEntry& entry) {
   if (!mpi_ctx_.UnregisterWindowName(entry.tensor_name)) {
-    return Status::InvalidArgument(std::string("Win_free failed with ") + entry.tensor_name);
+    entry.callback(Status::InvalidArgument(
+        std::string("Win_free failed with ") + entry.tensor_name));
+    return;
   }
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
-Status MPIController::WinFreeAll(TensorTableEntry& entry) {
+void MPIController::WinFreeAll(TensorTableEntry& entry) {
   if (!mpi_ctx_.UnregisterAllWindowName()) {
-    return Status::InvalidArgument(std::string("Win_free_all failed."));
+    entry.callback(
+        Status::InvalidArgument(std::string("Win_free_all failed.")));
+    return;
   }
   BFLOG(DEBUG) << "All MPI Win has been freed.";
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
 Status MPIController::WinSync(const std::string& name, int device, bool with_associated_p) {

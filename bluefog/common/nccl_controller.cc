@@ -986,7 +986,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
   nccl_ctx.win_passive_recv_shutdown_done = true;
 }
 
-Status NCCLController::WinCreate(TensorTableEntry& entry) {
+void NCCLController::WinCreate(TensorTableEntry& entry) {
   const std::string& name = entry.tensor_name;
   if (!nccl_ctx_.win_passive_recv_initialized) {
     nccl_ctx_.win_passive_recv_thread =
@@ -1008,8 +1008,9 @@ Status NCCLController::WinCreate(TensorTableEntry& entry) {
   // 1. Check the name is used or not.
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it != nccl_ctx_.named_win_map.end()) {
-    return Status::InvalidArgument(std::string("Win_create failed with ") +
-                                   name);
+    entry.callback(
+        Status::InvalidArgument(std::string("Win_create failed with ") + name));
+    return;
   }
 
   // 2. Create a NCCL Window Manager.
@@ -1029,10 +1030,11 @@ Status NCCLController::WinCreate(TensorTableEntry& entry) {
   MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
   timeline_ptr->ActivityEnd(name);
 
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
-Status NCCLController::WinFree(TensorTableEntry& entry) {
+// Helper function to Execute WinFree.
+Status WinFreeReturnStatus(TensorTableEntry& entry) {
   const std::string& name = entry.tensor_name;
   // TODO(ybc) Think about how to synchronize between processes?
   auto it = nccl_ctx_.named_win_map.find(name);
@@ -1061,7 +1063,12 @@ Status NCCLController::WinFree(TensorTableEntry& entry) {
   return Status::OK();
 }
 
-Status NCCLController::WinFreeAll(TensorTableEntry& entry) {
+void NCCLController::WinFree(TensorTableEntry& entry) {
+  Status status = WinFreeReturnStatus(entry);
+  entry.callback(status);
+}
+
+void NCCLController::WinFreeAll(TensorTableEntry& entry) {
   std::vector<std::string> win_names;
   win_names.reserve(nccl_ctx_.named_win_map.size());
   for (auto& it : nccl_ctx_.named_win_map) {
@@ -1069,12 +1076,17 @@ Status NCCLController::WinFreeAll(TensorTableEntry& entry) {
   }
   TensorTableEntry entry_for_win_free = entry;
   std::sort(win_names.begin(), win_names.end());
+  Status status;
   for (auto& name : win_names) {
     entry_for_win_free.tensor_name = name;
-    WinFree(entry_for_win_free);  // device is never used.
+    status = WinFreeReturnStatus(entry_for_win_free);
+    if (!status.ok()) {
+      entry.callback(status);
+      return;
+    }
   }
   BFLOG(DEBUG) << "All NCCL Wins have been freed.";
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
 Status NCCLController::WinSync(const std::string& name, int device, bool with_associated_p) {

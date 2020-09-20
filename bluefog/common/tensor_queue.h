@@ -53,6 +53,8 @@ class TensorQueue {
 
  protected:
   // Tensors waiting to be processed.
+  // Key is based upon the message name since tensor_name in table entry for win ops
+  // is for window and we need to add "win_put."/"win_create." before it in message.
   std::unordered_map<std::string, TensorTableEntry> tensor_table_;
 
   // Queue of MPI requests waiting to be sent to the coordinator node.

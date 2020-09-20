@@ -35,14 +35,20 @@ const std::string& Request::RequestType_Name(RequestType value) {
       static const std::string broadcast("BROADCAST");
       return broadcast;
     case RequestType::NEIGHBOR_ALLREDUCE:
-        static const std::string neighbor_allreduce("NEIGHBOR_ALLREDUCE");
-        return neighbor_allreduce;
+      static const std::string neighbor_allreduce("NEIGHBOR_ALLREDUCE");
+      return neighbor_allreduce;
     case RequestType::NEIGHBOR_ALLGATHER:
-        static const std::string neighbor_allgather("NEIGHBOR_ALLGATHER");
-        return neighbor_allgather;
+      static const std::string neighbor_allgather("NEIGHBOR_ALLGATHER");
+      return neighbor_allgather;
+    case RequestType::WIN_CREATE:
+      static const std::string win_create("WIN_CREATE");
+      return win_create;
+    case RequestType::WIN_FREE:
+      static const std::string win_free("WIN_FREE");
+      return win_free;
     case RequestType::WIN_PUT:
-        static const std::string win_put("WIN_PUT");
-        return win_put;
+      static const std::string win_put("WIN_PUT");
+      return win_put;
     case RequestType::WIN_GET:
         static const std::string win_get("WIN_GET");
         return win_get;
@@ -229,11 +235,17 @@ const std::string& Response::ResponseType_Name(ResponseType value) {
       static const std::string broadcast("BROADCAST");
       return broadcast;
     case ResponseType::NEIGHBOR_ALLREDUCE:
-        static const std::string neighbor_allreduce("NEIGHBOR_ALLREDUCE");
-        return neighbor_allreduce;
+      static const std::string neighbor_allreduce("NEIGHBOR_ALLREDUCE");
+      return neighbor_allreduce;
     case ResponseType::NEIGHBOR_ALLGATHER:
-        static const std::string neighbor_allgather("NEIGHBOR_ALLGATHER");
-        return neighbor_allgather;
+      static const std::string neighbor_allgather("NEIGHBOR_ALLGATHER");
+      return neighbor_allgather;
+    case ResponseType::WIN_CREATE:
+      static const std::string win_create("WIN_CREATE");
+      return win_create;
+    case ResponseType::WIN_FREE:
+      static const std::string win_free("WIN_FREE");
+      return win_free;
     case ResponseType::ERROR:
       static const std::string error("ERROR");
       return error;

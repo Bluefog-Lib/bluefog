@@ -86,16 +86,18 @@ enum RequestType {
   RequestType_BROADCAST = 3,
   RequestType_NEIGHBOR_ALLREDUCE = 4,
   RequestType_NEIGHBOR_ALLGATHER = 5,
-  RequestType_WIN_PUT = 6,
-  RequestType_WIN_GET = 7,
-  RequestType_WIN_ACCUMULATE = 8,
-  RequestType_BARRIER = 9,
-  RequestType_PAIR_GOSSIP = 10,
+  RequestType_WIN_CREATE = 6,
+  RequestType_WIN_FREE = 7,
+  RequestType_WIN_PUT = 8,
+  RequestType_WIN_GET = 9,
+  RequestType_WIN_ACCUMULATE = 10,
+  RequestType_BARRIER = 11,
+  RequestType_PAIR_GOSSIP = 12,
   RequestType_MIN = RequestType_UNKNOWN,
   RequestType_MAX = RequestType_PAIR_GOSSIP
 };
 
-inline const RequestType (&EnumValuesRequestType())[11] {
+inline const RequestType (&EnumValuesRequestType())[13] {
   static const RequestType values[] = {
     RequestType_UNKNOWN,
     RequestType_ALLREDUCE,
@@ -103,6 +105,8 @@ inline const RequestType (&EnumValuesRequestType())[11] {
     RequestType_BROADCAST,
     RequestType_NEIGHBOR_ALLREDUCE,
     RequestType_NEIGHBOR_ALLGATHER,
+    RequestType_WIN_CREATE,
+    RequestType_WIN_FREE,
     RequestType_WIN_PUT,
     RequestType_WIN_GET,
     RequestType_WIN_ACCUMULATE,
@@ -113,13 +117,15 @@ inline const RequestType (&EnumValuesRequestType())[11] {
 }
 
 inline const char * const *EnumNamesRequestType() {
-  static const char * const names[12] = {
+  static const char * const names[14] = {
     "UNKNOWN",
     "ALLREDUCE",
     "ALLGATHER",
     "BROADCAST",
     "NEIGHBOR_ALLREDUCE",
     "NEIGHBOR_ALLGATHER",
+    "WIN_CREATE",
+    "WIN_FREE",
     "WIN_PUT",
     "WIN_GET",
     "WIN_ACCUMULATE",
@@ -143,37 +149,43 @@ enum ResponseType {
   ResponseType_BROADCAST = 3,
   ResponseType_NEIGHBOR_ALLREDUCE = 4,
   ResponseType_NEIGHBOR_ALLGATHER = 5,
+  ResponseType_WIN_CREATE = 6,
+  ResponseType_WIN_FREE = 7,
   ResponseType_MIN = ResponseType_ERROR,
-  ResponseType_MAX = ResponseType_NEIGHBOR_ALLGATHER
+  ResponseType_MAX = ResponseType_WIN_FREE
 };
 
-inline const ResponseType (&EnumValuesResponseType())[6] {
+inline const ResponseType (&EnumValuesResponseType())[8] {
   static const ResponseType values[] = {
     ResponseType_ERROR,
     ResponseType_ALLREDUCE,
     ResponseType_ALLGATHER,
     ResponseType_BROADCAST,
     ResponseType_NEIGHBOR_ALLREDUCE,
-    ResponseType_NEIGHBOR_ALLGATHER
+    ResponseType_NEIGHBOR_ALLGATHER,
+    ResponseType_WIN_CREATE,
+    ResponseType_WIN_FREE
   };
   return values;
 }
 
 inline const char * const *EnumNamesResponseType() {
-  static const char * const names[7] = {
+  static const char * const names[9] = {
     "ERROR",
     "ALLREDUCE",
     "ALLGATHER",
     "BROADCAST",
     "NEIGHBOR_ALLREDUCE",
     "NEIGHBOR_ALLGATHER",
+    "WIN_CREATE",
+    "WIN_FREE",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameResponseType(ResponseType e) {
-  if (flatbuffers::IsOutRange(e, ResponseType_ERROR, ResponseType_NEIGHBOR_ALLGATHER)) return "";
+  if (flatbuffers::IsOutRange(e, ResponseType_ERROR, ResponseType_WIN_FREE)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesResponseType()[index];
 }

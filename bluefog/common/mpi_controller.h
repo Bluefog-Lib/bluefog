@@ -64,9 +64,10 @@ class MPIController {
   void NeighborAllgather(TensorTableEntry& entry);
   void NeighborAllreduce(TensorTableEntry& entry);
   void PairGossip(TensorTableEntry& entry);
-  Status WinCreate(TensorTableEntry& entry);
-  Status WinFree(TensorTableEntry& entry);
-  Status WinFreeAll(TensorTableEntry& entry);
+
+  void WinCreate(TensorTableEntry& entry);
+  void WinFree(TensorTableEntry& entry);
+  void WinFreeAll(TensorTableEntry& entry);
 
   void WinPut(TensorTableEntry& entry);
   void WinGet(TensorTableEntry& entry);

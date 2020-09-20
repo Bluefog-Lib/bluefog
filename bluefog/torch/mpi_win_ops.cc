@@ -225,7 +225,6 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   }
   if (associated_with_p) {
     double avg_p = GetWinAssociatedP(name) * self_weight;  // self value
-    int self_rank = common::bluefog_rank();
     for (auto& kv : neighbor_weights) {
       int neighbor_rank = kv.first;
       double weight = kv.second;
@@ -279,6 +278,8 @@ bool WinTorchStorageManager::AvgWithNeighbor(
   return true;
 }
 
+void DoWinWait(int);
+
 int DoWinCreate(::torch::Tensor tensor, const std::string& name,
                 const bool zero_init) {
   ThrowIfError(common::CheckInitialized());
@@ -305,9 +306,17 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
     return 0;
 
-  Status status = WindowCreate(bf_tensor, bf_neighbor_tensors, name, device,
-                               /*callback=*/[](const Status& status) {});
-  return status.ok() ? 1 : 0;
+  auto handle = win_handle_manager.AllocateHandle();
+  auto enqueue_result =
+      EnqueueTensorWindowCreate(bf_tensor, bf_neighbor_tensors, name, device,
+                                [handle](const Status& status) {
+                                  win_handle_manager.MarkDone(handle, status);
+                                });
+
+  ThrowIfError(enqueue_result);
+  // Blocking ops. Wait until it is done.
+  DoWinWait(handle);
+  return 1;
 }
 
 namespace {
@@ -435,9 +444,15 @@ int DoWinFree(const std::string& name) {
     }
   }
 
-  Status status = common::WindowFree(name, device,
-                                     /*callback=*/[](const Status& status) {});
-  return status.ok() ? 1 : 0;
+  auto handle = win_handle_manager.AllocateHandle();
+  auto enqueue_result = common::EnqueueTensorWindowFree(
+      name, device, [handle](const Status& status) {
+        win_handle_manager.MarkDone(handle, status);
+      });
+  ThrowIfError(enqueue_result);
+  // Blocking ops. Wait until it is done.
+  DoWinWait(handle);
+  return 1;
 }
 
 int DoWinPut(::torch::Tensor tensor, const std::string& name,
@@ -557,11 +572,9 @@ int DoWinGet(const std::string& name,
     return 0;
   }
   // Note callback function will be called by different thread.
-  std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowGet(
       name, src_weights, device, require_mutex,
-      [handle, name, src_weights, timeline_ptr,
-       tid](const Status& status) mutable {
+      [handle, name, src_weights, timeline_ptr](const Status& status) mutable {
         std::shared_ptr<TorchTensor> bf_neighbor_tensor;
         for (auto& kv : src_weights) {
           int rank = kv.first;

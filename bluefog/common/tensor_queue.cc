@@ -14,7 +14,6 @@
 // limitations under the License.
 // ==============================================================================
 
-#include "logging.h"
 #include "tensor_queue.h"
 
 #include <assert.h>
@@ -28,15 +27,7 @@ Status TensorQueue::AddToTensorQueue(TensorTableEntry& e, Request& message) {
   if (tensor_table_.find(e.tensor_name) != tensor_table_.end()) {
     return DUPLICATE_NAME_ERROR;
   }
-  std::string name;
-  if (message.request_type() == Request::WIN_ACCUMULATE ||
-      message.request_type() == Request::WIN_GET ||
-      message.request_type() == Request::WIN_PUT ) {
-    name = message.RequestType_Name(message.request_type()) + "." +
-           message.tensor_name();
-  } else {
-    name = e.tensor_name;
-  }
+  const std::string& name = message.tensor_name();
   tensor_table_.emplace(name, std::move(e));
   message_queue_.push(message);
   return Status::OK();
@@ -66,7 +57,6 @@ void TensorQueue::GetTensorEntriesFromResponse(
     // Lock on the tensor table.
     std::lock_guard<std::mutex> guard(mutex_);
     for (auto& name : response.tensor_names()) {
-      // We should never fail at finding this key in the tensor table.
       auto iter = tensor_table_.find(name);
       assert(iter != tensor_table_.end());
 
@@ -75,9 +65,16 @@ void TensorQueue::GetTensorEntriesFromResponse(
              response.response_type() == Response::BROADCAST ||
              response.response_type() == Response::NEIGHBOR_ALLGATHER ||
              response.response_type() == Response::NEIGHBOR_ALLREDUCE ||
+             response.response_type() == Response::WIN_CREATE ||
+             response.response_type() == Response::WIN_FREE ||
              response.response_type() == Response::ERROR);
 
-      entries.push_back(std::move(iter->second));
+      if (response.response_type() == Response::ERROR) {
+        auto& e = iter->second;
+        e.callback(Status::PreconditionError(response.error_message()));
+      } else {
+        entries.push_back(std::move(iter->second));
+      }
 
       // Clear the tensor table of this tensor.
       tensor_table_.erase(iter);
@@ -89,26 +86,20 @@ void TensorQueue::GetTensorEntriesFromResponse(
 TensorTableEntry TensorQueue::GetTensorEntriesFromRequestDirectly(
     const Request& request) {
   std::lock_guard<std::mutex> guard(mutex_);
-  std::string name;
-  if (request.request_type() == Request::WIN_ACCUMULATE ||
-      request.request_type() == Request::WIN_GET ||
-      request.request_type() == Request::WIN_PUT ) {
-    name = request.RequestType_Name(request.request_type()) + "." +
-           request.tensor_name();
-  } else {
-    name = request.tensor_name();
-  }
+  const std::string& name = request.tensor_name();
 
   auto iter = tensor_table_.find(name);
   assert(iter != tensor_table_.end());
 
   // After implementation of coordination, it should be added back.
-  // assert(request.request_type() != Request::ALLREDUCE ||
-  //        request.request_type() != Request::ALLGATHER ||
-  //        request.request_type() != Request::BROADCAST ||
-  //        request.request_type() != Request::NEIGHBOR_ALLGATHER ||
-  //        request.request_type() != Request::NEIGHBOR_ALLREDUCE ||
-  //        request.request_type() != Request::UNKNOWN);
+  assert(request.request_type() != Request::ALLREDUCE &&
+         request.request_type() != Request::ALLGATHER &&
+         request.request_type() != Request::BROADCAST &&
+         request.request_type() != Request::NEIGHBOR_ALLGATHER &&
+         request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
+         request.request_type() != Request::WIN_CREATE &&
+         request.request_type() != Request::WIN_FREE &&
+         request.request_type() != Request::UNKNOWN);
 
   TensorTableEntry e = iter->second;
   // Clear the tensor table of this tensor.
@@ -117,8 +108,8 @@ TensorTableEntry TensorQueue::GetTensorEntriesFromRequestDirectly(
 }
 
 // Get tensor entry given a tensor name
-const TensorTableEntry&
-TensorQueue::GetTensorEntry(const std::string& tensor_name) const{
+const TensorTableEntry& TensorQueue::GetTensorEntry(
+    const std::string& tensor_name) const {
   // Lock on the tensor table.
   std::lock_guard<std::mutex> guard(mutex_);
   auto& iter = tensor_table_.at(tensor_name);
@@ -142,7 +133,6 @@ void TensorQueue::PushMessageToQueue(Request& message) {
   std::lock_guard<std::mutex> guard(mutex_);
   message_queue_.push(std::move(message));
 }
-
 
 }  // namespace common
 }  // namespace bluefog

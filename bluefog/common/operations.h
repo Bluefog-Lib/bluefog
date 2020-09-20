@@ -134,6 +134,14 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
                                const int target_rank, const std::string& name,
                                const int device, StatusCallback callback);
 
+Status EnqueueTensorWindowCreate(
+    std::shared_ptr<Tensor> tensor,
+    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+    const std::string& name, int device, StatusCallback callback);
+
+Status EnqueueTensorWindowFree(const std::string& name, int device,
+                               StatusCallback callback);
+
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const std::string& name,
                               const std::unordered_map<int, double>& dst_ranks,
@@ -156,14 +164,7 @@ Status EnqueueTensorWindowGet(const std::string& name,
 
 Status ExecuteBarrier(StatusCallback callback);
 
-Status WindowCreate(std::shared_ptr<Tensor> tensor,
-                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                    const std::string& name, int device,
-                    StatusCallback callback);
-
 Status WindowSync(const std::string& name, int device);
-
-Status WindowFree(const std::string& name, int device, StatusCallback callback);
 
 Status WindowMutexAcquire(const std::string& name,
                           const std::vector<int>& acquire_ranks, int device,

@@ -38,11 +38,13 @@ class Request {
     BROADCAST = 3,
     NEIGHBOR_ALLREDUCE = 4,
     NEIGHBOR_ALLGATHER = 5,
-    WIN_PUT = 6,
-    WIN_GET = 7,
-    WIN_ACCUMULATE = 8,
-    BARRIER=9,
-    PAIR_GOSSIP = 10
+    WIN_CREATE = 6,
+    WIN_FREE = 7,
+    WIN_PUT = 8,
+    WIN_GET = 9,
+    WIN_ACCUMULATE = 10,
+    BARRIER = 11,
+    PAIR_GOSSIP = 12
   };
 
   static const std::string& RequestType_Name(RequestType value);
@@ -127,7 +129,9 @@ public:
    ALLGATHER = 2,
    BROADCAST = 3,
    NEIGHBOR_ALLREDUCE = 4,
-   NEIGHBOR_ALLGATHER = 5
+   NEIGHBOR_ALLGATHER = 5,
+   WIN_CREATE = 6,
+   WIN_FREE = 7
  };
 
  static const std::string& ResponseType_Name(ResponseType value);
