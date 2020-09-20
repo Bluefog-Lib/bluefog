@@ -76,12 +76,20 @@ enum class MPIOpsType {
   BROADCAST = 3,
   NEIGHBOR_ALLREDUCE = 4,
   NEIGHBOR_ALLGATHER = 5,
+  BARRIER=9,
   PAIR_GOSSIP = 10,
   WIN_PUT = 6,
   WIN_GET = 7,
   WIN_ACCUMULATE = 8,
-  BARRIER=9,
+  WIN_CREATE = 11,
+  WIN_SYNC = 12,
+  WIN_FREE = 13,
 };
+
+template <typename E>
+constexpr typename std::underlying_type<E>::type to_underlying(E e) noexcept {
+    return static_cast<typename std::underlying_type<E>::type>(e);
+}
 
 inline std::string CommunicatorName(Communicator comm) {
   switch (comm) {
@@ -99,6 +107,8 @@ inline std::string CommunicatorName(Communicator comm) {
 }
 
 const std::string& DataType_Name(DataType value);
+
+const std::string& Vendor_Name(Vendor vendor);
 
 std::size_t DataType_Size(DataType value);
 
@@ -237,6 +247,10 @@ struct TensorTableEntry {
 
   // The ops requires the mutex.
   bool require_mutex = false;
+
+  // If set, the associated p window will do same
+  // ops as win_ops.
+  bool win_ops_with_associated_p = false;
 
   // A callback to call with the status.
   StatusCallback callback;

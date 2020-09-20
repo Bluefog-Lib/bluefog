@@ -37,7 +37,7 @@ namespace common {
 static const char* BLUEFOG_MAX_WIN_SENT = std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
 static const int MAX_WIN_SENT =
     BLUEFOG_MAX_WIN_SENT == nullptr
-        ? 2000
+        ? 1000
         : std::strtol(BLUEFOG_MAX_WIN_SENT, nullptr, 10);
 
 // MPIController
@@ -89,8 +89,14 @@ int MPIController::GetTypeSize(DataType dtype) {
 void MPIController::Allgather(TensorTableEntry& entry) {
   int* recvcounts = new int[mpi_ctx_.size_];
   int* displcmnts = new int[mpi_ctx_.size_];
-  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
+  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GLOBAL);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GLOBAL);
+  if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
+    entry.callback(status);
+    return;
+  }
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -124,7 +130,8 @@ void MPIController::Allreduce(TensorTableEntry& entry) {
   with_device device_guard(entry.device);
   int ret_code = MPI_Allreduce(
       sendbuf, buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
-      MPI_SUM, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+      mpi_ctx_.GetMPISumOp(entry.tensor->dtype()),
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (ret_code != MPI_SUCCESS) {
     throw std::runtime_error(
         "MPI_AllReduce failed, see MPI output for details.");
@@ -227,8 +234,14 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   if (!mpi_ctx_.IsTopoSetup()) {
     throw std::runtime_error("Topology of MPI has not been set yet.");
   }
-  mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
+  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
+  if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
+    entry.callback(status);
+    return;
+  }
 
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -349,6 +362,10 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
   Status status = entry.context->AllocateOutput(output_shape, &entry.output);
+  if (!status.ok()) {
+    entry.callback(status);
+    return;
+  }
   timeline_ptr->ActivityEnd(entry.tensor_name);
 
   void* buffer_data = (void*)entry.output->data();
@@ -574,7 +591,7 @@ Status MPIController::WinFreeAll() {
   return Status::OK();
 }
 
-Status MPIController::WinSync(const std::string& name, int device) {
+Status MPIController::WinSync(const std::string& name, int device, bool with_associated_p) {
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_sync failed with ") + name);
@@ -587,6 +604,13 @@ Status MPIController::WinSync(const std::string& name, int device) {
     MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK, *mpi_win_ptr);
     MPI_Win_sync(*mpi_win_ptr);
     MPI_Win_unlock(mpi_ctx_.rank_, *mpi_win_ptr);
+  }
+  if (with_associated_p) {
+    auto p_win_ptr = win_mananger->GetPWin();
+    MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
+                 *p_win_ptr);
+    MPI_Win_sync(*p_win_ptr);
+    MPI_Win_unlock(mpi_ctx_.rank_, *p_win_ptr);
   }
 
   WinVersionClear(name);
@@ -638,12 +662,11 @@ void MPIController::WinPut(TensorTableEntry& entry) {
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
-    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (MPI) registered win name.");
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
-
-  std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
@@ -658,10 +681,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     BFLOG(TRACE, mpi_ctx_.rank_) << "Start MPI_Put for " << entry.tensor_name << " to " << target_rank;
 
     if (entry.require_mutex) {
-      mutex_ranks.clear();
-      mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
     timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -688,9 +709,23 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     timeline_ptr->ActivityEnd(entry.tensor_name);
 
     WinVersionPutUpdate(entry.tensor_name, mpi_ctx_.neighbor_out_ranks_);
+    if (entry.win_ops_with_associated_p) {
+      std::shared_ptr<MPI_Win> weight_win = win_mananger->GetPWin();
+      MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
+      // Unlike data window, weight window is just a raw "world size" vector.
+      int target_disp = mpi_ctx_.rank_;
+      double* p_memory = win_mananger->GetUnderlyingPMemory();
+      double weighted_p = (*(p_memory + mpi_ctx_.rank_)) * weight;
+      int ret_code = MPI_Put(&weighted_p, 1, MPI_DOUBLE, target_rank,
+                             target_disp, 1, MPI_DOUBLE, *weight_win);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Put failed, see MPI output for details.");
+      }
+      MPI_Win_unlock(target_rank, *weight_win);
+    }
 
     if (entry.require_mutex) {
-      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
 
@@ -709,14 +744,14 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
   MPI_Datatype data_type = mpi_ctx_.GetMPIDataType(entry.tensor);
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
-    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name);
+    throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
+                             " in (MPI) registered win name.");
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
   MPI_Win mpi_win = *(win_mananger->GetWinByRank(mpi_ctx_.rank_));
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   std::vector<std::pair<int, double>> sorted_dst_weights =
       GetSortedDstWeights(mpi_ctx_.rank_, mpi_ctx_.size_, entry.dst_weights);
@@ -728,10 +763,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
 
     if (entry.require_mutex) {
-      mutex_ranks.clear();
-      mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
     auto tensor = entry.tensor->data_weight(weight);
@@ -750,7 +783,8 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
           MPI_Accumulate(sendbuf_start, sent_size, data_type, target_rank,
                          target_disp, sent_size, data_type, MPI_SUM, mpi_win);
       if (ret_code != MPI_SUCCESS) {
-        if (entry.require_mutex) WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+        if (entry.require_mutex)
+          WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
         throw std::runtime_error(
             "MPI_Accumulate failed, see MPI output for details.");
       }
@@ -758,14 +792,31 @@ void MPIController::WinAccumulate(TensorTableEntry& entry) {
       sent_size = std::min(MAX_WIN_SENT, num_elements - target_disp);
     }
     MPI_Win_unlock(target_rank, mpi_win);
-
     timeline_ptr->ActivityEnd(entry.tensor_name);
+
+    if (entry.win_ops_with_associated_p) {
+      std::shared_ptr<MPI_Win> weight_win = win_mananger->GetPWin();
+      MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
+      // Unlike data window, weight window is just a raw "world size" vector.
+      int target_disp = mpi_ctx_.rank_;
+      double* p_memory = win_mananger->GetUnderlyingPMemory();
+      double weighted_p = (*(p_memory + mpi_ctx_.rank_)) * weight;
+      int ret_code =
+          MPI_Accumulate(&weighted_p, 1, MPI_DOUBLE, target_rank, target_disp,
+                         1, MPI_DOUBLE, MPI_SUM, *weight_win);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Accumulate failed, see MPI output for details.");
+      }
+      MPI_Win_unlock(target_rank, *weight_win);
+    }
+
     if (entry.require_mutex) {
-      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
-  BFLOG(TRACE, mpi_ctx_.rank_) << "MPI_Accmulate for " << entry.tensor_name
-                      << " is done.";
+  BFLOG(TRACE, mpi_ctx_.rank_)
+      << "MPI_Accmulate for " << entry.tensor_name << " is done.";
 
   timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
   entry.callback(Status::OK());
@@ -779,12 +830,11 @@ void MPIController::WinGet(TensorTableEntry& entry) {
   auto it = mpi_ctx_.named_win_map.find(entry.tensor_name);
   if (it == mpi_ctx_.named_win_map.end()) {
     throw std::runtime_error(std::string("Cannot find ") + entry.tensor_name +
-                             std::string(" in registered win object name."));
+                             std::string(" in (MPI) registered win object name."));
   }
   std::shared_ptr<WindowManager> win_mananger = it->second;
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
-  std::vector<int> mutex_ranks = {};  // used in mutex only.
 
   MPI_Win mpi_win = *(win_mananger->GetGlobalWin());
   for (auto kv : entry.src_weights) {
@@ -793,10 +843,8 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     if (target_rank == mpi_ctx_.rank_) continue;
 
     if (entry.require_mutex) {
-      mutex_ranks.clear();
-      mutex_ranks.push_back(target_rank);
       timeline_ptr->ActivityStart(entry.tensor_name, "Aquire_Mutex");
-      WinMutexAcquire(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexAcquire(entry.tensor_name, {target_rank}, /*is_sync=*/false);
       timeline_ptr->ActivityEnd(entry.tensor_name);
     }
 
@@ -830,7 +878,7 @@ void MPIController::WinGet(TensorTableEntry& entry) {
     WinVersionGetUpdate(entry.tensor_name, {target_rank});
 
     if (entry.require_mutex) {
-      WinMutexRelease(entry.tensor_name, mutex_ranks, /*is_sync=*/false);
+      WinMutexRelease(entry.tensor_name, {target_rank}, /*is_sync=*/false);
     }
   }
 
@@ -913,52 +961,13 @@ Status MPIController::WinMutexAcquire(const std::string& name,
                                      ". The data window for that name is found"
                                      "but the mutex window is not.");
   }
-
-  // TODO(ybc) Try better implementation than Spin Lock.
-  // Recall that we build N windows across all N processes.
-  // The spin value is stored in the rank i for i-th window.
-  // Other process will got to acquire it.
-  int one = 1;
-  int minus_one = -1;
-  int oldval = 0;
-  int target_disp = 0;
-
-  for (int rank : acquire_ranks) {
-    BFLOG(TRACE, mpi_ctx_.rank_) << "Acquire Win Mutex for rank " << rank;
-    MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
-    do {
-      if (is_sync) {
-        MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank, target_disp, MPI_SUM,
-                         *mutex_win);
-        MPI_Win_flush(rank, *mutex_win);
-        if (oldval == 0) break;
-        MPI_Accumulate(&minus_one, 1, MPI_INT, rank, target_disp, 1, MPI_INT,
-                       MPI_SUM, *mutex_win);
-        MPI_Win_flush(rank, *mutex_win);
-      } else {
-        MPI_Fetch_and_op(&minus_one, &oldval, MPI_INT, rank, target_disp,
-                         MPI_SUM, *mutex_win);
-        MPI_Win_flush(rank, *mutex_win);
-        if (oldval <= 0) break;
-        MPI_Accumulate(&one, 1, MPI_INT, rank, target_disp, 1, MPI_INT, MPI_SUM,
-                       *mutex_win);
-        MPI_Win_flush(rank, *mutex_win);
-      }
-      std::this_thread::sleep_for(std::chrono::microseconds(1));
-    } while (1);
-    MPI_Win_unlock(rank, *mutex_win);
-  }
-
-  return Status::OK();
+  return MPIWinMutexAcquireImpl(mutex_win, acquire_ranks, mpi_ctx_.rank_, is_sync);
 }
 
 Status MPIController::WinMutexRelease(const std::string& name,
                                       const std::vector<int>& release_ranks,
                                       bool is_sync) {
   BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex for " << name << " is released.";
-  int one = 1;
-  int minus_one = -1;
-  int target_disp = 0;
 
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
@@ -973,23 +982,7 @@ Status MPIController::WinMutexRelease(const std::string& name,
                                      ". The data window for that name is found"
                                      "but mutex window is not.");
   }
-
-  for (int rank : release_ranks) {
-    BFLOG(TRACE, mpi_ctx_.rank_) << "Release Win Mutex for rank " << rank;
-    MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
-    if (is_sync) {
-      // TODO(ybc) Notice the following accumulate may cause the value to be
-      // negative, i.e. more release ops is called than acquire.
-      MPI_Accumulate(&minus_one, 1, MPI_INT, rank, target_disp, 1, MPI_INT,
-                     MPI_SUM, *mutex_win);
-    } else {
-      MPI_Accumulate(&one, 1, MPI_INT, rank, target_disp, 1, MPI_INT, MPI_SUM,
-                     *mutex_win);
-    }
-    MPI_Win_unlock(rank, *mutex_win);
-  }
-
-  return Status::OK();
+  return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
 }
 
 Status MPIController::WinVersionGetUpdate(const std::string& name,
@@ -1108,19 +1101,114 @@ Status MPIController::GetWindowVersion(const std::string& name,
   return Status::OK();
 }
 
-WinMutexGuard::WinMutexGuard(MPIController* mpi_controller,
-                             const std::string& name,
-                             const std::vector<int>& acquire_ranks,
-                             bool is_sync)
-    : mpi_controller_(mpi_controller),
-      name_(name),
-      acquire_ranks_(acquire_ranks),
-      is_sync_(is_sync) {
-  mpi_controller_->WinMutexAcquire(name, acquire_ranks_, is_sync_);
+// Extracted from book "Using Advanced MPI" Section 4.5
+Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
+                              const std::vector<int>& acquire_ranks,
+                              int self_rank, bool is_sync) {
+  // TODO(ybc) Try better implementation than Spin Lock.
+  // Recall that we build N windows across all N processes.
+  // The spin value is stored in the rank i for i-th window.
+  // Other process will got to acquire it.
+  int one = 1;
+  int minus_one = -1;
+  int oldval = 0;
+
+  if (is_sync) {  // Lock for self mutex
+    MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
+    for (int rank : acquire_ranks) {
+      do {
+        MPI_Fetch_and_op(&one, &oldval, MPI_INT, self_rank,
+                         /*target_disp=*/rank, MPI_SUM, *mutex_win);
+        MPI_Win_flush(self_rank, *mutex_win);
+        if (oldval == 0) break;
+        MPI_Accumulate(&minus_one, 1, MPI_INT, self_rank, /*target_disp=*/rank,
+                       1, MPI_INT, MPI_SUM, *mutex_win);
+        MPI_Win_flush(self_rank, *mutex_win);
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      } while (1);
+    }
+    MPI_Win_unlock(self_rank, *mutex_win);
+  } else {  // Lock for remote mutex
+    for (int rank : acquire_ranks) {
+      MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
+      do {
+        MPI_Fetch_and_op(&one, &oldval, MPI_INT, rank,
+                         /*target_disp=*/self_rank, MPI_SUM, *mutex_win);
+        MPI_Win_flush(rank, *mutex_win);
+        if (oldval == 0) break;
+        MPI_Accumulate(&minus_one, 1, MPI_INT, rank,
+                       /*target_disp=*/self_rank, 1, MPI_INT, MPI_SUM,
+                       *mutex_win);
+        MPI_Win_flush(rank, *mutex_win);
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      } while (1);
+      MPI_Win_unlock(rank, *mutex_win);
+    }
+  }
+
+  return Status::OK();
 }
 
-WinMutexGuard::~WinMutexGuard() {
-  mpi_controller_->WinMutexAcquire(name_, acquire_ranks_, is_sync_);
+Status MPIWinMutexReleaseImpl(std::shared_ptr<MPI_Win> mutex_win,
+                              const std::vector<int>& release_ranks,
+                              int self_rank, bool is_sync) {
+  int minus_one = -1;
+  // TODO(ybc) Notice the following accumulate may cause the value to be
+  // negative, i.e. more release ops is called than acquire.
+  if (is_sync) {
+    MPI_Win_lock(MPI_LOCK_SHARED, self_rank, 0, *mutex_win);
+    for (int rank : release_ranks) {
+      MPI_Accumulate(&minus_one, 1, MPI_INT, self_rank, /*target_disp=*/rank, 1,
+                     MPI_INT, MPI_SUM, *mutex_win);
+    }
+    MPI_Win_unlock(self_rank, *mutex_win);
+  } else {
+    for (int rank : release_ranks) {
+      MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *mutex_win);
+      MPI_Accumulate(&minus_one, 1, MPI_INT, rank, /*target_disp=*/self_rank, 1,
+                     MPI_INT, MPI_SUM, *mutex_win);
+      MPI_Win_unlock(rank, *mutex_win);
+    }
+  }
+  return Status::OK();
+}
+
+Status MPIController::GetWinAssociatedPByNameAndRank(const std::string& name,
+                                                     const int rank,
+                                                     double* weight) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot get win associated P for " + name +
+        ". It may not be created or has been destroyed or wrong name for "
+        "associated window.");
+  }
+  if (rank < 0 || rank >= mpi_ctx_.size_) {
+    return Status::PreconditionError(
+        "Argument Rank to retrieve win associated P should be a value between "
+        "0 (inclusive) and size(exclusive).");
+  }
+  *weight = it->second->GetAssociatedP(rank);
+  return Status::OK();
+}
+
+Status MPIController::SetWinAssociatedPByNameAndRank(const std::string& name,
+                                                     const int rank,
+                                                     double weight) {
+  auto it = mpi_ctx_.named_win_map.find(name);
+  if (it == mpi_ctx_.named_win_map.end()) {
+    return Status::PreconditionError(
+        "Cannot get win associated P for " + name +
+        ". It may not be created or has been destroyed or wrong name for "
+        "associated window.");
+  }
+  if (rank < 0 || rank >= mpi_ctx_.size_) {
+    return Status::PreconditionError(
+        "Argument Rank to retrieve associated P should be a value "
+        "between 0 (inclusive) and size(exclusive).");
+  }
+  it->second->SetAssociatedP(rank, weight);
+  return Status::OK();
 }
 
 }  // namespace common

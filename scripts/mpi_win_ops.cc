@@ -7,7 +7,7 @@
 #include <cassert>
 #include <thread>
 
-const int max_sent = 1000;
+const int max_sent = 10022;
 
 void MPI_Win_ops(int rank, int nproc, int* array, int win_size, MPI_Win win) {
   if (rank == 0) {
@@ -27,17 +27,17 @@ int main(int argc, char** argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-  const int win_size = 20380;
-  int array[win_size];
+  const int win_size = 23*23*203;
+  double array[win_size];
   for (int i = 0; i < win_size; i++) {
     if (rank == 0) {
-      array[i] = 1234;
+      array[i] = 1234.0;
     } else {
       array[i] = rank;
     }
   }
   MPI_Win win;
-  MPI_Win_create(array, win_size * sizeof(int), sizeof(int), MPI_INFO_NULL,
+  MPI_Win_create(array, win_size * sizeof(double), sizeof(double), MPI_INFO_NULL,
                  MPI_COMM_WORLD, &win);
   if (rank == 0) {
     for (int target_rank = 1; target_rank < nproc; target_rank++) {
@@ -45,8 +45,8 @@ int main(int argc, char** argv) {
       int bias = 0;
       int sent_size = std::min(max_sent, win_size - bias);
       while (sent_size != 0) {
-        MPI_Put(array + bias, sent_size, MPI_INT, target_rank, bias, sent_size,
-                MPI_INT, win);
+        MPI_Put(array + bias, sent_size, MPI_DOUBLE, target_rank, bias, sent_size,
+                MPI_DOUBLE, win);
         bias += sent_size;
         sent_size = std::min(max_sent, win_size - bias);
       }
@@ -60,8 +60,8 @@ int main(int argc, char** argv) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (rank != 0) {
-    assert(array[0] == 1234);
-    assert(array[win_size - 1] == 1234);
+    assert(array[0] == 1234.0);
+    assert(array[win_size - 1] == 1234.0);
   }
 
   printf("Done\n");

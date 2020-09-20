@@ -88,7 +88,6 @@ int bluefog_load_topology(int* indegree, int*& sources,
 int bluefog_load_topology_weights(double& self_weight, 
                                   const std::unordered_map<int, double>*& neighbor_weights);
 
-
 // C interface to allow python to call timeline.
 // If start_activity == true, call ActivityStart, else call ActivityEnd.
 int bluefog_timeline(const bool start_activity, const char* tensor_name,
@@ -141,14 +140,15 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const int device, const bool require_mutex,
                               StatusCallback callback);
 
-Status EnqueueTensorWindowAccumulate(
-    std::shared_ptr<Tensor> tensor, const std::string& name,
-    const std::unordered_map<int, double>& dst_ranks, const int device,
-    const bool require_mutex, StatusCallback callback);
+Status EnqueueTensorWindowAccumulate(std::shared_ptr<Tensor> tensor,
+                                     const std::string& name,
+                                     const std::unordered_map<int, double>& dst_ranks,
+                                     const int device, const bool require_mutex,
+                                     StatusCallback callback);
 
 Status EnqueueTensorWindowGet(const std::string& name,
                               const std::unordered_map<int, double>& src_ranks,
-                              const bool require_mutex,
+                              const int device, const bool require_mutex,
                               StatusCallback callback);
 
 Status EnqueueBarrier(StatusCallback callback);
@@ -164,22 +164,36 @@ Status WindowSync(const std::string& name, int device);
 
 Status WindowFree(const std::string& name, int device);
 
+Status WindowMutexAcquire(const std::string& name,
+                          const std::vector<int>& acquire_ranks, int device,
+                          bool is_sync);
+
+Status WindowMutexRelease(const std::string& name,
+                          const std::vector<int>& release_ranks, int device,
+                          bool is_sync);
+
+Status GetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
+                                      double* weight);
+
+Status SetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
+                                      double weight);
+
+void SetWinOpsWithAssociatedPState(bool value);
+
+bool GetWinOpsWithAssociatedPState();
+
+Status GetWindowVersion(const std::string& name,
+                        std::vector<int>& versions);
+
+Status GetBluefogTimeline(Timeline*& timeline);
+
+// Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name);
 
 Status WindowLock(const std::string& name);
 
 Status WindowUnlock(const std::string& name);
 
-Status WindowMutexAcquire(const std::string& name,
-                          const std::vector<int>& acquire_ranks, bool is_sync);
-
-Status WindowMutexRelease(const std::string& name,
-                          const std::vector<int>& release_ranks, bool is_sync);
-
-Status GetWindowVersion(const std::string& name,
-                        std::vector<int>& versions);
-
-Status GetBluefogTimeline(Timeline*& timeline);
 
 }  // namespace common
 }  // namespace bluefog

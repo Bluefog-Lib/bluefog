@@ -50,10 +50,8 @@ static HandleManager win_handle_manager;
 static WinTorchStorageManager win_storage_manager;
 
 static const char* BLUEFOG_WIN_ON_GPU = std::getenv("BLUEFOG_WIN_ON_GPU");
-static const bool WIN_ON_CPU = !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
-
-// A map store {name -> gpu_tensor}. Used only when BLUEFOG_WIN_ON_CPU is turned on.
-static std::unordered_map<std::string, ::torch::Tensor> win_gpu_tensor_map;
+static const bool WIN_ON_CPU =
+    !((BLUEFOG_WIN_ON_GPU != nullptr) && (*BLUEFOG_WIN_ON_GPU == '1'));
 
 namespace {
 
@@ -62,6 +60,22 @@ int GetDeviceID(const ::torch::Tensor& tensor) {
     return tensor.device().index();
   }
   return CPU_DEVICE_ID;
+}
+
+double GetWinAssociatedP(const std::string& name) {
+  ThrowIfError(common::CheckInitialized());
+  double weight = 0.0;
+  Status status = common::GetWinAssociatedPByNameAndRank(
+      name, common::bluefog_rank(), &weight);
+  ThrowIfError(status);
+  return weight;
+}
+
+void SetWinAssociatedP(const std::string& name, const double value) {
+  ThrowIfError(common::CheckInitialized());
+  Status status = common::SetWinAssociatedPByNameAndRank(
+      name, common::bluefog_rank(), value);
+  ThrowIfError(status);
 }
 
 }  // namespace
@@ -169,7 +183,8 @@ bool WinTorchStorageManager::SetSelfStorageByName(
 }
 
 bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
-                                             ::torch::Tensor local_tensor) {
+                                             ::torch::Tensor local_tensor,
+                                             bool associated_with_p) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
     return false;
@@ -178,32 +193,54 @@ bool WinTorchStorageManager::SumWithNeighbor(const std::string& name,
     std::shared_ptr<TorchTensor> t = kv.second;
     local_tensor.add_(t->GetUnderlyingTensor());
   }
+  if (associated_with_p) {
+    double sum_p = GetWinAssociatedP(name);  // self value
+    for (auto& kv : it->second) {
+      int neighbor_rank = kv.first;
+      double neighbor_p = 0.0;
+      common::GetWinAssociatedPByNameAndRank(name, neighbor_rank, &neighbor_p);
+      sum_p += neighbor_p;
+    }
+    SetWinAssociatedP(name, sum_p);
+  }
   return true;
 }
 
 bool WinTorchStorageManager::AvgWithNeighbor(
-    const std::string& name, ::torch::Tensor local_tensor,
-    double self_weight,
-    const std::unordered_map<int, double>& neighbor_weights) {
+    const std::string& name, ::torch::Tensor local_tensor, double self_weight,
+    const std::unordered_map<int, double>& neighbor_weights,
+    bool associated_with_p) {
   auto it = tensors_map_.find(name);
   if (it == tensors_map_.end()) {
     return false;
   }
-  
+
   local_tensor.mul_(self_weight);
 
   auto neighbor_map = it->second;
-  for(auto& kv: neighbor_weights) {
+  for (auto& kv : neighbor_weights) {
     double weight = kv.second;
     auto neighbor_tesnor = neighbor_map.at(kv.first)->GetUnderlyingTensor();
     local_tensor.add_(neighbor_tesnor.mul(weight));
+  }
+  if (associated_with_p) {
+    double avg_p = GetWinAssociatedP(name) * self_weight;  // self value
+    int self_rank = common::bluefog_rank();
+    for (auto& kv : neighbor_weights) {
+      int neighbor_rank = kv.first;
+      double weight = kv.second;
+      double associated_p = 0.0;
+      common::GetWinAssociatedPByNameAndRank(name, neighbor_rank, &associated_p);
+      avg_p += (associated_p * weight);
+    }
+    SetWinAssociatedP(name, avg_p);
   }
   return true;
 }
 
 bool WinTorchStorageManager::SumWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor,
-    const std::vector<int>& source_ranks) {
+    const std::vector<int>& source_ranks, bool associated_with_p) {
   if (tensors_map_.find(name) == tensors_map_.end()) {
     return false;
   }
@@ -212,17 +249,33 @@ bool WinTorchStorageManager::SumWithNeighbor(
   for (int rank : source_ranks) {
     local_tensor.add_(neighbor_map.at(rank)->GetUnderlyingTensor());
   }
+  if (associated_with_p) {
+    double sum_p = GetWinAssociatedP(name);  // self value
+    for (int neighbor_rank : source_ranks) {
+      double neighbor_weight = 0.0;
+      common::GetWinAssociatedPByNameAndRank(name, neighbor_rank,
+                                             &neighbor_weight);
+      sum_p += neighbor_weight;
+    }
+    SetWinAssociatedP(name, sum_p);
+  }
   return true;
 }
 
 bool WinTorchStorageManager::AvgWithNeighbor(
     const std::string& name, ::torch::Tensor local_tensor,
-    const std::vector<int>& source_ranks) {
-  if (!SumWithNeighbor(name, local_tensor, source_ranks)) {
+    const std::vector<int>& source_ranks, bool associated_with_p) {
+  if (!SumWithNeighbor(name, local_tensor, source_ranks, associated_with_p)) {
     return false;
   }
   // +1 here because source_ranks doesn't include self rank.
-  local_tensor.div_(static_cast<double>(source_ranks.size()) + 1.0);
+  double neighbor_cnt_with_self =
+      static_cast<double>(source_ranks.size()) + 1.0;
+  local_tensor.div_(neighbor_cnt_with_self);
+  if (associated_with_p) {
+    double self_associated_p = GetWinAssociatedP(name);
+    SetWinAssociatedP(name, self_associated_p / neighbor_cnt_with_self);
+  }
   return true;
 }
 
@@ -235,20 +288,22 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
-        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/true);
+        tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
+    device = CPU_DEVICE_ID;
   } else {
     bf_tensor = std::make_shared<TorchTensor>(tensor);
   }
 
+  // TODO(ybc) Following argument usage is not reliable due to the order issue.
+  // bf_neighbor_tensors is the vector with in-neighbor size and the order is
+  // followed by neighbor order returned by bluefog_load_topology. 
+  // It is assumed that the order is sorted ascendingly.
   std::vector<std::shared_ptr<common::Tensor>> bf_neighbor_tensors;
 
   if (!win_storage_manager.RegisterWinName(name, device, bf_tensor, zero_init)) return 0;
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
     return 0;
-  if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    win_gpu_tensor_map[name] = tensor;
-  }
 
   Status status = WindowCreate(bf_tensor, bf_neighbor_tensors, name, device);
   return status.ok() ? 1 : 0;
@@ -257,7 +312,8 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
 namespace {
 
 int ResetNeighborTensor(const std::string& name,
-        const std::unordered_map<int, double>& neighbor_map) {
+        const std::unordered_map<int, double>& neighbor_map, 
+        bool associated_with_p) {
   std::shared_ptr<TorchTensor> bf_neighbor_tensor;
   for (auto& kv : neighbor_map) {
     int rank = kv.first;
@@ -268,6 +324,9 @@ int ResetNeighborTensor(const std::string& name,
       return 0;
     }
     bf_neighbor_tensor->GetUnderlyingTensor().fill_(0.0);
+    if (associated_with_p) {
+      common::SetWinAssociatedPByNameAndRank(name, rank, 0.0);
+    }
   }
   return 1;
 }
@@ -284,22 +343,28 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(name, "WIN_SYNC_COMPUTE_AVERAGE");
 
-  // We need to lock self avoid updating and win_put/win_accumulate happen at
-  // simultaneous time.
-  const std::vector<int> self_rank = {common::bluefog_rank()};
-  if (require_mutex) common::WindowMutexAcquire(name, self_rank, /*is_sync=*/true);
-
   int device = CPU_DEVICE_ID;
   if (!win_storage_manager.GetDeviceByName(name, &device)) {
     BFLOG(ERROR) << "Cannot get device of win " << name;
     return 0;
   }
 
+  // We need to lock self avoid updating and win_put/win_accumulate happen at
+  // simultaneous time.
+  std::vector<int> neighbor_ranks;
+  neighbor_ranks.reserve(neighbor_weights.size());
+  for (auto& kv : neighbor_weights) {
+    neighbor_ranks.push_back(kv.first);
+  }
+  if (require_mutex)
+    common::WindowMutexAcquire(name, neighbor_ranks, device, /*is_sync=*/true);
+
+  bool associated_with_p = common::GetWinOpsWithAssociatedPState();
   Status status = common::WindowSync(name, device);
 
-  ::torch::Tensor cpu_buffer = tensor;
+  ::torch::Tensor tensor_buffer = tensor;
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
-    cpu_buffer =
+    tensor_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
   }
 
@@ -309,34 +374,42 @@ int DoWinSync(::torch::Tensor tensor, const std::string& name,
   // weights are 1/(neighbor size+1).
   if (internal_avg) {
     // Weighted averaging with neighbors' tensors happens in-place.
-    if (!win_storage_manager.AvgWithNeighbor(name, cpu_buffer, self_weight,
-                                             neighbor_weights)) {
-      if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+    if (!win_storage_manager.AvgWithNeighbor(name, tensor_buffer, self_weight,
+                                             neighbor_weights, associated_with_p)) {
+      if (require_mutex)
+        common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
       return 0;
     }
   } else {
     // Sum over neighbors' tensors happens in-place.
-    if (!win_storage_manager.SumWithNeighbor(name, cpu_buffer)) {
-      if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+    if (!win_storage_manager.SumWithNeighbor(name, tensor_buffer, associated_with_p)) {
+      if (require_mutex)
+        common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
       return 0;
     }
     // +1 here because in neighbor degree doesn't include self rank.
     double neighbor_size = neighbor_weights.size() + 1.0;
-    cpu_buffer.div_(neighbor_size);
+    tensor_buffer.div_(neighbor_size);
+    if (associated_with_p) {
+      double associated_p = GetWinAssociatedP(name);
+      SetWinAssociatedP(name, associated_p / neighbor_size);
+    }
   }
 
-  if (reset && !ResetNeighborTensor(name, neighbor_weights)) {
-    if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+  if (reset && !ResetNeighborTensor(name, neighbor_weights, associated_with_p)) {
+    if (require_mutex)
+      common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
     return 0;
   }
-  if (require_mutex) common::WindowMutexRelease(name, self_rank, /*is_sync=*/true);
+  if (require_mutex)
+    common::WindowMutexRelease(name, neighbor_ranks, device, /*is_sync=*/true);
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
     auto device = GetDeviceID(tensor);
     with_device device_guard(device);
-    tensor.copy_(cpu_buffer);
+    tensor.copy_(tensor_buffer);
     // TODO(ybc) When pull_get is used in GPU, we need to copy twice here. Optimizer it.
-    // win_storage_manager.SetSelfStorageByName(name, tensor);
+    win_storage_manager.SetSelfStorageByName(name, tensor);
   }
   timeline_ptr->ActivityEnd(name);  // WIN_SYNC_COMPUTE_AVERAGE
 
@@ -349,7 +422,6 @@ int DoWinFree(const std::string& name) {
   int device = CPU_DEVICE_ID;
   if (name.empty()) {
     win_storage_manager.ClearAll();
-    if (WIN_ON_CPU) win_gpu_tensor_map.clear();
   } else {
     if(!win_storage_manager.GetDeviceByName(name, &device)) {
       BFLOG(ERROR) << "Cannot get device of win " << name;
@@ -360,9 +432,6 @@ int DoWinFree(const std::string& name) {
       BFLOG(ERROR) << "Cannot unregister win " << name;
       return 0;
     }
-    if (WIN_ON_CPU) {
-      win_gpu_tensor_map.erase(name);
-    }
   }
 
   Status status = common::WindowFree(name, device);
@@ -370,6 +439,7 @@ int DoWinFree(const std::string& name) {
 }
 
 int DoWinPut(::torch::Tensor tensor, const std::string& name,
+             const double self_weight,
              const std::unordered_map<int, double>& dst_weights,
              const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
@@ -380,6 +450,9 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
+  // Have to get that value here since it will be used in callback, of which
+  // might change will wait for communication.
+  bool associated_with_p = common::GetWinOpsWithAssociatedPState();
 
   std::shared_ptr<TorchTensor> bf_tensor;
 
@@ -397,7 +470,17 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowPut(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle, name, timeline_ptr, tid](const Status& status) {
+      [handle, name, timeline_ptr, tid, tensor, self_weight,
+       associated_with_p](const Status& status) {
+        if (status.ok()) {
+          if (self_weight != 1.0) {
+            tensor.mul_(self_weight);
+          }
+          if (associated_with_p) {
+            double old_value = GetWinAssociatedP(name);
+            SetWinAssociatedP(name, old_value * self_weight);
+          }
+        }
         win_handle_manager.MarkDone(handle, status);
         timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
       });
@@ -407,6 +490,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
 }
 
 int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
+                    const double self_weight,
                     const std::unordered_map<int, double>& dst_weights,
                     const bool require_mutex) {
   ThrowIfError(common::CheckInitialized());
@@ -417,6 +501,10 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
 
   auto device = GetDeviceID(tensor);
   auto handle = win_handle_manager.AllocateHandle();
+  // Have to get that value here since it will be used in callback, of which
+  // might change will wait for communication.
+  bool associated_with_p = common::GetWinOpsWithAssociatedPState();
+
   std::shared_ptr<TorchTensor> bf_tensor;
 
   if (WIN_ON_CPU && tensor.device().is_cuda()) {
@@ -432,7 +520,17 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
-      [handle, name, timeline_ptr, tid](const Status& status) {
+      [handle, name, timeline_ptr, tid, tensor, self_weight,
+       associated_with_p](const Status& status) {
+        if (status.ok()) {
+          if (self_weight != 1.0) {
+            tensor.mul_(self_weight);
+          }
+          if (associated_with_p) {
+            double old_value = GetWinAssociatedP(name);
+            SetWinAssociatedP(name, old_value * self_weight);
+          }
+        }
         win_handle_manager.MarkDone(handle, status);
         timeline_ptr->ActivityEnd(name, &tid);  // ENQUEUE
       });
@@ -451,11 +549,15 @@ int DoWinGet(const std::string& name,
   timeline_ptr->ActivityStart(name, "ENQUEUE_WIN_GET");
 
   auto handle = win_handle_manager.AllocateHandle();
-
+  int device = CPU_DEVICE_ID;
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
+    BFLOG(ERROR) << "Cannot get device of win " << name;
+    return 0;
+  }
   // Note callback function will be called by different thread.
   std::thread::id tid = std::this_thread::get_id();
   auto enqueue_result = EnqueueTensorWindowGet(
-      name, src_weights, require_mutex,
+      name, src_weights, device, require_mutex,
       [handle, name, src_weights, timeline_ptr,
        tid](const Status& status) mutable {
         std::shared_ptr<TorchTensor> bf_neighbor_tensor;
@@ -508,18 +610,26 @@ void DoWinUnlock(const std::string& name) {
 }
 
 void DoWinMutexAcquire(const std::string& name, const std::vector<int>& ranks,
-                       bool exclusive) {
+                       bool is_sync) {
   ThrowIfError(common::CheckInitialized());
+  int device = CPU_DEVICE_ID;
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
+    ThrowIfError(Status::InvalidArgument("Cannot get device of win " + name));
+  }
   Status status =
-      common::WindowMutexAcquire(name, ranks, /*is_sync=*/exclusive);
+      common::WindowMutexAcquire(name, ranks, device, /*is_sync=*/is_sync);
   ThrowIfError(status);
 }
 
 void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
-                       bool exclusive) {
+                       bool is_sync) {
   ThrowIfError(common::CheckInitialized());
+  int device = CPU_DEVICE_ID;
+  if (!win_storage_manager.GetDeviceByName(name, &device)) {
+    ThrowIfError(Status::InvalidArgument("Cannot get device of win " + name));
+  }
   Status status =
-      common::WindowMutexRelease(name, ranks, /*is_sync=*/exclusive);
+      common::WindowMutexRelease(name, ranks, device, /*is_sync=*/is_sync);
   ThrowIfError(status);
 }
 
@@ -531,12 +641,8 @@ void GetWinVersion(char* name,
   ThrowIfError(status);
 }
 
-void bluefog_torch_get_remote_win_version(char* name, int remote_rank,
-                  std::vector<int>& versions) {
-  ThrowIfError(common::CheckInitialized());
-  Status status =
-      common::GetRemoteWindowVersion(name, remote_rank, versions);
-  ThrowIfError(status);
+void SetWinOpsWithAssociatedPState(bool value) {
+  common::SetWinOpsWithAssociatedPState(value);
 }
 
 void AddWinOpsIntoPybind(py::module& m) {
@@ -601,6 +707,9 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
 
   m.def("bluefog_torch_get_win_version", &GetWinVersion);
+  
+  m.def("bluefog_torch_win_associated_p", &GetWinAssociatedP);
+  m.def("bluefog_torch_set_win_ops_with_associated_p_state", &SetWinOpsWithAssociatedPState);
 }
 
 }  // namespace torch

@@ -52,6 +52,9 @@ MPIContext mpi_context;
 NCCLContext nccl_context;
 #endif
 
+// If set, win_ops will execute the same ops on associated p as well.
+static bool global_with_associated_p_state = false;
+
 }  // namespace
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -64,7 +67,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   state.controller->Initialize();
 
   // We use Lazy initialized pattern. nccl_controller will be initialized only
-  // when it necessary. 
+  // when it is necessary. 
 
   // Signal that initialization is completed.
   state.initialization_done = true;
@@ -90,7 +93,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
       << "Shutting down background thread";
 
   // Signal that shutdown has been requested.
-  // state.shut_down = true;
+  state.shut_down = true;
   // Notify all outstanding operations that Bluefog has been shut down
   // and finalize tensor queue.
   std::vector<StatusCallback> callbacks;
@@ -99,6 +102,8 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
     cb(SHUT_DOWN_ERROR);
   }
 #if HAVE_NCCL
+  // NCCL context has to be finalized before MPI since it relied on
+  // several functions of MPI.
   if (nccl_context.is_initialized) {
     nccl_context.Finalize();
   }
@@ -106,52 +111,63 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   mpi_context.Finalize(mpi_ctx_manager);
 }
 
-Vendor DetermineController(const TensorTableEntry& entry) {
-  bool nccl_impl_available = false;
+Vendor DetermineController(const MPIOpsType& op_type, int device) {
+  if (device == CPU_DEVICE_ID) return Vendor::MPI;
+
+  bool nccl_impl_available = true;
   bool force_mpi = false;
   bool built_with_nccl = false;
 #if HAVE_NCCL
   built_with_nccl = true;
 #endif
   char* by_mpi_env;
-  switch (entry.mpi_ops_type) {
+  switch (op_type) {
     case MPIOpsType::ALLREDUCE:
       by_mpi_env = std::getenv("BLUEFOG_ALLREDUCE_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::BROADCAST:
       by_mpi_env = std::getenv("BLUEFOG_BROADCAST_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::ALLGATHER:
       by_mpi_env = std::getenv("BLUEFOG_ALLGATHER_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::NEIGHBOR_ALLGATHER:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLGATHER_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
       break;
     case MPIOpsType::NEIGHBOR_ALLREDUCE:
       by_mpi_env = std::getenv("BLUEFOG_NEIGHBOR_ALLREDUCE_BY_MPI");
-      force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
-      nccl_impl_available = true;
+      break;
+    case MPIOpsType::WIN_PUT:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
+      break;
+    case MPIOpsType::WIN_GET:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
+      break;
+    case MPIOpsType::WIN_ACCUMULATE:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
+      break;
+    case MPIOpsType::WIN_CREATE:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
+      break;
+    case MPIOpsType::WIN_FREE:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
+      break;
+    case MPIOpsType::WIN_SYNC:
+      by_mpi_env = std::getenv("BLUEFOG_WIN_OPS_BY_MPI");
       break;
     default:
+      by_mpi_env = nullptr;
       nccl_impl_available = false;
   }
-
+  force_mpi = (by_mpi_env != nullptr) && (*by_mpi_env == '1');
   if (!built_with_nccl || !nccl_impl_available || force_mpi) return Vendor::MPI;
-  return entry.device != CPU_DEVICE_ID ? Vendor::NCCL : Vendor::MPI;
+  return Vendor::NCCL;
 }
 
 bool RunLoopOnce(BluefogGlobalState& state) {
   try {
     auto entry = state.tensor_queue.PopMessagesFromQueue();
-    Vendor controller_vendor = DetermineController(entry);
+    Vendor controller_vendor = DetermineController(entry.mpi_ops_type, entry.device);
 #if HAVE_NCCL
     if(controller_vendor==Vendor::NCCL && !nccl_context.is_initialized) {
         state.nccl_controller->Initialize();
@@ -255,23 +271,47 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       // other, the order of allreduce request by them are undeterminisitc.
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_PUT on " << entry.tensor_name;
+            << "Processing WIN_PUT on " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
         state.timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
-        state.controller->WinPut(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->WinPut(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->WinPut(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_GET on " << entry.tensor_name;
+            << "Processing WIN_GET on " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
         state.timeline.ActivityStart(entry.tensor_name, "WIN_GET");
-        state.controller->WinGet(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->WinGet(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->WinGet(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_ACCUMULATE on " << entry.tensor_name;
+            << "Processing WIN_ACCUMULATE on " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
         state.timeline.ActivityStart(entry.tensor_name, "WIN_ACCUMULATE");
-        state.controller->WinAccumulate(entry);
+        if (controller_vendor == Vendor::MPI) {
+          state.controller->WinAccumulate(entry);
+        }
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          state.nccl_controller->WinAccumulate(entry);
+        }
+#endif
         state.timeline.ActivityEnd(entry.tensor_name);
         break;
       default:
@@ -385,11 +425,18 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
         << "Cannot set the topology because bluefog has not been initialized.";
     return -1;
   }
-  if (!bluefog_global.controller->IsWinObjetEmpty()) {
+  if (!bluefog_global.controller->IsWinObjectEmpty()) {
     BFLOG(ERROR)
         << "Cannot set the topology because there are window object uncleared.";
     return -1;
   }
+#if HAVE_NCCL
+  if (!bluefog_global.nccl_controller->IsWinObjectEmpty()) {
+    BFLOG(ERROR)
+        << "Cannot set the topology because there are window object uncleared.";
+    return -1;
+  }
+#endif
   if (bluefog_global.tensor_queue.size() > 0) {
     BFLOG(ERROR)
         << "Cannot set the topology because there are unfinished MPI ops.";
@@ -611,6 +658,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_PUT;
   e.dst_weights = dst_weights;
+  e.win_ops_with_associated_p = global_with_associated_p_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -631,6 +679,7 @@ Status EnqueueTensorWindowAccumulate(
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::WIN_ACCUMULATE;
   e.dst_weights = dst_weights;
+  e.win_ops_with_associated_p = global_with_associated_p_state;
   e.require_mutex = require_mutex;
 
   if (bluefog_global.shut_down) {
@@ -642,11 +691,12 @@ Status EnqueueTensorWindowAccumulate(
 
 Status EnqueueTensorWindowGet(const std::string& name,
                               const std::unordered_map<int, double>& src_weights,
-                              const bool require_mutex,
+                              const int device, const bool require_mutex,
                               StatusCallback callback) {
   TensorTableEntry e;
   e.tensor_name = name;
   e.callback = callback;
+  e.device = device;
   e.mpi_ops_type = MPIOpsType::WIN_GET;
   e.src_weights = src_weights;
   e.require_mutex = require_mutex;
@@ -676,8 +726,23 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
+  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
+  Status status;
+#if HAVE_NCCL
+  if (vendor == Vendor::NCCL) {
+    if (!nccl_context.is_initialized) {
+      bluefog_global.nccl_controller->Initialize();
+      BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
+    }
+    status = bluefog_global.nccl_controller->WinCreate(tensor, neighbor_tensors,
                                                        name, device);
+  }
+#endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
+                                                  name, device);
+  }
+
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot create the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -689,7 +754,19 @@ Status WindowSync(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.controller->WinSync(name, device);
+  Vendor vendor = DetermineController(MPIOpsType::WIN_SYNC, device);
+  Status status;
+#if HAVE_NCCL
+  if (vendor == Vendor::NCCL) {
+    status = bluefog_global.nccl_controller->WinSync(
+        name, device, global_with_associated_p_state);
+  }
+#endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinSync(name, device,
+                                                global_with_associated_p_state);
+  }
+
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
@@ -701,11 +778,24 @@ Status WindowFree(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  Vendor vendor = DetermineController(MPIOpsType::WIN_FREE, device);
   Status status;
+#if HAVE_NCCL
+  // No specified name. So both nccl and mpi will Free win.
+  if (nccl_context.is_initialized && name.empty()) {
+    status = bluefog_global.nccl_controller->WinFreeAll();
+  } else {
+    if (vendor == Vendor::NCCL) {
+      status = bluefog_global.nccl_controller->WinFree(name, device);
+    }
+  }
+#endif
   if (name.empty()) {
     status = bluefog_global.controller->WinFreeAll();
   } else {
-    status = bluefog_global.controller->WinFree(name, device);
+    if (vendor == Vendor::MPI) {
+      status = bluefog_global.controller->WinFree(name, device);
+    }
   }
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
@@ -714,6 +804,74 @@ Status WindowFree(const std::string& name, int device) {
   return status;
 }
 
+Status WindowMutexAcquire(const std::string& name,
+                          const std::vector<int>& acquire_ranks, int device,
+                          bool is_sync) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  // Because mutex is always associated with each win_create ops, it is safe to
+  // use the vendor of win_create for window mutex.
+  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
+  Status status;
+#if HAVE_NCCL
+  if (vendor == Vendor::NCCL) {
+    status = bluefog_global.nccl_controller->WinMutexAcquire(
+        name, acquire_ranks, is_sync);
+  }
+#endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinMutexAcquire(name, acquire_ranks,
+                                                        is_sync);
+  }
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot acquire window mutex";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status WindowMutexRelease(const std::string& name,
+                          const std::vector<int>& release_ranks, int device,
+                          bool is_sync) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  // Because mutex is always associated with each win_create ops, it is safe to
+  // use the vendor of win_create for window mutex.
+  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
+  Status status;
+#if HAVE_NCCL
+  if (vendor == Vendor::NCCL) {
+    status = bluefog_global.nccl_controller->WinMutexRelease(
+        name, release_ranks, is_sync);
+  }
+#endif
+  if (vendor == Vendor::MPI) {
+    status = bluefog_global.controller->WinMutexRelease(name, release_ranks,
+                                                        is_sync);
+  }
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot release window mutex";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
+Status GetBluefogTimeline(Timeline*& timeline) {
+  timeline = &(bluefog_global.timeline);
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  if (!bluefog_global.timeline_enabled) {
+    return Status::Aborted("timeline is not enabled.");
+  }
+  return Status::OK();
+}
+
+// Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
@@ -753,32 +911,6 @@ Status WindowUnlock(const std::string& name) {
   return status;
 }
 
-Status WindowMutexAcquire(const std::string& name, const std::vector<int>& acquire_ranks, bool is_sync) {
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Status status = bluefog_global.controller->WinMutexAcquire(name, acquire_ranks, is_sync);
-
-  if (!status.ok()) {
-    BFLOG(ERROR) << "Cannot acquire window mutex";
-    BFLOG(ERROR) << status.reason();
-  }
-  return status;
-}
-
-Status WindowMutexRelease(const std::string& name, const std::vector<int>& release_ranks, bool is_sync) {
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Status status = bluefog_global.controller->WinMutexRelease(name, release_ranks, is_sync);
-
-  if (!status.ok()) {
-    BFLOG(ERROR) << "Cannot release window mutex"; 
-    BFLOG(ERROR) << status.reason();
-  }
-  return status;
-}
-
 Status GetWindowVersion(const std::string& name,
                         std::vector<int>& versions) {
   if (bluefog_global.shut_down) {
@@ -793,16 +925,31 @@ Status GetWindowVersion(const std::string& name,
   }
   return status;
 }
-
-Status GetBluefogTimeline(Timeline*& timeline) {
-  timeline = &(bluefog_global.timeline);
+// TODO(ybc) Add NCCL version for this as well.
+Status GetWinAssociatedPByNameAndRank(const std::string& name,
+                                           const int rank, double* weight) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  if (!bluefog_global.timeline_enabled) {
-    return Status::Aborted("timeline is not enabled.");
+  return bluefog_global.controller->GetWinAssociatedPByNameAndRank(
+      name, rank, weight);
+}
+
+Status SetWinAssociatedPByNameAndRank(const std::string& name,
+                                           const int rank, const double weight) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
   }
-  return Status::OK();
+  return bluefog_global.controller->SetWinAssociatedPByNameAndRank(
+      name, rank, weight);
+}
+
+void SetWinOpsWithAssociatedPState(bool value) {
+  global_with_associated_p_state = value;
+}
+
+bool GetWinOpsWithAssociatedPState() {
+  return global_with_associated_p_state;
 }
 
 }  // namespace common

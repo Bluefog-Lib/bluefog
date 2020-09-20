@@ -79,8 +79,9 @@ def _allreduce_function_factory(tensor):
 def _allreduce_nonblocking(tensor, output, average, name):
     function = _check_function(_allreduce_function_factory, tensor)
     if average:
-        assert isinstance(tensor, (torch.FloatTensor, torch.DoubleTensor,
-                                   torch.cuda.FloatTensor, torch.cuda.DoubleTensor)), \
+        assert isinstance(tensor, (torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor,
+                                   torch.cuda.FloatTensor, torch.cuda.DoubleTensor,
+                                   torch.cuda.HalfTensor)), \
             "If average is set in allreduce, only float or double tensor is allowed."
 
     handle = getattr(mpi_lib, function)(tensor, output, average,
@@ -771,20 +772,12 @@ def win_update(name: str,
     return tensor
 
 
-def win_fence(name: str) -> bool:
-    """ A collective call to synchronization on MPI window with associated name.
-
-    Warning: The API win_get and win_put provied here is already wrapped by
-    MPI_Win_lock and MPI_Win_unlock. So you should not explicitly call win_fence there.
-    """
-    return mpi_lib.bluefog_torch_win_fence(name)
-
-
 def _win_put_function_factory(tensor):
     return 'bluefog_torch_win_put_' + tensor.type().replace('.', '_')
 
 
 def win_put_nonblocking(tensor: torch.Tensor, name: str,
+                        self_weight: float = None,
                         dst_weights: Dict[int, float] = None,
                         require_mutex: bool = False) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
@@ -794,6 +787,8 @@ def win_put_nonblocking(tensor: torch.Tensor, name: str,
     Args:
         tesnor: The tensor that shares to neighbor.
         name: The unique name to associate the window object.
+        self_weight: In-place multiply the weight to tensor (Happened after win_put send
+            tensor information to neigbors), Default is 1.0.
         dst_weights: A dictionary that maps the destination ranks to the weight.
             Namely, {rank: weight} means put tensor * weight to the rank neighbor.
             If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -809,17 +804,20 @@ def win_put_nonblocking(tensor: torch.Tensor, name: str,
     function = _check_function(_win_put_function_factory, tensor)
     dst_weights = ({rank: 1.0 for rank in out_neighbor_ranks()}
                    if dst_weights is None else dst_weights)
+    if self_weight is None:
+        self_weight = 1.0
     if not set(dst_weights.keys()).issubset(set(out_neighbor_ranks())):
         raise ValueError(
-            "The key of dst_weights should only containranks that "
+            "The key of dst_weights should only contain ranks that "
             " belong to out-neighbors (self-rank is not allowed).")
     handle = getattr(mpi_lib, function)(
-        tensor, name, dst_weights, require_mutex)
+        tensor, name, self_weight, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_put(tensor: torch.Tensor, name: str,
+            self_weight: float = None,
             dst_weights: Dict[int, float] = None,
             require_mutex: bool = False) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
@@ -829,6 +827,8 @@ def win_put(tensor: torch.Tensor, name: str,
     Args:
         tensor: The tensor that shares to neighbor.
         name: The unique name to associate the window object.
+        self_weight: In-place multiply the weight to tensor (Happened after win_put send
+            tensor information to neigbors), Default is 1.0.
         dst_weights: A dictionary that maps the destination ranks to the weight.
             Namely, {rank: weight} means put tensor * weight to the rank neighbor.
             If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -840,7 +840,7 @@ def win_put(tensor: torch.Tensor, name: str,
     Returns:
         A bool value to indicate the put succeeded or not.
     """
-    handle = win_put_nonblocking(tensor, name, dst_weights, require_mutex)
+    handle = win_put_nonblocking(tensor, name, self_weight, dst_weights, require_mutex)
     return win_wait(handle)
 
 
@@ -911,6 +911,7 @@ def _win_accumulate_function_factory(tensor):
 
 
 def win_accumulate_nonblocking(tensor: torch.Tensor, name: str,
+                               self_weight: float = None,
                                dst_weights: Dict[int, float] = None,
                                require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
@@ -921,6 +922,8 @@ def win_accumulate_nonblocking(tensor: torch.Tensor, name: str,
     Args:
         tesnor: The tensor that shares to neighbor.
         name: The unique name to associate the window object.
+        self_weight: In-place multiply the weight to tensor (Happened after win_accumulate
+            send tensor information to neigbors), Default is 1.0.
         dst_weights: A dictionary that maps the destination ranks to the weight.
             Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
             If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -936,17 +939,20 @@ def win_accumulate_nonblocking(tensor: torch.Tensor, name: str,
     function = _check_function(_win_accumulate_function_factory, tensor)
     dst_weights = ({rank: 1.0 for rank in out_neighbor_ranks()}
                    if dst_weights is None else dst_weights)
+    if self_weight is None:
+        self_weight = 1.0
     if not set(dst_weights.keys()).issubset(set(out_neighbor_ranks())):
         raise ValueError(
             "The key of dst_weights should only containranks that "
             " belong to out-neighbors (self-rank is not allowed).")
     handle = getattr(mpi_lib, function)(
-        tensor, name, dst_weights, require_mutex)
+        tensor, name, self_weight, dst_weights, require_mutex)
     _win_handle_map[handle] = name
     return handle
 
 
 def win_accumulate(tensor: torch.Tensor, name: str,
+                   self_weight: float = None,
                    dst_weights: Dict[int, float] = None,
                    require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
@@ -957,6 +963,8 @@ def win_accumulate(tensor: torch.Tensor, name: str,
     Args:
         tesnor: The tensor that shares to neighbor.
         name: The unique name to associate the window object.
+        self_weight: In-place multiply the weight to tensor (Happened after win_accumulate
+            send tensor information to neigbors), Default is 1.0.
         dst_weights: A dictionary that maps the destination ranks to the weight.
             Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
             If not provided, dst_weights will be set as all neighbor ranks defined by
@@ -969,7 +977,7 @@ def win_accumulate(tensor: torch.Tensor, name: str,
         A bool value to indicate the accumulate succeeded or not.
     """
     handle = win_accumulate_nonblocking(
-        tensor, name, dst_weights, require_mutex)
+        tensor, name, self_weight, dst_weights, require_mutex)
     return win_wait(handle)
 
 
@@ -1028,7 +1036,7 @@ def _win_unlock(name: str):
 
 
 @contextmanager
-def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
+def win_mutex(name: str, for_self=False, ranks: List[int] = None):
     """ A win object implemented mutex context manager. Note, there are N distributed
     mutex over N corresponding processes.
 
@@ -1036,9 +1044,8 @@ def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
         name: Used to get the mutex for the window that registered by name.
         ranks: The mutex associated with the specified ranks is acquired.
             If not presented, the mutex with all out_neighbor ranks are acquired.
-        exclusive: If not exclusive, multiple (inclusive) processes can hold the mutex for
-            the ranks. While only one exclusive processes (no other inclusive ones) can
-            acquire the mutex.
+        for_self: If it is false, it will require the remote mutexes at processes ranks, which
+            is specified by argument ranks). If it is true, it will require the self mutex.
 
     Example:
         >>> bf.win_create(tensor, name)
@@ -1047,16 +1054,43 @@ def win_mutex(name: str, ranks: List[int] = None, exclusive=True):
         >>> win_put(tensor, name)
     """
     _ranks = out_neighbor_ranks() if ranks is None else ranks
-    _win_mutex_acquire(name, _ranks, exclusive)
+    _win_mutex_acquire(name, _ranks, for_self)
     try:
         yield
     finally:
-        _win_mutex_release(name, _ranks, exclusive)
+        _win_mutex_release(name, _ranks, for_self)
 
 
-def _win_mutex_acquire(name, ranks, exclusive):
-    mpi_lib.bluefog_torch_win_mutex_acquire(name, ranks, exclusive)
+def _win_mutex_acquire(name, ranks, for_self):
+    mpi_lib.bluefog_torch_win_mutex_acquire(name, ranks, for_self)
 
 
-def _win_mutex_release(name, ranks, exclusive):
-    mpi_lib.bluefog_torch_win_mutex_release(name, ranks, exclusive)
+def _win_mutex_release(name, ranks, for_self):
+    mpi_lib.bluefog_torch_win_mutex_release(name, ranks, for_self)
+
+
+def win_associated_p(name: str) -> float:
+    """ Return the associated correction P, which is used in Push-Sum algorithm, for each named window.
+
+    Args:
+        name (str): The unique name to associate the window object.
+
+    Returns:
+        float: The p value. (Initialized as 1.)
+    """
+    return mpi_lib.bluefog_torch_win_associated_p(name)
+
+
+def turn_on_win_ops_with_associated_p():
+    """Turn on the global state of win operations with associated p.
+    
+    If it is state is on, all win ops such as put, update, accumulate also apply on the
+    associated p value as well.
+    The default state is off.
+    """
+    mpi_lib.bluefog_torch_set_win_ops_with_associated_p_state(True)
+
+
+def turn_off_win_ops_with_associated_p():
+    """Turn off the global state of win operations with associated p."""
+    mpi_lib.bluefog_torch_set_win_ops_with_associated_p_state(False)

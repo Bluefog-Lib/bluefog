@@ -16,6 +16,7 @@
 #ifndef BLUEFOG_COMMON_NCCL_CONTROLLER_H
 #define BLUEFOG_COMMON_NCCL_CONTROLLER_H
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -27,6 +28,7 @@
 #include "common.h"
 #include "logging.h"
 #include "mpi_context.h"
+#include "nccl_win.h"
 #include "tensor_queue.h"
 #include "timeline.h"
 
@@ -62,6 +64,7 @@
 namespace bluefog {
 namespace common {
 
+ncclDataType_t GetNCCLDataType(const DataType bf_data_type);
 ncclDataType_t GetNCCLDataType(const std::shared_ptr<Tensor> tensor);
 
 struct pair_hash {
@@ -82,32 +85,69 @@ class NCCLContext {
   NCCLContext(const NCCLContext&) = delete;
   NCCLContext& operator=(NCCLContext other) = delete;
 
-  void Initialize(const int rank, const int size, const int local_rank);
-  void Finalize();
-  void CleanPeerCommunicator();
+  void Initialize(const int rank, const int size,
+                  const int local_rank);  // only initial nccl_comm etc.
+  void Finalize();  // nccl_comm, peer, window will all be cleaned.
+#if NCCL_MINOR < 7
+  void CleanPeerCommunicators();
+#endif
+  void CleanWindowCommunicators();
 
   cudaError_t GetCudaEvent(cudaEvent_t* event);
   cudaError_t ReleaseCudaEvent(cudaEvent_t event);
 
-  // TODO(ybc) Create e intra-comm to allow the ops lik in-node allreduce.
+  // TODO(ybc) Create intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
   cudaStream_t stream;
 
   // We reuse CUDA events as it appears that their creation carries non-zero cost.
   std::queue<cudaEvent_t> cuda_events;
-  std::mutex cuda_events_mutex;
+  mutable std::mutex cuda_events_mutex;
 
+  // Window Communicators. Because NCCL function is not thread-safe, each window
+  // communication will be seperate by communicators.
+  // New rank for self is always 0 in acitive comm and 1 in passive comm.
+  std::vector<ncclComm_t> nccl_win_active_comms;  // Connect self is active and peer is passive.
+  std::vector<ncclComm_t> nccl_win_passive_comms; // Connect self is passive and peer is active.
+
+  std::vector<cudaStream_t> nccl_win_active_streams;
+  std::vector<cudaStream_t> nccl_win_passive_streams;
+  mutable std::mutex nccl_win_mutex;
+
+#if NCCL_MINOR < 7
   // Communicators between two ranks used to mimic send/recv through broadcast.
   std::unordered_map<std::pair<int, int>, ncclComm_t, pair_hash>
       nccl_pair_comms = {};
   std::unordered_map<std::pair<int, int>, cudaStream_t, pair_hash>
       pair_streams = {};
   std::vector<std::pair<int, int>> pair_order = {};
+#endif
 
   int cuda_device = -1;
+  int self_rank = -1;
+  int self_local_rank = -1;
   bool is_initialized = false;
-  bool is_peer_initialized = false;
+  bool is_window_comm_initialized = false;
+  bool is_peer_comm_initialized = false;
+
+  mutable ThreadPool finalizer_thread_pool;
+
+  // Window related variables
+  std::atomic_bool win_passive_recv_initialized{false};
+  std::atomic_bool win_passive_recv_shutdown{false};
+  mutable std::atomic_bool win_passive_recv_shutdown_done{false};
+  std::thread win_passive_recv_thread;
+
+  // Mimic MPI Windows used for one-sided communication. (Although there is no window). Manage
+  // the persistent memory mainly.
+  std::unordered_map<std::string, std::shared_ptr<NCCLWindowManager>> named_win_map;
+
+  // In charge of mapping unique window name to id and reversed way.
+  mutable NCCLWindowIdManager window_id_manager;
 };
+
+// Function to implement Window 
+void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx);
 
 class NCCLController {
  public:
@@ -116,33 +156,58 @@ class NCCLController {
     BFLOG(DEBUG) << "NCCL Controller Initialized.";
   }
 
+  // InitPeerCommunicator is always initialized when Initialize() is called.
+  // But InitWindowCommunicator is independent since is only required when
+  // window ops is used.
   void Initialize();
 #if NCCL_MINOR < 7
   void InitPeerCommunicator();
   void DestroyPeerCommunicator();
 #endif
+  void InitWindowCommunicators();
+  void DestroyWindowCommunicators();
 
-  void Allgather(TensorTableEntry& entries);
-  void Allreduce(TensorTableEntry& entries);
-  void Broadcast(TensorTableEntry& entries);
-  void NeighborAllgather(TensorTableEntry& entries);
-  void NeighborAllreduce(TensorTableEntry& entries);
+  inline bool IsWinObjectEmpty() const {
+    return nccl_ctx_.named_win_map.size() == 0;
+  }
+
+  void Allgather(TensorTableEntry& entry);
+  void Allreduce(TensorTableEntry& entry);
+  void Broadcast(TensorTableEntry& entry);
+  void NeighborAllgather(TensorTableEntry& entry);
+  void NeighborAllreduce(TensorTableEntry& entry);
+
+  void WinPut(TensorTableEntry& entry);
+  void WinGet(TensorTableEntry& entry);
+  void WinAccumulate(TensorTableEntry& entry);
+
+  Status WinCreate(std::shared_ptr<Tensor> tensor,
+                   std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+                   const std::string& name, int device);
+
+  Status WinFree(const std::string& name, int device);
+  Status WinFreeAll();
+  Status WinSync(const std::string& name, int device, bool with_associated_p);
+
+  Status WinMutexAcquire(const std::string& name,
+                         const std::vector<int>& acquire_ranks, bool is_sync);
+  Status WinMutexRelease(const std::string& name,
+                         const std::vector<int>& release_ranks, bool is_sync);
 
  protected:
+#if NCCL_MINOR < 7
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
-
-private:
+#endif
+ private:
   // Outside dependencies
   NCCLContext& nccl_ctx_;
 
   MPIContext& mpi_ctx_;
-  
-  Timeline* timeline_ptr_;
 
-  ThreadPool finalizer_thread_pool;
+  Timeline* timeline_ptr_;
 };
 
 }  // namespace common
