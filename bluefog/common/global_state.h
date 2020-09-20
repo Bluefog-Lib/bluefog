@@ -66,6 +66,9 @@ struct BluefogGlobalState {
   // Time point when last cycle started.
   std::chrono::steady_clock::time_point last_cycle_start;
 
+  // Time point when coordinator last checked for stalled tensors.
+  std::chrono::steady_clock::time_point last_stall_check;
+
   std::shared_ptr<MPIController> controller;
 
   #if HAVE_NCCL

@@ -41,6 +41,8 @@
 #define COORDINATE_RANK 0
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
 #define BLUEFOG_CYCLE_TIME "BLUEFOG_CYCLE_TIME"
+// Stall-check warning time
+#define STALL_WARNING_TIME std::chrono::seconds(15)
 
 namespace bluefog {
 namespace common {
@@ -311,6 +313,55 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
   message_table->erase(it);
 
   return response;
+}
+
+// Report Tensors that were submitted to be reduced, gathered or broadcasted by
+// some ranks but not others and are waiting for long time to get processed.
+void CheckForStalledTensors(BluefogGlobalState& state) {
+  bool preamble = false;
+  auto now = std::chrono::steady_clock::now();
+  for (auto& m : *state.message_table) {
+    auto tensor_name = m.first;
+    std::vector<Request>& messages = std::get<0>(m.second);
+    std::chrono::steady_clock::time_point start_at = std::get<1>(m.second);
+
+    if (now - start_at > STALL_WARNING_TIME) {
+      if (!preamble) {
+        std::cerr << "WARNING: One or more tensors were submitted to be "
+                     "reduced, gathered or broadcasted by subset of ranks and "
+                     "are waiting for remainder of ranks for more than "
+                  << std::chrono::duration_cast<std::chrono::seconds>(
+                         STALL_WARNING_TIME)
+                         .count()
+                  << " seconds. ";
+        std::cerr << "This may indicate that different ranks are trying to "
+                     "submit different tensors or that only subset of ranks is "
+                     "submitting tensors, which will cause deadlock. " << std::endl;
+        std::cerr << "Stalled ops:" << std::endl;
+        preamble = true;
+      }
+      std::cerr << tensor_name;
+      std::cerr << " [missing ranks:";
+      std::unordered_set<int32_t> ready_ranks;
+      bool missing_preamble = false;
+      for (auto msg_iter = messages.begin(); msg_iter != messages.end();
+           msg_iter++) {
+             ready_ranks.insert(msg_iter->request_rank());
+      }
+      for (int32_t rank = 0; rank < mpi_context.size_; rank++) {
+        if (ready_ranks.find(rank) == ready_ranks.end()) {
+          if (!missing_preamble) {
+            std::cerr << " ";
+            missing_preamble = true;
+          } else {
+            std::cerr << ", ";
+          }
+          std::cerr << rank;
+        }
+      }
+      std::cerr << "]" << std::endl;
+    }
+  }
 }
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -777,7 +828,13 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
       // TODO: tensor fusion logics?
     }
-    // TODO: Check for stalled tensors.
+
+    // Check for stalled tensors.
+    if (std::chrono::steady_clock::now() - state.last_stall_check >
+        STALL_WARNING_TIME) {
+      CheckForStalledTensors(state);
+      state.last_stall_check = std::chrono::steady_clock::now();
+    }
   } else {
     std::string encoded_message;
     RequestList message_list;

@@ -602,7 +602,6 @@ class WinOpsTests(unittest.TestCase):
                 assert (t_end - t_start) < 2, \
                     "The mutex acquire time should be shorter than 2 second"
 
-    @unittest.skip
     def test_win_mutex_given_ranks(self):
         size = bf.size()
         rank = bf.rank()
