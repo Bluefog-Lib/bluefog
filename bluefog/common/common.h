@@ -221,6 +221,8 @@ struct TensorTableEntry {
   std::string tensor_name;
   // Input tensor.
   std::shared_ptr<Tensor> tensor;
+  // Used for create window only.
+  std::vector<std::shared_ptr<Tensor>> neighbor_tensors;
   // Pre-allocated output tensor.
   std::shared_ptr<Tensor> output;
   // Operation context, used for allocation.

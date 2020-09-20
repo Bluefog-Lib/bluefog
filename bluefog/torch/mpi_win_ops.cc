@@ -305,7 +305,8 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
   if (!win_storage_manager.GetStorageByname(name, bf_neighbor_tensors))
     return 0;
 
-  Status status = WindowCreate(bf_tensor, bf_neighbor_tensors, name, device);
+  Status status = WindowCreate(bf_tensor, bf_neighbor_tensors, name, device,
+                               /*callback=*/[](const Status& status) {});
   return status.ok() ? 1 : 0;
 }
 
@@ -434,7 +435,8 @@ int DoWinFree(const std::string& name) {
     }
   }
 
-  Status status = common::WindowFree(name, device);
+  Status status = common::WindowFree(name, device,
+                                     /*callback=*/[](const Status& status) {});
   return status.ok() ? 1 : 0;
 }
 

@@ -503,17 +503,17 @@ bool MPIController::IsMpiUnifiedModel() {
   return *memory_model == MPI_WIN_UNIFIED;
 }
 
-Status MPIController::WinCreate(
-    std::shared_ptr<Tensor> tensor,
-    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-    const std::string& name, const int device) {
+Status MPIController::WinCreate(TensorTableEntry& entry) {
+  with_device device_guard(entry.device);
 
+  std::shared_ptr<Tensor>& tensor = entry.tensor;
+  std::vector<std::shared_ptr<Tensor>>& neighbor_tensors = entry.neighbor_tensors;
+  const std::string& name = entry.tensor_name;
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
   timeline_ptr->ActivityStart(name, "WIN_CREATE");
   // We need to explicitly set the device here.
-  with_device device_guard(device);
   // 1. Regist a Name and create a window first.
   if (!mpi_ctx_.RegisterWindowName(name)) {
     return Status::InvalidArgument(std::string("Win_create failed with ") +
@@ -576,14 +576,14 @@ Status MPIController::WinCreate(
   return Status::OK();
 }
 
-Status MPIController::WinFree(const std::string& name, int device) {
-  if (!mpi_ctx_.UnregisterWindowName(name)) {
-    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+Status MPIController::WinFree(TensorTableEntry& entry) {
+  if (!mpi_ctx_.UnregisterWindowName(entry.tensor_name)) {
+    return Status::InvalidArgument(std::string("Win_free failed with ") + entry.tensor_name);
   }
   return Status::OK();
 }
 
-Status MPIController::WinFreeAll() {
+Status MPIController::WinFreeAll(TensorTableEntry& entry) {
   if (!mpi_ctx_.UnregisterAllWindowName()) {
     return Status::InvalidArgument(std::string("Win_free_all failed."));
   }

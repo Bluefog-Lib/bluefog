@@ -158,11 +158,12 @@ Status ExecuteBarrier(StatusCallback callback);
 
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                    const std::string& name, int device);
+                    const std::string& name, int device,
+                    StatusCallback callback);
 
 Status WindowSync(const std::string& name, int device);
 
-Status WindowFree(const std::string& name, int device);
+Status WindowFree(const std::string& name, int device, StatusCallback callback);
 
 Status WindowMutexAcquire(const std::string& name,
                           const std::vector<int>& acquire_ranks, int device,

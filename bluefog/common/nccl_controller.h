@@ -181,12 +181,10 @@ class NCCLController {
   void WinGet(TensorTableEntry& entry);
   void WinAccumulate(TensorTableEntry& entry);
 
-  Status WinCreate(std::shared_ptr<Tensor> tensor,
-                   std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                   const std::string& name, int device);
+  Status WinCreate(TensorTableEntry& entry);
+  Status WinFree(TensorTableEntry& entry);
+  Status WinFreeAll(TensorTableEntry& entry);
 
-  Status WinFree(const std::string& name, int device);
-  Status WinFreeAll();
   Status WinSync(const std::string& name, int device, bool with_associated_p);
 
   Status WinMutexAcquire(const std::string& name,

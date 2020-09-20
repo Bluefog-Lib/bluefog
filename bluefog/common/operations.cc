@@ -427,8 +427,8 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         DetermineController(entry.mpi_ops_type, entry.device);
 #if HAVE_NCCL
     if (controller_vendor == Vendor::NCCL && !nccl_context.is_initialized) {
-      state.nccl_controller->Initialize();
-      BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
+      bluefog_global.nccl_controller->Initialize();
+      BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
     }
 #endif
 
@@ -1268,10 +1268,20 @@ Status ExecuteBarrier(StatusCallback callback) {
 
 Status WindowCreate(std::shared_ptr<Tensor> tensor,
                     std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                    const std::string& name, const int device) {
+                    const std::string& name, const int device,
+                    StatusCallback callback) {
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.callback = callback;
+  e.device = device;
+  e.mpi_ops_type = MPIOpsType::WIN_CREATE;
+  e.tensor = tensor;
+  e.neighbor_tensors = neighbor_tensors;
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+
   Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
   Status status;
 #if HAVE_NCCL
@@ -1280,13 +1290,11 @@ Status WindowCreate(std::shared_ptr<Tensor> tensor,
       bluefog_global.nccl_controller->Initialize();
       BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
     }
-    status = bluefog_global.nccl_controller->WinCreate(tensor, neighbor_tensors,
-                                                       name, device);
+    status = bluefog_global.nccl_controller->WinCreate(e);
   }
 #endif
   if (vendor == Vendor::MPI) {
-    status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
-                                                  name, device);
+    status = bluefog_global.controller->WinCreate(e);
   }
 
   if (!status.ok()) {
@@ -1320,7 +1328,14 @@ Status WindowSync(const std::string& name, int device) {
   return status;
 }
 
-Status WindowFree(const std::string& name, int device) {
+Status WindowFree(const std::string& name, int device,
+                  StatusCallback callback) {
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.callback = callback;
+  e.device = device;
+  e.mpi_ops_type = MPIOpsType::WIN_FREE;
+
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
@@ -1329,18 +1344,18 @@ Status WindowFree(const std::string& name, int device) {
 #if HAVE_NCCL
   // No specified name. So both nccl and mpi will Free win.
   if (nccl_context.is_initialized && name.empty()) {
-    status = bluefog_global.nccl_controller->WinFreeAll();
+    status = bluefog_global.nccl_controller->WinFreeAll(e);
   } else {
     if (vendor == Vendor::NCCL) {
-      status = bluefog_global.nccl_controller->WinFree(name, device);
+      status = bluefog_global.nccl_controller->WinFree(e);
     }
   }
 #endif
   if (name.empty()) {
-    status = bluefog_global.controller->WinFreeAll();
+    status = bluefog_global.controller->WinFreeAll(e);
   } else {
     if (vendor == Vendor::MPI) {
-      status = bluefog_global.controller->WinFree(name, device);
+      status = bluefog_global.controller->WinFree(e);
     }
   }
   if (!status.ok()) {
