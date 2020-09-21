@@ -45,8 +45,8 @@ class WinOpsTests(unittest.TestCase):
     def setUp(self):
         # Unfortunately, MPICH implementation have problem on running win ops
         # with negotiate stage as well.
-        bf.set_skip_negotiate_stage(True)
         bf.init()
+        bf.set_skip_negotiate_stage(True)
 
     def tearDown(self):
         assert bf.win_free()

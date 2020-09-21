@@ -720,38 +720,22 @@ bool RunLoopOnce(BluefogGlobalState& state) {
                      IsRequestConvertToEntryDirectly),
       message_queue_buffer.end());
 
-  if (global_skip_negotiate_stage) {
-    // Seperate the setting topology and negotiate communnication.
-    if (should_change_topo) {
-      bluefog_global.ready_to_setting_topology = true;
-      while (!bluefog_global.setting_topology_done) {
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
-      }
-      bluefog_global.ready_to_setting_topology = false;
-      // Wait for main thread reset.
-      while (bluefog_global.setting_topology_done) {
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
-      }
-    }
-
-    PerformOperation(entries);
-    return !should_shut_down;
-  }
-
   // For the rest requests, they needs to coordinate and neogiate.
   // Collect all tensors that are ready to be reduced. Record them in the
   // tensor count table (rank zero) or send them to rank zero to be
   // recorded (everyone else).
   std::vector<std::string> ready_to_reduce;
-  if (bluefog_rank() == COORDINATE_RANK) {
+  if (global_skip_negotiate_stage) {
+    // Pass don't do anything.
+  } else if (bluefog_rank() == COORDINATE_RANK) {
     RequestList message_list;
     message_list.set_shutdown(should_shut_down);
     message_list.set_change_topo(should_change_topo);
     while (!message_queue_buffer.empty()) {
-      Request& message = message_queue_buffer.front(); 
+      Request& message = message_queue_buffer.front();
       message_list.add_request(message_queue_buffer.front());
-      bool reduce =
-          IncrementTensorCount(state.message_table.get(), message, mpi_context.size_);
+      bool reduce = IncrementTensorCount(state.message_table.get(), message,
+                                         mpi_context.size_);
       if (reduce) {
         ready_to_reduce.push_back(message.tensor_name());
       }
@@ -764,8 +748,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     // 1. Get message lengths from every rank.
     auto recvcounts = new int[bluefog_size()];
     recvcounts[0] = 0;
-    MPI_Gather(MPI_IN_PLACE, 1, MPI_INT, recvcounts, 1, MPI_INT, COORDINATE_RANK,
-               mpi_context.mpi_comm);
+    MPI_Gather(MPI_IN_PLACE, 1, MPI_INT, recvcounts, 1, MPI_INT,
+               COORDINATE_RANK, mpi_context.mpi_comm);
 
     // 2. Compute displacements.
     auto displcmnts = new int[bluefog_size()];
@@ -839,7 +823,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     std::string encoded_response;
     ResponseList::SerializeToString(response_list, encoded_response);
     int encoded_response_length = (int)encoded_response.length() + 1;
-    MPI_Bcast(&encoded_response_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
+    MPI_Bcast(&encoded_response_length, 1, MPI_INT, COORDINATE_RANK,
+              mpi_context.mpi_comm);
     MPI_Bcast((void*)encoded_response.c_str(), encoded_response_length,
               MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
     // Perform the collective operation. All nodes should end up performing
@@ -1615,7 +1600,31 @@ bool GetWinOpsWithAssociatedPState() {
 }
 
 void SetSkipNegotiateStageState(bool value) {
-  global_skip_negotiate_stage = value;
+  if (value == global_skip_negotiate_stage) {
+    return;
+  }
+  if (value) {
+    // From running negotiate to skipping negotiate, we need to properly turn off
+    // negotiate stage. Otherwise, it may hang the processes.
+    // Use setting topology flag to suspend the negotiate stage then skip it.
+    bluefog_global.setting_topology = true;
+    while (!bluefog_global.ready_to_setting_topology.load()) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+
+    global_skip_negotiate_stage = value;
+
+    bluefog_global.setting_topology = false;
+    bluefog_global.setting_topology_done = true;
+    // Wait for the background thread receive the setting_topology_done and
+    // close the ready_to_setting_topology epoch.
+    while (bluefog_global.ready_to_setting_topology) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+    bluefog_global.setting_topology_done = false;
+  } else {
+    global_skip_negotiate_stage = value;
+  }
 }
 
 bool GetSkipNegotiateStageState() {
