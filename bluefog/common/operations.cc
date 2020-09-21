@@ -876,11 +876,15 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   }
   // Seperate the setting topology and negotiate communnication.
   if (should_change_topo) {
-    state.ready_to_setting_topology = true;
-    while (!state.setting_topology_done) {
+    bluefog_global.ready_to_setting_topology = true;
+    while (!bluefog_global.setting_topology_done) {
       std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
-    state.ready_to_setting_topology = false;
+    bluefog_global.ready_to_setting_topology = false;
+    // Wait for main thread reset.
+    while (bluefog_global.setting_topology_done) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
   }
 
   PerformOperation(entries);
@@ -997,9 +1001,8 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
     return -1;
   }
 #endif
-  bluefog_global.setting_topology_done = false;
   bluefog_global.setting_topology = true;
-  while (!bluefog_global.ready_to_setting_topology) {
+  while (!bluefog_global.ready_to_setting_topology.load()) {
     std::this_thread::sleep_for(std::chrono::microseconds(10));
   }
   bluefog_global.tensor_queue.LockTensorQueue();
@@ -1027,6 +1030,7 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
   while (bluefog_global.ready_to_setting_topology) {
     std::this_thread::sleep_for(std::chrono::microseconds(10));
   }
+  bluefog_global.setting_topology_done = false;
   return mpi_result;
 }
 

@@ -112,7 +112,7 @@ class BasicsTests(unittest.TestCase):
         bf.init()
         rank = bf.rank()
         size = bf.size()
-        bf.set_topology(PowerGraph(size))
+        assert bf.set_topology(PowerGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
@@ -128,7 +128,7 @@ class BasicsTests(unittest.TestCase):
         bf.init()
         rank = bf.rank()
         size = bf.size()
-        bf.set_topology(RingGraph(size))
+        assert bf.set_topology(RingGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
