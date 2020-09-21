@@ -576,7 +576,7 @@ void Barrier() {
   ThrowIfError(common::CheckInitialized());
   auto handle = handle_manager.AllocateHandle();
 
-  auto status = common::ExecuteBarrier([handle](const Status& status) {
+  auto status = common::ExecuteBarrier([handle](const Status& status) mutable {
     handle_manager.MarkDone(handle, status);
   });
   ThrowIfError(status);

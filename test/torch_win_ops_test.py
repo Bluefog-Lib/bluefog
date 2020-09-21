@@ -641,7 +641,6 @@ class WinOpsTests(unittest.TestCase):
             else:
                 bf.barrier()
 
-    @unittest.skip("Have problem due to new negotiate commit")
     def test_asscoicated_with_p(self):
         size = bf.size()
         rank = bf.rank()
@@ -686,7 +685,6 @@ class WinOpsTests(unittest.TestCase):
                         rank, associated_p))
         bf.turn_off_win_ops_with_associated_p()
 
-    @unittest.skip("Have problem due to new negotiate commit")
     def test_asscoicated_with_p_random_test(self):
         size = bf.size()
         rank = bf.rank()

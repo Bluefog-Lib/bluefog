@@ -888,6 +888,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   }
 
   PerformOperation(entries);
+  // In order to seperate neogiate and window_ops
+  MPI_Barrier(mpi_context.mpi_comm);
   return !should_shut_down;
 }
 
