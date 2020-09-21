@@ -60,6 +60,7 @@ NCCLContext nccl_context;
 
 // If set, win_ops will execute the same ops on associated p as well.
 static bool global_with_associated_p_state = false;
+static bool global_skip_negotiate_stage = true;
 
 }  // namespace
 
@@ -698,7 +699,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
 
   std::vector<TensorTableEntry> entries;
   auto IsRequestConvertToEntryDirectly = [](const Request& request) {
-    return (request.request_type() != Request::ALLREDUCE &&
+    return global_skip_negotiate_stage ||
+           (request.request_type() != Request::ALLREDUCE &&
             request.request_type() != Request::ALLGATHER &&
             request.request_type() != Request::BROADCAST &&
             request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
@@ -717,6 +719,24 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       std::remove_if(message_queue_buffer.begin(), message_queue_buffer.end(),
                      IsRequestConvertToEntryDirectly),
       message_queue_buffer.end());
+
+  if (global_skip_negotiate_stage) {
+    // Seperate the setting topology and negotiate communnication.
+    if (should_change_topo) {
+      bluefog_global.ready_to_setting_topology = true;
+      while (!bluefog_global.setting_topology_done) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+      }
+      bluefog_global.ready_to_setting_topology = false;
+      // Wait for main thread reset.
+      while (bluefog_global.setting_topology_done) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+      }
+    }
+
+    PerformOperation(entries);
+    return !should_shut_down;
+  }
 
   // For the rest requests, they needs to coordinate and neogiate.
   // Collect all tensors that are ready to be reduced. Record them in the

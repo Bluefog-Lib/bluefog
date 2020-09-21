@@ -91,16 +91,6 @@ TensorTableEntry TensorQueue::GetTensorEntriesFromRequestDirectly(
   auto iter = tensor_table_.find(name);
   assert(iter != tensor_table_.end());
 
-  // After implementation of coordination, it should be added back.
-  assert(request.request_type() != Request::ALLREDUCE &&
-         request.request_type() != Request::ALLGATHER &&
-         request.request_type() != Request::BROADCAST &&
-         request.request_type() != Request::NEIGHBOR_ALLGATHER &&
-         request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
-         request.request_type() != Request::WIN_CREATE &&
-         request.request_type() != Request::WIN_FREE &&
-         request.request_type() != Request::UNKNOWN);
-
   TensorTableEntry e = iter->second;
   // Clear the tensor table of this tensor.
   tensor_table_.erase(iter);
