@@ -60,7 +60,7 @@ NCCLContext nccl_context;
 
 // If set, win_ops will execute the same ops on associated p as well.
 static bool global_with_associated_p_state = false;
-static bool global_skip_negotiate_stage = true;
+static bool global_skip_negotiate_stage = false;
 
 }  // namespace
 
@@ -1115,6 +1115,15 @@ int bluefog_nccl_built() {
   return result;
 }
 
+int bluefog_set_skip_negotiate_stage(bool value) {
+  SetSkipNegotiateStageState(value);
+  return 1;
+}
+
+int bluefog_get_skip_negotiate_stage() {
+  return GetSkipNegotiateStageState();
+}
+
 }  // extern "C"
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
@@ -1603,6 +1612,14 @@ void SetWinOpsWithAssociatedPState(bool value) {
 
 bool GetWinOpsWithAssociatedPState() {
   return global_with_associated_p_state;
+}
+
+void SetSkipNegotiateStageState(bool value) {
+  global_skip_negotiate_stage = value;
+}
+
+bool GetSkipNegotiateStageState() {
+  return global_skip_negotiate_stage;
 }
 
 }  // namespace common

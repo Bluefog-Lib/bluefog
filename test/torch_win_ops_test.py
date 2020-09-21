@@ -43,6 +43,9 @@ class WinOpsTests(unittest.TestCase):
         warnings.simplefilter("module")
 
     def setUp(self):
+        # Unfortunately, MPICH implementation have problem on running win ops
+        # with negotiate stage as well.
+        bf.set_skip_negotiate_stage(True)
         bf.init()
 
     def tearDown(self):
@@ -602,7 +605,7 @@ class WinOpsTests(unittest.TestCase):
                 assert (t_end - t_start) < 2, \
                     "The mutex acquire time should be shorter than 2 second"
 
-    @unittest.skip
+    @unittest.skip("Unknown error to fail on rank 2 time if turn off the negotiate.")
     def test_win_mutex_given_ranks(self):
         size = bf.size()
         rank = bf.rank()

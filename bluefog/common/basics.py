@@ -278,6 +278,21 @@ class BlueFogBasics(object):
         """
         return bool(self._MPI_LIB_CTYPES.bluefog_nccl_built())
 
+    def set_skip_negotiate_stage(self, value: bool) -> bool:
+        """Skip the negotiate stage or not. (Default state is no skip).
+
+        For some MPI implementation, it doesn't have support for multiple thread.
+        To use the win ops, it has to turn off the negotiate the stage.
+        After turn off the negotiate the sate the error in collective callse like
+        size mismatch, order of tensor is randomized, may not be able to be handled properly.
+        But it may help to boost the performance.
+        """
+        return bool(self._MPI_LIB_CTYPES.bluefog_set_skip_negotiate_stage(value))
+
+    def get_skip_negotiate_stage(self) -> bool:
+        """Get the value of skip the negotiate stage. (Default state is no skip)."""
+        return bool(self._MPI_LIB_CTYPES.bluefog_get_skip_negotiate_stage())
+
     def timeline_start_activity(self, tensor_name: str, activity_name: str) -> bool:
         """A python interface to call the timeline for StartActivity.
         If you want to use this function, please make sure to turn on the timeline first by

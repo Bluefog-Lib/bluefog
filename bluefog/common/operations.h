@@ -96,6 +96,11 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
 // C interface to return flag indicating if BlueFog was compiled with NCCL support.
 int bluefog_nccl_built();
 
+// C interface to set skip negotiate_stage or not.
+int bluefog_set_skip_negotiate_stage(bool value);
+
+int bluefog_get_skip_negotiate_stage();
+
 }
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
@@ -183,6 +188,10 @@ Status SetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
 void SetWinOpsWithAssociatedPState(bool value);
 
 bool GetWinOpsWithAssociatedPState();
+
+void SetSkipNegotiateStageState(bool value);
+
+bool GetSkipNegotiateStageState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
 
