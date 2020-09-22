@@ -652,7 +652,7 @@ def win_create(tensor: torch.Tensor, name: str, zero_init: bool = False) -> bool
         bool: Indicate the creation succeed or not.
 
     Note: The window with same name across different bluefog processes should associate
-    the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put will
+    the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put may
     encounter unrecoverable memory segmentation fault.
     """
     function = _check_function(_win_create_function_factory, tensor)

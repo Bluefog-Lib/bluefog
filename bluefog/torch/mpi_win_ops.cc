@@ -296,7 +296,6 @@ int DoWinCreate(::torch::Tensor tensor, const std::string& name,
     bf_tensor = std::make_shared<TorchTensor>(tensor);
   }
 
-  // TODO(ybc) Following argument usage is not reliable due to the order issue.
   // bf_neighbor_tensors is the vector with in-neighbor size and the order is
   // followed by neighbor order returned by bluefog_load_topology. 
   // It is assumed that the order is sorted ascendingly.

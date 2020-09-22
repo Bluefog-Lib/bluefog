@@ -1036,7 +1036,6 @@ void NCCLController::WinCreate(TensorTableEntry& entry) {
 // Helper function to Execute WinFree.
 Status WinFreeReturnStatus(TensorTableEntry& entry) {
   const std::string& name = entry.tensor_name;
-  // TODO(ybc) Think about how to synchronize between processes?
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);

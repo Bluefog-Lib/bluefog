@@ -583,10 +583,6 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
             << "Processing Barrier now ";
         bluefog_global.controller->Barrier(entry);
         break;
-      // TODO(ybc) All above Ops are collective ops. If the order
-      // is disarranged, the whole process will hang. This is possible in
-      // tensorflow. For example, if two ops are not control dependent to each
-      // other, the order of allreduce request by them are undeterminisitc.
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_PUT on " << entry.tensor_name << " with "
@@ -634,7 +630,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         break;
       case MPIOpsType::WIN_CREATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_CREATE" << entry.tensor_name << " with "
+            << "Processing WIN_CREATE " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
@@ -652,7 +648,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         break;
       case MPIOpsType::WIN_FREE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
-            << "Processing WIN_FREE" << entry.tensor_name << " with "
+            << "Processing WIN_FREE " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
 #if HAVE_NCCL
         // No specified name. So both nccl and mpi will Free win.
@@ -727,6 +723,9 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   std::vector<std::string> ready_to_reduce;
   if (global_skip_negotiate_stage) {
     // Pass don't do anything.
+    if (entries.size() == 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
   } else if (bluefog_rank() == COORDINATE_RANK) {
     RequestList message_list;
     message_list.set_shutdown(should_shut_down);
@@ -1600,13 +1599,18 @@ bool GetWinOpsWithAssociatedPState() {
 }
 
 void SetSkipNegotiateStageState(bool value) {
+  if (!bluefog_global.initialization_done) {
+    BFLOG(ERROR)
+        << "Try to set skip negotiate stage before bluefog is initialized.";
+    return;
+  }
   if (value == global_skip_negotiate_stage) {
     return;
   }
   if (value) {
-    // From running negotiate to skipping negotiate, we need to properly turn off
-    // negotiate stage. Otherwise, it may hang the processes.
-    // Use setting topology flag to suspend the negotiate stage then skip it.
+    // From running negotiate to skipping negotiate, we need to properly turn
+    // off negotiate stage. Otherwise, it may hang the processes. Use setting
+    // topology flag to suspend the negotiate stage then skip it.
     bluefog_global.setting_topology = true;
     while (!bluefog_global.ready_to_setting_topology.load()) {
       std::this_thread::sleep_for(std::chrono::microseconds(10));

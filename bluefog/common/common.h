@@ -138,13 +138,15 @@ const Status NOT_INITIALIZED_ERROR = Status::PreconditionError(
 
 const Status SHUT_DOWN_ERROR = Status::UnknownError(
     "Bluefog has been shut down. This was caused by an exception on one of the "
-    "ranks or an attempt to allreduce, allgather or broadcast a tensor after "
-    "one of the ranks finished execution. If the shutdown was caused by an "
-    "exception, you should see the exception in the log before the first "
+    "ranks or an attempt to run collective operation like (allreduce, "
+    "neighbor_allreduce) or window ops like (win_put, win_create) a tensor "
+    "after one of the ranks finished execution. If the shutdown was caused by "
+    "an exception, you should see the exception in the log before the first "
     "shutdown message.");
 
 const Status DUPLICATE_NAME_ERROR = Status::InvalidArgument(
-    "Requested to allreduce, allgather, or broadcast a tensor with the same "
+    "Requested to collective operation like (allreduce, neighbor_allreduce) or "
+    "window ops like (win_put, win_create) a tensor with the same "
     "name as another tensor that is currently being processed.  If you want "
     "to request another tensor, use a different tensor name.");
 
