@@ -31,17 +31,17 @@
 namespace bluefog {
 namespace common {
 
-// Historical problem. It was because the win_create is called at different
+// It may be because the win_create is called at different
 // threads from the win_put, win_get, etc. After moving win_create into
-// communicaiton thread, it resolved.
-// [No longer true] Due to unclear reason that mpi_put/get/accumlate under the
+// communicaiton thread, it resolved. (works in Openmpi=4.0.2 and MPICH).
+// Due to unclear reason that mpi_put/get/accumlate under the
 // mpi_lock epoch cannot send too long vector in one time, we
 // define this number as the maximum size of win_ops can send.
 static const char* BLUEFOG_MAX_WIN_SENT =
     std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
 static const int MAX_WIN_SENT =
     BLUEFOG_MAX_WIN_SENT == nullptr
-        ? 1000000
+        ? 1000
         : std::strtol(BLUEFOG_MAX_WIN_SENT, nullptr, 10);
 
 // MPIController
