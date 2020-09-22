@@ -31,13 +31,17 @@
 namespace bluefog {
 namespace common {
 
-// Due to unclear reason that mpi_put/get/accumlate under the
+// Historical problem. It was because the win_create is called at different
+// threads from the win_put, win_get, etc. After moving win_create into
+// communicaiton thread, it resolved.
+// [No longer true] Due to unclear reason that mpi_put/get/accumlate under the
 // mpi_lock epoch cannot send too long vector in one time, we
 // define this number as the maximum size of win_ops can send.
-static const char* BLUEFOG_MAX_WIN_SENT = std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
+static const char* BLUEFOG_MAX_WIN_SENT =
+    std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
 static const int MAX_WIN_SENT =
     BLUEFOG_MAX_WIN_SENT == nullptr
-        ? 1000
+        ? 1000000
         : std::strtol(BLUEFOG_MAX_WIN_SENT, nullptr, 10);
 
 // MPIController
@@ -515,6 +519,7 @@ void MPIController::WinCreate(TensorTableEntry& entry) {
   timeline_ptr->ActivityStart(name, "WIN_CREATE");
   // We need to explicitly set the device here.
   // 1. Regist a Name and create a window first.
+  // It also initializes the mutex memoery.
   if (!mpi_ctx_.RegisterWindowName(name)) {
     entry.callback(
         Status::InvalidArgument(std::string("Win_create failed with ") + name));
@@ -943,11 +948,6 @@ Status MPIController::WinMutexAcquire(const std::string& name,
                                       const std::vector<int>& acquire_ranks,
                                       bool is_sync) {
   BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex for " << name << " is acquired.";
-  // The logic is similar to read-write lock:
-  // Value starts at 0:
-  //    1. is_sync step +1 if value is 0 else wait
-  //    2. Not is_sync step -1 if value is <= 0 else wait. (i.e. we allow
-  //    multiple non sync step).
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
     return Status::PreconditionError(
