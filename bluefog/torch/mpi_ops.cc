@@ -117,16 +117,15 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
-    // auto ready_event = RecordReadyEvent(device);
     // When input and out are the same, mpi_allreduce use IN_PLACE mode.
     // Because we will copy from cpu to gpu anway, there is no reason
     // allocate two cpu memories.
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto bf_output = bf_tensor;
-
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_tensor, nullptr, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_tensor, ready_event, op_name, CPU_DEVICE_ID,
         callback_wrapper([average, output, cpu_buffer, device]() mutable {
             with_device device_guard(device);
             output.copy_(cpu_buffer);
@@ -142,10 +141,10 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_output = std::make_shared<TorchTensor>(output);
-    // auto ready_event = RecordReadyEvent(device);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_output, nullptr, op_name, device,
+        bf_tensor, bf_output, ready_event, op_name, device,
         callback_wrapper([average, output]() mutable {
           // Will execute in the `device` context.
           ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
@@ -182,9 +181,9 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
-
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorBroadcast(
-        bf_tensor, bf_tensor, root_rank, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_tensor, ready_event, root_rank, op_name, CPU_DEVICE_ID,
         callback_wrapper([output, cpu_buffer, device]() mutable {
           with_device device_guard(device);
           output.copy_(cpu_buffer);
@@ -199,9 +198,9 @@ int DoBroadcast(::torch::Tensor tensor, ::torch::Tensor output, int root_rank,
     } else {
       bf_output = std::make_shared<TorchTensor>(output);
     }
-
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorBroadcast(
-        bf_tensor, bf_output, root_rank, op_name, device,
+        bf_tensor, bf_output, ready_event, root_rank, op_name, device,
         callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
@@ -230,9 +229,9 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
     auto cpu_output = ::torch::empty_like(cpu_buffer);
     auto bf_context =
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
-
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorAllgather(
-        bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_context, ready_event, op_name, CPU_DEVICE_ID,
         callback_wrapper([cpu_output, device, output]() mutable {
           with_device device_guard(device);
           // output needs to be resized before copying in the CPU tensor.
@@ -245,8 +244,9 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
     // The real output space of allgather is allocated later because we don't
     // know the size of output in advance.
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorAllgather(
-        bf_tensor, bf_context, op_name, device,
+        bf_tensor, bf_context, ready_event, op_name, device,
         callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
@@ -276,9 +276,10 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     auto cpu_output = ::torch::empty_like(cpu_buffer);
     auto bf_context =
         std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_context, ready_event, op_name, CPU_DEVICE_ID,
         callback_wrapper([cpu_output, device, output]() mutable {
           with_device device_guard(device);
           // output needs to be resized before copying in the CPU tensor.
@@ -291,8 +292,9 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     // The real output space of neighbor allgather is allocated later because
     // we don't know the size of output in advance.
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, op_name, device,
+        bf_tensor, bf_context, ready_event,op_name, device,
         callback_wrapper(/*func=*/[](){}));
     ThrowIfError(enqueue_result);
   }
@@ -332,9 +334,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     // TODO(ybc) Figure out why ready_event may encounter signal abort (6) problem.
-    // auto ready_event = RecordReadyEvent(device);
+    auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(            
-        bf_context, bf_tensor, bf_output, nullptr, bf_recv_neighbors, bf_send_neighbors,
+        bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
         enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
         mutable {
@@ -418,10 +420,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(tensor);
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
-    // auto ready_event = RecordReadyEvent(device);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, nullptr, bf_recv_neighbors, bf_send_neighbors,
+        bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
         enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, recv_neighbors, send_neighbors, tensor, output] () mutable {
           int recv_size = bluefog_neighbor_size();
@@ -521,38 +523,43 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
     ::torch::Tensor cpu_buffer_output =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     auto bf_output = std::make_shared<TorchTensor>(cpu_buffer_output);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorPairGossip(
-        bf_tensor, bf_output, target_rank, op_name, CPU_DEVICE_ID,
-        callback_wrapper([tensor, output, cpu_buffer_output, device, self_weight,
-         pair_weight, avg_computation]() mutable {
+        bf_tensor, bf_output, ready_event, target_rank, op_name, CPU_DEVICE_ID,
+        callback_wrapper([tensor, output, cpu_buffer_output, device,
+                          self_weight, pair_weight, avg_computation]() mutable {
           // Will execute in the `device` context.
           with_device device_guard(device);
           output.copy_(cpu_buffer_output);
-            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
-            if (avg_computation) {
-              output_buffer.add_(tensor_buffer).div_(2);
-            } else {
-              output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
-            }
-            MaybeCopyBufferBack(output, output_buffer);
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+          ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
+          if (avg_computation) {
+            output_buffer.add_(tensor_buffer).div_(2);
+          } else {
+            output_buffer.mul_(pair_weight)
+                .add_(tensor_buffer.mul(self_weight));
+          }
+          MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_output = std::make_shared<TorchTensor>(output);
+    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorPairGossip(
-        bf_tensor, bf_output, target_rank, op_name, device,
-        callback_wrapper([tensor, output, self_weight, pair_weight, avg_computation]() mutable {
+        bf_tensor, bf_output, ready_event, target_rank, op_name, device,
+        callback_wrapper([tensor, output, self_weight, pair_weight,
+                          avg_computation]() mutable {
           // Will execute in the `device` context.
           ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
           ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
           if (avg_computation) {
             output_buffer.add_(tensor_buffer).div_(2);
           } else {
-            output_buffer.mul_(pair_weight).add_(tensor_buffer.mul(self_weight));
+            output_buffer.mul_(pair_weight)
+                .add_(tensor_buffer.mul(self_weight));
           }
           MaybeCopyBufferBack(output, output_buffer);
         }));

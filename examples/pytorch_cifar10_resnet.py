@@ -245,11 +245,11 @@ else:
 print("resume_from_epoch: ", resume_from_epoch)
 # Restore from a previous checkpoint, if initial_epoch is specified.
 # Bluefog: restore on the first worker which will broadcast weights to other workers.
-if resume_from_epoch > 0 and bf.rank() == 0:
-    filepath = args.checkpoint_format.format(epoch=resume_from_epoch)
-    checkpoint = torch.load(filepath)
-    model.load_state_dict(checkpoint["model"])
-    optimizer.load_state_dict(checkpoint["optimizer"])
+# if resume_from_epoch > 0 and bf.rank() == 0:
+#     filepath = args.checkpoint_format.format(epoch=resume_from_epoch)
+#     checkpoint = torch.load(filepath)
+#     model.load_state_dict(checkpoint["model"])
+#     optimizer.load_state_dict(checkpoint["optimizer"])
 
 # Bluefog: broadcast parameters & optimizer state.
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
@@ -420,4 +420,4 @@ class Metric(object):
 for epoch in range(resume_from_epoch, args.epochs):
     train(epoch)
     validate(epoch)
-    save_checkpoint(epoch)
+    # save_checkpoint(epoch)

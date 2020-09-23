@@ -540,6 +540,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
 
 Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const int root_rank, const std::string& name,
                               const int device, StatusCallback callback) {
   TensorTableEntry e;
@@ -547,6 +548,7 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
   e.tensor = tensor;
   e.output = output;
   e.root_rank = root_rank;
+  e.ready_event = ready_event;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::BROADCAST;
@@ -560,6 +562,7 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
 
 Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<OpContext> context,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback) {
   TensorTableEntry e;
@@ -567,6 +570,7 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
   e.tensor = tensor;
   e.context = context;
   e.device = device;
+  e.ready_event = ready_event;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLGATHER;
 
@@ -579,6 +583,7 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
 
 Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<OpContext> context,
+                                      std::shared_ptr<ReadyEvent> ready_event,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
   TensorTableEntry e;
@@ -586,6 +591,7 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   e.tensor = tensor;
   e.context = context;
   e.device = device;
+  e.ready_event = ready_event;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::NEIGHBOR_ALLGATHER;
 
@@ -627,6 +633,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 
 Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
                                std::shared_ptr<Tensor> output,
+                               std::shared_ptr<ReadyEvent> ready_event,
                                const int target_rank, const std::string& name,
                                const int device, StatusCallback callback) {
   TensorTableEntry e;
@@ -634,6 +641,7 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
   e.tensor = tensor;
   e.output = output;
   e.root_rank = target_rank;
+  e.ready_event = ready_event;
   e.device = device;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::PAIR_GOSSIP;
