@@ -15,7 +15,7 @@
 # ==============================================================================
 
 from contextlib import contextmanager
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import torch
 
@@ -92,7 +92,8 @@ def _allreduce_nonblocking(tensor, output, average, name):
     return handle
 
 
-def allreduce(tensor: torch.Tensor, average: bool = True, name: str = None) -> torch.Tensor:
+def allreduce(tensor: torch.Tensor, average: bool = True,
+              name: Optional[str] = None) -> torch.Tensor:
     """
     A function that performs averaging or summation of the input tensor over all the
     Bluefog processes. The input tensor is not modified.
@@ -116,7 +117,8 @@ def allreduce(tensor: torch.Tensor, average: bool = True, name: str = None) -> t
     return synchronize(handle)
 
 
-def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True, name: str = None) -> int:
+def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
+                          name: Optional[str] = None) -> int:
     """
     A function that performs nonblocking averaging or summation of the input tensor
     over all the Bluefog processes. The input tensor is not modified.
@@ -152,7 +154,7 @@ def _broadcast_nonblocking(tensor, output, root_rank, name):
     return handle
 
 
-def broadcast(tensor: torch.Tensor, root_rank: int, name: str = None) -> torch.Tensor:
+def broadcast(tensor: torch.Tensor, root_rank: int, name: Optional[str] = None) -> torch.Tensor:
     """
     A function that broadcasts the input tensor on root rank to the same input tensor
     on all other Bluefog processes. The input tensor is not modified.
@@ -179,7 +181,7 @@ def broadcast(tensor: torch.Tensor, root_rank: int, name: str = None) -> torch.T
     return synchronize(handle)
 
 
-def broadcast_nonblocking(tensor: torch.Tensor, root_rank: int, name: str = None) -> int:
+def broadcast_nonblocking(tensor: torch.Tensor, root_rank: int, name: Optional[str] = None) -> int:
     """
     A function that nonblockingly broadcasts the input tensor on root rank to the same
     input tensor on all other Bluefog processes. The input tensor is not modified.
@@ -259,7 +261,7 @@ def _allgather_nonblocking(tensor, output, name):
     return handle
 
 
-def allgather(tensor: torch.Tensor, name: str = None) -> torch.Tensor:
+def allgather(tensor: torch.Tensor, name: Optional[str] = None) -> torch.Tensor:
     """
     A function that concatenates the input tensor with the same input tensor on
     all other Bluefog processes. The input tensor is not modified.
@@ -281,7 +283,7 @@ def allgather(tensor: torch.Tensor, name: str = None) -> torch.Tensor:
     return synchronize(handle)
 
 
-def allgather_nonblocking(tensor: torch.Tensor, name: str = None) -> int:
+def allgather_nonblocking(tensor: torch.Tensor, name: Optional[str] = None) -> int:
     """
     A function that nonblockingly concatenates the input tensor with the same input
     tensor on all other Bluefog processes. The input tensor is not modified.
@@ -313,7 +315,7 @@ def _neighbor_allgather_nonblocking(tensor, output, name):
     return handle
 
 
-def neighbor_allgather(tensor: torch.Tensor, name: str = None) -> torch.Tensor:
+def neighbor_allgather(tensor: torch.Tensor, name: Optional[str] = None) -> torch.Tensor:
     """
     A function that concatenates the input tensor with the same input tensor on
     on all neighbor Bluefog processes (Not include self). The input tensor is not modified.
@@ -335,7 +337,7 @@ def neighbor_allgather(tensor: torch.Tensor, name: str = None) -> torch.Tensor:
     return synchronize(handle)
 
 
-def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: str = None) -> int:
+def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: Optional[str] = None) -> int:
     """
     A function that nonblockingly concatenates the input tensor with the same input
     tensor on all neighbor Bluefog processes (Not include self).
@@ -409,9 +411,11 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
 
 
 def neighbor_allreduce(tensor: torch.Tensor,
-                       self_weight: float = None, neighbor_weights: Dict[int, float] = None,
-                       send_neighbors: List[int] = None, enable_topo_check: bool = True,
-                       name: str = None) -> torch.Tensor:
+                       self_weight: Optional[float] = None,
+                       neighbor_weights: Optional[Dict[int, float]] = None,
+                       send_neighbors: Optional[List[int]] = None,
+                       enable_topo_check: bool = True,
+                       name: Optional[str] = None) -> torch.Tensor:
     """
     A function that performs weighted averaging of the input tensor over the negihbors and itself
     in the Bluefog processes. The default behavior is (uniformly) average.
@@ -456,11 +460,11 @@ def neighbor_allreduce(tensor: torch.Tensor,
 
 
 def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
-                                   self_weight: float = None,
-                                   neighbor_weights: Dict[int, float] = None,
-                                   send_neighbors: List[int] = None,
+                                   self_weight: Optional[float] = None,
+                                   neighbor_weights: Optional[Dict[int, float]] = None,
+                                   send_neighbors: Optional[List[int]] = None,
                                    enable_topo_check: bool = True,
-                                   name: str = None) -> int:
+                                   name: Optional[str] = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the
     negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.
@@ -500,7 +504,12 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
        (self_weight is not None and neighbor_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    output = tensor.new(tensor.shape)
+    if send_neighbors is None:
+        first_dim = tensor.shape[0] * len(in_neighbor_ranks())
+    else:
+        first_dim = tensor.shape[0] * len(neighbor_weights)
+    new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
+    output = tensor.new(new_shape) # Pre-allocate the memory for the output.
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
                                            send_neighbors, enable_topo_check, name)
 
@@ -613,7 +622,7 @@ def synchronize(handle: int) -> torch.Tensor:
         torch.Tensor: An output tensor of the operation.
     """
     if handle not in _handle_map:
-        return None
+        raise ValueError("Cannot find handle to synchronize")
     mpi_lib.bluefog_torch_wait_and_clear(handle)
     _, output = _handle_map.pop(handle)
     return output
@@ -662,7 +671,7 @@ def win_create(tensor: torch.Tensor, name: str, zero_init: bool = False) -> bool
     return False
 
 
-def win_free(name: str = None) -> bool:
+def win_free(name: Optional[str] = None) -> bool:
     """ Free the MPI windows associated with name.
 
     Args:
@@ -684,7 +693,7 @@ def _win_update_function_factory(tensor):
     return 'bluefog_torch_win_sync_' + tensor.type().replace('.', '_')
 
 
-def win_update_then_collect(name: str, require_mutex=True) -> torch.Tensor:
+def win_update_then_collect(name: str, require_mutex: bool = True) -> torch.Tensor:
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
@@ -702,7 +711,8 @@ def win_update_then_collect(name: str, require_mutex=True) -> torch.Tensor:
 
 
 def win_update(name: str,
-               self_weight: float = None, neighbor_weights: Dict[int, float] = None,
+               self_weight: Optional[float] = None,
+               neighbor_weights: Optional[Dict[int, float]] = None,
                reset: bool = False, clone: bool = False,
                require_mutex: bool = False) -> torch.Tensor:
     """Locally synchronized the window objects and returned the reduced neighbor tensor.
@@ -779,8 +789,8 @@ def _win_put_function_factory(tensor):
 
 
 def win_put_nonblocking(tensor: torch.Tensor, name: str,
-                        self_weight: float = None,
-                        dst_weights: Dict[int, float] = None,
+                        self_weight: Optional[float] = None,
+                        dst_weights: Optional[Dict[int, float]] = None,
                         require_mutex: bool = False) -> int:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a non-blocking function, which will return without waiting the
@@ -819,8 +829,8 @@ def win_put_nonblocking(tensor: torch.Tensor, name: str,
 
 
 def win_put(tensor: torch.Tensor, name: str,
-            self_weight: float = None,
-            dst_weights: Dict[int, float] = None,
+            self_weight: Optional[float] = None,
+            dst_weights: Optional[Dict[int, float]] = None,
             require_mutex: bool = False) -> bool:
     """ Passively put the tensor into neighbor's shared window memory.
     This is a blocking function, which will return until win_put operation
@@ -846,7 +856,7 @@ def win_put(tensor: torch.Tensor, name: str,
     return win_wait(handle)
 
 
-def win_get_nonblocking(name: str, src_weights: Dict[int, float] = None,
+def win_get_nonblocking(name: str, src_weights: Optional[Dict[int, float]] = None,
                         require_mutex: bool = False) -> int:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
@@ -880,7 +890,7 @@ def win_get_nonblocking(name: str, src_weights: Dict[int, float] = None,
     return handle
 
 
-def win_get(name: str, src_weights: Dict[int, float] = None,
+def win_get(name: str, src_weights: Optional[Dict[int, float]] = None,
             require_mutex: bool = False) -> bool:
     """ Passively get the tensor(s) from neighbors' shared window memory into
     local shared memory, which cannot be accessed in python directly.
@@ -913,8 +923,8 @@ def _win_accumulate_function_factory(tensor):
 
 
 def win_accumulate_nonblocking(tensor: torch.Tensor, name: str,
-                               self_weight: float = None,
-                               dst_weights: Dict[int, float] = None,
+                               self_weight: Optional[float] = None,
+                               dst_weights: Optional[Dict[int, float]] = None,
                                require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
@@ -954,8 +964,8 @@ def win_accumulate_nonblocking(tensor: torch.Tensor, name: str,
 
 
 def win_accumulate(tensor: torch.Tensor, name: str,
-                   self_weight: float = None,
-                   dst_weights: Dict[int, float] = None,
+                   self_weight: Optional[float] = None,
+                   dst_weights: Optional[Dict[int, float]] = None,
                    require_mutex: bool = False) -> bool:
     """ Passively accmulate the tensor into neighbor's shared window memory.
     Only SUM ops is supported now.
@@ -1031,7 +1041,7 @@ def _win_unlock(name: str):
 
 
 @contextmanager
-def win_mutex(name: str, for_self=False, ranks: List[int] = None):
+def win_mutex(name: str, for_self=False, ranks: Optional[List[int]] = None):
     """ A win object implemented mutex context manager. Note, there are N distributed
     mutex over N corresponding processes.
 
@@ -1065,7 +1075,7 @@ def _win_mutex_release(name, ranks, for_self):
 
 
 def win_associated_p(name: str) -> float:
-    """ Return the associated correction P, which is used in Push-Sum algorithm, for each named window.
+    """Return the associated correction P, used in Push-Sum algorithm, for each named window.
 
     Args:
         name (str): The unique name to associate the window object.
@@ -1078,7 +1088,7 @@ def win_associated_p(name: str) -> float:
 
 def turn_on_win_ops_with_associated_p():
     """Turn on the global state of win operations with associated p.
-    
+
     If it is state is on, all win ops such as put, update, accumulate also apply on the
     associated p value as well.
     The default state is off.

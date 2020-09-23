@@ -355,23 +355,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // Allgather output will have shape of:
   // (sum of first dimension of every tensor) x (tensor slice shape).
   // For allreduce, the first dimension of every tensor should be the same.
-  TensorShape output_shape;
-  const int neighbor_size = entry.send_neighbors->empty() ? GetNeighborSize()
-                                                          : entry.recv_neighbors->size();
-  const int total_entry_dimension_size = entry.tensor->shape().dim_size(0) * neighbor_size;
-  output_shape.AddDim(total_entry_dimension_size);
-  for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
-    output_shape.AddDim(entry.tensor->shape().dim_size(i));
-  }
-
-  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
-  Status status = entry.context->AllocateOutput(output_shape, &entry.output);
-  if (!status.ok()) {
-    entry.callback(status);
-    return;
-  }
-  timeline_ptr->ActivityEnd(entry.tensor_name);
-
+  // Assume the memory has already been allocated at python side.
   void* buffer_data = (void*)entry.output->data();
 
   // We need to explicitly set the device here.

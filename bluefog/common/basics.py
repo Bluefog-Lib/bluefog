@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import List, Callable
+from typing import List, Callable, Optional
 import atexit
 import contextlib
 import ctypes
@@ -44,7 +44,7 @@ class BlueFogBasics(object):
         self._is_topo_weighted = False
         self.warn_timeline = False
 
-    def init(self, topology_fn: Callable[[int], networkx.DiGraph] = None,
+    def init(self, topology_fn: Optional[Callable[[int], networkx.DiGraph]] = None,
              is_weighted: bool = False):
         """A function that initializes BlueFog.
 
@@ -64,7 +64,7 @@ class BlueFogBasics(object):
         self.set_topology(topo, is_weighted)
         atexit.register(self.shutdown)
 
-    def shutdown(self) -> int:
+    def shutdown(self) -> None:
         """A function that shuts BlueFog down."""
         self._MPI_LIB_CTYPES.bluefog_shutdown()
         self.topology = None
@@ -185,7 +185,7 @@ class BlueFogBasics(object):
                               if r != _rank]
         return out_neighbor_ranks
 
-    def set_topology(self, topology: networkx.DiGraph = None,
+    def set_topology(self, topology: Optional[networkx.DiGraph] = None,
                      is_weighted: bool = False) -> bool:
         """A funnction that set the virtual topology MPI used.
 

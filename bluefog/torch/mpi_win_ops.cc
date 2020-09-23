@@ -487,7 +487,7 @@ int DoWinPut(::torch::Tensor tensor, const std::string& name,
   auto enqueue_result = EnqueueTensorWindowPut(
       bf_tensor, name, dst_weights, device, require_mutex,
       [handle, name, timeline_ptr, tid, tensor, self_weight,
-       associated_with_p](const Status& status) {
+       associated_with_p](const Status& status) mutable {
         if (status.ok()) {
           if (self_weight != 1.0) {
             tensor.mul_(self_weight);
@@ -537,7 +537,7 @@ int DoWinAccumulate(::torch::Tensor tensor, const std::string& name,
   auto enqueue_result = EnqueueTensorWindowAccumulate(
       bf_tensor, name, dst_weights, device, require_mutex,
       [handle, name, timeline_ptr, tid, tensor, self_weight,
-       associated_with_p](const Status& status) {
+       associated_with_p](const Status& status) mutable {
         if (status.ok()) {
           if (self_weight != 1.0) {
             tensor.mul_(self_weight);

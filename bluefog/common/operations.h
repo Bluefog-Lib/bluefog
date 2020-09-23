@@ -111,16 +111,19 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
 
 Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const int root_rank, const std::string& name,
                               const int device, StatusCallback callback);
 
 Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<OpContext> context,
+                              std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback);
 
 Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<OpContext> context,
+                                      std::shared_ptr<ReadyEvent> ready_event,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 
@@ -136,6 +139,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
 
 Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
                                std::shared_ptr<Tensor> output,
+                               std::shared_ptr<ReadyEvent> ready_event,
                                const int target_rank, const std::string& name,
                                const int device, StatusCallback callback);
 
