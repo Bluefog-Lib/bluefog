@@ -193,6 +193,8 @@ class NCCLController {
                          const std::vector<int>& release_ranks, bool is_sync);
 
  protected:
+  Status WinFreeReturnStatus(TensorTableEntry& entry);
+
 #if NCCL_MINOR < 7
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);

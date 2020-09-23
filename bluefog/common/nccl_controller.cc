@@ -1034,7 +1034,7 @@ void NCCLController::WinCreate(TensorTableEntry& entry) {
 }
 
 // Helper function to Execute WinFree.
-Status WinFreeReturnStatus(TensorTableEntry& entry) {
+Status NCCLController::WinFreeReturnStatus(TensorTableEntry& entry) {
   const std::string& name = entry.tensor_name;
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
