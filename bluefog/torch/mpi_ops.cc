@@ -326,10 +326,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
+    ::torch::Tensor cpu_output =
+        output.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
-    auto cpu_output = ::torch::empty_like(cpu_buffer);
     auto bf_context =
-        std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
+        std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output); // No need. Already allocated.
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
@@ -341,8 +342,6 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
         mutable {
           with_device device_guard(device);
-          // output needs to be resized before copying in the CPU tensor.
-          output.resize_(cpu_output.sizes());
           output.copy_(cpu_output);
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
@@ -416,8 +415,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
-    auto bf_context = std::make_shared<TorchOpContext>(device, output);
-    auto bf_output = std::make_shared<TorchTensor>(tensor);
+    auto bf_context = std::make_shared<TorchOpContext>(device, output);  // No need.
+    auto bf_output = std::make_shared<TorchTensor>(output);
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     auto ready_event = RecordReadyEvent(device);
@@ -492,6 +491,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
+          } else {
+            output.set_(tensor);
           }
         }));
     ThrowIfError(enqueue_result);

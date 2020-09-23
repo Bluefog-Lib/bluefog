@@ -502,7 +502,12 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
        (self_weight is not None and neighbor_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    output = tensor.new(tensor.shape)
+    if send_neighbors is None:
+        first_dim = tensor.shape[0] * len(in_neighbor_ranks())
+    else:
+        first_dim = tensor.shape[0] * len(neighbor_weights)
+    new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
+    output = tensor.new(new_shape) # Pre-allocate the memory for the output.
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
                                            send_neighbors, enable_topo_check, name)
 

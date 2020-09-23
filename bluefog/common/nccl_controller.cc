@@ -636,6 +636,9 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   const int element_size = mpi_ctx_.GetMPITypeSize(
       entry.tensor->dtype());  // Assume NCCL use same size as MPI
 
+  // We need to explicitly set the device here.
+  with_device device_guard(entry.device);
+
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
@@ -644,27 +647,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // Allgather output will have shape of:
   // (sum of first dimension of every tensor) x (tensor slice shape).
   // For allreduce, the first dimension of every tensor should be the same.
-  TensorShape output_shape;
-  const int neighbor_size = entry.send_neighbors->empty()
-                                ? mpi_ctx_.neighbor_indgree_
-                                : entry.recv_neighbors->size();
-  const int total_entry_dimension_size =
-      entry.tensor->shape().dim_size(0) * neighbor_size;
-  output_shape.AddDim(total_entry_dimension_size);
-  for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
-    output_shape.AddDim(entry.tensor->shape().dim_size(i));
-  }
-
-  timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
-  Status status = entry.context->AllocateOutput(output_shape, &entry.output);
-  timeline_ptr->ActivityEnd(entry.tensor_name);
-  if (!status.ok()) {
-    entry.callback(status);
-    return;
-  }
-
-  // We need to explicitly set the device here.
-  with_device device_guard(entry.device);
+  // Assume the memory has already been allocated at python side.
 
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check
