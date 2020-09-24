@@ -659,6 +659,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     entry.callback(Status::InvalidArgument(
         "Send and recv neighbors dont' match in neighbor "
         "allreduce with partial send/recv request."));
+    return; 
   }
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
