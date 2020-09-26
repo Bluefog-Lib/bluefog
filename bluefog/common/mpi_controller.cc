@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <thread>
 
 #include "cuda_util.h"

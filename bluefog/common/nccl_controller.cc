@@ -1532,16 +1532,18 @@ void NCCLController::MemcpyOutFusionBuffer(
 
 void NCCLController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                                void* buffer_data_at_offset) {
-  CUDA_CHECK(cudaMemcpyAsync(buffer_data_at_offset, e.tensor->data(),
-                             (size_t)e.tensor->size(), cudaMemcpyDeviceToDevice,
-                             nccl_ctx_.stream));
+  const void* src_data = e.tensor->data();
+  size_t count = (size_t)e.tensor->size();
+  CUDACHECK(cudaMemcpyAsync(buffer_data_at_offset, src_data, count,
+                            cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
 }
 
 void NCCLController::MemcpyEntryOutFusionBuffer(
     const void* buffer_data_at_offset, TensorTableEntry& e) {
-  CUDA_CHECK(cudaMemcpyAsync(e.tensor->data(), buffer_data_at_offset,
-                             (size_t)e.tensor->size(), cudaMemcpyDeviceToDevice,
-                             nccl_ctx_.stream));
+  void* dst_data = (void*)e.tensor->data();
+  size_t count = (size_t)e.tensor->size();
+  CUDACHECK(cudaMemcpyAsync(dst_data, buffer_data_at_offset, count,
+                            cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
 }
 
 }  // namespace common
