@@ -201,6 +201,20 @@ class NCCLController {
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
 #endif
+
+  void MemcpyInFusionBuffer(const std::vector<TensorTableEntry>& entries,
+                            const void*& fused_input_data, void*& buffer_data,
+                            size_t& buffer_len);
+
+  void MemcpyOutFusionBuffer(const void* buffer_data,
+                             std::vector<TensorTableEntry>& entries);
+
+  void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
+                                 void* buffer_data_at_offset);
+
+  void MemcpyEntryOutFusionBuffer(const void* buffer_data_at_offset,
+                                  TensorTableEntry& e);
+
  private:
   // Outside dependencies
   NCCLContext& nccl_ctx_;

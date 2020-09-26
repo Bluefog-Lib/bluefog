@@ -77,6 +77,8 @@ struct BluefogGlobalState {
 
   TensorQueue tensor_queue;
 
+  FusionBufferManager fusion_buffer;
+
   // Because setting topology happens in the main thread instead of communication
   // thread. Following three variables are to sync between them.
   std::atomic_bool setting_topology{false};

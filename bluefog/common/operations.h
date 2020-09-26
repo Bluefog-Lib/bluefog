@@ -20,6 +20,7 @@
 #include <functional>
 #include "common.h"
 #include "timeline.h"
+#include "tensor_queue.h"
 
 namespace bluefog {
 namespace common {
@@ -198,6 +199,8 @@ void SetSkipNegotiateStageState(bool value);
 bool GetSkipNegotiateStageState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
+
+Status GetBluefogFusionBuffer(FusionBufferManager*& fusion_buffer);
 
 // Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name);

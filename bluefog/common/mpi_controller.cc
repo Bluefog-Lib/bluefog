@@ -969,6 +969,51 @@ Status MPIController::WinMutexRelease(const std::string& name,
   return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
 }
 
+void MPIController::MemcpyInFusionBuffer(
+    const std::vector<TensorTableEntry>& entries, const void*& fused_input_data,
+    void*& buffer_data, size_t& buffer_len) {
+  // Access the fusion buffer.
+  auto& first_entry = entries[0];
+  FusionBufferManager* buffer_manager;
+  GetBluefogFusionBuffer(buffer_manager);
+  auto buffer = buffer_manager->GetBuffer(first_entry.device);
+  buffer_data = const_cast<void*>(buffer->AccessData(first_entry.context));
+
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryInFusionBuffer(e, buffer_data_at_offset);
+    offset += e.tensor->size();
+  }
+
+  buffer_len = (size_t)offset;
+
+  // Set the input data to originate from the buffer.
+  fused_input_data = buffer_data;
+}
+
+void MPIController::MemcpyOutFusionBuffer(
+    const void* buffer_data, std::vector<TensorTableEntry>& entries) {
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryOutFusionBuffer(buffer_data_at_offset, e);
+    offset += e.output->size();
+  }
+}
+
+void MPIController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
+                                              void* buffer_data_at_offset) {
+  std::memcpy(buffer_data_at_offset, e.tensor->data(),
+              (size_t)e.tensor->size());
+}
+
+void MPIController::MemcpyEntryOutFusionBuffer(
+    const void* buffer_data_at_offset, TensorTableEntry& e) {
+  std::memcpy((void*)e.output->data(), buffer_data_at_offset,
+              (size_t)e.output->size());
+}
+
 // Extracted from book "Using Advanced MPI" Section 4.5
 Status MPIWinMutexAcquireImpl(std::shared_ptr<MPI_Win> mutex_win,
                               const std::vector<int>& acquire_ranks,

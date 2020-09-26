@@ -1579,6 +1579,14 @@ Status GetBluefogTimeline(Timeline*& timeline) {
   return Status::OK();
 }
 
+Status GetBluefogFusionBuffer(FusionBufferManager*& fusion_buffer) {
+  fusion_buffer = &(bluefog_global.fusion_buffer);
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  return Status::OK();
+}
+
 // Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name) {
   if (bluefog_global.shut_down) {

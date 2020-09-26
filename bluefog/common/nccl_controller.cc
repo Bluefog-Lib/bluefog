@@ -1497,5 +1497,52 @@ Status NCCLController::WinMutexRelease(const std::string& name,
   return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
 }
 
+void NCCLController::MemcpyInFusionBuffer(
+    const std::vector<TensorTableEntry>& entries, const void*& fused_input_data,
+    void*& buffer_data, size_t& buffer_len) {
+  // Access the fusion buffer.
+  auto& first_entry = entries[0];
+  FusionBufferManager* buffer_manager;
+  GetBluefogFusionBuffer(buffer_manager);
+  auto buffer = buffer_manager->GetBuffer(first_entry.device);
+  buffer_data = const_cast<void*>(buffer->AccessData(first_entry.context));
+
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryInFusionBuffer(e, buffer_data_at_offset);
+    offset += e.tensor->size();
+  }
+
+  buffer_len = (size_t)offset;
+
+  // Set the input data to originate from the buffer.
+  fused_input_data = buffer_data;
+}
+
+void NCCLController::MemcpyOutFusionBuffer(
+    const void* buffer_data, std::vector<TensorTableEntry>& entries) {
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryOutFusionBuffer(buffer_data_at_offset, e);
+    offset += e.output->size();
+  }
+}
+
+void NCCLController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
+                                               void* buffer_data_at_offset) {
+  CUDA_CHECK(cudaMemcpyAsync(buffer_data_at_offset, e.tensor->data(),
+                             (size_t)e.tensor->size(), cudaMemcpyDeviceToDevice,
+                             nccl_ctx_.stream));
+}
+
+void NCCLController::MemcpyEntryOutFusionBuffer(
+    const void* buffer_data_at_offset, TensorTableEntry& e) {
+  CUDA_CHECK(cudaMemcpyAsync(e.tensor->data(), buffer_data_at_offset,
+                             (size_t)e.tensor->size(), cudaMemcpyDeviceToDevice,
+                             nccl_ctx_.stream));
+}
+
 }  // namespace common
 }  // namespace bluefog
