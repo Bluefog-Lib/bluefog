@@ -482,7 +482,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
               for (int i = 1; i < bluefog_neighbor_size(); i++) {
                 output_reduced.add_(
-                    output.slice(0, i * first_dim, (i + 1) * first_dim));
+                    output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
               }
               output_buffer.resize_(shape_vector);
               // Include self data as well.
