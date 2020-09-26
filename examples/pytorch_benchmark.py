@@ -146,7 +146,7 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
 # Set up fake data
 datasets = []
-for _ in range(100):
+for _ in range(50):
     # First two should be CPU usage only.
     if args.model == "lenet":
         data = torch.rand(args.batch_size, 1, 28, 28)  # mnist size

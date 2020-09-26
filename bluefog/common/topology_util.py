@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from typing import List, Tuple, Dict, Iterator
+from typing import List, Tuple, Dict, Iterator, Optional
 
 import math
 import numpy as np
@@ -157,7 +157,7 @@ def SymmetricPowerGraph(size: int, base: int = 4) -> nx.DiGraph:
     return G
 
 
-def MeshGrid2DGraph(size: int, shape: Tuple[int, int] = None) -> nx.DiGraph:
+def MeshGrid2DGraph(size: int, shape: Optional[Tuple[int, int]] = None) -> nx.DiGraph:
     """Generate 2D MeshGrid structure of graph.
 
     Assume shape = (nrow, ncol), when shape is provided, a meshgrid of nrow*ncol will be generated.
