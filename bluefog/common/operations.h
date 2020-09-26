@@ -97,7 +97,7 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
 int bluefog_nccl_built();
 
 // C interface to set skip negotiate_stage or not.
-int bluefog_set_skip_negotiate_stage(bool value);
+void bluefog_set_skip_negotiate_stage(bool value);
 
 int bluefog_get_skip_negotiate_stage();
 

@@ -83,6 +83,8 @@ table RequestList {
 // now. If the operation requested would result in an error (for example, due
 // to a type or shape mismatch), then the Response can contain an error and
 // an error message instead.
+// Note some types like win_put, win_get neven go through the negotiation.
+// Hence response type will not contain them.
 enum ResponseType:byte {
     ERROR = 0,
     ALLREDUCE = 1,

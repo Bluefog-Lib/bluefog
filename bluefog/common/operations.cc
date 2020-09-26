@@ -62,7 +62,7 @@ NCCLContext nccl_context;
 static bool global_with_associated_p_state = false;
 static bool global_skip_negotiate_stage = false;
 
-}  // namespace
+const auto SUSPEND_BACKGROUND_WAITTING_DURATION = std::chrono::microseconds(10);
 
 // Table for storing Tensor metadata on rank zero. This is used for error
 // checking, stall checking and size calculations, as well as determining
@@ -96,22 +96,9 @@ bool IncrementTensorCount(MessageTable* message_table, const Request& msg,
   return ready_to_reduce;
 }
 
-// Once a tensor is ready to be reduced, the coordinator sends an MPIResponse
-// instructing all ranks to start the reduction to all ranks. The MPIResponse
-// also contains error messages in case the submitted MPIRequests were not
-// valid (for example, contained mismatched shapes or types).
-//
-// Constructing the MPIResponse, thus, requires a whole lot of error checking.
-Response ConstructResponse(MessageTable* message_table, std::string name) {
+bool CheckRequestAndDataType(const std::vector<Request>& requests,
+                             std::ostringstream& error_message_stream) {
   bool error = false;
-  auto it = message_table->find(name);
-  assert(it != message_table->end());
-
-  std::vector<Request>& requests = std::get<0>(it->second);
-  assert(requests.size() > 0);
-
-  std::ostringstream error_message_stream;
-
   // Check that all requested operations are the same
   auto message_type = requests[0].request_type();
   assert(message_type == Request::ALLREDUCE ||
@@ -122,10 +109,6 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
          message_type == Request::WIN_CREATE ||
          message_type == Request::WIN_FREE);
   for (unsigned int i = 1; i < requests.size(); i++) {
-    if (error) {
-      break;
-    }
-
     auto request_type = requests[i].request_type();
     if (message_type != request_type) {
       error = true;
@@ -138,6 +121,9 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
   }
 
   // Check that all data types of tensors are identical.
+  // WIN_FREE doesn't need that since win_create have checked the size for
+  // each associated name is the same. Also, win_free does not provid size
+  // information since it can be WinFreeAll.
   if (message_type != Request::WIN_FREE) {
     auto data_type = requests[0].tensor_type();
     for (unsigned int i = 1; i < requests.size(); i++) {
@@ -152,123 +138,116 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
       }
     }
   }
+  return error;
+}
 
-  // If we are doing a broadcast, check that all root ranks are identical.
-  if (message_type == Request::BROADCAST) {
-    int first_root_rank = requests[0].root_rank();
-    for (unsigned int i = 1; i < requests.size(); i++) {
-      if (error) {
-        break;
-      }
-
-      int this_root_rank = requests[i].root_rank();
-      if (first_root_rank != this_root_rank) {
-        error = true;
-        error_message_stream
-            << "Mismatched " << Request::RequestType_Name(message_type)
-            << " root ranks: One rank specified root rank " << first_root_rank
-            << ", but another rank specified root rank " << this_root_rank
-            << ".";
-        break;
-      }
-    }
-  }
-
-  // If we are doing an (neighbor_)allreduce or broadcast, check that all tensor
-  // shapes are identical.
-  if (message_type == Request::ALLREDUCE ||
-      message_type == Request::BROADCAST ||
-      message_type == Request::NEIGHBOR_ALLREDUCE ||
-      message_type == Request::WIN_CREATE) {
-    TensorShape tensor_shape;
-    for (auto dim : requests[0].tensor_shape()) {
-      tensor_shape.AddDim(dim);
-    }
-    for (unsigned int i = 1; i < requests.size(); i++) {
-      if (error) {
-        break;
-      }
-
-      TensorShape request_shape;
-      for (auto dim : requests[i].tensor_shape()) {
-        request_shape.AddDim(dim);
-      }
-      if (tensor_shape != request_shape) {
-        error = true;
-        error_message_stream
-            << "Mismatched " << Request::RequestType_Name(message_type)
-            << " tensor shapes: One rank sent a tensor of shape "
-            << tensor_shape.DebugString()
-            << ", but another rank sent a tensor of shape "
-            << request_shape.DebugString() << ".";
-        break;
-      }
-    }
-  }
-
-  // If we are doing (neighbor_)allgather, make sure all but the first dimension
-  // are the same. The first dimension may be different and the output tensor is
-  // the sum of the first dimension.
-  if (message_type == Request::ALLGATHER ||
-      message_type == Request::NEIGHBOR_ALLGATHER) {
-    TensorShape tensor_shape;
-    for (auto dim : requests[0].tensor_shape()) {
-      tensor_shape.AddDim(dim);
-    }
-
-    if (tensor_shape.dims() == 0) {
-      error = true;
-      error_message_stream << "Rank zero tried to "
-                           << Request::RequestType_Name(message_type)
-                           << " a rank-zero tensor.";
-    }
-
-    for (unsigned int i = 1; i < requests.size(); i++) {
-      if (error) {
-        break;
-      }
-
-      TensorShape request_shape;
-      for (auto dim : requests[i].tensor_shape()) {
-        request_shape.AddDim(dim);
-      }
-      if (tensor_shape.dims() != request_shape.dims()) {
-        error = true;
-        error_message_stream
-            << "Mismatched " << Request::RequestType_Name(message_type)
-            << " tensor shapes: One rank sent a tensor of rank "
-            << tensor_shape.dims()
-            << ", but another rank sent a tensor of rank "
-            << request_shape.dims() << ".";
-        break;
-      }
-
-      bool dim_mismatch = false;
-      for (int dim = 1; dim < tensor_shape.dims(); dim++) {
-        if (tensor_shape.dim_size(dim) != request_shape.dim_size(dim)) {
-          error = true;
-          error_message_stream
-              << "Mismatched " << Request::RequestType_Name(message_type)
-              << " tensor shapes: One rank sent a tensor with dimension " << dim
-              << " equal to " << tensor_shape.dim_size(dim)
-              << ", but another rank sent a tensor with dimension " << dim
-              << " equal to " << request_shape.dim_size(dim) << ".";
-          dim_mismatch = true;
-          break;
-        }
-      }
-      if (dim_mismatch) {
-        break;
-      }
-    }
-  }
-
-  bool first_device_is_cpu = requests[0].device() == CPU_DEVICE_ID;
+bool CheckRequestRootRank(const std::vector<Request>& requests,
+                          std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  int first_root_rank = requests[0].root_rank();
   for (unsigned int i = 1; i < requests.size(); i++) {
-    if (error) {
+    int this_root_rank = requests[i].root_rank();
+    if (first_root_rank != this_root_rank) {
+      error = true;
+      error_message_stream << "Mismatched "
+                           << Request::RequestType_Name(message_type)
+                           << " root ranks: One rank specified root rank "
+                           << first_root_rank
+                           << ", but another rank specified root rank "
+                           << this_root_rank << ".";
+      break;
+    }
+  }
+  return error;
+}
+
+bool CheckRequestTensorShape(const std::vector<Request>& requests,
+                             std::ostringstream& error_message_stream) {
+  bool error = false;
+  auto message_type = requests[0].request_type();
+  TensorShape tensor_shape;
+  for (auto dim : requests[0].tensor_shape()) {
+    tensor_shape.AddDim(dim);
+  }
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    TensorShape request_shape;
+    for (auto dim : requests[i].tensor_shape()) {
+      request_shape.AddDim(dim);
+    }
+    if (tensor_shape != request_shape) {
+      error = true;
+      error_message_stream << "Mismatched "
+                           << Request::RequestType_Name(message_type)
+                           << " tensor shapes: One rank sent a tensor of shape "
+                           << tensor_shape.DebugString()
+                           << ", but another rank sent a tensor of shape "
+                           << request_shape.DebugString() << ".";
+      break;
+    }
+  }
+  return error;
+}
+
+bool CheckRequestGatherTensorShape(const std::vector<Request>& requests,
+                                   std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  TensorShape tensor_shape;
+  for (auto dim : requests[0].tensor_shape()) {
+    tensor_shape.AddDim(dim);
+  }
+
+  if (tensor_shape.dims() == 0) {
+    error = true;
+    error_message_stream << "Rank zero tried to "
+                         << Request::RequestType_Name(message_type)
+                         << " a rank-zero tensor.";
+  }
+
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    TensorShape request_shape;
+    for (auto dim : requests[i].tensor_shape()) {
+      request_shape.AddDim(dim);
+    }
+    if (tensor_shape.dims() != request_shape.dims()) {
+      error = true;
+      error_message_stream << "Mismatched "
+                           << Request::RequestType_Name(message_type)
+                           << " tensor shapes: One rank sent a tensor of rank "
+                           << tensor_shape.dims()
+                           << ", but another rank sent a tensor of rank "
+                           << request_shape.dims() << ".";
       break;
     }
 
+    bool dim_mismatch = false;
+    for (int dim = 1; dim < tensor_shape.dims(); dim++) {
+      if (tensor_shape.dim_size(dim) != request_shape.dim_size(dim)) {
+        error = true;
+        error_message_stream
+            << "Mismatched " << Request::RequestType_Name(message_type)
+            << " tensor shapes: One rank sent a tensor with dimension " << dim
+            << " equal to " << tensor_shape.dim_size(dim)
+            << ", but another rank sent a tensor with dimension " << dim
+            << " equal to " << request_shape.dim_size(dim) << ".";
+        dim_mismatch = true;
+        break;
+      }
+    }
+    if (dim_mismatch) {
+      break;
+    }
+  }
+  return error;
+}
+
+bool CheckRequestDevice(const std::vector<Request>& requests,
+                        std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  bool first_device_is_cpu = requests[0].device() == CPU_DEVICE_ID;
+  for (unsigned int i = 1; i < requests.size(); i++) {
     bool this_device_is_cpu = requests[i].device() == CPU_DEVICE_ID;
     if (first_device_is_cpu != this_device_is_cpu) {
       error = true;
@@ -281,6 +260,62 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
       break;
     }
   }
+  return error;
+}
+
+// Once a tensor is ready to be reduced, the coordinator sends an MPIResponse
+// instructing all ranks to start the reduction to all ranks. The MPIResponse
+// also contains error messages in case the submitted MPIRequests were not
+// valid (for example, contained mismatched shapes or types).
+//
+// Constructing the MPIResponse, thus, requires a whole lot of error checking.
+Response ConstructResponse(MessageTable* message_table, std::string name) {
+  bool error = false;
+  auto it = message_table->find(name);
+  assert(it != message_table->end());
+
+  std::vector<Request>& requests = std::get<0>(it->second);
+  assert(requests.size() > 0);
+  auto message_type = requests[0].request_type();
+
+  std::ostringstream error_message_stream;
+
+  // Make sure all requests' message type and data type are the same.
+  error = CheckRequestAndDataType(requests, error_message_stream);
+
+  // Make sure all requests use the same device.
+  if (!error) {
+    error = CheckRequestDevice(requests, error_message_stream);
+  }
+
+  // If we are doing a broadcast, check that all root ranks are identical.
+  if (!error) {
+    if (message_type == Request::BROADCAST) {
+      error = CheckRequestRootRank(requests, error_message_stream);
+    }
+  }
+
+  // If we are doing an (neighbor_)allreduce or broadcast, check that all tensor
+  // shapes are identical.
+  if (!error) {
+    if (message_type == Request::ALLREDUCE ||
+        message_type == Request::BROADCAST ||
+        message_type == Request::NEIGHBOR_ALLREDUCE ||
+        message_type == Request::WIN_CREATE) {
+      error = CheckRequestTensorShape(requests, error_message_stream);
+    }
+  }
+
+  // If we are doing (neighbor_)allgather, make sure all but the first dimension
+  // are the same. The first dimension may be different and the output tensor is
+  // the sum of the first dimension.
+  if (!error) {
+    if (message_type == Request::ALLGATHER ||
+        message_type == Request::NEIGHBOR_ALLGATHER) {
+      error = CheckRequestGatherTensorShape(requests, error_message_stream);
+    }
+  }
+
   std::vector<int32_t> devices(requests.size());
   for (auto& request : requests) {
     devices[request.request_rank()] = request.device();
@@ -347,7 +382,7 @@ void CheckForStalledTensors(BluefogGlobalState& state) {
       bool missing_preamble = false;
       for (auto msg_iter = messages.begin(); msg_iter != messages.end();
            msg_iter++) {
-             ready_ranks.insert(msg_iter->request_rank());
+        ready_ranks.insert(msg_iter->request_rank());
       }
       for (int32_t rank = 0; rank < mpi_context.size_; rank++) {
         if (ready_ranks.find(rank) == ready_ranks.end()) {
@@ -365,6 +400,8 @@ void CheckForStalledTensors(BluefogGlobalState& state) {
   }
 }
 
+}  // namespace
+
 bool RunLoopOnce(BluefogGlobalState& state);
 
 void BackgroundThreadLoop(BluefogGlobalState& state) {
@@ -375,7 +412,7 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   state.controller->Initialize();
 
   // We use Lazy initialized pattern. nccl_controller will be initialized only
-  // when it is necessary. 
+  // when it is necessary.
 
   // Open the timeline file
   char* bluefog_timeline_loc = std::getenv(BLUEFOG_TIMELINE);
@@ -634,11 +671,6 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
             << Vendor_Name(controller_vendor);
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          if (!nccl_context.is_initialized) {
-            bluefog_global.nccl_controller->Initialize();
-            BFLOG(INFO, bluefog_global.controller->GetRank())
-                << "NCCL Initialized";
-          }
           bluefog_global.nccl_controller->WinCreate(entry);
         }
 #endif
@@ -650,8 +682,12 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_FREE " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
+        // If the entry doesn't specify the tensor name, which means it will
+        // free all windows. Since the controller vender is determined through
+        // the device of operating tensors. Apparently, all windows case may
+        // have multiple cases. Hence, WinFreeAll will be called in both 
+        // controllers not matter what.
 #if HAVE_NCCL
-        // No specified name. So both nccl and mpi will Free win.
         if (nccl_context.is_initialized && entry.tensor_name.empty()) {
           bluefog_global.nccl_controller->WinFreeAll(entry);
         } else {
@@ -694,7 +730,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
 
   std::vector<TensorTableEntry> entries;
-  auto IsRequestConvertToEntryDirectly = [](const Request& request) {
+  auto IsRequestConvertToEntryDirectly = [](const Request& request) -> bool {
     return global_skip_negotiate_stage ||
            (request.request_type() != Request::ALLREDUCE &&
             request.request_type() != Request::ALLGATHER &&
@@ -720,19 +756,16 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   // Collect all tensors that are ready to be reduced. Record them in the
   // tensor count table (rank zero) or send them to rank zero to be
   // recorded (everyone else).
-  std::vector<std::string> ready_to_reduce;
   if (global_skip_negotiate_stage) {
     // Pass don't do anything.
-    if (entries.size() == 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
   } else if (bluefog_rank() == COORDINATE_RANK) {
+    std::vector<std::string> ready_to_reduce;
     RequestList message_list;
     message_list.set_shutdown(should_shut_down);
     message_list.set_change_topo(should_change_topo);
     while (!message_queue_buffer.empty()) {
       Request& message = message_queue_buffer.front();
-      message_list.add_request(message_queue_buffer.front());
+      message_list.add_request(message);
       bool reduce = IncrementTensorCount(state.message_table.get(), message,
                                          mpi_context.size_);
       if (reduce) {
@@ -882,12 +915,12 @@ bool RunLoopOnce(BluefogGlobalState& state) {
   if (should_change_topo) {
     bluefog_global.ready_to_setting_topology = true;
     while (!bluefog_global.setting_topology_done) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
     }
     bluefog_global.ready_to_setting_topology = false;
     // Wait for main thread reset.
     while (bluefog_global.setting_topology_done) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
     }
   }
 
@@ -1007,7 +1040,7 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
 #endif
   bluefog_global.setting_topology = true;
   while (!bluefog_global.ready_to_setting_topology.load()) {
-    std::this_thread::sleep_for(std::chrono::microseconds(10));
+    std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
   }
   bluefog_global.tensor_queue.LockTensorQueue();
   if (bluefog_global.tensor_queue.size() > 0) {
@@ -1032,7 +1065,7 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
   // Wait for the background thread receive the setting_topology_done and
   // close the ready_to_setting_topology epoch.
   while (bluefog_global.ready_to_setting_topology) {
-    std::this_thread::sleep_for(std::chrono::microseconds(10));
+    std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
   }
   bluefog_global.setting_topology_done = false;
   return mpi_result;
@@ -1099,9 +1132,8 @@ int bluefog_nccl_built() {
   return result;
 }
 
-int bluefog_set_skip_negotiate_stage(bool value) {
+void bluefog_set_skip_negotiate_stage(bool value) {
   SetSkipNegotiateStageState(value);
-  return 1;
 }
 
 int bluefog_get_skip_negotiate_stage() {
@@ -1285,6 +1317,14 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::PAIR_GOSSIP);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+  if (!global_skip_negotiate_stage) {
+    return Status::InvalidArgument(
+        "Currently, pair gossip operation does not support to run under with "
+        "negotiate stage setting. Please set skip negotiate stage to be true.");
+  }
 
   TensorTableEntry e;
   e.tensor_name = name;
@@ -1621,7 +1661,7 @@ void SetSkipNegotiateStageState(bool value) {
     // topology flag to suspend the negotiate stage then skip it.
     bluefog_global.setting_topology = true;
     while (!bluefog_global.ready_to_setting_topology.load()) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
     }
 
     global_skip_negotiate_stage = value;
@@ -1631,7 +1671,7 @@ void SetSkipNegotiateStageState(bool value) {
     // Wait for the background thread receive the setting_topology_done and
     // close the ready_to_setting_topology epoch.
     while (bluefog_global.ready_to_setting_topology) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
     }
     bluefog_global.setting_topology_done = false;
   } else {

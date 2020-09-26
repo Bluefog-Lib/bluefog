@@ -278,7 +278,7 @@ class BlueFogBasics(object):
         """
         return bool(self._MPI_LIB_CTYPES.bluefog_nccl_built())
 
-    def set_skip_negotiate_stage(self, value: bool) -> bool:
+    def set_skip_negotiate_stage(self, value: bool) -> None:
         """Skip the negotiate stage or not. (Default state is no skip).
 
         For some MPI implementation, it doesn't have support for multiple thread.
@@ -287,7 +287,7 @@ class BlueFogBasics(object):
         size mismatch, order of tensor is randomized, may not be able to be handled properly.
         But it may help to boost the performance.
         """
-        return bool(self._MPI_LIB_CTYPES.bluefog_set_skip_negotiate_stage(value))
+        return self._MPI_LIB_CTYPES.bluefog_set_skip_negotiate_stage(value)
 
     def get_skip_negotiate_stage(self) -> bool:
         """Get the value of skip the negotiate stage. (Default state is no skip)."""
