@@ -96,7 +96,7 @@ bool WindowManager::InitializeVersionWin(const MPI_Comm& mpi_comm, const std::ve
   MPI_Type_size(MPI_INT, &element_size);
   int win_size = version_mem_.size() * element_size;
   MPI_Win_create((void *)version_mem_.data(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
-                 mutex_win_.get());
+                 version_win_.get());
   return true;
 }
 
