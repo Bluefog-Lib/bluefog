@@ -132,7 +132,8 @@ public:
    NEIGHBOR_ALLGATHER = 5,
    WIN_CREATE = 6,
    WIN_FREE = 7
- };
+ };  // Ops like WIN_PUT, WIN_GET, Barrier will not go through the coordination.
+     // Hence they should not belong to response type.
 
  static const std::string& ResponseType_Name(ResponseType value);
 

@@ -63,10 +63,10 @@ struct BluefogGlobalState {
   // Background thread cycle time in milliseconds.  Fractional numbers are permitted.
   double cycle_time_ms = 3;
 
-  // Time point when last cycle started.
+  // Time point when last cycle started in seconds.
   std::chrono::steady_clock::time_point last_cycle_start;
 
-  // Time point when coordinator last checked for stalled tensors.
+  // Time point when coordinator last checked for stalled tensors in seconds.
   std::chrono::steady_clock::time_point last_stall_check;
 
   std::shared_ptr<MPIController> controller;
@@ -85,6 +85,8 @@ struct BluefogGlobalState {
 
   // Only exists on the coordinator node (rank zero). Maintains a vector of
   // requests to allreduce every tensor (keyed by tensor name).
+  // The associated time_point is recorded when the request is received, which
+  // is used in stalled tensors check.
   std::unique_ptr<std::unordered_map<
       std::string,
       std::tuple<std::vector<Request>, std::chrono::steady_clock::time_point>>>
