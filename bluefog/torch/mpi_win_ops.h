@@ -202,7 +202,6 @@ extern "C" void bluefog_torch_win_mutex_release(char* name,
                                                 
 extern "C" void bluefog_torch_get_win_version(char* name,
                                               std::vector<int>& versions);
-                                                bool is_sync);
 
 // Do not have support in the NCCL implementation
 extern "C" int bluefog_torch_win_fence(char* name);
