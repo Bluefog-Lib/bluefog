@@ -29,6 +29,7 @@ import networkx as nx
 
 import bluefog.torch as bf
 from bluefog.common import topology_util
+from common import is_openmpi_built
 
 
 EPSILON = 1e-5
@@ -186,6 +187,7 @@ class OpsTests(unittest.TestCase):
                 torch.allclose(output, tensor.mul(size))
             ), "bf.allreduce(sum) produces incorrect tensor"
 
+    @unittest.skipIf(not is_openmpi_built(), "MPICH have unclear mismatch Bcast size problem.")
     def test_allreduce_fusion(self):
         """Test that the allreduce works under tensor fusion."""
         size = bf.size()
