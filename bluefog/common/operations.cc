@@ -887,8 +887,6 @@ void NegotiationOfRequest(BluefogGlobalState& state,
       assert(response.tensor_names().size() == 1);
       responses.pop_front();
 
-      // TODO(ybc) fusion neighbor_allreduce all require the send/recv neighbors are 
-      // the same.
       if (response.response_type() == Response::ResponseType::ALLREDUCE) {
         // Attempt to add more responses to this fused response.
         auto& entry =
@@ -913,6 +911,59 @@ void NegotiationOfRequest(BluefogGlobalState& state,
             // computed in order of requests and skipping tensors may mean
             // that the batch will have to wait longer while skipped tensors
             // could be reduced at that time.
+            break;
+          }
+        }
+      } else if (response.response_type() ==
+                 Response::ResponseType::NEIGHBOR_ALLREDUCE) {
+        // Attempt to add more responses to this fused response.
+        auto& entry =
+            state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
+        auto IsSameNeighborList =
+            [](std::shared_ptr<std::vector<int>> n1,
+               std::shared_ptr<std::vector<int>> n2) -> bool {
+          if (n1 == nullptr && n2 == nullptr) return true;
+          if (n1 == nullptr || n2 == nullptr) return false;
+          if (n1->size() != n2->size()) return false;
+          // The order matters as well.
+          for (int i = 0; i < n1->size(); i++) {
+            if (n1->at(i) != n2->at(i)) {
+              return false;
+            }
+          }
+          return true;
+        };
+        // Recall that send_neighbors is empty or not determines we use partial
+        // neighbor allreduce or not.
+        int num_recv_neighbors = entry.send_neighbors == nullptr
+                                     ? mpi_context.neighbor_indgree_
+                                     : entry.recv_neighbors->size();
+        // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
+        // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
+        // Here t_1 and t_2  means self tensor 1 and 2 and _n1 and _n2 means the
+        // recieving tensors for neighbor 1 and 2;
+        int64_t tensor_size = entry.tensor->size() * (1 + num_recv_neighbors);
+
+        while (!responses.empty()) {
+          auto new_response = responses.front();
+          assert(new_response.tensor_names().size() == 1);
+          auto& new_entry =
+              state.tensor_queue.GetTensorEntry(new_response.tensor_names()[0]);
+          int64_t new_tensor_size =
+              new_entry.tensor->size() * (1 + num_recv_neighbors);
+          if (response.response_type() == new_response.response_type() &&
+              response.devices() == new_response.devices() &&
+              entry.tensor->dtype() == new_entry.tensor->dtype() &&
+              IsSameNeighborList(entry.send_neighbors,
+                                 new_entry.send_neighbors) &&
+              IsSameNeighborList(entry.recv_neighbors,
+                                 new_entry.recv_neighbors) &&
+              tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
+            // These tensors will fuse together well.
+            tensor_size += new_tensor_size;
+            response.add_tensor_name(new_response.tensor_names()[0]);
+            responses.pop_front();
+          } else {
             break;
           }
         }

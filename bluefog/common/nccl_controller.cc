@@ -678,20 +678,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
     }
   } else {
-    int rank = mpi_ctx_.rank_;
-    int size = mpi_ctx_.size_;
-    std::sort(entry.send_neighbors->begin(), entry.send_neighbors->end(),
-              [rank, size](int a, int b) {
-                int a_index = a >= rank ? a - rank : a - rank + size;
-                int b_index = b >= rank ? b - rank : b - rank + size;
-                return a_index - b_index;
-              });
-    std::sort(entry.recv_neighbors->begin(), entry.recv_neighbors->end(),
-              [rank, size](int a, int b) {
-                int a_index = a >= rank ? a - rank : a - rank + size;
-                int b_index = b >= rank ? b - rank : b - rank + size;
-                return b_index - a_index;
-              });
     for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
       int recv_rank = entry.recv_neighbors->at(i);
       void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
@@ -788,7 +774,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 #endif
 }
 
-// TODO(ybc) Add logics.
 void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   auto& first_entry = entries[0];
   with_device device_guard(first_entry.device);
@@ -841,7 +826,130 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   });
 }
 
-void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {}
+// TODO: reuse the code of NeighborAllreduce without fusion.
+void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
+  auto& first_entry = entries[0];
+  with_device device_guard(first_entry.device);
+
+  void* buffer_data;
+  size_t buffer_len = 0;
+  int64_t num_elements = 0;
+  for (auto& e : entries) {
+    num_elements += e.tensor->shape().num_elements();
+  }
+  const int element_size = mpi_ctx_.GetMPITypeSize(first_entry.tensor->dtype());
+
+  Timeline* timeline_ptr;
+  GetBluefogTimeline(timeline_ptr);
+
+  // If only partial sending is enabled, the following code block checks whether
+  // the sending and recieving neighbors match each other when enable_topo_check
+  // is set to be True.
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
+      mpi_ctx_.size_, first_entry, timeline_ptr,
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  if (is_topo_check_fail) {
+    for (auto& entry : entries) {
+      entry.callback(Status::InvalidArgument(
+          "Send and recv neighbors dont' match in neighbor "
+          "allreduce with partial send/recv request."));
+    }
+    return;
+  }
+
+  // TODO(ybc) Timeline add record event to measure the time on GPU.
+  const void* fused_input_data;
+  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+
+  // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
+  // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
+  // Here t_1 and t_2  means self tensor 1 and 2 and _n1 and _n2 means the
+  // recieving tensors for neighbor 1 and 2;
+  // Hence, we need to offset the buffer data to location for neighbors.
+  buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
+
+  timeline_ptr_->ActivityStartAll(entries, "COMM. (NCCL)");
+#if NCCL_MINOR > 6
+  ncclGroupStart();
+  if (first_entry.send_neighbors->empty()) {
+    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+      void* recvbuf =
+          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                         GetNCCLDataType(first_entry.tensor), recv_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+      NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                         GetNCCLDataType(first_entry.tensor), send_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  } else {
+    for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+      int recv_rank = first_entry.recv_neighbors->at(i);
+      void* recvbuf =
+          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                         GetNCCLDataType(first_entry.tensor), recv_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : *first_entry.send_neighbors) {
+      NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                         GetNCCLDataType(first_entry.tensor), send_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  }
+  ncclGroupEnd();
+
+  // Remember buffer_data is already pointed at offset location (after self).
+  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
+  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
+  // Notice the size of t_1_n1 can be retrieved from the tensor size.
+  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
+  int64_t offset = 0;
+  int num_recv_neighbors = first_entry.send_neighbors == nullptr
+                               ? mpi_ctx_.neighbor_indgree_
+                               : first_entry.recv_neighbors->size();
+  for (auto& e : entries) {
+    size_t input_tenosr_size = e.tensor->size();
+    size_t output_tenosr_size = e.output->size();
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    for (int i = 0; i < num_recv_neighbors; ++i) {
+      void* output_at_offset =
+          (uint8_t*)e.output->data() + i * input_tenosr_size;
+      void* buffer_data_at_offset_for_neighbor =
+          (uint8_t*)buffer_data_at_offset + i * output_tenosr_size;
+      CUDACHECK(cudaMemcpyAsync(
+          output_at_offset, buffer_data_at_offset_for_neighbor,
+          input_tenosr_size, cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
+    }
+    offset += input_tenosr_size;
+  }
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute([this, entries, tid]() mutable {
+    auto& first_entry = entries[0];
+    with_device device_guard(first_entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEndAll(entries, &tid);
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    this->timeline_ptr_->ActivityStartAll(entries, "CALLBACK", &tid);
+    for (auto& entry : entries) {
+      entry.callback(Status::OK());
+    }
+    this->timeline_ptr_->ActivityEndAll(entries, &tid);
+  });
+#else
+  throw std::runtime_error(
+      "Neighbor allreduce with NCCL only supports NCCL version  > 2.7");
+#endif
+}
 
 #if NCCL_MINOR < 7
 ncclResult_t NCCLController::ncclSendByBcast(const void* sendbuf,

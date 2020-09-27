@@ -209,7 +209,7 @@ class OpsTests(unittest.TestCase):
             name_1 = "allreduce_fusion_tensor_{}_{}_1".format(dim, dtype)
             name_2 = "allreduce_fusion_tensor_{}_{}_2".format(dim, dtype)
             tensor_1 = self.cast_and_place(tensor_1, dtype)
-            tensor_2 = self.cast_and_place(tensor_1, dtype)
+            tensor_2 = self.cast_and_place(tensor_2, dtype)
 
             bf.barrier()
             handle_1 = bf.allreduce_nonblocking(tensor_1, average=True, name=name_1)
@@ -756,6 +756,130 @@ class OpsTests(unittest.TestCase):
             assert (
                 (reduced_tensor.data - expect_result).abs().max() < eps
             ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced tensor"
+
+    @unittest.skipIf(not is_openmpi_built(), "MPICH have unclear mismatch Bcast size problem.")
+    def test_neighbor_allreduce_fusion(self):
+        """Test that the neighbor allreduce works under tensor fusion."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        # TODO(hanbinhu) torch Half have problem in accuracy
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
+            dtypes += [torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor_1 = torch.FloatTensor(*([23] * dim)).fill_(rank)
+            tensor_2 = torch.FloatTensor(*([23] * dim)).fill_(rank+1)
+            name_1 = "neighbor_allreduce_fusion_tensor_{}_{}_1".format(
+                dim, dtype)
+            name_2 = "neighbor_allreduce_fusion_tensor_{}_{}_2".format(
+                dim, dtype)
+            tensor_1 = self.cast_and_place(tensor_1, dtype)
+            tensor_2 = self.cast_and_place(tensor_2, dtype)
+
+            bf.barrier()
+            handle_1 = bf.neighbor_allreduce_nonblocking(tensor_1, name=name_1)
+            handle_2 = bf.neighbor_allreduce_nonblocking(tensor_2, name=name_2)
+
+            output_1 = bf.synchronize(handle_1)
+            output_2 = bf.synchronize(handle_2)
+            tensor_1, output_1 = self.convert_cpu_fp16_to_fp32(
+                tensor_1, output_1)
+            tensor_2, output_2 = self.convert_cpu_fp16_to_fp32(
+                tensor_2, output_2)
+
+            eps = EPSILON if tensor_1.dtype != torch.float16 else LOOSE_EPSILON
+            assert (
+                list(output_1.shape) == [23] * dim
+            ), "bf.neighbor_allreduce_1 (fusion) produces incorrect reduced shape"
+            assert (
+                (output_1.data.mul_(num_indegree+1) -
+                 sum_value).abs().max() < eps
+            ), "bf.neighbor_allreduce_1 (fusion) produces incorrect reduced tensor"
+            assert (
+                list(output_2.shape) == [23] * dim
+            ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced shape"
+            assert (
+                ((output_2.data - 1).mul_(num_indegree+1) -
+                 sum_value).abs().max() < eps
+            ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced tensor"
+
+    @unittest.skipIf(not is_openmpi_built(), "MPICH have unclear mismatch Bcast size problem.")
+    def test_neighbor_allreduce_dynamic_topo_fusion(self):
+        """Test neighbor allreduce works with parital send (dynamic topo) under tensor fusion."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        # TODO(hanbinhu) torch Half have problem in accuracy
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
+            dtypes += [torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+
+        self_weight = 1/(num_indegree+1)
+        neighbor_weights = {i: self_weight for i in neighbor_ranks}
+        send_ranks = [(rank + 2**i) % size for i in range(num_indegree)]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor_1 = torch.FloatTensor(*([23] * dim)).fill_(rank)
+            tensor_2 = torch.FloatTensor(*([23] * dim)).fill_(rank+1)
+            name_1 = "neighbor_allreduce_fusion_tensor_{}_{}_1".format(
+                dim, dtype)
+            name_2 = "neighbor_allreduce_fusion_tensor_{}_{}_2".format(
+                dim, dtype)
+            tensor_1 = self.cast_and_place(tensor_1, dtype)
+            tensor_2 = self.cast_and_place(tensor_2, dtype)
+
+            bf.barrier()
+            handle_1 = bf.neighbor_allreduce_nonblocking(
+                tensor_1, name=name_1, self_weight=self_weight,
+                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            handle_2 = bf.neighbor_allreduce_nonblocking(
+                tensor_2, name=name_2, self_weight=self_weight,
+                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+
+            output_1 = bf.synchronize(handle_1)
+            output_2 = bf.synchronize(handle_2)
+            tensor_1, output_1 = self.convert_cpu_fp16_to_fp32(tensor_1, output_1)
+            tensor_2, output_2 = self.convert_cpu_fp16_to_fp32(tensor_2, output_2)
+
+            eps = EPSILON if tensor_1.dtype != torch.float16 else LOOSE_EPSILON
+            assert (
+                list(output_1.shape) == [23] * dim
+            ), "bf.neighbor_allreduce_1 (fusion) produces incorrect reduced shape"
+            assert (
+                (output_1.data.mul_(num_indegree+1) -
+                 sum_value).abs().max() < eps
+            ), "bf.neighbor_allreduce_1 (fusion) produces incorrect reduced tensor"
+            assert (
+                list(output_2.shape) == [23] * dim
+            ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced shape"
+            assert (
+                ((output_2.data - 1).mul_(num_indegree+1) -
+                 sum_value).abs().max() < eps
+            ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced tensor"
 
     def test_neighbor_allgather(self):
         """Test that the neighbor all gather 1D, 2D, 3D tensors correctly."""

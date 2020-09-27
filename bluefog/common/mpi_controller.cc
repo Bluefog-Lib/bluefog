@@ -368,6 +368,13 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
       mpi_ctx_.size_, entry, timeline_ptr,
       mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
 
+  if (is_topo_check_fail) {
+    entry.callback(Status::InvalidArgument(
+        "Send and recv neighbors dont' match in neighbor "
+        "allreduce with partial send/recv request."));
+    return;
+  }
+
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
   // Pitfall: Our neighbor_allreduce include itself, while
   // mpi_neighbor_allgather do not! Because for saving the communication there
@@ -384,24 +391,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           "MPI_Neighbor_allreduce (through neighbor_allgather) failed, see MPI "
           "output for details.");
     }
-  } else if (!is_topo_check_fail) {
-    // Sort the send and recv order to avoid the conflict of commmunication as
-    // much as possible.
-    int rank = mpi_ctx_.rank_;
-    int size = mpi_ctx_.size_;
-    std::sort(entry.send_neighbors->begin(), entry.send_neighbors->end(),
-              [rank, size](int a, int b) {
-                int a_index = a >= rank ? a - rank : a - rank + size;
-                int b_index = b >= rank ? b - rank : b - rank + size;
-                return a_index - b_index;
-              });
-    std::sort(entry.recv_neighbors->begin(), entry.recv_neighbors->end(),
-              [rank, size](int a, int b) {
-                int a_index = a >= rank ? a - rank : a - rank + size;
-                int b_index = b >= rank ? b - rank : b - rank + size;
-                return b_index - a_index;
-              });
-
+  } else {
     int nsend = entry.send_neighbors->size();
     int nrecv = entry.recv_neighbors->size();
     std::vector<MPI_Request> requests(nsend+nrecv);
@@ -433,12 +423,9 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMPUTE_AVERAGE");
-  if (is_topo_check_fail) {
-    entry.callback(Status::InvalidArgument("Send and recv neighbors dont' match in neighbor "
-                                           "allreduce with partial send/recv request."));
-  } else if (error_message != "") {
+  if (error_message != "") {
     entry.callback(Status::UnknownError(error_message));
-  } else {
+  } else { 
     entry.callback(Status::OK());
   }
   timeline_ptr->ActivityEnd(entry.tensor_name);
@@ -483,7 +470,136 @@ void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {
   }
 }
 
-void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {}
+// TODO: reuse the code of NeighborAllreduce without fusion.
+void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
+  auto& first_entry = entries[0];
+  with_device device_guard(first_entry.device);
+
+  void* buffer_data;
+  size_t buffer_len = 0;
+  int64_t num_elements = 0;
+  for (auto& e : entries) {
+    num_elements += e.tensor->shape().num_elements();
+  }
+  int element_size = mpi_ctx_.GetMPITypeSize(first_entry.tensor->dtype());
+  Timeline* timeline_ptr;
+  GetBluefogTimeline(timeline_ptr);
+
+  // If only partial sending is enabled, the following code block checks whether
+  // the sending and recieving neighbors match each other when enable_topo_check
+  // is set to be True.
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
+      mpi_ctx_.size_, first_entry, timeline_ptr,
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+
+  if (is_topo_check_fail) {
+    for (auto& entry : entries) {
+      entry.callback(Status::InvalidArgument(
+          "Send and recv neighbors dont' match in neighbor "
+          "allreduce with partial send/recv request."));
+    }
+    return;
+  }
+
+  timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_FUSION_BUFFER");
+  const void* fused_input_data;
+  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  timeline_ptr->ActivityEndAll(entries);
+
+  // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
+  // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
+  // Here t_1 and t_2  means self tensor 1 and 2 and _n1 and _n2 means the
+  // recieving tensors for neighbor 1 and 2;
+  // Hence, we need to offset the buffer data to location for neighbors.
+  buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
+
+  timeline_ptr->ActivityStartAll(entries, "COMMUNICATE");
+  // Pitfall: Our neighbor_allreduce include itself, while
+  // mpi_neighbor_allgather do not! Because for saving the communication there
+  // is no need to transfer the local info again. However, for computation view,
+  // including itself is more intuitive.
+  std::string error_message = "";
+  if (first_entry.send_neighbors->empty()) {
+    int ret_code = MPI_Neighbor_allgather(
+        fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
+        buffer_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.output),
+        mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Neighbor_allreduce (through neighbor_allgather) failed, see MPI "
+          "output for details.");
+    }
+  } else {
+    int nsend = first_entry.send_neighbors->size();
+    int nrecv = first_entry.recv_neighbors->size();
+    std::vector<MPI_Request> requests(nsend + nrecv);
+    std::vector<MPI_Status> statuses(nsend + nrecv);
+    for (int i = 0; i < nrecv; ++i) {
+      void* recvbuf =
+          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+      int ret_code = MPI_Irecv(recvbuf, num_elements,
+                               mpi_ctx_.GetMPIDataType(first_entry.output),
+                               first_entry.recv_neighbors->at(i),
+                               /*tag=*/mpi_ctx_.rank_ + first_entry.recv_neighbors->at(i),
+                               mpi_ctx_.GetMPICommunicator(Communicator::GRAPH),
+                               &requests[i + nsend]);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI output "
+            "for details.");
+      }
+    }
+    for (int i = 0; i < nsend; ++i) {
+      int ret_code = MPI_Isend(
+          fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
+          first_entry.send_neighbors->at(i),
+          /*tag=*/mpi_ctx_.rank_ + first_entry.send_neighbors->at(i),
+          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
+      if (ret_code != MPI_SUCCESS) {
+        throw std::runtime_error(
+            "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI output "
+            "for details.");
+      }
+    }
+    MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+    error_message =
+        GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+  }
+  timeline_ptr->ActivityEndAll(entries);
+
+  // Remember buffer_data is already pointed at offset location (after self).
+  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
+  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
+  // Notice the size of t_1_n1 can be retrieved from the tensor size.
+  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
+  timeline_ptr->ActivityStartAll(entries, "MEMCPY_OUT_FUSION_BUFFER");
+  int64_t offset = 0;
+  int num_recv_neighbors = first_entry.send_neighbors == nullptr
+                               ? mpi_ctx_.neighbor_indgree_
+                               : first_entry.recv_neighbors->size();
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    for (int i = 0; i < num_recv_neighbors; ++i) {
+      void* output_at_offset =
+          (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();
+      void* buffer_data_at_offset_for_neighbor =
+          (uint8_t*)buffer_data_at_offset + i * (size_t)e.output->size();
+      std::memcpy(output_at_offset, buffer_data_at_offset_for_neighbor,
+                  (size_t)e.tensor->size());
+    }
+    offset += e.tensor->size();
+  }
+  timeline_ptr->ActivityEndAll(entries);
+
+  for (auto& e : entries) {
+    if (error_message != "") {
+      e.callback(Status::UnknownError(error_message));
+    } else {
+      e.callback(Status::OK());
+    }
+  }
+}
 
 void MPIController::PairGossip(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
