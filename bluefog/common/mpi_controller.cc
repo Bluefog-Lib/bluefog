@@ -444,8 +444,45 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
-// TODO(ybc) Add logics.
-void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {}
+void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {
+  auto& first_entry = entries[0];
+  with_device device_guard(first_entry.device);
+
+  void* buffer_data;
+  size_t buffer_len = 0;
+  int64_t num_elements = 0;
+  for (auto& e : entries) {
+    num_elements += e.tensor->shape().num_elements();
+  }
+  Timeline* timeline_ptr;
+  GetBluefogTimeline(timeline_ptr);
+
+  timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_FUSION_BUFFER");
+  const void* fused_input_data;
+  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  timeline_ptr->ActivityEndAll(entries);
+
+  timeline_ptr->ActivityStartAll(entries, "COMMUNICATE");
+  int ret_code =
+      MPI_Allreduce(MPI_IN_PLACE, buffer_data, num_elements,
+                    mpi_ctx_.GetMPIDataType(first_entry.tensor),
+                    mpi_ctx_.GetMPISumOp(first_entry.tensor->dtype()),
+                    mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  if (ret_code != MPI_SUCCESS) {
+    throw std::runtime_error(
+        "MPI_AllReduce failed, see MPI output for details.");
+  }
+  timeline_ptr->ActivityEndAll(entries);
+
+  timeline_ptr->ActivityStartAll(entries, "MEMCPY_OUT_FUSION_BUFFER");
+  MemcpyOutFusionBuffer(buffer_data, entries);
+  timeline_ptr->ActivityEndAll(entries);
+
+  for (auto& e : entries) {
+    e.callback(Status::OK());
+  }
+}
+
 void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {}
 
 void MPIController::PairGossip(TensorTableEntry& entry) {

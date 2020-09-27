@@ -886,7 +886,38 @@ void NegotiationOfRequest(BluefogGlobalState& state,
       auto response = responses.front();
       assert(response.tensor_names().size() == 1);
       responses.pop_front();
-      // TODO: Tensor Fusion Logics.
+
+      // TODO(ybc) fusion neighbor_allreduce all require the send/recv neighbors are 
+      // the same.
+      if (response.response_type() == Response::ResponseType::ALLREDUCE) {
+        // Attempt to add more responses to this fused response.
+        auto& entry =
+            state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
+        int64_t tensor_size = entry.tensor->size();
+        while (!responses.empty()) {
+          auto new_response = responses.front();
+          assert(new_response.tensor_names().size() == 1);
+          auto& new_entry =
+              state.tensor_queue.GetTensorEntry(new_response.tensor_names()[0]);
+          int64_t new_tensor_size = new_entry.tensor->size();
+          if (response.response_type() == new_response.response_type() &&
+              response.devices() == new_response.devices() &&
+              entry.tensor->dtype() == new_entry.tensor->dtype() &&
+              tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
+            // These tensors will fuse together well.
+            tensor_size += new_tensor_size;
+            response.add_tensor_name(new_response.tensor_names()[0]);
+            responses.pop_front();
+          } else {
+            // Don't try to fuse additional tensors since they are usually
+            // computed in order of requests and skipping tensors may mean
+            // that the batch will have to wait longer while skipped tensors
+            // could be reduced at that time.
+            break;
+          }
+        }
+      }
+
       response_list.add_response(response);
     }
 
@@ -1248,6 +1279,7 @@ int bluefog_get_skip_negotiate_stage() {
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<OpContext> context,
                               std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback) {
@@ -1267,6 +1299,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   e.output = output;
   e.device = device;
   e.ready_event = ready_event;
+  e.context = context;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLREDUCE;
 
@@ -1371,9 +1404,9 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   return status;
 }
 
-Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
-                                      std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
+                                      std::shared_ptr<OpContext> context,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,

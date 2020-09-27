@@ -789,7 +789,58 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 }
 
 // TODO(ybc) Add logics.
-void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {}
+void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
+  auto& first_entry = entries[0];
+  with_device device_guard(first_entry.device);
+
+  void* buffer_data;
+  size_t buffer_len = 0;
+  int64_t num_elements = 0;
+  for (auto& e : entries) {
+    num_elements += e.tensor->shape().num_elements();
+  }
+  Timeline* timeline_ptr;
+  GetBluefogTimeline(timeline_ptr);
+
+  // TODO(ybc) Timeline add record event to measure the time on GPU.
+  const void* fused_input_data;
+  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+
+  timeline_ptr_->ActivityStartAll(entries, "COMM. (NCCL)");
+  ncclResult_t ret_code =
+      ncclAllReduce(fused_input_data, buffer_data, num_elements,
+                    GetNCCLDataType(first_entry.tensor), ncclSum,
+                    nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+  if (ret_code != ncclSuccess) {
+    std::string error_msg =
+        "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) "
+        "for details.";
+    BFLOG(ERROR) << error_msg;
+    for (auto& entry : entries) {
+      entry.callback(Status::UnknownError(error_msg));
+    }
+    return;
+  }
+
+  MemcpyOutFusionBuffer(buffer_data, entries);
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute([this, entries, tid]() mutable {
+    auto& first_entry = entries[0];
+    with_device device_guard(first_entry.device);
+    cudaEvent_t event;
+    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
+    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
+    CUDACHECK(cudaEventSynchronize(event));
+    this->timeline_ptr_->ActivityEndAll(entries, &tid);
+
+    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
+    for (auto& entry: entries) {
+      entry.callback(Status::OK());
+    }
+  });
+}
+
 void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {}
 
 #if NCCL_MINOR < 7
@@ -1544,8 +1595,8 @@ void NCCLController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
 
 void NCCLController::MemcpyEntryOutFusionBuffer(
     const void* buffer_data_at_offset, TensorTableEntry& e) {
-  void* dst_data = (void*)e.tensor->data();
-  size_t count = (size_t)e.tensor->size();
+  void* dst_data = (void*)e.output->data();
+  size_t count = (size_t)e.output->size();
   CUDACHECK(cudaMemcpyAsync(dst_data, buffer_data_at_offset, count,
                             cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
 }

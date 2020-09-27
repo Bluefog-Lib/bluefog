@@ -186,6 +186,44 @@ class OpsTests(unittest.TestCase):
                 torch.allclose(output, tensor.mul(size))
             ), "bf.allreduce(sum) produces incorrect tensor"
 
+    def test_allreduce_fusion(self):
+        """Test that the allreduce works under tensor fusion."""
+        size = bf.size()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.HalfTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
+            dtypes += [torch.cuda.DoubleTensor]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            torch.manual_seed(123456)
+            tensor_1 = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
+            tensor_2 = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
+            name_1 = "allreduce_fusion_tensor_{}_{}_1".format(dim, dtype)
+            name_2 = "allreduce_fusion_tensor_{}_{}_2".format(dim, dtype)
+            tensor_1 = self.cast_and_place(tensor_1, dtype)
+            tensor_2 = self.cast_and_place(tensor_1, dtype)
+
+            bf.barrier()
+            handle_1 = bf.allreduce_nonblocking(tensor_1, average=True, name=name_1)
+            handle_2 = bf.allreduce_nonblocking(tensor_2, average=True, name=name_2)
+
+            output_1 = bf.synchronize(handle_1)
+            output_2 = bf.synchronize(handle_2)
+            tensor_1, output_1 = self.convert_cpu_fp16_to_fp32(tensor_1, output_1)
+            tensor_2, output_2 = self.convert_cpu_fp16_to_fp32(tensor_2, output_2)
+            assert (
+                torch.allclose(tensor_1, output_1)
+            ), "bf.allreduce(fusion) produces incorrect tensor 1"
+            assert (
+                torch.allclose(tensor_2, output_2)
+            ), "bf.allreduce(fusion) produces incorrect tensor 2"
+
     def test_allgather(self):
         """Test that the allgather correctly gathers 1D, 2D, 3D tensors."""
         size = bf.size()

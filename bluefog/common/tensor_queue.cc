@@ -137,7 +137,6 @@ Status FusionBufferManager::InitializeBuffer(
 
   if (buffer == nullptr) {
     on_start_init();
-
     // Lazily allocate persistent buffer for Tensor Fusion and keep it
     // forever per device.
     Status status = context->AllocatePersistent(threshold, &buffer);
