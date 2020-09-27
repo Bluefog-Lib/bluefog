@@ -794,56 +794,10 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
   }
 }
 
-bool RunLoopOnce(BluefogGlobalState& state) {
-  // The coordinator sends a SHUTDOWN message to trigger shutdown.
-  bool should_shut_down = state.shut_down;
-  bool should_change_topo = state.setting_topology;
-
-  // This delay determines thread frequency and MPI message latency
-  auto sleep_duration =
-      state.last_cycle_start +
-      std::chrono::microseconds(long(state.cycle_time_ms * 1000.)) -
-      std::chrono::steady_clock::now();
-  if (sleep_duration > std::chrono::steady_clock::duration::zero()) {
-    std::this_thread::sleep_for(sleep_duration);
-  }
-  state.last_cycle_start = std::chrono::steady_clock::now();
-
-  std::deque<Request> message_queue_buffer;
-  state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
-
-  std::vector<TensorTableEntry> entries;
-  auto IsRequestConvertToEntryDirectly = [](const Request& request) -> bool {
-    return global_skip_negotiate_stage ||
-           (request.request_type() != Request::ALLREDUCE &&
-            request.request_type() != Request::ALLGATHER &&
-            request.request_type() != Request::BROADCAST &&
-            request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
-            request.request_type() != Request::NEIGHBOR_ALLGATHER &&
-            request.request_type() != Request::WIN_CREATE &&
-            request.request_type() != Request::WIN_FREE);
-  };
-  // For these no need to coordinate, put them into entries directly.
-  for (auto& request : message_queue_buffer) {
-    if (IsRequestConvertToEntryDirectly(request)) {
-      entries.push_back(
-          state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
-    }
-  }
-  message_queue_buffer.erase(
-      std::remove_if(message_queue_buffer.begin(), message_queue_buffer.end(),
-                     IsRequestConvertToEntryDirectly),
-      message_queue_buffer.end());
-
-  PerformOperation(entries);
-
-  // For the rest requests, they needs to coordinate and neogiate.
-  // Collect all tensors that are ready to be reduced. Record them in the
-  // tensor count table (rank zero) or send them to rank zero to be
-  // recorded (everyone else).
-  if (global_skip_negotiate_stage) {
-    // Pass don't do anything.
-  } else if (bluefog_rank() == COORDINATE_RANK) {
+void NegotiationOfRequest(BluefogGlobalState& state,
+                          std::deque<Request>& message_queue_buffer,
+                          bool& should_change_topo, bool& should_shut_down) {
+  if (bluefog_rank() == COORDINATE_RANK) {
     std::vector<std::string> ready_to_reduce;
     RequestList message_list;
     message_list.set_shutdown(should_shut_down);
@@ -982,7 +936,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     int msg_length;
     MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
     auto buffer = new uint8_t[msg_length];
-    MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
+    MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK,
+              mpi_context.mpi_comm);
     ResponseList response_list;
     ResponseList::ParseFromBytes(response_list, buffer);
     delete[] buffer;
@@ -1005,6 +960,61 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     if (response_list.change_topo()) {
       should_change_topo = true;
     }
+  }
+}
+
+bool RunLoopOnce(BluefogGlobalState& state) {
+  // The coordinator sends a SHUTDOWN message to trigger shutdown.
+  bool should_shut_down = state.shut_down;
+  bool should_change_topo = state.setting_topology;
+
+  // This delay determines thread frequency and MPI message latency
+  auto sleep_duration =
+      state.last_cycle_start +
+      std::chrono::microseconds(long(state.cycle_time_ms * 1000.)) -
+      std::chrono::steady_clock::now();
+  if (sleep_duration > std::chrono::steady_clock::duration::zero()) {
+    std::this_thread::sleep_for(sleep_duration);
+  }
+  state.last_cycle_start = std::chrono::steady_clock::now();
+
+  std::deque<Request> message_queue_buffer;
+  state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
+
+  std::vector<TensorTableEntry> entries;
+  auto IsRequestConvertToEntryDirectly = [](const Request& request) -> bool {
+    return global_skip_negotiate_stage ||
+           (request.request_type() != Request::ALLREDUCE &&
+            request.request_type() != Request::ALLGATHER &&
+            request.request_type() != Request::BROADCAST &&
+            request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
+            request.request_type() != Request::NEIGHBOR_ALLGATHER &&
+            request.request_type() != Request::WIN_CREATE &&
+            request.request_type() != Request::WIN_FREE);
+  };
+  // For these no need to coordinate, put them into entries directly.
+  for (auto& request : message_queue_buffer) {
+    if (IsRequestConvertToEntryDirectly(request)) {
+      entries.push_back(
+          state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+    }
+  }
+  message_queue_buffer.erase(
+      std::remove_if(message_queue_buffer.begin(), message_queue_buffer.end(),
+                     IsRequestConvertToEntryDirectly),
+      message_queue_buffer.end());
+
+  PerformOperation(entries);
+
+  // For the rest requests, they needs to coordinate and neogiate.
+  // Collect all tensors that are ready to be reduced. Record them in the
+  // tensor count table (rank zero) or send them to rank zero to be
+  // recorded (everyone else).
+  if (global_skip_negotiate_stage) {
+    // Pass don't do anything.
+  } else {
+    NegotiationOfRequest(state, message_queue_buffer, should_change_topo,
+                         should_shut_down);
   }
   // Seperate the setting topology and negotiate communnication.
   if (should_change_topo) {
