@@ -177,6 +177,9 @@ class NCCLController {
   void NeighborAllgather(TensorTableEntry& entry);
   void NeighborAllreduce(TensorTableEntry& entry);
 
+  void Allreduce(std::vector<TensorTableEntry>& entries);
+  void NeighborAllreduce(std::vector<TensorTableEntry>& entries);
+
   void WinPut(TensorTableEntry& entry);
   void WinGet(TensorTableEntry& entry);
   void WinAccumulate(TensorTableEntry& entry);

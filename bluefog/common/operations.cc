@@ -41,6 +41,8 @@
 #define COORDINATE_RANK 0
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
 #define BLUEFOG_CYCLE_TIME "BLUEFOG_CYCLE_TIME"
+#define BLUEFOG_FUSION_THRESHOLD "BLUEFOG_FUSION_THRESHOLD"
+
 // Stall-check warning time
 #define STALL_WARNING_TIME std::chrono::seconds(15)
 
@@ -430,6 +432,13 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
     state.cycle_time_ms = std::strtof(bluefog_cycle_time, nullptr);
   }
 
+  // Override Tensor Fusion threshold, if it's set.
+  auto bluefog_fusion_threshold = std::getenv(BLUEFOG_FUSION_THRESHOLD);
+  if (bluefog_fusion_threshold != nullptr) {
+    state.tensor_fusion_threshold =
+        std::strtol(bluefog_fusion_threshold, nullptr, 10);
+  }
+
   // Initialize the tensor count table. No tensors are available yet.
   if (bluefog_global.controller->GetRank() == COORDINATE_RANK) {
     state.message_table = std::unique_ptr<MessageTable>(new MessageTable());
@@ -711,6 +720,80 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
   }
 }
 
+void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
+  auto& timeline = bluefog_global.timeline;
+  assert(entries.size() > 1);
+  auto& first_entry = entries[0];
+  Vendor controller_vendor =
+      DetermineController(first_entry.mpi_ops_type, first_entry.device);
+#if HAVE_NCCL
+  if (controller_vendor == Vendor::NCCL && !nccl_context.is_initialized) {
+    bluefog_global.nccl_controller->Initialize();
+    BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
+  }
+#endif
+
+  Status status = bluefog_global.fusion_buffer.InitializeBuffer(
+      bluefog_global.tensor_fusion_threshold, first_entry.device,
+      first_entry.context,
+      [&]() { timeline.ActivityStartAll(entries, "INIT_FUSION_BUFFER"); },
+      [&]() { timeline.ActivityEndAll(entries); });
+  if (!status.ok()) {
+    for (auto& e : entries) {
+      e.callback(status);
+    }
+    return;
+  }
+
+  // Wait for all data are ready.
+  for (auto& entry : entries) {
+    if (entry.ready_event != nullptr) {
+      while (!entry.ready_event->Ready()) {
+        std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+      }
+    }
+  }
+
+  switch (first_entry.mpi_ops_type) {
+    case MPIOpsType::ALLREDUCE:
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
+          << "Processing fused " << first_entry.tensor_name << " and rest "
+          << std::to_string(entries.size()) << " tensors.";
+      timeline.ActivityStartAll(entries, "ALLREDUCE");
+      if (controller_vendor == Vendor::MPI) {
+        bluefog_global.controller->Allreduce(entries);
+      }
+#if HAVE_NCCL
+      if (controller_vendor == Vendor::NCCL) {
+        bluefog_global.nccl_controller->Allreduce(entries);
+      }
+#endif
+      for (auto& entry : entries) {
+        timeline.ActivityEnd(entry.tensor_name);
+      }
+      break;
+    case MPIOpsType::NEIGHBOR_ALLREDUCE:
+      BFLOG(TRACE, bluefog_global.controller->GetRank())
+          << "Processing fused " << first_entry.tensor_name << " and rest "
+          << std::to_string(entries.size()) << " tensors.";
+      timeline.ActivityStartAll(entries, "NEIGHBOR_ALLREDUCE");
+      if (controller_vendor == Vendor::MPI) {
+        bluefog_global.controller->NeighborAllreduce(entries);
+      }
+#if HAVE_NCCL
+      if (controller_vendor == Vendor::NCCL) {
+        bluefog_global.nccl_controller->NeighborAllreduce(entries);
+      }
+#endif
+      timeline.ActivityEndAll(entries);
+      break;
+    default:
+      throw std::runtime_error(
+          "Only allreduce or neighbor_allreduce should be called within "
+          "PerformOperationWithFusion");
+  }
+}
+
 bool RunLoopOnce(BluefogGlobalState& state) {
   // The coordinator sends a SHUTDOWN message to trigger shutdown.
   bool should_shut_down = state.shut_down;
@@ -751,6 +834,8 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       std::remove_if(message_queue_buffer.begin(), message_queue_buffer.end(),
                      IsRequestConvertToEntryDirectly),
       message_queue_buffer.end());
+
+  PerformOperation(entries);
 
   // For the rest requests, they needs to coordinate and neogiate.
   // Collect all tensors that are ready to be reduced. Record them in the
@@ -862,8 +947,13 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     // Perform the collective operation. All nodes should end up performing
     // the same operation.
     for (auto& response : response_list.responses()) {
-      state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
-      // TODO: tensor fusion logics?
+      std::vector<TensorTableEntry> nego_entries;
+      state.tensor_queue.GetTensorEntriesFromResponse(response, nego_entries);
+      if (nego_entries.size() > 1) {
+        PerformOperationWithFusion(nego_entries);
+      } else {
+        PerformOperation(nego_entries);
+      }
     }
 
     // Check for stalled tensors.
@@ -900,8 +990,13 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     // Perform the collective operation. All nodes should end up performing
     // the same operation.
     for (auto& response : response_list.responses()) {
-      state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
-      // TODO: tensor fusion logics?
+      std::vector<TensorTableEntry> nego_entries;
+      state.tensor_queue.GetTensorEntriesFromResponse(response, nego_entries);
+      if (nego_entries.size() > 1) {
+        PerformOperationWithFusion(nego_entries);
+      } else {
+        PerformOperation(nego_entries);
+      }
     }
 
     if (response_list.shutdown()) {
@@ -924,7 +1019,6 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     }
   }
 
-  PerformOperation(entries);
   return !should_shut_down;
 }
 

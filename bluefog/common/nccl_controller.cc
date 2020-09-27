@@ -788,6 +788,10 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 #endif
 }
 
+// TODO(ybc) Add logics.
+void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {}
+void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {}
+
 #if NCCL_MINOR < 7
 ncclResult_t NCCLController::ncclSendByBcast(const void* sendbuf,
                                              const int count,

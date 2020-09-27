@@ -189,5 +189,20 @@ void Timeline::ActivityEnd(const std::string& tensor_name,
   tensor_states_[tensor_name] = TimelineState::TOP_LEVEL;
 }
 
+void Timeline::ActivityStartAll(const std::vector<TensorTableEntry>& entries,
+                                const std::string& activity,
+                                const std::thread::id* tid_ptr) {
+  for (auto& e : entries) {
+    ActivityStart(e.tensor_name, activity, tid_ptr);
+  }
+}
+
+void Timeline::ActivityEndAll(const std::vector<TensorTableEntry>& entries,
+                              const std::thread::id* tid_ptr) {
+  for (auto& e : entries) {
+    ActivityEnd(e.tensor_name, tid_ptr);
+  }
+}
+
 }  // namespace common
 }  // namespace bluefog

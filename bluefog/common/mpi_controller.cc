@@ -444,6 +444,10 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   timeline_ptr->ActivityEnd(entry.tensor_name);
 }
 
+// TODO(ybc) Add logics.
+void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {}
+void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {}
+
 void MPIController::PairGossip(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   void* recvbuf = (void*)entry.output->data();

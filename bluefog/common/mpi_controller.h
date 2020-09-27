@@ -65,6 +65,9 @@ class MPIController {
   void NeighborAllreduce(TensorTableEntry& entry);
   void PairGossip(TensorTableEntry& entry);
 
+  void Allreduce(std::vector<TensorTableEntry>& entries);
+  void NeighborAllreduce(std::vector<TensorTableEntry>& entries);
+
   void WinCreate(TensorTableEntry& entry);
   void WinFree(TensorTableEntry& entry);
   void WinFreeAll(TensorTableEntry& entry);
