@@ -631,10 +631,13 @@ def synchronize(handle: int) -> torch.Tensor:
 def barrier():
     """Barrier function to sychronize all MPI processes.
 
-    After this function returns, it is guaranteed that all async functions
+    After this function returns, it is guaranteed that all blocking functions
     before it is finished.
     """
-    return mpi_lib.bluefog_torch_barrier()
+    if get_skip_negotiate_stage():
+        mpi_lib.bluefog_torch_barrier()
+    else:
+        allreduce(torch.Tensor([1.0]), name="barrier")
 
 # MPI one sided ops, which will be useful in the asynchronized algorithm.
 
