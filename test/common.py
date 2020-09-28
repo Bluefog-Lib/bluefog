@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import sys
+import subprocess
 
 def mpi_env_rank_and_size():
     """Get MPI rank and size from environment variables and return them as a
@@ -49,3 +50,12 @@ def is_openmpi_built():
     if rank is not None and size is not None:
         return True
     return False
+
+
+def is_openmpi_version_gt_4():
+    if not is_openmpi_built:
+        return False
+    process = subprocess.Popen(["mpirun", "--version"], stdout=subprocess.PIPE)
+    output, _ = process.communicate()
+    version = int(output[19])
+    return version >= 4

@@ -29,7 +29,7 @@ import networkx as nx
 
 import bluefog.torch as bf
 from bluefog.common import topology_util
-from common import is_openmpi_built
+from common import is_openmpi_built, is_openmpi_version_gt_4
 
 
 EPSILON = 1e-5
@@ -187,7 +187,7 @@ class OpsTests(unittest.TestCase):
                 torch.allclose(output, tensor.mul(size))
             ), "bf.allreduce(sum) produces incorrect tensor"
 
-    @unittest.skipIf(not is_openmpi_built(), "MPICH have unclear mismatch Bcast size problem.")
+    @unittest.skipIf(not is_openmpi_version_gt_4(), "MPICH have unclear mismatch Bcast size problem.")
     def test_allreduce_fusion(self):
         """Test that the allreduce works under tensor fusion."""
         size = bf.size()
@@ -755,7 +755,7 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data - expect_result).abs().max() < eps
             ), "bf.neighbor_allreduce (weighted_avg) produces incorrect reduced tensor"
 
-    @unittest.skipIf(not is_openmpi_built(), "MPICH have unclear mismatch Bcast size problem.")
+    @unittest.skipIf(not is_openmpi_version_gt_4(), "MPICH have unclear mismatch Bcast size problem.")
     def test_neighbor_allreduce_fusion(self):
         """Test that the neighbor allreduce works under tensor fusion."""
         size = bf.size()
@@ -812,7 +812,7 @@ class OpsTests(unittest.TestCase):
                  sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced tensor"
 
-    @unittest.skipIf(not is_openmpi_built(), "MPICH have unclear mismatch Bcast size problem.")
+    @unittest.skipIf(not is_openmpi_version_gt_4(), "MPICH have unclear mismatch Bcast size problem.")
     def test_neighbor_allreduce_dynamic_topo_fusion(self):
         """Test neighbor allreduce works with parital send (dynamic topo) under tensor fusion."""
         size = bf.size()
