@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <string>
 #include <thread>
+#include <mutex>
 
 #include "common.h"
 #include "cuda_util.h"
@@ -28,6 +29,8 @@
 
 namespace bluefog {
 namespace common {
+
+static std::once_flag nccl27VersionLogOnceFlag;
 
 static const char* BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE = std::getenv("BLUEFOG_SLEEP_USEC_FOR_WIN_PASSIVE");
 static const int MAX_SLEEP_USEC_FOR_WIN_PASSIVE =
@@ -707,6 +710,12 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
   });
 #else
+  std::call_once(nccl27VersionLogOnceFlag, []() {
+    BFLOG(WARNING) << "neighbor_allreduce is called under NCCL version < 2.7, "
+                      "which doesn't support point-to-point communication. "
+                      "Hence, the performance may be largely degraded";
+  });
+
   ncclGroupStart();
   uint recv_rank_index = 0;
   uint send_rank_index = 0;
@@ -946,8 +955,9 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     this->timeline_ptr_->ActivityEndAll(entries, &tid);
   });
 #else
-  throw std::runtime_error(
-      "Neighbor allreduce with NCCL only supports NCCL version  > 2.7");
+  for (auto& entry : entries) {
+    NeighborAllreduce(entry);
+  }
 #endif
 }
 
