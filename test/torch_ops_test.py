@@ -197,9 +197,7 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.HalfTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
-        if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
-            dtypes += [torch.cuda.DoubleTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -769,9 +767,7 @@ class OpsTests(unittest.TestCase):
         # TODO(hanbinhu) torch Half have problem in accuracy
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
-        if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
-            dtypes += [torch.cuda.DoubleTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
@@ -828,9 +824,7 @@ class OpsTests(unittest.TestCase):
         # TODO(hanbinhu) torch Half have problem in accuracy
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor]
-        if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
-            dtypes += [torch.cuda.DoubleTensor]
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use power two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
