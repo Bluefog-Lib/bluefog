@@ -1,7 +1,7 @@
 NUM_PROC ?= 4
 $(info $(shell mpirun --version))
 ifeq ($(findstring Open MPI, $(shell mpirun --version)), Open MPI)
-  EXTRA_MPI_FLAG = -mca ^openib --allow-run-as-root
+  EXTRA_MPI_FLAG = --allow-run-as-root
 else
   EXTRA_MPI_FLAG = 
 endif
