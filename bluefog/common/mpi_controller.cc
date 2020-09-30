@@ -568,28 +568,11 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   timeline_ptr->ActivityEndAll(entries);
 
   // Remember buffer_data is already pointed at offset location (after self).
-  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
-  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
-  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
-  // Notice the size of t_1_n1 can be retrieved from the tensor size.
-  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
   timeline_ptr->ActivityStartAll(entries, "MEMCPY_OUT_FUSION_BUFFER");
-  int64_t offset = 0;
   int num_recv_neighbors = first_entry.send_neighbors == nullptr
                                ? mpi_ctx_.neighbor_indgree_
                                : first_entry.recv_neighbors->size();
-  for (auto& e : entries) {
-    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
-    for (int i = 0; i < num_recv_neighbors; ++i) {
-      void* output_at_offset =
-          (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();
-      void* buffer_data_at_offset_for_neighbor =
-          (uint8_t*)buffer_data_at_offset + i * (size_t)e.output->size();
-      std::memcpy(output_at_offset, buffer_data_at_offset_for_neighbor,
-                  (size_t)e.tensor->size());
-    }
-    offset += e.tensor->size();
-  }
+  MemcpyOutFusionBufferForNeighbors(buffer_data, entries, num_recv_neighbors);
   timeline_ptr->ActivityEndAll(entries);
 
   for (auto& e : entries) {
@@ -1160,16 +1143,76 @@ void MPIController::MemcpyOutFusionBuffer(
   }
 }
 
+void MPIController::MemcpyOutFusionBufferForNeighbors(
+    const void* buffer_data, std::vector<TensorTableEntry>& entries,
+    const int num_recv_neighbors) {
+  // Remember buffer_data is already pointed at offset location (after self).
+  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
+  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
+  // Notice the size of t_1_n1 can be retrieved from the tensor size.
+  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryOutFusionBufferForNeighbors(buffer_data_at_offset, e,
+                                           num_recv_neighbors);
+    offset += e.tensor->size();
+  }
+}
+
 void MPIController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                               void* buffer_data_at_offset) {
-  std::memcpy(buffer_data_at_offset, e.tensor->data(),
-              (size_t)e.tensor->size());
+  const void* src_data = e.tensor->data();
+  size_t count = (size_t)e.tensor->size();
+#if HAVE_CUDA
+  if (e.device != CPU_DEVICE_ID) {
+    CUDACHECK(cudaMemcpy(buffer_data_at_offset, src_data, count,
+                         cudaMemcpyDeviceToDevice));
+  } else {
+#endif
+    std::memcpy(buffer_data_at_offset, src_data, count);
+#if HAVE_CUDA
+  }
+#endif
 }
 
 void MPIController::MemcpyEntryOutFusionBuffer(
     const void* buffer_data_at_offset, TensorTableEntry& e) {
-  std::memcpy((void*)e.output->data(), buffer_data_at_offset,
-              (size_t)e.output->size());
+  void* dst_data = (void*)e.output->data();
+  size_t count = (size_t)e.output->size();
+#if HAVE_CUDA
+  if (e.device != CPU_DEVICE_ID) {
+    CUDACHECK(cudaMemcpy(dst_data, buffer_data_at_offset, count,
+                         cudaMemcpyDeviceToDevice));
+  } else {
+#endif
+    std::memcpy(dst_data, buffer_data_at_offset, count);
+#if HAVE_CUDA
+  }
+#endif
+}
+
+void MPIController::MemcpyEntryOutFusionBufferForNeighbors(
+    const void* buffer_data_at_offset, TensorTableEntry& e,
+    const int num_recv_neighbors) {
+  for (int i = 0; i < num_recv_neighbors; ++i) {
+    void* output_at_offset =
+        (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();
+    void* buffer_data_at_offset_for_neighbor =
+        (uint8_t*)buffer_data_at_offset + i * (size_t)e.output->size();
+    size_t count = (size_t)e.tensor->size();
+#if HAVE_CUDA
+    if (e.device != CPU_DEVICE_ID) {
+      CUDACHECK(cudaMemcpy(output_at_offset, buffer_data_at_offset_for_neighbor,
+                           count, cudaMemcpyDeviceToDevice));
+    } else {
+#endif
+      std::memcpy(output_at_offset, buffer_data_at_offset_for_neighbor, count);
+#if HAVE_CUDA
+    }
+#endif
+  }
 }
 
 // Extracted from book "Using Advanced MPI" Section 4.5
