@@ -316,9 +316,12 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
     }
   }
 
-  std::vector<int32_t> devices(requests.size());
-  for (auto& request : requests) {
-    devices[request.request_rank()] = request.device();
+  std::vector<int32_t> devices;
+  if (!error) {
+    devices.resize(requests.size());
+    for (auto& request : requests) {
+      devices[request.request_rank()] = request.device();
+    }
   }
 
   Response response;

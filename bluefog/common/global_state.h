@@ -63,10 +63,10 @@ struct BluefogGlobalState {
   // Background thread cycle time in milliseconds.  Fractional numbers are permitted.
   double cycle_time_ms = 3;
 
-  // Time point when last cycle started in seconds.
+  // Time point when last cycle started.
   std::chrono::steady_clock::time_point last_cycle_start;
 
-  // Time point when coordinator last checked for stalled tensors in seconds.
+  // Time point when coordinator last checked for stalled tensors.
   std::chrono::steady_clock::time_point last_stall_check;
 
   std::shared_ptr<MPIController> controller;

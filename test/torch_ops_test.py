@@ -762,7 +762,6 @@ class OpsTests(unittest.TestCase):
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
 
-    @unittest.skip("Skip due to coordinate operation development.")
     def test_pair_gossip(self):
         size = bf.size()
         rank = bf.rank()
@@ -775,6 +774,9 @@ class OpsTests(unittest.TestCase):
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
             dtypes += [torch.cuda.DoubleTensor]
+
+        # Pair gossip cannot run with negotiation yet.
+        bf.set_skip_negotiate_stage(True)
 
         expect_result = (rank+target_rank) / 2
         dims = [1, 2, 3]
@@ -791,7 +793,8 @@ class OpsTests(unittest.TestCase):
                 (gossiped_tensor.data - expect_result).abs().max() < EPSILON
             ), "bf.pair_gossip produces incorrect reduced tensor"
 
-    @unittest.skip("Skip due to coordinate operation development.")
+        bf.set_skip_negotiate_stage(False)
+
     def test_pair_gossip_weighted(self):
         size = bf.size()
         rank = bf.rank()
@@ -805,6 +808,9 @@ class OpsTests(unittest.TestCase):
             dtypes += [torch.cuda.FloatTensor]
         if bf.nccl_built():  # MPI with CUDA aware may have problem on double tensor format
             dtypes += [torch.cuda.DoubleTensor]
+
+        # Pair gossip cannot run with negotiation yet.
+        bf.set_skip_negotiate_stage(True)
 
         expect_result = 0.25*rank + 0.75*target_rank
         dims = [1, 2, 3]
@@ -820,6 +826,7 @@ class OpsTests(unittest.TestCase):
             assert (
                 (gossiped_tensor.data - expect_result).abs().max() < EPSILON
             ), "bf.pair_gossip(weighted) produces incorrect reduced tensor"
+        bf.set_skip_negotiate_stage(False)
 
 
 if __name__ == "__main__":
