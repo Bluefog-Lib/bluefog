@@ -755,7 +755,6 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
       BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing fused " << first_entry.tensor_name << " and rest "
           << std::to_string(entries.size()) << " tensors.";
-      timeline.ActivityStartAll(entries, "ALLREDUCE");
       if (controller_vendor == Vendor::MPI) {
         bluefog_global.controller->Allreduce(entries);
       }
@@ -764,15 +763,11 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
         bluefog_global.nccl_controller->Allreduce(entries);
       }
 #endif
-      for (auto& entry : entries) {
-        timeline.ActivityEnd(entry.tensor_name);
-      }
       break;
     case MPIOpsType::NEIGHBOR_ALLREDUCE:
       BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing fused " << first_entry.tensor_name << " and rest "
           << std::to_string(entries.size()) << " tensors.";
-      timeline.ActivityStartAll(entries, "NEIGHBOR_ALLREDUCE");
       if (controller_vendor == Vendor::MPI) {
         bluefog_global.controller->NeighborAllreduce(entries);
       }
@@ -781,7 +776,6 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
         bluefog_global.nccl_controller->NeighborAllreduce(entries);
       }
 #endif
-      timeline.ActivityEndAll(entries);
       break;
     default:
       throw std::runtime_error(
@@ -931,7 +925,7 @@ void NegotiationOfRequest(BluefogGlobalState& state,
         };
         // Recall that send_neighbors is empty or not determines we use partial
         // neighbor allreduce or not.
-        int num_recv_neighbors = entry.send_neighbors == nullptr
+        int num_recv_neighbors = entry.send_neighbors->empty()
                                      ? mpi_context.neighbor_indgree_
                                      : entry.recv_neighbors->size();
         // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer

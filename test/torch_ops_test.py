@@ -808,6 +808,48 @@ class OpsTests(unittest.TestCase):
                  sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced tensor"
 
+    def test_neighbor_allreduce_fusion_alot(self):
+        size = bf.size()
+        rank = bf.rank()
+        K = 50 # number of tensors send in short time
+
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = np.sum(neighbor_ranks) + rank
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor_list, handles, names = [], [], []
+            for i in range(K):
+                tensor = torch.FloatTensor(*([23] * dim)).fill_(i + rank)
+                tensor = self.cast_and_place(tensor, dtype)
+                tensor_list.append(tensor)
+                names.append("index{}_{}_{}".format(i, dtype, dim))
+
+            for i in range(K):
+                handle = bf.neighbor_allreduce_nonblocking(
+                    tensor_list[i], name=names[i])
+                handles.append(handle)
+
+            outputs = []
+            for i in range(K):
+                output = bf.synchronize(handles[i])
+                outputs.append(output)
+
+            for i in range(K):
+                assert (
+                    list(outputs[i].shape) == [23] * dim
+                ), f"{names[i]} (fusion) produces incorrect reduced shape"
+                output_normalized = (outputs[i] - i).mul(num_indegree+1) 
+                assert (
+                    (output_normalized - sum_value).abs().max() < EPSILON
+                ), f"{names[i]} (fusion) produces incorrect reduced tensor"
+
     def test_neighbor_allreduce_dynamic_topo_fusion(self):
         """Test neighbor allreduce works with parital send (dynamic topo) under tensor fusion."""
         size = bf.size()

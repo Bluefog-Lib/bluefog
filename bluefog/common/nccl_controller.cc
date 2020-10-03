@@ -94,6 +94,7 @@ void NCCLContext::Initialize(const int rank, const int size,
   CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
   CUDACHECK(cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking,
                                          greatest_priority));
+  // TODO(ybc) Handle the error case then np > number of GPU properly.
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
 
   cuda_device = local_rank % nDevices;
@@ -911,34 +912,18 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   }
   ncclGroupEnd();
 
-  // Remember buffer_data is already pointed at offset location (after self).
-  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
-  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
-  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
-  // Notice the size of t_1_n1 can be retrieved from the tensor size.
-  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
-  int64_t offset = 0;
-  int num_recv_neighbors = first_entry.send_neighbors == nullptr
+  // Remember buffer_data is already pointed at offset location (after self
+  // tensor).
+  int num_recv_neighbors = first_entry.send_neighbors->empty()
                                ? mpi_ctx_.neighbor_indgree_
                                : first_entry.recv_neighbors->size();
-  for (auto& e : entries) {
-    size_t input_tenosr_size = e.tensor->size();
-    size_t output_tenosr_size = e.output->size();
-    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
-    for (int i = 0; i < num_recv_neighbors; ++i) {
-      void* output_at_offset =
-          (uint8_t*)e.output->data() + i * input_tenosr_size;
-      void* buffer_data_at_offset_for_neighbor =
-          (uint8_t*)buffer_data_at_offset + i * output_tenosr_size;
-      CUDACHECK(cudaMemcpyAsync(
-          output_at_offset, buffer_data_at_offset_for_neighbor,
-          input_tenosr_size, cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
-    }
-    offset += input_tenosr_size;
-  }
+  int64_t fused_data_size = num_elements * element_size;
+  MemcpyOutFusionBufferForNeighbors(buffer_data, entries, num_recv_neighbors,
+                                    fused_data_size);
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entries, tid]() mutable {
+  nccl_ctx_.finalizer_thread_pool.execute([this, entries, tid,
+                                           buffer_data]() mutable {
     auto& first_entry = entries[0];
     with_device device_guard(first_entry.device);
     cudaEvent_t event;
@@ -1703,6 +1688,24 @@ void NCCLController::MemcpyOutFusionBuffer(
   }
 }
 
+void NCCLController::MemcpyOutFusionBufferForNeighbors(
+    const void* buffer_data, std::vector<TensorTableEntry>& entries,
+    const int num_recv_neighbors, const int64_t fused_data_size) {
+  // Remember buffer_data is already pointed at offset location (after self).
+  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
+  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
+  // Notice the size of t_1_n1 can be retrieved from the tensor size.
+  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryOutFusionBufferForNeighbors(buffer_data_at_offset, e,
+                                           num_recv_neighbors, fused_data_size);
+    offset += e.tensor->size();
+  }
+}
+
 void NCCLController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                                void* buffer_data_at_offset) {
   const void* src_data = e.tensor->data();
@@ -1717,6 +1720,21 @@ void NCCLController::MemcpyEntryOutFusionBuffer(
   size_t count = (size_t)e.output->size();
   CUDACHECK(cudaMemcpyAsync(dst_data, buffer_data_at_offset, count,
                             cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
+}
+
+void NCCLController::MemcpyEntryOutFusionBufferForNeighbors(
+    const void* buffer_data_at_offset, TensorTableEntry& e,
+    const int num_recv_neighbors, const int64_t fused_data_size) {
+  for (int i = 0; i < num_recv_neighbors; ++i) {
+    void* output_at_offset =
+        (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();
+    void* buffer_data_at_offset_for_neighbor =
+        (uint8_t*)buffer_data_at_offset + i * fused_data_size;
+    size_t count = (size_t)e.tensor->size();
+    CUDACHECK(cudaMemcpyAsync(output_at_offset,
+                              buffer_data_at_offset_for_neighbor, count,
+                              cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
+  }
 }
 
 }  // namespace common

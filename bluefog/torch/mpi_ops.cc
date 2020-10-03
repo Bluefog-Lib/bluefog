@@ -324,6 +324,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
   std::vector<int> recv_neighbors;
   for (auto kv : neighbor_weights)
       recv_neighbors.push_back(kv.first);
+  std::sort(recv_neighbors.begin(), recv_neighbors.end());
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =

@@ -403,6 +403,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
+    send_neighbors.sort()
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
                                         name.encode() if name is not None else "")

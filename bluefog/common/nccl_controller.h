@@ -183,11 +183,21 @@ class NCCLController {
   void MemcpyOutFusionBuffer(const void* buffer_data,
                              std::vector<TensorTableEntry>& entries);
 
+  void MemcpyOutFusionBufferForNeighbors(const void* buffer_data,
+                                         std::vector<TensorTableEntry>& entries,
+                                         const int num_recv_neighbors,
+                                         const int64_t fused_data_size);
+
   void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                  void* buffer_data_at_offset);
 
   void MemcpyEntryOutFusionBuffer(const void* buffer_data_at_offset,
                                   TensorTableEntry& e);
+
+  void MemcpyEntryOutFusionBufferForNeighbors(const void* buffer_data_at_offset,
+                                              TensorTableEntry& e,
+                                              const int num_recv_neighbors,
+                                              const int64_t fused_data_size);
 
  private:
   // Outside dependencies

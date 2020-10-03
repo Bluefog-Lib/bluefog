@@ -113,7 +113,8 @@ class MPIController {
 
   void MemcpyOutFusionBufferForNeighbors(const void* buffer_data,
                                          std::vector<TensorTableEntry>& entries,
-                                         const int num_recv_neighbors);
+                                         const int num_recv_neighbors,
+                                         const int64_t fused_data_size);
 
   void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                  void* buffer_data_at_offset);
@@ -123,7 +124,8 @@ class MPIController {
 
   void MemcpyEntryOutFusionBufferForNeighbors(const void* buffer_data_at_offset,
                                               TensorTableEntry& e,
-                                              const int num_recv_neighbors);
+                                              const int num_recv_neighbors,
+                                              const int64_t fused_data_size);
 
   // Outside dependencies
   MPIContext& mpi_ctx_;
