@@ -643,9 +643,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
-  Timeline* timeline_ptr;
-  Status timeline_status = GetBluefogTimeline(timeline_ptr);
-
   // NCCL does not have neighbor_allreduce API. So neighbor_allgather 
   // is implemented through Send/Recv first.
   // Allgather output will have shape of:
@@ -657,7 +654,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
   bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, entry, timeline_ptr,
+      mpi_ctx_.size_, entry, timeline_ptr_,
       mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
@@ -666,7 +663,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     return; 
   }
 
-  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
+  timeline_ptr_->ActivityStart(entry.tensor_name, "COMMUNICATE");
 #if NCCL_MINOR > 6
   ncclGroupStart();
   if (entry.send_neighbors->empty()) {
@@ -794,8 +791,6 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   for (auto& e : entries) {
     num_elements += e.tensor->shape().num_elements();
   }
-  Timeline* timeline_ptr;
-  GetBluefogTimeline(timeline_ptr);
 
   // TODO(ybc) Timeline add record event to measure the time on GPU.
   const void* fused_input_data;
@@ -848,9 +843,6 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     num_elements += e.tensor->shape().num_elements();
   }
   const int element_size = mpi_ctx_.GetMPITypeSize(first_entry.tensor->dtype());
-
-  Timeline* timeline_ptr;
-  GetBluefogTimeline(timeline_ptr);
 
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check

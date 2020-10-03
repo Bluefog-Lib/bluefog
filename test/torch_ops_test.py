@@ -845,7 +845,7 @@ class OpsTests(unittest.TestCase):
                 assert (
                     list(outputs[i].shape) == [23] * dim
                 ), f"{names[i]} (fusion) produces incorrect reduced shape"
-                output_normalized = (outputs[i] - i).mul(num_indegree+1) 
+                output_normalized = (outputs[i] - i).mul(num_indegree+1)
                 assert (
                     (output_normalized - sum_value).abs().max() < EPSILON
                 ), f"{names[i]} (fusion) produces incorrect reduced tensor"
