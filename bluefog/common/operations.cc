@@ -84,13 +84,12 @@ bool IncrementTensorCount(MessageTable* message_table, const Request& msg,
 
     auto now = std::chrono::steady_clock::now();
     message_table->emplace(name, std::make_tuple(std::move(messages), now));
-    table_iter = message_table->find(name);
-  } else {
-    std::vector<Request>& messages = std::get<0>(table_iter->second);
-    messages.push_back(msg);
+    // ready_to_reduce unless mpi_size is 1 because only 1 message is inserted.
+    return mpi_size == 1;
   }
 
   std::vector<Request>& messages = std::get<0>(table_iter->second);
+  messages.push_back(msg);
   int count = (int)messages.size();
   bool ready_to_reduce = count == mpi_size;
   return ready_to_reduce;
