@@ -287,7 +287,7 @@ class BlueFogBasics(object):
         size mismatch, order of tensor is randomized, may not be able to be handled properly.
         But it may help to boost the performance.
         """
-        return self._MPI_LIB_CTYPES.bluefog_set_skip_negotiate_stage(value)
+        self._MPI_LIB_CTYPES.bluefog_set_skip_negotiate_stage(value)
 
     def get_skip_negotiate_stage(self) -> bool:
         """Get the value of skip the negotiate stage. (Default state is no skip)."""
