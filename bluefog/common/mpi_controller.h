@@ -64,6 +64,11 @@ class MPIController {
   void NeighborAllgather(TensorTableEntry& entry);
   void NeighborAllreduce(TensorTableEntry& entry);
   void PairGossip(TensorTableEntry& entry);
+
+  void WinCreate(TensorTableEntry& entry);
+  void WinFree(TensorTableEntry& entry);
+  void WinFreeAll(TensorTableEntry& entry);
+
   void WinPut(TensorTableEntry& entry);
   void WinGet(TensorTableEntry& entry);
   void WinAccumulate(TensorTableEntry& entry);
@@ -78,11 +83,6 @@ class MPIController {
   int LoadTopologyWeights(double& self_weight,
                           const std::unordered_map<int, double>*& neighbor_weights);
 
-  Status WinCreate(std::shared_ptr<Tensor> tensor,
-                   std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                   const std::string& name, int device);
-  Status WinFree(const std::string& name, int device);
-  Status WinFreeAll();
   Status WinSync(const std::string& name, int device, bool with_associated_p);
   Status WinFence(const std::string& name);
   Status WinLock(const std::string& name);

@@ -181,12 +181,10 @@ class NCCLController {
   void WinGet(TensorTableEntry& entry);
   void WinAccumulate(TensorTableEntry& entry);
 
-  Status WinCreate(std::shared_ptr<Tensor> tensor,
-                   std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                   const std::string& name, int device);
+  void WinCreate(TensorTableEntry& entry);
+  void WinFree(TensorTableEntry& entry);
+  void WinFreeAll(TensorTableEntry& entry);
 
-  Status WinFree(const std::string& name, int device);
-  Status WinFreeAll();
   Status WinSync(const std::string& name, int device, bool with_associated_p);
 
   Status WinMutexAcquire(const std::string& name,
@@ -195,6 +193,8 @@ class NCCLController {
                          const std::vector<int>& release_ranks, bool is_sync);
 
  protected:
+  Status WinFreeReturnStatus(TensorTableEntry& entry);
+
 #if NCCL_MINOR < 7
   ncclResult_t ncclSendByBcast(const void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
