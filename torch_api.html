@@ -447,6 +447,23 @@ this information.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.set_skip_negotiate_stage">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">set_skip_negotiate_stage</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">value</span><span class="p">:</span> <span class="n">bool</span></em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#bluefog.torch.set_skip_negotiate_stage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Skip the negotiate stage or not. (Default state is no skip).</p>
+<p>For some MPI implementation, it doesn’t have support for multiple thread.
+To use the win ops, it has to turn off the negotiate the stage.
+After turn off the negotiate the sate the error in collective callse like
+size mismatch, order of tensor is randomized, may not be able to be handled properly.
+But it may help to boost the performance.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.get_skip_negotiate_stage">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">get_skip_negotiate_stage</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.get_skip_negotiate_stage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the value of skip the negotiate stage. (Default state is no skip).</p>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.allreduce">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allreduce</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tensor</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">average</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">name</span><span class="p">:</span> <span class="n">Optional<span class="p">[</span>str<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.allreduce" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that performs averaging or summation of the input tensor over all the
@@ -895,7 +912,7 @@ the value of tensor.</p></li>
 </dd>
 </dl>
 <p>Note: The window with same name across different bluefog processes should associate
-the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put will
+the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put may
 encounter unrecoverable memory segmentation fault.</p>
 </dd></dl>
 
