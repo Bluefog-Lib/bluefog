@@ -190,7 +190,7 @@ void NCCLController::Initialize() {
       std::getenv("BLUEFOG_NUM_FINALIZER_THREADS");
   const int num_finalizer_threads =
       bluefog_num_finalizer_threads == nullptr
-          ? 50
+          ? 2
           : std::strtol(bluefog_num_finalizer_threads, nullptr, 10);
 
   nccl_ctx_.finalizer_thread_pool.create(num_finalizer_threads);
@@ -795,8 +795,10 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   // TODO(ybc) Timeline add record event to measure the time on GPU.
   const void* fused_input_data;
   MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(nccl_ctx_.event_queue, "MEM_CPY_IN");
+  }
 
-  timeline_ptr_->ActivityStartAll(entries, "COMM. (NCCL)");
   ncclResult_t ret_code =
       ncclAllReduce(fused_input_data, buffer_data, num_elements,
                     GetNCCLDataType(first_entry.tensor), ncclSum,
@@ -811,21 +813,24 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
     }
     return;
   }
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(nccl_ctx_.event_queue, "COMM. (NCCL)");
+  }
 
   MemcpyOutFusionBuffer(buffer_data, entries);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(nccl_ctx_.event_queue, "MEM_CPY_OUT");
+  }
+
+  RecordEvent(nccl_ctx_.event_queue, "");
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entries, tid]() mutable {
     auto& first_entry = entries[0];
     with_device device_guard(first_entry.device);
-    cudaEvent_t event;
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEndAll(entries, &tid);
-
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    for (auto& entry: entries) {
+    WaitForEvents(this->nccl_ctx_.event_queue, entries, this->timeline_ptr_,
+                  tid);
+    for (auto& entry : entries) {
       entry.callback(Status::OK());
     }
   });
@@ -1748,7 +1753,7 @@ void NCCLController::WaitForEvents(
     std::tie(name, event) = event_queue.front();
     event_queue.pop();
     if (name != "") {
-      timeline->ActivityStartAll(entries, name);
+      timeline->ActivityStartAll(entries, name, &tid);
     }
     CUDACHECK(cudaEventSynchronize(event));
     if (name != "") {

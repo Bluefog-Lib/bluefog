@@ -79,7 +79,7 @@ struct BluefogGlobalState {
 
   // Threshold for Tensor Fusion.  All tensors that occupy memory beyond this
   // threshold will be fused.
-  int64_t tensor_fusion_threshold = 64 * 1024 * 1024;
+  int64_t tensor_fusion_threshold = 8 * 1024 * 1024;
   FusionBufferManager fusion_buffer;
 
   // Because setting topology happens in the main thread instead of communication

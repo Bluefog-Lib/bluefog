@@ -422,12 +422,13 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   char* bluefog_timeline_loc = std::getenv(BLUEFOG_TIMELINE);
   if (bluefog_timeline_loc != nullptr) {
     std::string timeline_filename = std::string(bluefog_timeline_loc) +
-                                    std::to_string(bluefog_rank()) +
+                                    std::to_string(mpi_context.rank_) +
                                     std::string(".json");
-    state.timeline.Initialize(timeline_filename, bluefog_size());
+    state.timeline.Initialize(timeline_filename, mpi_context.size_);
     state.timeline_enabled = true;
+    BFLOG(TRACE, mpi_context.rank_)
+        << "timeline " << timeline_filename << " init done";
   }
-
   // Override the cycle time.
   char* bluefog_cycle_time = std::getenv(BLUEFOG_CYCLE_TIME);
   if (bluefog_cycle_time != nullptr) {
