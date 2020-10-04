@@ -1729,5 +1729,34 @@ void NCCLController::MemcpyEntryOutFusionBufferForNeighbors(
   }
 }
 
+void NCCLController::RecordEvent(
+    std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+    std::string name) {
+  cudaEvent_t event;
+  CUDACHECK(nccl_ctx_.GetCudaEvent(&event));
+  CUDACHECK(cudaEventRecord(event, nccl_ctx_.stream));
+  event_queue.emplace(name, event);
+}
+
+void NCCLController::WaitForEvents(
+    std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+    const std::vector<TensorTableEntry>& entries, Timeline* timeline,
+    const std::thread::id tid) {
+  while (!event_queue.empty()) {
+    std::string name;
+    cudaEvent_t event;
+    std::tie(name, event) = event_queue.front();
+    event_queue.pop();
+    if (name != "") {
+      timeline->ActivityStartAll(entries, name);
+    }
+    CUDACHECK(cudaEventSynchronize(event));
+    if (name != "") {
+      timeline->ActivityEndAll(entries, &tid);
+    }
+    CUDACHECK(nccl_ctx_.ReleaseCudaEvent(event));
+  }
+}
+
 }  // namespace common
 }  // namespace bluefog
