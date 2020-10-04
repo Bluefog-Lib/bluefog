@@ -848,7 +848,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
   bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, first_entry, timeline_ptr,
+      mpi_ctx_.size_, first_entry, timeline_ptr_,
       mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
