@@ -821,7 +821,7 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   if (timeline_ptr_->Initialized()) {
     RecordEvent(nccl_ctx_.event_queue, "MEM_CPY_OUT");
   }
-
+  // Blocking event (Not for timeline).
   RecordEvent(nccl_ctx_.event_queue, "");
 
   auto tid = std::this_thread::get_id();
@@ -867,6 +867,9 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // TODO(ybc) Timeline add record event to measure the time on GPU.
   const void* fused_input_data;
   MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(nccl_ctx_.event_queue, "MEM_CPY_IN");
+  }
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
   // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
@@ -875,7 +878,6 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // Hence, we need to offset the buffer data to location for neighbors.
   buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
 
-  timeline_ptr_->ActivityStartAll(entries, "COMM. (NCCL)");
 #if NCCL_MINOR > 6
   ncclGroupStart();
   if (first_entry.send_neighbors->empty()) {
@@ -908,7 +910,9 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     }
   }
   ncclGroupEnd();
-
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(nccl_ctx_.event_queue, "COMM. (NCCL)");
+  }
   // Remember buffer_data is already pointed at offset location (after self
   // tensor).
   int num_recv_neighbors = first_entry.send_neighbors->empty()
@@ -917,25 +921,26 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   int64_t fused_data_size = num_elements * element_size;
   MemcpyOutFusionBufferForNeighbors(buffer_data, entries, num_recv_neighbors,
                                     fused_data_size);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(nccl_ctx_.event_queue, "MEM_CPY_OUT");
+  }
+  // Blocking event (Not for timeline).
+  RecordEvent(nccl_ctx_.event_queue, "");
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entries, tid,
-                                           buffer_data]() mutable {
-    auto& first_entry = entries[0];
-    with_device device_guard(first_entry.device);
-    cudaEvent_t event;
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEndAll(entries, &tid);
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entries, tid, buffer_data]() mutable {
+        auto& first_entry = entries[0];
+        with_device device_guard(first_entry.device);
+        WaitForEvents(this->nccl_ctx_.event_queue, entries, this->timeline_ptr_,
+                      tid);
 
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    this->timeline_ptr_->ActivityStartAll(entries, "CALLBACK", &tid);
-    for (auto& entry : entries) {
-      entry.callback(Status::OK());
-    }
-    this->timeline_ptr_->ActivityEndAll(entries, &tid);
-  });
+        this->timeline_ptr_->ActivityStartAll(entries, "CALLBACK", &tid);
+        for (auto& entry : entries) {
+          entry.callback(Status::OK());
+        }
+        this->timeline_ptr_->ActivityEndAll(entries, &tid);
+      });
 #else
   for (auto& entry : entries) {
     NeighborAllreduce(entry);
@@ -1752,7 +1757,7 @@ void NCCLController::WaitForEvents(
     cudaEvent_t event;
     std::tie(name, event) = event_queue.front();
     event_queue.pop();
-    if (name != "") {
+    if (name != "") {  // Incidate it is blocking event for one ops.
       timeline->ActivityStartAll(entries, name, &tid);
     }
     CUDACHECK(cudaEventSynchronize(event));
@@ -1760,6 +1765,7 @@ void NCCLController::WaitForEvents(
       timeline->ActivityEndAll(entries, &tid);
     }
     CUDACHECK(nccl_ctx_.ReleaseCudaEvent(event));
+    if (name == "") break;
   }
 }
 
