@@ -692,7 +692,8 @@ void MPIController::WinPut(TensorTableEntry& entry) {
     MPI_Win_unlock(target_rank, mpi_win);
     timeline_ptr->ActivityEnd(entry.tensor_name);
 
-    WinVersionPutUpdate(entry.tensor_name, mpi_ctx_.neighbor_out_ranks_);
+    WinVersionPutUpdate(entry.tensor_name, {target_rank});
+
     if (entry.win_ops_with_associated_p) {
       std::shared_ptr<MPI_Win> weight_win = win_mananger->GetPWin();
       MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, *weight_win);
@@ -987,13 +988,10 @@ Status MPIController::WinVersionGetUpdate(const std::string& name,
                                      "but the version window is not.");
   }
 
-  std::vector<int> version_data = it->second->GetVersionMemory();
   MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
                  *version_win);
   for (int position : ranks) {
-    BFLOG(TRACE, mpi_ctx_.rank_)
-        << "Update Win Version for rank " << position;
-    version_data[position]++;
+    it->second->updateVersion(position);
   }
   MPI_Win_sync(*version_win);
   MPI_Win_unlock(mpi_ctx_.rank_, *version_win);
@@ -1022,9 +1020,8 @@ Status MPIController::WinVersionPutUpdate(const std::string& name,
   int one = 1;
 
   for (int rank : ranks) {
-    BFLOG(TRACE, mpi_ctx_.rank_) << "Update Win Version for rank " << rank;
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *version_win);
-    MPI_Accumulate(&one, 1, MPI_INT, rank, /*target_disp=*/rank, 1, MPI_INT, MPI_SUM,
+    MPI_Accumulate(&one, 1, MPI_INT, rank, /*target_disp=*/mpi_ctx_.rank_, 1, MPI_INT, MPI_SUM,
                    *version_win);
     MPI_Win_unlock(rank, *version_win);
   }
@@ -1050,14 +1047,9 @@ Status MPIController::WinVersionClear(const std::string& name) {
                                      "but version window is not.");
   }
 
-  std::vector<int> version_mem = it->second->GetVersionMemory();
   MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
                *version_win);
-  for (int position = 0; position < version_mem.size();
-       position++) {
-    BFLOG(TRACE, mpi_ctx_.rank_) << "Reset Win Version for rank " << position;
-    version_mem[position] = initial_value;
-  }
+  it->second->resetVersionWinMem();
   MPI_Win_sync(*version_win);
   MPI_Win_unlock(mpi_ctx_.rank_, *version_win);
 
@@ -1076,10 +1068,10 @@ Status MPIController::GetWindowVersion(const std::string& name,
         ". It may not be created or has "
         "been destroyed or wrong name for associated window.");
   }
-
+  std::shared_ptr<MPI_Win> version_win = it->second->GetVersionWin();
   std::vector<int> version_mem = it->second->GetVersionMemory();
   for (int i = 0; i < version_mem.size(); i++) {
-    versions.push_back(version_mem[i]);
+    versions[i] = version_mem[i];
   }
 
   return Status::OK();

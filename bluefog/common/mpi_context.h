@@ -74,6 +74,9 @@ class WindowManager {
 
   std::vector<int> GetVersionMemory();
 
+  void resetVersionWinMem();
+  void updateVersion(int position);
+
   inline std::shared_ptr<MPI_Win> GetVersionWin() { return version_win_; }
   inline std::shared_ptr<MPI_Win> GetMutexWin() { return mutex_win_; }
 

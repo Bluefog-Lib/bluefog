@@ -633,12 +633,13 @@ void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
   ThrowIfError(status);
 }
 
-void GetWinVersion(char* name,
+std::vector<int> GetWinVersion(char* name,
                   std::vector<int>& versions) {
   ThrowIfError(common::CheckInitialized());
   Status status =
       common::GetWindowVersion(name, versions);
   ThrowIfError(status);
+  return versions;
 }
 
 void SetWinOpsWithAssociatedPState(bool value) {

@@ -76,6 +76,17 @@ std::vector<int> WindowManager::GetVersionMemory(){
   return version_mem_;
 }
 
+void WindowManager::resetVersionWinMem(){
+  int initialValue = 0;
+  for (int i = 0; i < version_mem_.size(); i++){
+    version_mem_[i] = initialValue;
+  }
+}
+
+void WindowManager::updateVersion(int position){
+  version_mem_[position]++;
+}
+
 bool WindowManager::InitializeVersionWin(const MPI_Comm& mpi_comm, const std::vector<int>& neighbor_in_ranks) {
   int self_rank = 0;
   int global_size = 1;
@@ -97,6 +108,7 @@ bool WindowManager::InitializeVersionWin(const MPI_Comm& mpi_comm, const std::ve
   int win_size = version_mem_.size() * element_size;
   MPI_Win_create((void *)version_mem_.data(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
                  version_win_.get());
+  MPI_Win_sync(*version_win_);
   return true;
 }
 

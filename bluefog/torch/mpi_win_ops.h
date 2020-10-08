@@ -200,7 +200,7 @@ extern "C" void bluefog_torch_win_mutex_release(char* name,
                                                 const std::vector<int>& ranks,
                                                 bool exclusive);
                                                 
-extern "C" void bluefog_torch_get_win_version(char* name,
+extern "C" std::vector<int> bluefog_torch_get_win_version(char* name,
                                               std::vector<int>& versions);
 
 // Do not have support in the NCCL implementation
