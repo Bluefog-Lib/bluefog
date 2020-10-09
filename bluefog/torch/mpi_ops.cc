@@ -122,7 +122,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     // allocate two cpu memories.
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto bf_output = bf_tensor;
-    auto bf_context = std::make_shared<TorchOpContext>(device, output);
+    auto bf_context = std::make_shared<TorchOpContext>(CPU_DEVICE_ID, output);
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
