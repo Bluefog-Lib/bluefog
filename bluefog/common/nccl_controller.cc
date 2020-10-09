@@ -148,7 +148,7 @@ void NCCLContext::Finalize() {
   CUDACHECK(cudaStreamDestroy(stream));
 
 #if NCCL_MINOR < 7
-  CleanPeerCommunicator();
+  CleanPeerCommunicators();
 #endif
   CleanWindowCommunicators();
 
@@ -184,7 +184,7 @@ cudaError_t NCCLContext::ReleaseCudaEvent(cudaEvent_t event) {
 void NCCLController::Initialize() {
   nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
 #if NCCL_MINOR < 7
-  InitPeerCommunicator();
+  InitPeerCommunicators();
 #endif
   const char* bluefog_num_finalizer_threads =
       std::getenv("BLUEFOG_NUM_FINALIZER_THREADS");
@@ -204,7 +204,7 @@ void NCCLController::Initialize() {
 }
 
 #if NCCL_MINOR < 7
-void NCCLController::InitPeerCommunicator() {
+void NCCLController::InitPeerCommunicators() {
   int nDevices = 0;
   CUDACHECK(cudaGetDeviceCount(&nDevices));
   CUDACHECK(cudaSetDevice(mpi_ctx_.local_rank_ % nDevices));
@@ -736,7 +736,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       recv_rank = entry.recv_neighbors->at(recv_rank_index);
     }
 
-    int target_disp = displcmnts[recv_rank_index];
     bool should_recv = false;
     bool should_send = false;
     if (send_rank_index < num_send_size && peer_rank == send_rank) {
@@ -750,7 +749,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       BFLOG(DEBUG, mpi_ctx_.rank_) << "Should recv from rank " << peer_rank;
     }
 
-    void* recvbuf = (void*)(static_cast<const char*>(buffer_data) +
+    void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
                               num_elements * recv_rank_index * element_size);
     if (mpi_ctx_.rank_ == pair.second) {
       // Recv then send
@@ -1086,7 +1085,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                          /*source=*/0, win_comm, win_stream));
 #else
       NCCLCHECK(ncclBroadcast(/*sendbuf=*/nullptr, /*recvbuf=*/recvbuf,
-                              num_elements, GetNCCLDataType(entry.tensor),
+                              req.length, GetNCCLDataType(req.data_type),
                               /*root=*/0, win_comm, win_stream));
 #endif
     } else if (req.op_type == MPIOpsType::WIN_GET) {
@@ -1099,7 +1098,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                          /*dest=*/0, win_comm, win_stream));
 #else
       NCCLCHECK(ncclBroadcast(/*sendbuf=*/sendbuf, /*recvbuf=*/nullptr,
-                              num_elements, GetNCCLDataType(entry.tensor),
+                              req.length, GetNCCLDataType(req.data_type),
                               /*root=*/1, win_comm, win_stream));
 #endif
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {

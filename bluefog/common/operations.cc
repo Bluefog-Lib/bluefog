@@ -1233,8 +1233,8 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
       indegree, sources, outdegree, destinations);
 #if HAVE_NCCL && NCCL_MINOR < 7
   if (mpi_result && nccl_context.is_initialized) {
-    bluefog_global.nccl_controller->DestroyPeerCommunicator();
-    bluefog_global.nccl_controller->InitPeerCommunicator();
+    bluefog_global.nccl_controller->DestroyPeerCommunicators();
+    bluefog_global.nccl_controller->InitPeerCommunicators();
   }
 #endif
   bluefog_global.tensor_queue.UnlockTensorQueue();

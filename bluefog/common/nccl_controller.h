@@ -136,8 +136,8 @@ class NCCLController {
   // window ops is used.
   void Initialize();
 #if NCCL_MINOR < 7
-  void InitPeerCommunicator();
-  void DestroyPeerCommunicator();
+  void InitPeerCommunicators();
+  void DestroyPeerCommunicators();
 #endif
   void InitWindowCommunicators();
   void DestroyWindowCommunicators();
