@@ -108,7 +108,6 @@ bool WindowManager::InitializeVersionWin(const MPI_Comm& mpi_comm, const std::ve
   int win_size = version_mem_.size() * element_size;
   MPI_Win_create((void *)version_mem_.data(), win_size, element_size, MPI_INFO_NULL, mpi_comm,
                  version_win_.get());
-  MPI_Win_sync(*version_win_);
   return true;
 }
 
