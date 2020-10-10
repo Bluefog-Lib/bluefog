@@ -299,11 +299,13 @@ def get_common_options(build_ext):
         'third_party/boost/static_assert/include',
         'third_party/boost/type_traits/include',
         'third_party/boost/utility/include',
+        'third_party/flatbuffers/include',
     ]
     SOURCES = ["bluefog/common/common.cc",
                "bluefog/common/cuda_util.cc",
                "bluefog/common/half.cc",
                "bluefog/common/logging.cc",
+               "bluefog/common/message.cc",
                "bluefog/common/mpi_context.cc",
                "bluefog/common/mpi_controller.cc",
                "bluefog/common/operations.cc",

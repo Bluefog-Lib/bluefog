@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstring>
 #include <map>
 #include <queue>
@@ -30,13 +31,18 @@
 #include "common.h"
 #include "global_state.h"
 #include "logging.h"
+#include "message.h"
 
 #if HAVE_NCCL
 #include "nccl_controller.h"
 #endif
 
 // Bluefog knobs.
+#define COORDINATE_RANK 0
 #define BLUEFOG_TIMELINE "BLUEFOG_TIMELINE"
+#define BLUEFOG_CYCLE_TIME "BLUEFOG_CYCLE_TIME"
+// Stall-check warning time
+#define STALL_WARNING_TIME std::chrono::seconds(15)
 
 namespace bluefog {
 namespace common {
@@ -54,6 +60,347 @@ NCCLContext nccl_context;
 
 // If set, win_ops will execute the same ops on associated p as well.
 static bool global_with_associated_p_state = false;
+static bool global_skip_negotiate_stage = false;
+
+const auto SUSPEND_BACKGROUND_WAITTING_DURATION = std::chrono::microseconds(10);
+
+// Table for storing Tensor metadata on rank zero. This is used for error
+// checking, stall checking and size calculations, as well as determining
+// when a reduction is ready to be done (when all nodes are ready to do it).
+using MessageTable = std::unordered_map<
+    std::string,
+    std::tuple<std::vector<Request>, std::chrono::steady_clock::time_point>>;
+
+// Store the Request for a name, and return whether the total count of
+// Requests for that tensor is now equal to the MPI size (and thus we are
+// ready to reduce the tensor).
+bool IncrementTensorCount(MessageTable* message_table, const Request& msg,
+                          int mpi_size) {
+  std::string name = msg.tensor_name();
+  auto table_iter = message_table->find(name);
+  if (table_iter == message_table->end()) {
+    std::vector<Request> messages = {msg};
+    messages.reserve(static_cast<unsigned long>(mpi_size));
+
+    auto now = std::chrono::steady_clock::now();
+    message_table->emplace(name, std::make_tuple(std::move(messages), now));
+    // ready_to_reduce unless mpi_size is 1 because only 1 message is inserted.
+    return mpi_size == 1;
+  }
+
+  std::vector<Request>& messages = std::get<0>(table_iter->second);
+  messages.push_back(msg);
+  int count = (int)messages.size();
+  bool ready_to_reduce = count == mpi_size;
+  return ready_to_reduce;
+}
+
+bool CheckRequestAndDataType(const std::vector<Request>& requests,
+                             std::ostringstream& error_message_stream) {
+  bool error = false;
+  // Check that all requested operations are the same
+  auto message_type = requests[0].request_type();
+  assert(message_type == Request::ALLREDUCE ||
+         message_type == Request::BROADCAST ||
+         message_type == Request::ALLGATHER ||
+         message_type == Request::NEIGHBOR_ALLGATHER ||
+         message_type == Request::NEIGHBOR_ALLREDUCE ||
+         message_type == Request::WIN_CREATE ||
+         message_type == Request::WIN_FREE);
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    auto request_type = requests[i].request_type();
+    if (message_type != request_type) {
+      error = true;
+      error_message_stream << "Mismatched MPI operations: One rank did an "
+                           << Request::RequestType_Name(message_type)
+                           << ", but another rank did an "
+                           << Request::RequestType_Name(request_type) << ".";
+      break;
+    }
+  }
+
+  // Check that all data types of tensors are identical.
+  // WIN_FREE doesn't need that since win_create have checked the size for
+  // each associated name is the same. Also, win_free does not provid size
+  // information since it can be WinFreeAll.
+  if (message_type != Request::WIN_FREE) {
+    auto data_type = requests[0].tensor_type();
+    for (unsigned int i = 1; i < requests.size(); i++) {
+      auto request_type = requests[i].tensor_type();
+      if (data_type != request_type) {
+        error = true;
+        error_message_stream << "Mismatched data types: One rank had type "
+                             << DataType_Name(data_type)
+                             << ", but another rank had type "
+                             << DataType_Name(request_type) << ".";
+        break;
+      }
+    }
+  }
+  return error;
+}
+
+bool CheckRequestRootRank(const std::vector<Request>& requests,
+                          std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  int first_root_rank = requests[0].root_rank();
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    int this_root_rank = requests[i].root_rank();
+    if (first_root_rank != this_root_rank) {
+      error = true;
+      error_message_stream << "Mismatched "
+                           << Request::RequestType_Name(message_type)
+                           << " root ranks: One rank specified root rank "
+                           << first_root_rank
+                           << ", but another rank specified root rank "
+                           << this_root_rank << ".";
+      break;
+    }
+  }
+  return error;
+}
+
+bool CheckRequestTensorShape(const std::vector<Request>& requests,
+                             std::ostringstream& error_message_stream) {
+  bool error = false;
+  auto message_type = requests[0].request_type();
+  TensorShape tensor_shape;
+  for (auto dim : requests[0].tensor_shape()) {
+    tensor_shape.AddDim(dim);
+  }
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    TensorShape request_shape;
+    for (auto dim : requests[i].tensor_shape()) {
+      request_shape.AddDim(dim);
+    }
+    if (tensor_shape != request_shape) {
+      error = true;
+      error_message_stream << "Mismatched "
+                           << Request::RequestType_Name(message_type)
+                           << " tensor shapes: One rank sent a tensor of shape "
+                           << tensor_shape.DebugString()
+                           << ", but another rank sent a tensor of shape "
+                           << request_shape.DebugString() << ".";
+      break;
+    }
+  }
+  return error;
+}
+
+bool CheckRequestGatherTensorShape(const std::vector<Request>& requests,
+                                   std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  TensorShape tensor_shape;
+  for (auto dim : requests[0].tensor_shape()) {
+    tensor_shape.AddDim(dim);
+  }
+
+  if (tensor_shape.dims() == 0) {
+    error = true;
+    error_message_stream << "Rank zero tried to "
+                         << Request::RequestType_Name(message_type)
+                         << " a rank-zero tensor.";
+  }
+
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    TensorShape request_shape;
+    for (auto dim : requests[i].tensor_shape()) {
+      request_shape.AddDim(dim);
+    }
+    if (tensor_shape.dims() != request_shape.dims()) {
+      error = true;
+      error_message_stream << "Mismatched "
+                           << Request::RequestType_Name(message_type)
+                           << " tensor shapes: One rank sent a tensor of rank "
+                           << tensor_shape.dims()
+                           << ", but another rank sent a tensor of rank "
+                           << request_shape.dims() << ".";
+      break;
+    }
+
+    bool dim_mismatch = false;
+    for (int dim = 1; dim < tensor_shape.dims(); dim++) {
+      if (tensor_shape.dim_size(dim) != request_shape.dim_size(dim)) {
+        error = true;
+        error_message_stream
+            << "Mismatched " << Request::RequestType_Name(message_type)
+            << " tensor shapes: One rank sent a tensor with dimension " << dim
+            << " equal to " << tensor_shape.dim_size(dim)
+            << ", but another rank sent a tensor with dimension " << dim
+            << " equal to " << request_shape.dim_size(dim) << ".";
+        dim_mismatch = true;
+        break;
+      }
+    }
+    if (dim_mismatch) {
+      break;
+    }
+  }
+  return error;
+}
+
+bool CheckRequestDevice(const std::vector<Request>& requests,
+                        std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  bool first_device_is_cpu = requests[0].device() == CPU_DEVICE_ID;
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    bool this_device_is_cpu = requests[i].device() == CPU_DEVICE_ID;
+    if (first_device_is_cpu != this_device_is_cpu) {
+      error = true;
+      error_message_stream
+          << "Mismatched " << Request::RequestType_Name(message_type)
+          << " CPU/GPU device selection: One rank specified device "
+          << (first_device_is_cpu ? "CPU" : "GPU")
+          << ", but another rank specified device "
+          << (this_device_is_cpu ? "CPU" : "GPU") << ".";
+      break;
+    }
+  }
+  return error;
+}
+
+// Once a tensor is ready to be reduced, the coordinator sends an MPIResponse
+// instructing all ranks to start the reduction to all ranks. The MPIResponse
+// also contains error messages in case the submitted MPIRequests were not
+// valid (for example, contained mismatched shapes or types).
+//
+// Constructing the MPIResponse, thus, requires a whole lot of error checking.
+Response ConstructResponse(MessageTable* message_table, std::string name) {
+  bool error = false;
+  auto it = message_table->find(name);
+  assert(it != message_table->end());
+
+  std::vector<Request>& requests = std::get<0>(it->second);
+  assert(requests.size() > 0);
+  auto message_type = requests[0].request_type();
+
+  std::ostringstream error_message_stream;
+
+  // Make sure all requests' message type and data type are the same.
+  error = CheckRequestAndDataType(requests, error_message_stream);
+
+  // Make sure all requests use the same device.
+  if (!error) {
+    error = CheckRequestDevice(requests, error_message_stream);
+  }
+
+  // If we are doing a broadcast, check that all root ranks are identical.
+  if (!error) {
+    if (message_type == Request::BROADCAST) {
+      error = CheckRequestRootRank(requests, error_message_stream);
+    }
+  }
+
+  // If we are doing an (neighbor_)allreduce or broadcast, check that all tensor
+  // shapes are identical.
+  if (!error) {
+    if (message_type == Request::ALLREDUCE ||
+        message_type == Request::BROADCAST ||
+        message_type == Request::NEIGHBOR_ALLREDUCE ||
+        message_type == Request::WIN_CREATE) {
+      error = CheckRequestTensorShape(requests, error_message_stream);
+    }
+  }
+
+  // If we are doing (neighbor_)allgather, make sure all but the first dimension
+  // are the same. The first dimension may be different and the output tensor is
+  // the sum of the first dimension.
+  if (!error) {
+    if (message_type == Request::ALLGATHER ||
+        message_type == Request::NEIGHBOR_ALLGATHER) {
+      error = CheckRequestGatherTensorShape(requests, error_message_stream);
+    }
+  }
+
+  std::vector<int32_t> devices;
+  if (!error) {
+    devices.resize(requests.size());
+    for (auto& request : requests) {
+      devices[request.request_rank()] = request.device();
+    }
+  }
+
+  Response response;
+  response.add_tensor_name(name);
+  if (error) {
+    std::string error_message = error_message_stream.str();
+    response.set_response_type(Response::ERROR);
+    response.set_error_message(error_message);
+  } else if (message_type == Request::ALLGATHER) {
+    response.set_response_type(Response::ALLGATHER);
+  } else if (message_type == Request::ALLREDUCE) {
+    response.set_response_type(Response::ALLREDUCE);
+  } else if (message_type == Request::BROADCAST) {
+    response.set_response_type(Response::BROADCAST);
+  } else if (message_type == Request::NEIGHBOR_ALLGATHER) {
+    response.set_response_type(Response::NEIGHBOR_ALLGATHER);
+  } else if (message_type == Request::NEIGHBOR_ALLREDUCE) {
+    response.set_response_type(Response::NEIGHBOR_ALLREDUCE);
+  } else if (message_type == Request::WIN_CREATE) {
+    response.set_response_type(Response::WIN_CREATE);
+  } else if (message_type == Request::WIN_FREE) {
+    response.set_response_type(Response::WIN_FREE);
+  }
+  response.set_devices(devices);
+
+  // Clear all queued up requests for this name. They are now taken care of
+  // by the constructed MPI response.
+  message_table->erase(it);
+
+  return response;
+}
+
+// Report Tensors that were submitted to be reduced, gathered or broadcasted by
+// some ranks but not others and are waiting for long time to get processed.
+void CheckForStalledTensors(BluefogGlobalState& state) {
+  bool preamble = false;
+  auto now = std::chrono::steady_clock::now();
+  for (auto& m : *state.message_table) {
+    auto tensor_name = m.first;
+    std::vector<Request>& messages = std::get<0>(m.second);
+    std::chrono::steady_clock::time_point start_at = std::get<1>(m.second);
+
+    if (now - start_at > STALL_WARNING_TIME) {
+      if (!preamble) {
+        std::cerr << "WARNING: One or more tensors were submitted to be "
+                     "reduced, gathered or broadcasted by subset of ranks and "
+                     "are waiting for remainder of ranks for more than "
+                  << std::chrono::duration_cast<std::chrono::seconds>(
+                         STALL_WARNING_TIME)
+                         .count()
+                  << " seconds. ";
+        std::cerr << "This may indicate that different ranks are trying to "
+                     "submit different tensors or that only subset of ranks is "
+                     "submitting tensors, which will cause deadlock. " << std::endl;
+        std::cerr << "Stalled ops:" << std::endl;
+        preamble = true;
+      }
+      std::cerr << tensor_name;
+      std::cerr << " [missing ranks:";
+      std::unordered_set<int32_t> ready_ranks;
+      bool missing_preamble = false;
+      for (auto msg_iter = messages.begin(); msg_iter != messages.end();
+           msg_iter++) {
+        ready_ranks.insert(msg_iter->request_rank());
+      }
+      for (int32_t rank = 0; rank < mpi_context.size_; rank++) {
+        if (ready_ranks.find(rank) == ready_ranks.end()) {
+          if (!missing_preamble) {
+            std::cerr << " ";
+            missing_preamble = true;
+          } else {
+            std::cerr << ", ";
+          }
+          std::cerr << rank;
+        }
+      }
+      std::cerr << "]" << std::endl;
+    }
+  }
+}
 
 }  // namespace
 
@@ -67,23 +414,32 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   state.controller->Initialize();
 
   // We use Lazy initialized pattern. nccl_controller will be initialized only
-  // when it is necessary. 
-
-  // Signal that initialization is completed.
-  state.initialization_done = true;
-  BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
+  // when it is necessary.
 
   // Open the timeline file
   char* bluefog_timeline_loc = std::getenv(BLUEFOG_TIMELINE);
-
   if (bluefog_timeline_loc != nullptr) {
     std::string timeline_filename = std::string(bluefog_timeline_loc) +
                                     std::to_string(bluefog_rank()) +
                                     std::string(".json");
     state.timeline.Initialize(timeline_filename, bluefog_size());
-
     state.timeline_enabled = true;
   }
+
+  // Override the cycle time.
+  char* bluefog_cycle_time = std::getenv(BLUEFOG_CYCLE_TIME);
+  if (bluefog_cycle_time != nullptr) {
+    state.cycle_time_ms = std::strtof(bluefog_cycle_time, nullptr);
+  }
+
+  // Initialize the tensor count table. No tensors are available yet.
+  if (bluefog_global.controller->GetRank() == COORDINATE_RANK) {
+    state.message_table = std::unique_ptr<MessageTable>(new MessageTable());
+  }
+
+  // Signal that initialization is completed.
+  state.initialization_done = true;
+  BFLOG(INFO, bluefog_global.controller->GetRank()) << "Bluefog Initialized";
 
   // Iterate until shutdown.
   while (RunLoopOnce(state))
@@ -164,20 +520,21 @@ Vendor DetermineController(const MPIOpsType& op_type, int device) {
   return Vendor::NCCL;
 }
 
-bool RunLoopOnce(BluefogGlobalState& state) {
-  try {
-    auto entry = state.tensor_queue.PopMessagesFromQueue();
-    Vendor controller_vendor = DetermineController(entry.mpi_ops_type, entry.device);
+void PerformOperation(std::vector<TensorTableEntry>& entries) {
+  auto& timeline = bluefog_global.timeline;
+  for (auto& entry : entries) {
+    Vendor controller_vendor =
+        DetermineController(entry.mpi_ops_type, entry.device);
 #if HAVE_NCCL
-    if(controller_vendor==Vendor::NCCL && !nccl_context.is_initialized) {
-        state.nccl_controller->Initialize();
-        BFLOG(INFO, state.controller->GetRank()) << "NCCL Initialized";
+    if (controller_vendor == Vendor::NCCL && !nccl_context.is_initialized) {
+      bluefog_global.nccl_controller->Initialize();
+      BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
     }
 #endif
 
     // Wait for the data is ready (in GPU case).
-    if(entry.ready_event != nullptr) {
-      while(!entry.ready_event->Ready()) {
+    if (entry.ready_event != nullptr) {
+      while (!entry.ready_event->Ready()) {
         std::this_thread::sleep_for(std::chrono::nanoseconds(100));
       }
     }
@@ -186,151 +543,397 @@ bool RunLoopOnce(BluefogGlobalState& state) {
       case MPIOpsType::ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, "ALLREDUCE");
+        timeline.ActivityStart(entry.tensor_name, "ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
-          state.controller->Allreduce(entry);
+          bluefog_global.controller->Allreduce(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->Allreduce(entry);
+          bluefog_global.nccl_controller->Allreduce(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BROADCAST:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, "BROADCAST");
+        timeline.ActivityStart(entry.tensor_name, "BROADCAST");
         if (controller_vendor == Vendor::MPI) {
-          state.controller->Broadcast(entry);
+          bluefog_global.controller->Broadcast(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->Broadcast(entry);
+          bluefog_global.nccl_controller->Broadcast(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
-        state.timeline.ActivityStart(entry.tensor_name, "ALLGATHER");
+        timeline.ActivityStart(entry.tensor_name, "ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         if (controller_vendor == Vendor::MPI) {
-          state.controller->Allgather(entry);
+          bluefog_global.controller->Allgather(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->Allgather(entry);
+          bluefog_global.nccl_controller->Allgather(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
-        state.timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER");
+        timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
         if (controller_vendor == Vendor::MPI) {
-          state.controller->NeighborAllgather(entry);
+          bluefog_global.controller->NeighborAllgather(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->NeighborAllgather(entry);
+          bluefog_global.nccl_controller->NeighborAllgather(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLREDUCE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE");
+        timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
-          state.controller->NeighborAllreduce(entry);
+          bluefog_global.controller->NeighborAllreduce(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->NeighborAllreduce(entry);
+          bluefog_global.nccl_controller->NeighborAllreduce(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::PAIR_GOSSIP:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name;
-        state.timeline.ActivityStart(entry.tensor_name, "PAIR_GOSSIP");
-        state.controller->PairGossip(entry);
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityStart(entry.tensor_name, "PAIR_GOSSIP");
+        bluefog_global.controller->PairGossip(entry);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::BARRIER:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing Barrier now ";
-        state.controller->Barrier(entry);
+        bluefog_global.controller->Barrier(entry);
         break;
-      // TODO(ybc) All above Ops are collective ops. If the order
-      // is disarranged, the whole process will hang. This is possible in
-      // tensorflow. For example, if two ops are not control dependent to each
-      // other, the order of allreduce request by them are undeterminisitc.
       case MPIOpsType::WIN_PUT:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_PUT on " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        state.timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
+        timeline.ActivityStart(entry.tensor_name, "WIN_PUT");
         if (controller_vendor == Vendor::MPI) {
-          state.controller->WinPut(entry);
+          bluefog_global.controller->WinPut(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->WinPut(entry);
+          bluefog_global.nccl_controller->WinPut(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_GET:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_GET on " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        state.timeline.ActivityStart(entry.tensor_name, "WIN_GET");
+        timeline.ActivityStart(entry.tensor_name, "WIN_GET");
         if (controller_vendor == Vendor::MPI) {
-          state.controller->WinGet(entry);
+          bluefog_global.controller->WinGet(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->WinGet(entry);
+          bluefog_global.nccl_controller->WinGet(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::WIN_ACCUMULATE:
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing WIN_ACCUMULATE on " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        state.timeline.ActivityStart(entry.tensor_name, "WIN_ACCUMULATE");
+        timeline.ActivityStart(entry.tensor_name, "WIN_ACCUMULATE");
         if (controller_vendor == Vendor::MPI) {
-          state.controller->WinAccumulate(entry);
+          bluefog_global.controller->WinAccumulate(entry);
         }
 #if HAVE_NCCL
         if (controller_vendor == Vendor::NCCL) {
-          state.nccl_controller->WinAccumulate(entry);
+          bluefog_global.nccl_controller->WinAccumulate(entry);
         }
 #endif
-        state.timeline.ActivityEnd(entry.tensor_name);
+        timeline.ActivityEnd(entry.tensor_name);
+        break;
+      case MPIOpsType::WIN_CREATE:
+        BFLOG(TRACE, bluefog_global.controller->GetRank())
+            << "Processing WIN_CREATE " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
+#if HAVE_NCCL
+        if (controller_vendor == Vendor::NCCL) {
+          bluefog_global.nccl_controller->WinCreate(entry);
+        }
+#endif
+        if (controller_vendor == Vendor::MPI) {
+          bluefog_global.controller->WinCreate(entry);
+        }
+        break;
+      case MPIOpsType::WIN_FREE:
+        BFLOG(TRACE, bluefog_global.controller->GetRank())
+            << "Processing WIN_FREE " << entry.tensor_name << " with "
+            << Vendor_Name(controller_vendor);
+        // If the entry doesn't specify the tensor name, which means it will
+        // free all windows. Since the controller vender is determined through
+        // the device of operating tensors. Apparently, all windows case may
+        // have multiple cases. Hence, WinFreeAll will be called in both 
+        // controllers not matter what.
+#if HAVE_NCCL
+        if (nccl_context.is_initialized && entry.tensor_name.empty()) {
+          bluefog_global.nccl_controller->WinFreeAll(entry);
+        } else {
+          if (controller_vendor == Vendor::NCCL) {
+            bluefog_global.nccl_controller->WinFree(entry);
+          }
+        }
+#endif
+        if (entry.tensor_name.empty()) {
+          bluefog_global.controller->WinFreeAll(entry);
+        } else {
+          if (controller_vendor == Vendor::MPI) {
+            bluefog_global.controller->WinFree(entry);
+          }
+        }
         break;
       default:
-        state.timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
+        timeline.ActivityEnd(entry.tensor_name);  // End activity for enqueue
         throw std::runtime_error("Unsupported/Unkown MPI Operation Types");
     }
-  } catch (std::length_error& e) {
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
-  } catch (std::exception& e) {
-    BFLOG(ERROR) << e.what();
   }
-  return !bluefog_global.shut_down;
+}
+
+bool RunLoopOnce(BluefogGlobalState& state) {
+  // The coordinator sends a SHUTDOWN message to trigger shutdown.
+  bool should_shut_down = state.shut_down;
+  bool should_change_topo = state.setting_topology;
+
+  // This delay determines thread frequency and MPI message latency
+  auto sleep_duration =
+      state.last_cycle_start +
+      std::chrono::microseconds(long(state.cycle_time_ms * 1000.)) -
+      std::chrono::steady_clock::now();
+  if (sleep_duration > std::chrono::steady_clock::duration::zero()) {
+    std::this_thread::sleep_for(sleep_duration);
+  }
+  state.last_cycle_start = std::chrono::steady_clock::now();
+
+  std::deque<Request> message_queue_buffer;
+  state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
+
+  std::vector<TensorTableEntry> entries;
+  auto IsRequestConvertToEntryDirectly = [](const Request& request) -> bool {
+    return global_skip_negotiate_stage ||
+           (request.request_type() != Request::ALLREDUCE &&
+            request.request_type() != Request::ALLGATHER &&
+            request.request_type() != Request::BROADCAST &&
+            request.request_type() != Request::NEIGHBOR_ALLREDUCE &&
+            request.request_type() != Request::NEIGHBOR_ALLGATHER &&
+            request.request_type() != Request::WIN_CREATE &&
+            request.request_type() != Request::WIN_FREE);
+  };
+  // For these no need to coordinate, put them into entries directly.
+  for (auto& request : message_queue_buffer) {
+    if (IsRequestConvertToEntryDirectly(request)) {
+      entries.push_back(
+          state.tensor_queue.GetTensorEntriesFromRequestDirectly(request));
+    }
+  }
+  message_queue_buffer.erase(
+      std::remove_if(message_queue_buffer.begin(), message_queue_buffer.end(),
+                     IsRequestConvertToEntryDirectly),
+      message_queue_buffer.end());
+
+  // For the rest requests, they needs to coordinate and neogiate.
+  // Collect all tensors that are ready to be reduced. Record them in the
+  // tensor count table (rank zero) or send them to rank zero to be
+  // recorded (everyone else).
+  if (global_skip_negotiate_stage) {
+    // Pass don't do anything.
+  } else if (bluefog_rank() == COORDINATE_RANK) {
+    std::vector<std::string> ready_to_reduce;
+    RequestList message_list;
+    message_list.set_shutdown(should_shut_down);
+    message_list.set_change_topo(should_change_topo);
+    while (!message_queue_buffer.empty()) {
+      Request& message = message_queue_buffer.front();
+      message_list.add_request(message);
+      bool reduce = IncrementTensorCount(state.message_table.get(), message,
+                                         mpi_context.size_);
+      if (reduce) {
+        ready_to_reduce.push_back(message.tensor_name());
+      }
+      message_queue_buffer.pop_front();
+    }
+
+    // Rank zero has put all its own tensors in the tensor count table.
+    // Now, it should count all the tensors that are coming from other
+    // ranks at this tick.
+    // 1. Get message lengths from every rank.
+    auto recvcounts = new int[bluefog_size()];
+    recvcounts[0] = 0;
+    MPI_Gather(MPI_IN_PLACE, 1, MPI_INT, recvcounts, 1, MPI_INT,
+               COORDINATE_RANK, mpi_context.mpi_comm);
+
+    // 2. Compute displacements.
+    auto displcmnts = new int[bluefog_size()];
+    size_t total_size = 0;
+    for (int i = 0; i < bluefog_size(); i++) {
+      if (i == 0) {
+        displcmnts[i] = 0;
+      } else {
+        displcmnts[i] = recvcounts[i - 1] + displcmnts[i - 1];
+      }
+      total_size += recvcounts[i];
+    }
+
+    // 3. Collect messages from every rank.
+    auto buffer = new uint8_t[total_size];
+    MPI_Gatherv(nullptr, 0, MPI_BYTE, buffer, recvcounts, displcmnts, MPI_BYTE,
+                COORDINATE_RANK, mpi_context.mpi_comm);
+
+    // 4. Process messages.
+    for (int i = 1; i < bluefog_size(); i++) {
+      auto rank_buffer_ptr = buffer + displcmnts[i];
+      RequestList received_message_list;
+      RequestList::ParseFromBytes(received_message_list, rank_buffer_ptr);
+      for (auto& received_message : received_message_list.requests()) {
+        auto& received_name = received_message.tensor_name();
+        bool reduce = IncrementTensorCount(state.message_table.get(),
+                                           received_message, mpi_context.size_);
+        if (reduce) {
+          ready_to_reduce.push_back(received_name);
+        }
+      }
+      if (received_message_list.shutdown()) {
+        // Received SHUTDOWN request from one of the workers.
+        should_shut_down = true;
+      }
+      if (received_message_list.change_topo()) {
+        should_change_topo = true;
+      }
+    }
+    // 5. Free buffers.
+    delete[] recvcounts;
+    delete[] displcmnts;
+    delete[] buffer;
+
+    // At this point, rank zero should have a fully updated tensor count
+    // table and should know all the tensors that need to be reduced or
+    // gathered, and everyone else should have sent all their information
+    // to rank zero. We can now do reductions and gathers; rank zero will
+    // choose which ones and in what order, and will notify the other ranks
+    // before doing each reduction.
+    std::deque<Response> responses;
+    for (auto& tensor_name : ready_to_reduce) {
+      Response response =
+          ConstructResponse(state.message_table.get(), tensor_name);
+      responses.push_back(std::move(response));
+    }
+
+    ResponseList response_list;
+    response_list.set_shutdown(should_shut_down);
+    response_list.set_change_topo(should_change_topo);
+
+    while (!responses.empty()) {
+      auto response = responses.front();
+      assert(response.tensor_names().size() == 1);
+      responses.pop_front();
+      // TODO: Tensor Fusion Logics.
+      response_list.add_response(response);
+    }
+
+    // Notify all nodes which tensors we'd like to reduce at this step.
+    std::string encoded_response;
+    ResponseList::SerializeToString(response_list, encoded_response);
+    int encoded_response_length = (int)encoded_response.length() + 1;
+    MPI_Bcast(&encoded_response_length, 1, MPI_INT, COORDINATE_RANK,
+              mpi_context.mpi_comm);
+    MPI_Bcast((void*)encoded_response.c_str(), encoded_response_length,
+              MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
+    // Perform the collective operation. All nodes should end up performing
+    // the same operation.
+    for (auto& response : response_list.responses()) {
+      state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
+      // TODO: tensor fusion logics?
+    }
+
+    // Check for stalled tensors.
+    if (std::chrono::steady_clock::now() - state.last_stall_check >
+        STALL_WARNING_TIME) {
+      CheckForStalledTensors(state);
+      state.last_stall_check = std::chrono::steady_clock::now();
+    }
+  } else {
+    std::string encoded_message;
+    RequestList message_list;
+    message_list.set_shutdown(state.shut_down);
+    message_list.set_change_topo(should_change_topo);
+    while (!message_queue_buffer.empty()) {
+      message_list.add_request(message_queue_buffer.front());
+      message_queue_buffer.pop_front();
+    }
+    RequestList::SerializeToString(message_list, encoded_message);
+    int encoded_message_length = (int)encoded_message.length() + 1;
+    MPI_Gather(&encoded_message_length, 1, MPI_INT, nullptr, 1, MPI_INT,
+               COORDINATE_RANK, mpi_context.mpi_comm);
+    MPI_Gatherv((void*)encoded_message.c_str(), encoded_message_length,
+                MPI_BYTE, nullptr, nullptr, nullptr, MPI_BYTE, COORDINATE_RANK,
+                mpi_context.mpi_comm);
+
+    int msg_length;
+    MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
+    auto buffer = new uint8_t[msg_length];
+    MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
+    ResponseList response_list;
+    ResponseList::ParseFromBytes(response_list, buffer);
+    delete[] buffer;
+
+    // Perform the collective operation. All nodes should end up performing
+    // the same operation.
+    for (auto& response : response_list.responses()) {
+      state.tensor_queue.GetTensorEntriesFromResponse(response, entries);
+      // TODO: tensor fusion logics?
+    }
+
+    if (response_list.shutdown()) {
+      should_shut_down = true;
+    }
+    if (response_list.change_topo()) {
+      should_change_topo = true;
+    }
+  }
+  // Seperate the setting topology and negotiate communnication.
+  if (should_change_topo) {
+    bluefog_global.ready_to_setting_topology = true;
+    while (!bluefog_global.setting_topology_done) {
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
+    }
+    bluefog_global.ready_to_setting_topology = false;
+    // Wait for main thread reset.
+    while (bluefog_global.setting_topology_done) {
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
+    }
+  }
+
+  PerformOperation(entries);
+  return !should_shut_down;
 }
 
 // Start Bluefog background thread. Ensure that this is
 // only done once no matter how many times this function is called.
 void InitializeBluefogOnce() {
-  mpi_context
-      .Enable();  // We always enable mpi since we relied on MPI only now.
+  mpi_context.Enable();  // We always enable mpi since we relied on MPI only now.
   if (!bluefog_global.initialize_flag.test_and_set()) {
     bluefog_global.controller.reset(new MPIController(mpi_context));
 #if HAVE_NCCL
@@ -437,9 +1040,15 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
     return -1;
   }
 #endif
+  bluefog_global.setting_topology = true;
+  while (!bluefog_global.ready_to_setting_topology.load()) {
+    std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
+  }
+  bluefog_global.tensor_queue.LockTensorQueue();
   if (bluefog_global.tensor_queue.size() > 0) {
     BFLOG(ERROR)
         << "Cannot set the topology because there are unfinished MPI ops.";
+    bluefog_global.tensor_queue.UnlockTensorQueue();
     return -1;
   }
 
@@ -451,6 +1060,16 @@ int bluefog_set_topology(int indegree, const int* sources, int outdegree,
     bluefog_global.nccl_controller->InitPeerCommunicator();
   }
 #endif
+  bluefog_global.tensor_queue.UnlockTensorQueue();
+
+  bluefog_global.setting_topology = false;
+  bluefog_global.setting_topology_done = true;
+  // Wait for the background thread receive the setting_topology_done and
+  // close the ready_to_setting_topology epoch.
+  while (bluefog_global.ready_to_setting_topology) {
+    std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
+  }
+  bluefog_global.setting_topology_done = false;
   return mpi_result;
 }
 
@@ -515,6 +1134,14 @@ int bluefog_nccl_built() {
   return result;
 }
 
+void bluefog_set_skip_negotiate_stage(bool value) {
+  SetSkipNegotiateStageState(value);
+}
+
+int bluefog_get_skip_negotiate_stage() {
+  return GetSkipNegotiateStageState();
+}
+
 }  // extern "C"
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
@@ -522,6 +1149,16 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name(name);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::ALLREDUCE);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -534,7 +1171,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -543,6 +1180,16 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<ReadyEvent> ready_event,
                               const int root_rank, const std::string& name,
                               const int device, StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name(name);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::BROADCAST);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -556,7 +1203,7 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -565,6 +1212,16 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name(name);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::ALLGATHER);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -577,7 +1234,7 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -586,6 +1243,16 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name(name);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::NEIGHBOR_ALLGATHER);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -598,7 +1265,7 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -611,6 +1278,16 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
                                       bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name(name);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::NEIGHBOR_ALLREDUCE);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -627,7 +1304,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -636,6 +1313,21 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
                                std::shared_ptr<ReadyEvent> ready_event,
                                const int target_rank, const std::string& name,
                                const int device, StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name(name);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::PAIR_GOSSIP);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+  if (!global_skip_negotiate_stage) {
+    return Status::InvalidArgument(
+        "Currently, pair gossip operation does not support to run under with "
+        "negotiate stage setting. Please set skip negotiate stage to be true.");
+  }
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -649,7 +1341,57 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
+  return status;
+}
+
+Status EnqueueTensorWindowCreate(
+    std::shared_ptr<Tensor> tensor,
+    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+    const std::string& name, const int device, StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name("win_create." + name);  // Add prefix to diff win_ops on same window.
+  message.set_request_type(Request::WIN_CREATE);
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  for (int i = 0; i < tensor->shape().dims(); i++) {
+    message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
+  }
+
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.callback = callback;
+  e.device = device;
+  e.mpi_ops_type = MPIOpsType::WIN_CREATE;
+  e.tensor = tensor;
+  e.neighbor_tensors = neighbor_tensors;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
+  return status;
+}
+
+Status EnqueueTensorWindowFree(const std::string& name, int device,
+                               StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name("win_free." + name);  // Add prefix to diff win_ops on same window.
+  message.set_request_type(Request::WIN_FREE);
+  message.set_device(device);
+
+  TensorTableEntry e;
+  e.tensor_name = name;
+  e.callback = callback;
+  e.device = device;
+  e.mpi_ops_type = MPIOpsType::WIN_FREE;
+
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -659,6 +1401,13 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const int device, 
                               const bool require_mutex, 
                               StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name("win_put." + name);  // Add prefix to diff win_ops on same window.
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::WIN_PUT);
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -672,7 +1421,7 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -680,6 +1429,13 @@ Status EnqueueTensorWindowAccumulate(
     std::shared_ptr<Tensor> tensor, const std::string& name,
     const std::unordered_map<int, double>& dst_weights, const int device,
     const bool require_mutex, StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name("win_accumulate." + name);  // Add prefix to diff win_ops on same window.
+  message.set_tensor_type(tensor->dtype());
+  message.set_device(device);
+  message.set_request_type(Request::WIN_ACCUMULATE);
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.tensor = tensor;
@@ -693,7 +1449,7 @@ Status EnqueueTensorWindowAccumulate(
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
@@ -701,6 +1457,11 @@ Status EnqueueTensorWindowGet(const std::string& name,
                               const std::unordered_map<int, double>& src_weights,
                               const int device, const bool require_mutex,
                               StatusCallback callback) {
+  Request message;
+  message.set_request_rank(bluefog_global.controller->GetRank());
+  message.set_tensor_name("win_get." + name);  // Add prefix to diff win_ops on same window.
+  message.set_request_type(Request::WIN_GET);
+
   TensorTableEntry e;
   e.tensor_name = name;
   e.callback = callback;
@@ -712,50 +1473,21 @@ Status EnqueueTensorWindowGet(const std::string& name,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
+  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
 
-Status EnqueueBarrier(StatusCallback callback) {
+Status ExecuteBarrier(StatusCallback callback) {
   TensorTableEntry e;
+  e.tensor_name = "barrier";
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::BARRIER;
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
-  Status status = bluefog_global.tensor_queue.AddToTensorQueue(e);
-  return status;
-}
-
-Status WindowCreate(std::shared_ptr<Tensor> tensor,
-                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                    const std::string& name, const int device) {
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
-  Status status;
-#if HAVE_NCCL
-  if (vendor == Vendor::NCCL) {
-    if (!nccl_context.is_initialized) {
-      bluefog_global.nccl_controller->Initialize();
-      BFLOG(INFO, bluefog_global.controller->GetRank()) << "NCCL Initialized";
-    }
-    status = bluefog_global.nccl_controller->WinCreate(tensor, neighbor_tensors,
-                                                       name, device);
-  }
-#endif
-  if (vendor == Vendor::MPI) {
-    status = bluefog_global.controller->WinCreate(tensor, neighbor_tensors,
-                                                  name, device);
-  }
-
-  if (!status.ok()) {
-    BFLOG(ERROR) << "Cannot create the MPI_Win for " << name;
-    BFLOG(ERROR) << status.reason();
-  }
-  return status;
+  bluefog_global.controller->Barrier(e);
+  return Status::OK();
 }
 
 Status WindowSync(const std::string& name, int device) {
@@ -777,36 +1509,6 @@ Status WindowSync(const std::string& name, int device) {
 
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot sync the MPI_Win for " << name;
-    BFLOG(ERROR) << status.reason();
-  }
-  return status;
-}
-
-Status WindowFree(const std::string& name, int device) {
-  if (bluefog_global.shut_down) {
-    return SHUT_DOWN_ERROR;
-  }
-  Vendor vendor = DetermineController(MPIOpsType::WIN_FREE, device);
-  Status status;
-#if HAVE_NCCL
-  // No specified name. So both nccl and mpi will Free win.
-  if (nccl_context.is_initialized && name.empty()) {
-    status = bluefog_global.nccl_controller->WinFreeAll();
-  } else {
-    if (vendor == Vendor::NCCL) {
-      status = bluefog_global.nccl_controller->WinFree(name, device);
-    }
-  }
-#endif
-  if (name.empty()) {
-    status = bluefog_global.controller->WinFreeAll();
-  } else {
-    if (vendor == Vendor::MPI) {
-      status = bluefog_global.controller->WinFree(name, device);
-    }
-  }
-  if (!status.ok()) {
-    BFLOG(ERROR) << "Cannot free the MPI_Win for " << name;
     BFLOG(ERROR) << status.reason();
   }
   return status;
@@ -958,6 +1660,43 @@ void SetWinOpsWithAssociatedPState(bool value) {
 
 bool GetWinOpsWithAssociatedPState() {
   return global_with_associated_p_state;
+}
+
+void SetSkipNegotiateStageState(bool value) {
+  if (!bluefog_global.initialization_done) {
+    BFLOG(ERROR)
+        << "Try to set skip negotiate stage before bluefog is initialized.";
+    return;
+  }
+  if (value == global_skip_negotiate_stage) {
+    return;
+  }
+  if (value) {
+    // From running negotiate to skipping negotiate, we need to properly turn
+    // off negotiate stage. Otherwise, it may hang the processes. Use setting
+    // topology flag to suspend the negotiate stage then skip it.
+    bluefog_global.setting_topology = true;
+    while (!bluefog_global.ready_to_setting_topology.load()) {
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
+    }
+
+    global_skip_negotiate_stage = value;
+
+    bluefog_global.setting_topology = false;
+    bluefog_global.setting_topology_done = true;
+    // Wait for the background thread receive the setting_topology_done and
+    // close the ready_to_setting_topology epoch.
+    while (bluefog_global.ready_to_setting_topology) {
+      std::this_thread::sleep_for(SUSPEND_BACKGROUND_WAITTING_DURATION);
+    }
+    bluefog_global.setting_topology_done = false;
+  } else {
+    global_skip_negotiate_stage = value;
+  }
+}
+
+bool GetSkipNegotiateStageState() {
+  return global_skip_negotiate_stage;
 }
 
 }  // namespace common

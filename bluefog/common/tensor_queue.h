@@ -22,6 +22,7 @@
 #include <queue>
 
 #include "common.h"
+#include "message.h"
 
 namespace bluefog {
 namespace common {
@@ -30,19 +31,34 @@ class TensorQueue {
  public:
   TensorQueue() = default;
   TensorQueue(const TensorQueue&) = delete;
-  Status AddToTensorQueue(TensorTableEntry& e);
+  Status AddToTensorQueue(TensorTableEntry& e, Request& message);
 
   void FinalizeTensorQueue(std::vector<StatusCallback>& callbacks_buffer);
 
-  TensorTableEntry PopMessagesFromQueue();
+  void GetTensorEntriesFromResponse(const Response& response,
+                                    std::vector<TensorTableEntry>& entries);
 
-  void PushMessageToQueue(TensorTableEntry& message);
+  TensorTableEntry GetTensorEntriesFromRequestDirectly(const Request& request);
 
-  inline int size() { return message_queue_.size(); }
+  const TensorTableEntry& GetTensorEntry(const std::string& tensor_name) const;
+
+  void PopMessagesFromQueue(std::deque<Request>& message_queue_buffer);
+
+  void PushMessageToQueue(Request& message);
+
+  // Used when setting Topology, which require the tensor queue should be empty always.
+  inline void LockTensorQueue() { mutex_.lock(); }
+  inline void UnlockTensorQueue() { mutex_.unlock(); }
+  inline size_t size() { return message_queue_.size(); }
 
  protected:
-  // Queue of MPI requests waiting to be performed.
-  std::queue<TensorTableEntry> message_queue_;
+  // Tensors waiting to be processed.
+  // Key is based upon the message name since tensor_name in table entry for win ops
+  // is for window and we need to add "win_put."/"win_create." before it in message.
+  std::unordered_map<std::string, TensorTableEntry> tensor_table_;
+
+  // Queue of MPI requests waiting to be sent to the coordinator node.
+  std::queue<Request> message_queue_;
 
   // A mutex that needs to be used whenever operations on message queue are
   // done.

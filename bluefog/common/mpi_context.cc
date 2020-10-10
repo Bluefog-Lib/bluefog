@@ -441,7 +441,6 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
   // Every tensor participating in Allgather operation may have different
   // first dimension size, but the rest of dimensions are same for all
   // tensors.  Here we get shape of tensor sliced by first dimension.
-  // TODO(ybc): Check single_slice_shape is same cross all ranks.
   TensorShape single_slice_shape;
   for (int i = 1; i < entry.tensor->shape().dims(); ++i) {
     single_slice_shape.AddDim(entry.tensor->shape().dim_size(i));

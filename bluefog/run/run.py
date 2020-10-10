@@ -129,6 +129,10 @@ def parse_args():
     parser.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
                         help='Extra mpi flages you want to pass for mpirun.')
 
+    parser.add_argument('--prefix', action='store', dest="prefix", default='',
+                        type=str, help='A prefix path to add before mpirun. '
+                        'Set if you need to specify the path for mpirun')
+
     parser.add_argument('--verbose', action="store_true", dest="verbose",
                         help="If this flag is set, extra messages will "
                              "printed.")
@@ -232,6 +236,11 @@ def main():
     else:
         ib_arg = "-mca btl ^openib"
 
+    if args.prefix:
+        mpi_prefix = args.prefix
+    else:
+        mpi_prefix = ""
+
     if not _is_open_mpi_installed():
         raise Exception(
             'bfrun convenience script currently only supports Open MPI.\n\n'
@@ -246,14 +255,15 @@ def main():
     env = os.environ.copy()
     env = set_env_from_args(env, args)
     mpirun_command = (
-        'mpirun --allow-run-as-root '
+        '{prefix}mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
         '-mca pml ob1 {ib_arg}'
         '{ssh_port_arg} {tcp_intf_arg} '
         '{nccl_socket_intf_arg} '
         '{extra_flags} {env} {command}'
-        .format(num_proc=args.np,
+        .format(prefix=mpi_prefix,
+                num_proc=args.np,
                 hosts_arg=hosts_arg,
                 ib_arg=ib_arg,
                 ssh_port_arg=ssh_port_arg,
