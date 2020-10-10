@@ -137,7 +137,7 @@ def _register_timeline(optimizer, models, parameter_names, parent_name=None):
 
 
 class _DistributedOptimizer(torch.optim.Optimizer):
-    def __init__(self, params, model):
+    def __init__(self, params, model, num_steps_per_communication=1):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
@@ -150,6 +150,9 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        self._num_steps_per_communication = num_steps_per_communication
+        self._allreduce_delay = {v: self._num_steps_per_communication
+                                 for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -169,8 +172,16 @@ class _DistributedOptimizer(torch.optim.Optimizer):
     def _make_hook(self, p):
         def hook(*ignore):
             assert not p.grad.requires_grad
-            handle = self._allreduce_grad_async(p)
-            self._handles[p] = handle
+            if self._allreduce_delay[p] <= 0:
+                raise AssertionError(
+                    "Unexpected behavior: forward computation were computed "
+                    "more than num_steps_per_communication times before call "
+                    "to step(). Adjust num_steps_per_communication to "
+                    "accumulate gradients locally.")
+            self._allreduce_delay[p] -= 1
+            if self._allreduce_delay[p] == 0:
+                handle = self._allreduce_grad_async(p)
+                self._handles[p] = handle
 
         return hook
 
@@ -194,17 +205,9 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._use_timeline = False
 
     def synchronize(self):
-        missing_p = self._requires_update - set(self._handles.keys())
-        for p in missing_p:
-            handle = self._allreduce_grad_async(p)
-            self._handles[p] = handle
-
-        for p, handle in self._handles.items():
-            if handle is None:
-                handle = self._allreduce_grad_async(p)
-                self._handles[p] = handle
         for p, handle in self._handles.items():
             output = bf.synchronize(handle)
+            self._allreduce_delay[p] = self._num_steps_per_communication
             p.grad.set_(output)
         self._handles.clear()
 
@@ -275,7 +278,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         w_{i+1, k} = Neighbor_Average( w_{i, k} - lr * local_grad(w_{i, k}) )
     """
 
-    def __init__(self, params, model):
+    def __init__(self, params, model, num_steps_per_communication=1):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
@@ -291,6 +294,9 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        self._num_steps_per_communication = num_steps_per_communication
+        self._neighbor_allreduce_delay = {v: self._num_steps_per_communication
+                                          for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -312,8 +318,16 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    handle = self._neighbor_allreduce_data_async(p)
-                    self._handles[p] = handle
+                    if self._neighbor_allreduce_delay[p] <= 0:
+                        raise AssertionError(
+                            "Unexpected behavior: forward computation were computed "
+                            "more than num_steps_per_communication times before call "
+                            "to step(). Adjust num_steps_per_communication to "
+                            "accumulate gradients locally.")
+                    self._neighbor_allreduce_delay[p] -= 1
+                    if self._neighbor_allreduce_delay[p] == 0:
+                        handle = self._neighbor_allreduce_data_async(p)
+                        self._handles[p] = handle
         return hook
 
     def _neighbor_allreduce_data_async(self, p):
@@ -337,19 +351,10 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._use_timeline = False
 
     def synchronize(self):
-        missing_p = self._requires_update - set(self._handles.keys())
-        for p in missing_p:
-            handle = self._neighbor_allreduce_data_async(p)
-            self._handles[p] = handle
-
-        for p, handle in self._handles.items():
-            if handle is None:
-                handle = self._neighbor_allreduce_data_async(p)
-                self._handles[p] = handle
-
         with torch.no_grad():
             for p, handle in self._handles.items():
                 output = bf.synchronize(handle)
+                self._neighbor_allreduce_delay[p] = self._num_steps_per_communication
                 p.set_(output)
         self._handles.clear()
 
@@ -394,7 +399,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
 
 class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
-    def __init__(self, params, model, pull_style):
+    def __init__(self, params, model, num_steps_per_communication, pull_style):
         super(self.__class__, self).__init__(params)
 
         if pull_style:
@@ -411,6 +416,9 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._num_steps_per_communication = num_steps_per_communication
+        self._bluefog_delay = {v: self._num_steps_per_communication
+                               for _, v in sorted(named_parameters)}
         self._timeline_hook_handles = []
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
@@ -436,10 +444,18 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 if not module.training:
                     continue
                 if p.requires_grad:
-                    handle = bf.win_put_nonblocking(
-                        tensor=p.data, name=parent_name+'.'+name,
-                        dst_weights=self.dst_weights, require_mutex=False)
-                    self._handles[p] = handle
+                    if self._bluefog_delay[p] <= 0:
+                        raise AssertionError(
+                            "Gradients were computed more than "
+                            "backward_passes_per_step times before call "
+                            "to step(). Increase backward_passes_per_step to "
+                            "accumulate gradients locally.")
+                    self._bluefog_delay[p] -= 1
+                    if self._bluefog_delay[p] == 0:
+                        handle = bf.win_put_nonblocking(
+                            tensor=p.data, name=parent_name+'.'+name,
+                            dst_weights=self.dst_weights, require_mutex=False)
+                        self._handles[p] = handle
         return hook
 
     def _make_get_hook(self, parent_name):
@@ -451,10 +467,18 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
                 if not module.training:
                     continue
                 if p.requires_grad:
-                    handle = bf.win_get_nonblocking(
-                        name=parent_name+'.'+name, src_weights=self.src_weights,
-                        require_mutex=True)
-                    self._handles[p] = handle
+                    if self._bluefog_delay[p] <= 0:
+                        raise AssertionError(
+                            "Unexpected behavior: forward computation were computed "
+                            "more than num_steps_per_communication times before call "
+                            "to step(). Adjust num_steps_per_communication to "
+                            "accumulate gradients locally.")
+                    self._bluefog_delay[p] -= 1
+                    if self._bluefog_delay[p] == 0:
+                        handle = bf.win_get_nonblocking(
+                            name=parent_name+'.'+name, src_weights=self.src_weights,
+                            require_mutex=True)
+                        self._handles[p] = handle
         return hook
 
     def _register_window(self):
@@ -506,6 +530,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
             for p, handle in self._handles.items():
                 _ = bf.win_wait(handle)
                 name = self._parameter_names.get(p)
+                self._bluefog_delay[p] = self._num_steps_per_communication
                 # Update p to the average of neighbors.
                 p.set_(bf.win_update(name=name, require_mutex=True))
 
@@ -533,7 +558,7 @@ class _DistributedBluefogOptimizer(torch.optim.Optimizer):
 
 class _DistributedPushSumOptimizer(torch.optim.Optimizer):
 
-    def __init__(self, params, model):
+    def __init__(self, params, model, num_steps_per_communication):
         super(self.__class__, self).__init__(params)
 
         # use to control the behavior of win_accumulate dynamically.
@@ -552,6 +577,9 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._num_steps_per_communication = num_steps_per_communication
+        self._pushsum_delay = {v: self._num_steps_per_communication
+                               for _, v in sorted(named_parameters)}
         self._timeline_hook_handles = []
         if bf.size() > 1:
             self._register_window()
@@ -591,15 +619,22 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                 if not module.training:
                     continue
                 if p.requires_grad:
-                    ps_weights = self._named_ps_weights[full_name]
-                    extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
-                    self._named_extension_parameters[name] = extended_parameter
-                    handle = bf.win_accumulate_nonblocking(
-                        tensor=extended_parameter, name=full_name,
-                        dst_weights=self.dst_weights,
-                        require_mutex=True)
-
-                    self._handles[p] = handle
+                    if self._pushsum_delay[p] <= 0:
+                        raise AssertionError(
+                            "Unexpected behavior: forward computation were computed "
+                            "more than num_steps_per_communication times before call "
+                            "to step(). Adjust num_steps_per_communication to "
+                            "accumulate gradients locally.")
+                    self._pushsum_delay[p] -= 1
+                    if self._pushsum_delay[p] == 0:
+                        ps_weights = self._named_ps_weights[full_name]
+                        extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
+                        self._named_extension_parameters[name] = extended_parameter
+                        handle = bf.win_accumulate_nonblocking(
+                            tensor=extended_parameter, name=full_name,
+                            dst_weights=self.dst_weights,
+                            require_mutex=True)
+                        self._handles[p] = handle
         return hook
 
     def turn_on_timeline(self):
@@ -640,6 +675,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
             for p, handle in self._handles.items():
                 _ = bf.win_wait(handle)
                 name = self._parameter_names.get(p)
+                self._pushsum_delay[p] = self._num_steps_per_communication
                 extended_parameter = self._named_extension_parameters[name]
                 extended_parameter.mul_(self.self_weight)
                 # Last dimension is the push_sum weights and we want parameter / weight
@@ -672,7 +708,8 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
-def DistributedPushSumOptimizer(optimizer, model):
+def DistributedPushSumOptimizer(optimizer, model,
+                                num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     win_accumulate ops to implement the gradient push algorithm.
@@ -684,15 +721,20 @@ def DistributedPushSumOptimizer(optimizer, model):
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
+        num_steps_per_communication: Number of expected step() function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
     """
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
         dict(_DistributedPushSumOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model)
+    return cls(optimizer.param_groups, model, num_steps_per_communication)
 
-def DistributedPullGetOptimizer(optimizer, model):
+def DistributedPullGetOptimizer(optimizer, model,
+                                num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer with
     pull model average through bf.win_get ops.
@@ -700,6 +742,10 @@ def DistributedPullGetOptimizer(optimizer, model):
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
+        num_steps_per_communication: Number of expected step() function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
 
     Returned optimizer has two extra parameters `src_weights` and `force_barrier`.
     Set src_weights dictionary as {rank: scaling} differently per iteration to achieve
@@ -711,16 +757,21 @@ def DistributedPullGetOptimizer(optimizer, model):
         (optimizer.__class__,),
         dict(_DistributedBluefogOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, pull_style=True)
+    return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=True)
 
 
-def DistributedBluefogOptimizer(optimizer, model):
+def DistributedBluefogOptimizer(optimizer, model,
+                                num_steps_per_communication=1):
     """An distributed optimizer that wraps another torch.optim.Optimizer with
     pull model average through bf.win_put ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
+        num_steps_per_communication: Number of expected step() function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
 
     Returned optimizer has two extra parameters `dst_weights` and `force_barrier`.
     Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
@@ -741,10 +792,11 @@ def DistributedBluefogOptimizer(optimizer, model):
         (optimizer.__class__,),
         dict(_DistributedBluefogOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, pull_style=False)
+    return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=False)
 
 
-def DistributedNeighborAllreduceOptimizer(optimizer, model):
+def DistributedNeighborAllreduceOptimizer(optimizer, model,
+                                          num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops.
@@ -756,6 +808,10 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model):
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
+        num_steps_per_communication: Number of expected step() function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with neighbor_allreduce implementation.
@@ -764,16 +820,21 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model):
         (optimizer.__class__,),
         dict(_DistributedNeighborAllreduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model)
+    return cls(optimizer.param_groups, model, num_steps_per_communication)
 
 
-def DistributedAllreduceOptimizer(optimizer, model):
+def DistributedAllreduceOptimizer(optimizer, model,
+                                  num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
+        num_steps_per_communication: Number of expected step() function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with an allreduce implementation.
@@ -782,4 +843,4 @@ def DistributedAllreduceOptimizer(optimizer, model):
         (optimizer.__class__,),
         dict(_DistributedOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model)
+    return cls(optimizer.param_groups, model, num_steps_per_communication)
