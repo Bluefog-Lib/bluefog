@@ -925,7 +925,7 @@ Status GetWindowVersion(const std::string& name,
     return SHUT_DOWN_ERROR;
   }
 
-  Status status = bluefog_global.controller->GetWindowVersion(name, versions);
+  Status status = bluefog_global.controller->GetWindowVersionValue(name, versions);
 
   if (!status.ok()) {
     BFLOG(ERROR) << "Cannot get window version"; 

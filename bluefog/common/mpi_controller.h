@@ -96,9 +96,8 @@ class MPIController {
                          const std::vector<int>& release_ranks, bool is_sync);
   Status WinVersionPutUpdate(const std::string& name, const std::vector<int>& ranks);
   Status WinVersionGetUpdate(const std::string& name, const std::vector<int>& ranks);
-  Status WinVersionClear(const std::string& name);
-  Status GetWindowVersion(const std::string& name,
-                          std::vector<int>& versions);
+  Status VersionWinClear(const std::string& name);
+  Status GetWindowVersionValue(const std::string& name, std::vector<int>& versions);
 
   Status GetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
                                         double* weight);

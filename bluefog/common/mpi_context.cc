@@ -72,18 +72,21 @@ bool WindowManager::InitializeMutexWin(const MPI_Comm& mpi_comm) {
   return true;
 }
 
-std::vector<int> WindowManager::GetVersionMemory(){
+std::vector<int> WindowManager::GetVersionMemoryCopy(){
   return version_mem_;
 }
 
-void WindowManager::resetVersionWinMem(){
-  int initialValue = 0;
+void WindowManager::resetVersionWinMem(int initialValue /* = 0 */){
   for (int i = 0; i < version_mem_.size(); i++){
     version_mem_[i] = initialValue;
   }
 }
 
-void WindowManager::updateVersion(int position){
+void WindowManager::setVersionWinMem(int value, int position){
+  version_mem_[position] =  value;
+}
+
+void WindowManager::incrementVersionWinMem(int position){
   version_mem_[position]++;
 }
 
@@ -394,8 +397,11 @@ bool MPIContext::RegisterWindowName(const std::string& name) {
   }
   auto win_manager_ptr = std::make_shared<WindowManager>();
   win_manager_ptr->InitializeMutexWin(mpi_comm);
+  assert(win_manager_ptr->InitializeMutexWin(mpi_comm));
   win_manager_ptr->InitializeVersionWin(mpi_comm, neighbor_in_ranks_);
+  assert(win_manager_ptr->InitializeVersionWin(mpi_comm, neighbor_in_ranks_));
   win_manager_ptr->InitializePWin(mpi_comm);
+  assert(win_manager_ptr->InitializePWin(mpi_comm));
   named_win_map[name] = win_manager_ptr;
   return true;
 }
@@ -415,8 +421,11 @@ bool MPIContext::UnregisterWindowName(const std::string& name) {
   }
   it->second->FreeAllWins();
   it->second->DestroyMutexWin();
+  assert(it->second->DestroyMutexWin());
   it->second->DestroyVersionWin();
+  assert(it->second->DestroyVersionWin());
   it->second->DestroyPWin();
+  assert(it->second->DestroyPWin());
   named_win_map.erase(it);
   return true;
 }

@@ -1007,10 +1007,17 @@ def win_wait(handle: int) -> bool:
     return True
 
 
-def get_win_version(name: str):
-    """Get the version of the window in each node."""
+def get_win_version(name: str) -> Dict[int, int]:
+    """Get the version of the window in each node and return a dictionary between the rank and the version.
+
+    Args:
+        name: The name of existing MPI_win object. 
+    
+    """
     versions = [0] * size()
-    return mpi_lib.bluefog_torch_get_win_version(name, versions)
+    versions = mpi_lib.bluefog_torch_get_win_version(name, versions)
+    neighbor_version = {r: versions[r] for r in in_neighbor_ranks()}
+    return neighbor_version
 
 
 # Lock for MPI Open a passive RMA epcoh, which has nothing to do with mutex.
