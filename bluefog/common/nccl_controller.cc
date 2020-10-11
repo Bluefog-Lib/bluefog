@@ -659,6 +659,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     entry.callback(Status::InvalidArgument(
         "Send and recv neighbors dont' match in neighbor "
         "allreduce with partial send/recv request."));
+    return; 
   }
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
@@ -969,10 +970,8 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
   nccl_ctx.win_passive_recv_shutdown_done = true;
 }
 
-Status NCCLController::WinCreate(
-    std::shared_ptr<Tensor> tensor,
-    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-    const std::string& name, const int device) {
+void NCCLController::WinCreate(TensorTableEntry& entry) {
+  const std::string& name = entry.tensor_name;
   if (!nccl_ctx_.win_passive_recv_initialized) {
     nccl_ctx_.win_passive_recv_thread =
         std::thread(WinPassiveRecvRequest, mpi_ctx_.rank_, std::ref(nccl_ctx_));
@@ -989,17 +988,18 @@ Status NCCLController::WinCreate(
 
   timeline_ptr->ActivityStart(name, "WIN_CREATE");
   // We need to explicitly set the device here.
-  with_device device_guard(device);
+  with_device device_guard(entry.device);
   // 1. Check the name is used or not.
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it != nccl_ctx_.named_win_map.end()) {
-    return Status::InvalidArgument(std::string("Win_create failed with ") +
-                                   name);
+    entry.callback(
+        Status::InvalidArgument(std::string("Win_create failed with ") + name));
+    return;
   }
 
   // 2. Create a NCCL Window Manager.
   auto nccl_window = std::make_shared<NCCLWindowManager>();
-  nccl_window->InitializeWinMemory(tensor, neighbor_tensors, device, mpi_ctx_);
+  nccl_window->InitializeWinMemory(entry.tensor, entry.neighbor_tensors, entry.device, mpi_ctx_);
   nccl_window->InitializeMutexWin();
 
   // 3. Registered NCCL window manager and allocate unique id for them.
@@ -1014,11 +1014,12 @@ Status NCCLController::WinCreate(
   MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
   timeline_ptr->ActivityEnd(name);
 
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
-Status NCCLController::WinFree(const std::string& name, int device) {
-  // TODO(ybc) Think about how to synchronize between processes?
+// Helper function to Execute WinFree.
+Status NCCLController::WinFreeReturnStatus(TensorTableEntry& entry) {
+  const std::string& name = entry.tensor_name;
   auto it = nccl_ctx_.named_win_map.find(name);
   if (it == nccl_ctx_.named_win_map.end()) {
     return Status::InvalidArgument(std::string("Win_free failed with ") + name);
@@ -1045,18 +1046,30 @@ Status NCCLController::WinFree(const std::string& name, int device) {
   return Status::OK();
 }
 
-Status NCCLController::WinFreeAll() {
+void NCCLController::WinFree(TensorTableEntry& entry) {
+  Status status = WinFreeReturnStatus(entry);
+  entry.callback(status);
+}
+
+void NCCLController::WinFreeAll(TensorTableEntry& entry) {
   std::vector<std::string> win_names;
   win_names.reserve(nccl_ctx_.named_win_map.size());
   for (auto& it : nccl_ctx_.named_win_map) {
     win_names.push_back(it.first);
   }
+  TensorTableEntry entry_for_win_free = entry;
   std::sort(win_names.begin(), win_names.end());
+  Status status;
   for (auto& name : win_names) {
-    WinFree(name, /*device=*/0);  //device is never used.
+    entry_for_win_free.tensor_name = name;
+    status = WinFreeReturnStatus(entry_for_win_free);
+    if (!status.ok()) {
+      entry.callback(status);
+      return;
+    }
   }
   BFLOG(DEBUG) << "All NCCL Wins have been freed.";
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
 Status NCCLController::WinSync(const std::string& name, int device, bool with_associated_p) {

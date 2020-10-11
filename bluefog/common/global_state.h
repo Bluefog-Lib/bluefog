@@ -18,6 +18,8 @@
 #define BLUEFOG_COMMON_GLOBAL_STATE_H
 
 #include <atomic>
+#include <chrono>
+#include <memory>
 #include <queue>
 #include <thread>
 
@@ -58,6 +60,15 @@ struct BluefogGlobalState {
   // Flag indicating whether timeline enabled.
   bool timeline_enabled = false;
 
+  // Background thread cycle time in milliseconds.  Fractional numbers are permitted.
+  double cycle_time_ms = 3;
+
+  // Time point when last cycle started.
+  std::chrono::steady_clock::time_point last_cycle_start;
+
+  // Time point when coordinator last checked for stalled tensors.
+  std::chrono::steady_clock::time_point last_stall_check;
+
   std::shared_ptr<MPIController> controller;
 
   #if HAVE_NCCL
@@ -65,6 +76,21 @@ struct BluefogGlobalState {
   #endif
 
   TensorQueue tensor_queue;
+
+  // Because setting topology happens in the main thread instead of communication
+  // thread. Following three variables are to sync between them.
+  std::atomic_bool setting_topology{false};
+  std::atomic_bool setting_topology_done{false};
+  std::atomic_bool ready_to_setting_topology{false};
+
+  // Only exists on the coordinator node (rank zero). Maintains a vector of
+  // requests to allreduce every tensor (keyed by tensor name).
+  // The associated time_point is recorded when the request is received, which
+  // is used in stalled tensors check.
+  std::unique_ptr<std::unordered_map<
+      std::string,
+      std::tuple<std::vector<Request>, std::chrono::steady_clock::time_point>>>
+      message_table;
 
   ~BluefogGlobalState() {
     // Make sure that the destructor of the background thread is safe to

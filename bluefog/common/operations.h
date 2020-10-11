@@ -96,6 +96,11 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
 // C interface to return flag indicating if BlueFog was compiled with NCCL support.
 int bluefog_nccl_built();
 
+// C interface to set skip negotiate_stage or not.
+void bluefog_set_skip_negotiate_stage(bool value);
+
+int bluefog_get_skip_negotiate_stage();
+
 }
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
@@ -138,6 +143,14 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
                                const int target_rank, const std::string& name,
                                const int device, StatusCallback callback);
 
+Status EnqueueTensorWindowCreate(
+    std::shared_ptr<Tensor> tensor,
+    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
+    const std::string& name, int device, StatusCallback callback);
+
+Status EnqueueTensorWindowFree(const std::string& name, int device,
+                               StatusCallback callback);
+
 Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
                               const std::string& name,
                               const std::unordered_map<int, double>& dst_ranks,
@@ -155,18 +168,12 @@ Status EnqueueTensorWindowGet(const std::string& name,
                               const int device, const bool require_mutex,
                               StatusCallback callback);
 
-Status EnqueueBarrier(StatusCallback callback);
-
 // Note all following ops are not proccessed through the communication thread.
 // it is executed throug the main thread. It may cause some mismatch.
 
-Status WindowCreate(std::shared_ptr<Tensor> tensor,
-                    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-                    const std::string& name, int device);
+Status ExecuteBarrier(StatusCallback callback);
 
 Status WindowSync(const std::string& name, int device);
-
-Status WindowFree(const std::string& name, int device);
 
 Status WindowMutexAcquire(const std::string& name,
                           const std::vector<int>& acquire_ranks, int device,
@@ -182,12 +189,16 @@ Status GetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
 Status SetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
                                       double weight);
 
+Status GetWindowVersion(const std::string& name,
+                        std::vector<int>& versions);
+
 void SetWinOpsWithAssociatedPState(bool value);
 
 bool GetWinOpsWithAssociatedPState();
 
-Status GetWindowVersion(const std::string& name,
-                        std::vector<int>& versions);
+void SetSkipNegotiateStageState(bool value);
+
+bool GetSkipNegotiateStageState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
 

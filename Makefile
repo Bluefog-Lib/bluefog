@@ -7,7 +7,7 @@ else
 endif
 
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
-PYTEST = pytest -s
+PYTEST = pytest -s -vv
 MPICH_NOT_EXIST = $(shell which mpichversion)
 
 .PHONY: build

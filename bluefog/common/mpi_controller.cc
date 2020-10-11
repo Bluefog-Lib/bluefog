@@ -31,10 +31,14 @@
 namespace bluefog {
 namespace common {
 
+// It may be because the win_create is called at different
+// threads from the win_put, win_get, etc. After moving win_create into
+// communicaiton thread, it resolved. (works in Openmpi=4.0.2 and MPICH).
 // Due to unclear reason that mpi_put/get/accumlate under the
 // mpi_lock epoch cannot send too long vector in one time, we
 // define this number as the maximum size of win_ops can send.
-static const char* BLUEFOG_MAX_WIN_SENT = std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
+static const char* BLUEFOG_MAX_WIN_SENT =
+    std::getenv("BLUEFOG_MAX_WIN_SENT_LENGTH");
 static const int MAX_WIN_SENT =
     BLUEFOG_MAX_WIN_SENT == nullptr
         ? 1000
@@ -487,21 +491,23 @@ bool MPIController::IsMpiUnifiedModel() {
   return *memory_model == MPI_WIN_UNIFIED;
 }
 
-Status MPIController::WinCreate(
-    std::shared_ptr<Tensor> tensor,
-    std::vector<std::shared_ptr<Tensor>> neighbor_tensors,
-    const std::string& name, const int device) {
+void MPIController::WinCreate(TensorTableEntry& entry) {
+  with_device device_guard(entry.device);
 
+  std::shared_ptr<Tensor>& tensor = entry.tensor;
+  std::vector<std::shared_ptr<Tensor>>& neighbor_tensors = entry.neighbor_tensors;
+  const std::string& name = entry.tensor_name;
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
   timeline_ptr->ActivityStart(name, "WIN_CREATE");
   // We need to explicitly set the device here.
-  with_device device_guard(device);
   // 1. Regist a Name and create a window first.
+  // It also initializes the mutex memoery.
   if (!mpi_ctx_.RegisterWindowName(name)) {
-    return Status::InvalidArgument(std::string("Win_create failed with ") +
-                                   name);
+    entry.callback(
+        Status::InvalidArgument(std::string("Win_create failed with ") + name));
+    return;
   }
   // 2. Get the registered window manager.
   std::shared_ptr<WindowManager> win_manager = mpi_ctx_.GetWindowByName(name);
@@ -557,22 +563,26 @@ Status MPIController::WinCreate(
   }
   timeline_ptr->ActivityEnd(name);
 
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
-Status MPIController::WinFree(const std::string& name, int device) {
-  if (!mpi_ctx_.UnregisterWindowName(name)) {
-    return Status::InvalidArgument(std::string("Win_free failed with ") + name);
+void MPIController::WinFree(TensorTableEntry& entry) {
+  if (!mpi_ctx_.UnregisterWindowName(entry.tensor_name)) {
+    entry.callback(Status::InvalidArgument(
+        std::string("Win_free failed with ") + entry.tensor_name));
+    return;
   }
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
-Status MPIController::WinFreeAll() {
+void MPIController::WinFreeAll(TensorTableEntry& entry) {
   if (!mpi_ctx_.UnregisterAllWindowName()) {
-    return Status::InvalidArgument(std::string("Win_free_all failed."));
+    entry.callback(
+        Status::InvalidArgument(std::string("Win_free_all failed.")));
+    return;
   }
   BFLOG(DEBUG) << "All MPI Win has been freed.";
-  return Status::OK();
+  entry.callback(Status::OK());
 }
 
 Status MPIController::WinSync(const std::string& name, int device, bool with_associated_p) {
@@ -928,11 +938,6 @@ Status MPIController::WinMutexAcquire(const std::string& name,
                                       const std::vector<int>& acquire_ranks,
                                       bool is_sync) {
   BFLOG(TRACE, mpi_ctx_.rank_) << "Win Mutex for " << name << " is acquired.";
-  // The logic is similar to read-write lock:
-  // Value starts at 0:
-  //    1. is_sync step +1 if value is 0 else wait
-  //    2. Not is_sync step -1 if value is <= 0 else wait. (i.e. we allow
-  //    multiple non sync step).
   auto it = mpi_ctx_.named_win_map.find(name);
   if (it == mpi_ctx_.named_win_map.end()) {
     return Status::PreconditionError(
