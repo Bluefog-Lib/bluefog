@@ -21,7 +21,7 @@ Darwin)
       brew install mpich
       ;;
     openmpi) set -x;
-       brew install openmpi@4.0.1
+      HOMEBREW_NO_AUTO_UPDATE=1 brew install openmpi
       ;;
     *)
       echo "Unknown MPI implementation:" $1
