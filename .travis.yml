@@ -28,8 +28,8 @@ addons:
 
 before_install:
     - ./scripts/install_mpi.sh $MPI
-    - pip$PY install numpy==1.18.1
     - pip$PY install torch==1.4.0
+    - pip$PY install numpy
     - pip$PY install matplotlib  # For the plot in doc
     - python$PY --version
     - python$PY -c "import torch; print(torch.__version__)"
