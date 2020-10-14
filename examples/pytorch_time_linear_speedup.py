@@ -227,7 +227,8 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
             ' linear_regression and logistic_regression')
 
     topology = bf.load_topology()
-    self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+    # self_weight, neighbor_weights = topology_util.GetWeights(topology, bf.rank())
+    self_weight, neighbor_weights = topology_util.GetRecvWeights(topology, bf.rank())
 
     w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
     phi = w.clone()
@@ -344,7 +345,13 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
 
         # record convergence
         if bf.rank() == 0:
-            mse.append(torch.norm(w.data - w_opt.data, p=2))
+            mse_tensor = torch.norm(w.data - w_opt.data, p=2)/torch.norm(w_opt.data, p=2)
+            mse_np = mse_tensor.data.numpy()
+            # print(type(mse_np))
+            # print(mse_np.shape)
+            print(mse_np, ',')
+            mse.append(mse_np)
+            # mse.append(torch.norm(w.data - w_opt.data, p=2))
 
     # record convergence
     if bf.rank() == 0:
@@ -626,6 +633,7 @@ else:
 
 # plot and print result
 if bf.rank() == 0:
+    print(mse[-30:])
     plt.semilogy(mse)
     finalize_plot()
 
