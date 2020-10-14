@@ -17,6 +17,8 @@ import os
 import torch
 import matplotlib.pyplot as plt
 import argparse
+import time
+import numpy as np
 
 import bluefog.torch as bf
 from bluefog.common import topology_util
@@ -51,6 +53,13 @@ parser.add_argument(
     "--topology", help="this example supports mesh, star, ring, and power_two",
     default='ring'
 )
+parser.add_argument(
+    "--centralized-lr", action='store', type=float, default=1e-1, help="learning rate"
+)
+parser.add_argument(
+    "--centralized-max-iter", action='store', type=int, default=5000, help="maximum iteration number."
+)
+
 args = parser.parse_args()
 
 
@@ -85,6 +94,8 @@ def generate_data(m, n, task='logistic_regression'):
 def _loss_step(X, y, x_, loss='logistic_regression', **kwargs):
     """Calculate gradient via pytorch autograd."""
 
+    # loss_seed = kwargs.get('loss_seed', 3241)
+
     if loss == 'logistic_regression':
         rho = kwargs.get('rho', 1e-1)
         loss_ = torch.mean(torch.log(1 + torch.exp(-y*X.mm(x_)))) + \
@@ -99,6 +110,7 @@ def _loss_step(X, y, x_, loss='logistic_regression', **kwargs):
         )
 
     loss_.backward()
+    time.sleep(np.random.randn(1)*0.1)
 
     return loss_
 
@@ -162,6 +174,68 @@ def distributed_grad_descent(X, y, loss, maxite=5000, alpha=1e-1, **kwargs):
         bf.rank(), local_grad_norm))
 
     return w_opt
+
+# ==================== Decentralized Gradient Descent ============================
+# Calculate the solution with diffusion:
+# x^{k+1} = allreduce(x^k) - alpha * local_grad
+#
+# Reference:
+#
+# [R1] A. Nedic and A. Ozdaglar, ``Distributed subgradient methods for multi-agent
+#      optimization'', IEEE TAC, 2009
+#
+# [R2] K. Yuan, Q. Ling and W. Yin, ``On the convergence of decentralized gradient
+#      descent'', SIAM J. Opt, 2016
+# ================================================================================
+
+
+def DGD(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
+
+    if loss == 'logistic_regression':
+        rho = kwargs.get('rho', 1e-1)
+    elif loss == 'linear_regression':
+        rho = 0
+    else:
+        raise NotImplementedError(
+            'Task not supported. This example only supports' +
+            ' linear_regression and logistic_regression')
+
+    topology = bf.load_topology()
+    self_weight, neighbor_weights = topology_util.GetRecvWeights(
+        topology, bf.rank())
+
+    w = torch.zeros(n, 1, dtype=torch.double, requires_grad=True)
+    phi = w.clone()
+    mse = []
+
+    for i in range(maxite):
+
+        # Notice the communication of neighbor_allreduce can overlap with gradient computation.
+        w_handle = bf.neighbor_allreduce_nonblocking(w.data, self_weight, 
+            neighbor_weights, name='local variable')
+
+        # calculate local gradient
+        loss_step(X, y, w, tensor_name='neighbor.allreduce.Grad.Tracking.w',
+                  loss=loss, rho=rho)
+
+        w.data = bf.synchronize(w_handle) - alpha * w.grad.data
+        w.grad.data.zero_()
+
+        # # calculate loccal gradient via pytorch autograd
+        # loss_step(X, y, w,
+        #           tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
+
+        # # DGD
+        # phi = w - alpha * w.grad.data
+        # w.data = bf.neighbor_allreduce_nonblocking(
+        #     phi, self_weight, neighbor_weights, name='local variable')
+        # w.grad.data.zero_()
+
+        # record convergence
+        if bf.rank() == 0:
+            mse.append(torch.norm(w.data - w_opt.data, p=2))
+
+    return w, mse
 
 # ==================== Diffusion ================================================
 # Calculate the solution with diffusion:
@@ -396,8 +470,11 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
     bf.win_create(w, name="w_buff", zero_init=True)
 
     mse = []
-    for _ in range(maxite):
-        bf.barrier()
+
+    bf.barrier()
+    for i in range(maxite):
+        if i%10 == 0:
+            bf.barrier()
 
         w[:n] = w[:n] - alpha*w[n:2*n]
         bf.win_accumulate(
@@ -406,7 +483,9 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
                          for rank in bf.out_neighbor_ranks()},
             require_mutex=True)
         w.div_(2)
-        bf.barrier()
+
+        if i%10 == 0:
+            bf.barrier()
 
         w = bf.win_update_then_collect(name="w_buff")
 
@@ -452,11 +531,15 @@ X, y = generate_data(m, n, task=args.task)
 
 # calculate the global solution w_opt via distributed gradient descent
 w_opt = distributed_grad_descent(X, y, loss=args.task,
-                                 maxite=args.max_iter, alpha=args.lr, rho=rho)
+                                 maxite=args.centralized_max_iter, 
+                                 alpha=args.centralized_lr, rho=rho)
 
 # solve the logistic regression with indicated decentralized algorithms
 if args.method == 'diffusion':
     w, mse = diffusion(X, y, w_opt, loss=args.task,
+                       maxite=args.max_iter, alpha=args.lr, rho=rho)
+elif args.method == 'DGD':
+    w, mse = DGD(X, y, w_opt, loss=args.task,
                        maxite=args.max_iter, alpha=args.lr, rho=rho)
 elif args.method == 'exact_diffusion':
     w, mse = exact_diffusion(X, y, w_opt, loss=args.task,
@@ -476,7 +559,6 @@ else:
 
 # plot and print result
 if bf.rank() == 0:
-    # print(mse[-100:])
     plt.semilogy(mse)
     finalize_plot()
 
