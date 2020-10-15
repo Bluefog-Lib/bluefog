@@ -24,7 +24,8 @@ addons:
     apt:
         update: true
     homebrew:
-        update: true
+        packages:
+        - openmpi
 
 before_install:
     - ./scripts/install_mpi.sh $MPI
