@@ -25,9 +25,11 @@ parser.add_argument('--data-size', type=int, default=100000,
                     help='the size of data.')
 parser.add_argument('--max-iters', type=int, default=200,
                     help='maximum iterations')
+parser.add_argument('--local-size', type=int, default=4,
+                    help='number of nodes per machine')
 parser.add_argument('--virtual-topology', type=str, default="power2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star].')
+                    '[power2(Default), ring, mesh, star, InnerOuterRing].')
 parser.add_argument('--asynchronous-mode', action='store_true', default=False,
                     help='Use one-sided ops to run asynchronous push sum algorithm')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -37,6 +39,9 @@ parser.add_argument('--enable-dynamic-topology', action='store_true',
                                          'per iteration dynamically.'))
 parser.add_argument(
     "--plot-interactive", action='store_true', help="Use plt.show() to present the plot."
+)
+parser.add_argument(
+    "--save-plot-file", default='average_consensus_plot.png', help="Saving the plot in the file."
 )
 parser.add_argument('--seed', type=int, default=2020,
                     help='Seed for randomness.')
@@ -66,6 +71,8 @@ elif args.virtual_topology == "mesh":
         bf.size(), connect_style=0), is_weighted=True)
 elif args.virtual_topology == "star":
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
+elif args.virtual_topology == "InnerOuterRing":
+    bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=args.local_size))
 elif args.virtual_topology == "full":
     bf.set_topology(topology_util.FullyConnectedGraph(bf.size()))
 else:
@@ -81,10 +88,14 @@ if not args.asynchronous_mode:
     send_neighbors = None
 
     if args.enable_dynamic_topology:
-        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
-            bf.load_topology(), bf.rank())
+        if args.virtual_topology == "InnerOuterRing":
+            dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+                bf.size(), local_size=args.local_size, self_rank=bf.rank())
+        else:
+            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+                bf.load_topology(), bf.rank())
 
-    for _ in range(args.max_iters):
+    for ite in range(args.max_iters):
         if args.enable_dynamic_topology:
             send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
             send_neighbors = [send_neighbor]
@@ -170,4 +181,6 @@ print("MSE at last iteration: ", mse[-1])
 if args.plot_interactive and bf.rank() == 0:
     import matplotlib.pyplot as plt
     plt.semilogy(mse)
+    plt.savefig(args.save_plot_file)
     plt.show()
+    plt.close()

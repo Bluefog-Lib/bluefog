@@ -463,6 +463,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int,
         >>> for _ in range(10):
         >>>     print(next(gen))
     """
+
     index = 0
     while True:
 
@@ -478,6 +479,5 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int,
             if target_rank_id == self_rank:
                 recv_ranks.append(other_rank)
         
-        print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
         yield send_rank, recv_ranks
         index += 1
