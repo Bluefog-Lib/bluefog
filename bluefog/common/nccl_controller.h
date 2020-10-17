@@ -103,10 +103,6 @@ class NCCLContext {
 
   mutable ThreadPool finalizer_thread_pool;
 
-  // GPU events are used as an alternative to host-device synchronization (which stalls the GPU pipeline)
-  // for the purpose of recording timing on the Horovod timeline.
-  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
-
   // Window related variables
   std::atomic_bool win_passive_recv_initialized{false};
   std::atomic_bool win_passive_recv_shutdown{false};

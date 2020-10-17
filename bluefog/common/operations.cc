@@ -544,7 +544,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        timeline.ActivityStart(entry.tensor_name, "ALLREDUCE");
+        timeline.ActivityStart(entry.tensor_name, "PROC_ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
           bluefog_global.controller->Allreduce(entry);
         }
@@ -559,7 +559,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        timeline.ActivityStart(entry.tensor_name, "BROADCAST");
+        timeline.ActivityStart(entry.tensor_name, "PROC_BROADCAST");
         if (controller_vendor == Vendor::MPI) {
           bluefog_global.controller->Broadcast(entry);
         }
@@ -571,7 +571,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
-        timeline.ActivityStart(entry.tensor_name, "ALLGATHER");
+        timeline.ActivityStart(entry.tensor_name, "PROC_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
@@ -586,7 +586,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
-        timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLGATHER");
+        timeline.ActivityStart(entry.tensor_name, "PROC_NEIGHBOR_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name  << " with "
             << Vendor_Name(controller_vendor);
@@ -604,7 +604,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        timeline.ActivityStart(entry.tensor_name, "NEIGHBOR_ALLREDUCE");
+        timeline.ActivityStart(entry.tensor_name, "PROC_NEIGHBOR_ALLREDUCE");
         if (controller_vendor == Vendor::MPI) {
           bluefog_global.controller->NeighborAllreduce(entry);
         }
@@ -758,6 +758,7 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
       BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing fused " << first_entry.tensor_name << " and rest "
           << std::to_string(entries.size()) << " tensors.";
+      timeline.ActivityStartAll(entries, "PROC_ALLREDUCE");
       if (controller_vendor == Vendor::MPI) {
         bluefog_global.controller->Allreduce(entries);
       }
@@ -766,11 +767,13 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
         bluefog_global.nccl_controller->Allreduce(entries);
       }
 #endif
+      timeline.ActivityEndAll(entries);
       break;
     case MPIOpsType::NEIGHBOR_ALLREDUCE:
       BFLOG(TRACE, bluefog_global.controller->GetRank())
           << "Processing fused " << first_entry.tensor_name << " and rest "
           << std::to_string(entries.size()) << " tensors.";
+      timeline.ActivityStartAll(entries, "PROC_NEIGHBOR_ALLREDUCE");
       if (controller_vendor == Vendor::MPI) {
         bluefog_global.controller->NeighborAllreduce(entries);
       }
@@ -779,6 +782,7 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
         bluefog_global.nccl_controller->NeighborAllreduce(entries);
       }
 #endif
+      timeline.ActivityEndAll(entries);
       break;
     default:
       throw std::runtime_error(
