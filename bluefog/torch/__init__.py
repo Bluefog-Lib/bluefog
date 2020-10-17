@@ -63,4 +63,4 @@ from bluefog.torch.mpi_ops import turn_off_win_ops_with_associated_p
 
 from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
 from bluefog.torch.mpi_ops import timeline_context
-from bluefog.torch.utility import broadcast_optimizer_state, broadcast_parameters
+from bluefog.torch.utility import broadcast_optimizer_state, broadcast_parameters, allreduce_parameters
