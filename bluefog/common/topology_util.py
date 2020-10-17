@@ -302,6 +302,62 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
+def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
+    """Generate ring structure of graph (uniliteral).
+    Argument connect_style should be an integer between 0 and 2, where
+    0 represents the bi-connection, 1 represents the left-connection,
+    and 2 represents the right-connection.
+
+    Example: A RingGraph with 16 nodes:
+
+    .. plot::
+
+        >>> import networkx as nx
+        >>> from bluefog.common import topology_util
+        >>> G = topology_util.RingGraph(16)
+        >>> nx.draw_circular(G)
+    """
+    
+    total_nodes = world_size
+    num_machines = world_size // local_size
+    nodes_per_machine = local_size
+
+    topo = np.zeros([total_nodes, total_nodes])
+
+    for i in range(total_nodes):
+        for j in range(total_nodes):
+            machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
+            machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
+            if machine_i == machine_j:
+                topo[i,j] = 1
+            elif ((machine_i + 1) % num_machines) == machine_j:
+                topo[i,j] = 1 if local_rank_i == local_rank_j else 0
+            else:
+                topo[i,j] = 0
+    
+    topo = topo / topo.sum(axis=1)
+    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    return G
+
+    # x = np.zeros(size)
+    # x[0] = 0.5
+    # if connect_style == 0:  # bi-connection
+    #     x[0] = 1/3.0
+    #     x[-1] = 1/3.0
+    #     x[1] = 1/3.0
+    # elif connect_style == 1:  # left-connection
+    #     x[-1] = 0.5
+    # elif connect_style == 2:  # right-connection
+    #     x[1] = 0.5
+    # else:
+    #     raise ValueError("Connect_style has to be int between 0 and 2")
+
+    # topo = np.empty((size, size))
+    # for i in range(size):
+    #     topo[i] = np.roll(x, i)
+    # G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    # return G
+
 
 def IsRegularGraph(topo: nx.DiGraph) -> bool:
     """Dtermine a graph is regular or not, i.e. all nodes have the same degree."""
@@ -340,6 +396,8 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
             sorted_ranks = sorted_ranks[1:]  # remove the self-loop
         sorted_send_ranks.append(sorted_ranks)
 
+    # print('line 343:', sorted_send_ranks)
+
     self_degree = topo.out_degree(self_rank) - 1
     index = 0
     while True:
@@ -351,5 +409,75 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
             degree = topo.out_degree(other_rank) - 1
             if sorted_send_ranks[other_rank][index % degree] == self_rank:
                 recv_ranks.append(other_rank)
+
+        # print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
+        # print('rank {}, send_rank:{}, recv_ranks:{}'.format(self_rank, send_rank, recv_ranks))
+        yield send_rank, recv_ranks
+        index += 1
+
+def GetInnerOuterRingDynamicSendRank(world_size: int, local_size: int, 
+                                     self_rank: int, index: int) -> int:
+    num_machines = world_size//local_size
+    nodes_per_machine = local_size
+
+    machine_id = self_rank // nodes_per_machine 
+    local_rank_id = self_rank % nodes_per_machine
+    local_rank_to_go_outside_id = index % nodes_per_machine
+
+    # find send_rank
+    if local_rank_to_go_outside_id == local_rank_id:
+        target_machine_id = (machine_id + 1) % num_machines
+        target_rank_id = target_machine_id * nodes_per_machine + local_rank_id
+        send_rank = target_rank_id
+    else:
+        if nodes_per_machine == 2:
+            send_rank = -1  # do not send info. Needs discussion!
+            return send_rank
+
+        target_rank_id = (local_rank_id + 1) % nodes_per_machine
+        if target_rank_id == local_rank_to_go_outside_id:
+            target_rank_id = (target_rank_id + 1) % nodes_per_machine
+
+        send_rank = target_rank_id + machine_id*nodes_per_machine
+    return send_rank
+        
+
+def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, 
+                                          self_rank: int) -> Iterator[Tuple[int, List[int]]]:
+    """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+       for Inner-Ring-Outer-Ring topology
+
+    Args:
+        world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
+        local_size (int): number of nodes in each machine
+        self_rank (int): The self rank.
+
+    Yields:
+        Iterator[Tuple[int, List[int]]]: send_rank, recv_ranks.
+
+    Example:
+
+        >>> from bluefog.common import topology_util
+        >>> world_size, local_size = 64, 8
+        >>> gen = topology_util.GetDynamicSendRecvRanks(world_size, local_size, 0)
+        >>> for _ in range(10):
+        >>>     print(next(gen))
+    """
+    index = 0
+    while True:
+
+        send_rank = GetInnerOuterRingDynamicSendRank(world_size, local_size, self_rank, index)
+        recv_ranks = []
+
+        for other_rank in range(world_size):
+            if other_rank == self_rank:
+                continue
+            target_rank_id = GetInnerOuterRingDynamicSendRank(world_size, local_size, other_rank, index)
+            # print('index:{}, self_rank:{}, send_rank:{}, other_rank:{}, target_rank_id:{}'.format(index, self_rank, send_rank, other_rank, target_rank_id))
+
+            if target_rank_id == self_rank:
+                recv_ranks.append(other_rank)
+        
+        print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
         yield send_rank, recv_ranks
         index += 1

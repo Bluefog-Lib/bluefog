@@ -72,16 +72,27 @@ if args.dist_optimizer == 'horovod':
 
 bf.init()
 if args.dist_optimizer != 'horovod':
+
+    print('line 76\n')
+
     if args.virtual_topology == "power2":
+        print('line 76-1\n')
         pass
     elif args.virtual_topology == "ring":
+        print('line 76-2\n')
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
     elif args.virtual_topology == "mesh":
+        print('line 76-3\n')
         bf.set_topology(topology_util.RingGraph(
             bf.size(), connect_style=0), is_weighted=True)
     elif args.virtual_topology == "star":
+        print('line 76-4\n')
         bf.set_topology(topology_util.StarGraph(bf.size()))
+    elif args.virtual_topology == "InnerOuterRing":
+        print('line 85\n')
+        bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=4))
     else:
+        print('line 76-5\n')
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
                          "[power2(Default), ring, mesh, star].")
 
@@ -167,6 +178,10 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
     dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
         bf.load_topology(), bf.rank())
 
+if args.enable_dynamic_topology and args.virtual_topology == 'InnerOuterRing':
+    print('line 171\n')
+    dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+        bf.size(), local_size=4, self_rank=bf.rank())
 
 def dynamic_topology_update(batch_idx):
     if args.dist_optimizer == 'win_put':
