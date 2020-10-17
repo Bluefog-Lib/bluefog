@@ -863,7 +863,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     return;
   }
 
-  // TODO(ybc) Timeline add record event to measure the time on GPU.
+#if NCCL_MINOR > 6
   const void* fused_input_data;
   MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
   if (timeline_ptr_->Initialized()) {
@@ -877,7 +877,6 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // Hence, we need to offset the buffer data to location for neighbors.
   buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
 
-#if NCCL_MINOR > 6
   ncclGroupStart();
   if (first_entry.send_neighbors->empty()) {
     for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
