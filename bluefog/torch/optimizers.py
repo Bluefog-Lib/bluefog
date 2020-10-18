@@ -726,26 +726,24 @@ def DistributedPushSumOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for  two scenarios to use num_steps_per_communication:
-        Scenario 1) w_{i+1} = neighbor_allredce(w_i) + \sum \grad_j(w_i)
-                    No local model parameter update, accumulate the gradients for reducing
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+    Example for two scenarios to use num_steps_per_communication:
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+        >>> opt = bf.DistributedPushSumOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     loss.backward()
-        >>> opt.step()  # Neighbor allreducing happens here
-        Scenario 2) w_{i, j+1} = w_{i, j} - \grad_j(w_{i,j}), j = 0, 1, ....J-1
-                    w_{i+1, 0} = neighbor_allredce(w_{i, 0}）
-                    Local model parameter update
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+        >>> opt.step()  # PushSum reducing happens here
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+        >>> opt = bf.DistributedPushSumOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     opt.zero_grad()
         >>>     loss.backward()
-        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
+        >>>     opt.step()  # PushSum reducing happens at the last iteration
     """
     cls = type(
         optimizer.__class__.__name__,
@@ -768,26 +766,24 @@ def DistributedPullGetOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for  two scenarios to use num_steps_per_communication:
-        Scenario 1) w_{i+1} = neighbor_allredce(w_i) + \sum \grad_j(w_i)
-                    No local model parameter update, accumulate the gradients for reducing
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+    Example for two scenarios to use num_steps_per_communication:
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+        >>> opt = bf.DistributedPullGetOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     loss.backward()
-        >>> opt.step()  # Neighbor allreducing happens here
-        Scenario 2) w_{i, j+1} = w_{i, j} - \grad_j(w_{i,j}), j = 0, 1, ....J-1
-                    w_{i+1, 0} = neighbor_allredce(w_{i, 0}）
-                    Local model parameter update
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+        >>> opt.step()  # PullGet communication happens here
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+        >>> opt = bf.DistributedPullGetOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     opt.zero_grad()
         >>>     loss.backward()
-        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
+        >>>     opt.step()  # PullGet communication happens at the last iteration
 
     Returned optimizer has two extra parameters `src_weights` and `force_barrier`.
     Set src_weights dictionary as {rank: scaling} differently per iteration to achieve
@@ -815,26 +811,24 @@ def DistributedBluefogOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for  two scenarios to use num_steps_per_communication:
-        Scenario 1) w_{i+1} = neighbor_allredce(w_i) + \sum \grad_j(w_i)
-                    No local model parameter update, accumulate the gradients for reducing
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+    Example for two scenarios to use num_steps_per_communication:
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+        >>> opt = bf.DistributedBluefogOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     loss.backward()
-        >>> opt.step()  # Neighbor allreducing happens here
-        Scenario 2) w_{i, j+1} = w_{i, j} - \grad_j(w_{i,j}), j = 0, 1, ....J-1
-                    w_{i+1, 0} = neighbor_allredce(w_{i, 0}）
-                    Local model parameter update
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+        >>> opt.step()  # Window operation happens here
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+        >>> opt = bf.DistributedBluefogOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     opt.zero_grad()
         >>>     loss.backward()
-        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
+        >>>     opt.step()  # Window operation happens at the last iteration
 
     Returned optimizer has two extra parameters `dst_weights` and `force_barrier`.
     Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
@@ -876,20 +870,20 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for  two scenarios to use num_steps_per_communication:
-        Scenario 1) w_{i+1} = neighbor_allredce(w_i) + \sum \grad_j(w_i)
-                    No local model parameter update, accumulate the gradients for reducing
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+    Example for two scenarios to use num_steps_per_communication:
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+        >>> opt = bf.DistributedNeighborAllreduceOptimizer(optimizer, model,
+                                                           num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     loss.backward()
         >>> opt.step()  # Neighbor allreducing happens here
-        Scenario 2) w_{i, j+1} = w_{i, j} - \grad_j(w_{i,j}), j = 0, 1, ....J-1
-                    w_{i+1, 0} = neighbor_allredce(w_{i, 0}）
-                    Local model parameter update
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+        >>> opt = bf.DistributedNeighborAllreduceOptimizer(optimizer, model,
+                                                           num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
@@ -920,26 +914,24 @@ def DistributedAllreduceOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for  two scenarios to use num_steps_per_communication:
-        Scenario 1) w_{i+1} = neighbor_allredce(w_i) + \sum \grad_j(w_i)
-                    No local model parameter update, accumulate the gradients for reducing
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+    Example for two scenarios to use num_steps_per_communication:
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+        >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     loss.backward()
-        >>> opt.step()  # Neighbor allreducing happens here
-        Scenario 2) w_{i, j+1} = w_{i, j} - \grad_j(w_{i,j}), j = 0, 1, ....J-1
-                    w_{i+1, 0} = neighbor_allredce(w_{i, 0}）
-                    Local model parameter update
-        >>> opt = bf.DistributedOptimizer(optimizer, model, num_steps_per_communication=J)
+        >>> opt.step()  # Allreducing happens here
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+        >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model, num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
         >>>     opt.zero_grad()
         >>>     loss.backward()
-        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
+        >>>     opt.step()  # Allreducing happens at the last iteration
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with an allreduce implementation.
