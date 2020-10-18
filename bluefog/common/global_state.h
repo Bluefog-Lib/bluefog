@@ -61,7 +61,7 @@ struct BluefogGlobalState {
   bool timeline_enabled = false;
 
   // Background thread cycle time in milliseconds.  Fractional numbers are permitted.
-  double cycle_time_ms = 3;
+  double cycle_time_ms = 0.5;
 
   // Time point when last cycle started.
   std::chrono::steady_clock::time_point last_cycle_start;
