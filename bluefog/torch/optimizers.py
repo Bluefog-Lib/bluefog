@@ -267,120 +267,12 @@ class _DistributedOptimizer(torch.optim.Optimizer):
             )
         return super(self.__class__, self).zero_grad()
 
-class _DistributedAllreduceOptimizer(torch.optim.Optimizer):
-    def __init__(self, params, model, num_steps_per_communication=1):
-        super(self.__class__, self).__init__(params)
-
-        named_parameters, models = _check_named_parameters(self, model)
-        self._models = models
-        self._parameter_names = {v: k for k, v in sorted(named_parameters)}
-        self._handles = {}
-        self._requires_update = set()
-        self._synchronized = False
-        self._should_synchronize = True
-        self._timeline_hook_handles = []
-        self._use_timeline = False
-        self._num_steps_per_communication = num_steps_per_communication
-        self._allreduce_delay = {v: self._num_steps_per_communication
-                                 for _, v in sorted(named_parameters)}
-        if os.getenv('BLUEFOG_TIMELINE'):
-            self.turn_on_timeline()
-        if bf.size() > 1:
-            self._register_hooks()
-
-    def _register_hooks(self):
-        for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                layer.register_forward_hook(self._make_hook(parent_name))
-                for _, p in layer.named_parameters():
-                    self._requires_update.add(p)
-
-    def _make_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if not module.training:
-                    continue
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if p.requires_grad:
-                    if self._allreduce_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
-                    self._allreduce_delay[p] -= 1
-                    if self._allreduce_delay[p] == 0:
-                        handle = self._allreduce_data_async(p)
-                        self._handles[p] = handle
-        return hook
-
-    def _allreduce_data_async(self, p):
-        name = self._parameter_names.get(p)
-        handle = bf.allreduce_nonblocking(p.data, average=True, name=name)
-        return handle
-
-    def turn_on_timeline(self):
-        handles = _register_timeline(
-            self, self._models, self._parameter_names, 'allreduce')
-        self._timeline_hook_handles.extend(handles)
-        self._use_timeline = True
-
-    def turn_off_timeline(self):
-        for hook in self._timeline_hook_handles:
-            hook.remove()
-        self._timeline_hook_handles.clear()
-        self._use_timeline = False
-
-    def synchronize(self):
-        with torch.no_grad():
-            for p, handle in self._handles.items():
-                output = bf.synchronize(handle)
-                self._allreduce_delay[p] = self._num_steps_per_communication
-                p.set_(output)
-        self._handles.clear()
-
-        self._synchronized = True
-
-    @contextmanager
-    def skip_synchronize(self):
-        """
-        A context manager used to specify that optimizer.step() should
-        not perform synchronization.
-
-        It's typically used in a following pattern:
-
-        .. code-block:: python
-
-            optimizer.synchronize()
-            with optimizer.skip_synchronize():
-                optimizer.step()
-        """
-        self._should_synchronize = False
-        try:
-            yield
-        finally:
-            self._should_synchronize = True
-
-    def step(self, closure=None):
-        # consensus style is the easist way to implement it.
-        if self._should_synchronize:
-            if self._synchronized:
-                warnings.warn(
-                    "optimizer.step() called without "
-                    "optimizer.skip_synchronize() context after "
-                    "optimizer.synchronize(). This can cause training "
-                    "slowdown. You may want to consider using "
-                    "optimizer.skip_synchronize() context if you use "
-                    "optimizer.synchronize() in your code."
-                )
-            self.synchronize()
-        self._synchronized = False
-        return super(self.__class__, self).step(closure)
-
-class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
+class _DistributedReduceOptimizer(torch.optim.Optimizer):
     """ A distributed optimizer wrapper over torch optimizer.
+
+    Arguments:
+        reduce_type: either to be "allreduce" or "neighbor_allreduce" to decide the reducing
+                     method for communication.
 
     Note: Unlike the _DistributedOptimizer class that registers hook for each named parameters,
     triggers the allreduce_nonblocking after gradient computation is finished, and updates the
@@ -399,7 +291,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         w_{i+1, k} = Neighbor_Average( w_{i, k} - lr * local_grad(w_{i, k}) )
     """
 
-    def __init__(self, params, model, num_steps_per_communication=1):
+    def __init__(self, params, model, reduce_type, num_steps_per_communication=1):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
@@ -416,7 +308,16 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles = []
         self._use_timeline = False
         self._num_steps_per_communication = num_steps_per_communication
-        self._neighbor_allreduce_delay = {v: self._num_steps_per_communication
+        self._reduce_type_str = reduce_type
+        # _reduce_method: 0 for allreduce, and 1 for neighbor_allreduce
+        if self._reduce_type_str == "allreduce":
+            self._reduce_method = 0
+        elif self._reduce_type_str == "neighbor.allreduce":
+            self._reduce_method = 1
+        else:
+            raise ValueError("Unknown reduce type for internal class _DistributedReduceOptimizer")
+
+        self._reduce_delay = {v: self._num_steps_per_communication
                                           for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
@@ -439,15 +340,18 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
                     # End forward computation timeline
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
-                    if self._neighbor_allreduce_delay[p] <= 0:
+                    if self._reduce_delay[p] <= 0:
                         raise AssertionError(
                             "Unexpected behavior: forward computation were computed "
                             "more than num_steps_per_communication times before call "
                             "to step(). Adjust num_steps_per_communication to "
                             "accumulate gradients locally.")
-                    self._neighbor_allreduce_delay[p] -= 1
-                    if self._neighbor_allreduce_delay[p] == 0:
-                        handle = self._neighbor_allreduce_data_async(p)
+                    self._reduce_delay[p] -= 1
+                    if self._reduce_delay[p] == 0:
+                        if self._reduce_method == 0:
+                            handle = self._allreduce_data_async(p)
+                        elif self._reduce_method == 1:
+                            handle = self._neighbor_allreduce_data_async(p)
                         self._handles[p] = handle
         return hook
 
@@ -459,9 +363,14 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
                                                    enable_topo_check=self.enable_topo_check)
         return handle
 
+    def _allreduce_data_async(self, p):
+        name = self._parameter_names.get(p)
+        handle = bf.allreduce_nonblocking(p.data, average=True, name=name)
+        return handle
+
     def turn_on_timeline(self):
         handles = _register_timeline(
-            self, self._models, self._parameter_names, 'neighbor.allreduce')
+            self, self._models, self._parameter_names, self._reduce_type_str)
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
@@ -475,7 +384,7 @@ class _DistributedNeighborAllreduceOptimizer(torch.optim.Optimizer):
         with torch.no_grad():
             for p, handle in self._handles.items():
                 output = bf.synchronize(handle)
-                self._neighbor_allreduce_delay[p] = self._num_steps_per_communication
+                self._reduce_delay[p] = self._num_steps_per_communication
                 p.set_(output)
         self._handles.clear()
 
@@ -976,7 +885,7 @@ def DistributedAllreduceOptimizer(optimizer, model,
                                   num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
-    The communication is triggered during forward propagation happens.
+    The communication for allreduce is applied on the parameters when forward propagation happens.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
@@ -1012,16 +921,16 @@ def DistributedAllreduceOptimizer(optimizer, model,
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
-        dict(_DistributedAllreduceOptimizer.__dict__),
+        dict(_DistributedReduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, num_steps_per_communication)
+    return cls(optimizer.param_groups, model, "allreduce", num_steps_per_communication)
 
 
 def DistributedNeighborAllreduceOptimizer(optimizer, model,
                                           num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through
-    neighbor_allreduce ops.
+    neighbor_allreduce ops over parameters.
 
     Returned optimizer has two extra parameters `self_weight` and `neighbor_weights`.
     Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
@@ -1061,16 +970,17 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
-        dict(_DistributedNeighborAllreduceOptimizer.__dict__),
+        dict(_DistributedReduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, num_steps_per_communication)
+    return cls(optimizer.param_groups, model, "neighbor.allreduce", num_steps_per_communication)
 
 
-def DistributedHorovodOptimizer(optimizer, model,
-                                backward_passes_per_step=1):
+def DistributedGradientAllreduceOptimizer(optimizer, model,
+                                          backward_passes_per_step=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
     The communication happens when backward propagation happens, which is the same as Horovod.
+    In addition, allreduce is applied on gradient instead of parameters.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
@@ -1083,7 +993,8 @@ def DistributedHorovodOptimizer(optimizer, model,
     Example for two scenarios to use num_steps_per_communication:
         Scenario 1) Local accumulation of gradient without update model.
                     (Used in large batch size or large model cases)
-        >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model, num_steps_per_communication=J)
+        >>> opt = bf.DistributedGradientAllreduceOptimizer(optimizer, model,
+        >>>                                                num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
@@ -1091,7 +1002,8 @@ def DistributedHorovodOptimizer(optimizer, model,
         >>>     loss.backward()
         >>> opt.step()  # Allreducing happens here
         Scenario 2) Local updating the model. (Used in case that decreasing the communication).
-        >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model, num_steps_per_communication=J)
+        >>> opt = bf.DistributedGradientAllreduceOptimizer(optimizer, model,
+        >>>                                                num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
