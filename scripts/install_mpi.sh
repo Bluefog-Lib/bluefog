@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+export HOMEBREW_NO_AUTO_UPDATE=1
 case `uname` in
 Linux)
   case $1 in
@@ -21,7 +22,7 @@ Darwin)
       brew install mpich
       ;;
     openmpi) set -x;
-       brew install openmpi
+      brew install openmpi
       ;;
     *)
       echo "Unknown MPI implementation:" $1
