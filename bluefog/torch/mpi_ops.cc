@@ -401,14 +401,17 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              for (int i = 1; i < bluefog_neighbor_size(); i++) {
+              int neighbor_size = send_neighbors.empty()
+                                      ? bluefog_neighbor_size()
+                                      : recv_neighbors.size();
+              for (int i = 1; i < neighbor_size; i++) {
                 output_reduced.add_(
                     output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
               }
               output_buffer.resize_(shape_vector);
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(bluefog_neighbor_size() + 1);
+              output_buffer.div_(neighbor_size + 1);
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
@@ -483,14 +486,17 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              for (int i = 1; i < bluefog_neighbor_size(); i++) {
+              int neighbor_size = send_neighbors.empty()
+                                      ? bluefog_neighbor_size()
+                                      : recv_neighbors.size();
+              for (int i = 1; i < neighbor_size; i++) {
                 output_reduced.add_(
                     output.slice(0, i * first_dim, (i + 1) * first_dim));
               }
               output_buffer.resize_(shape_vector);
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(bluefog_neighbor_size() + 1);
+              output_buffer.div_(neighbor_size + 1);
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);

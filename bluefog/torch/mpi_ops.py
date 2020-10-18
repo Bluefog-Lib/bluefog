@@ -399,11 +399,18 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
-        avg_computation = True
+        uniform_weights = 1.0/(len(neighbor_weights)+1)
+        avg_computation = False
+        if abs(self_weight - uniform_weights) > 1e-6:
+            avg_computation = True
+        for n_weights in neighbor_weights.values():
+            if abs(n_weights - uniform_weights) > 1e-6:
+                avg_computation = True
+                break
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    send_neighbors.sort()
+
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
                                         name.encode() if name is not None else "")
