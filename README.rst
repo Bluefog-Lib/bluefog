@@ -46,13 +46,14 @@ NOTE: Although the most torch-based APIs perform well, this repository is still 
 Quick Start
 -----------
 
-First, make sure your environment is with ``python>=3.7`` and ``openmpi_ >= 4.0``.
-Then, install Bluefog with: ``pip install --no-cache-dir bluefog``.  Check
+First, make sure your environment is with ``python>=3.7`` and ``openmpi >= 4.0``.
+Then, install Bluefog with: ``pip install --no-cache-dir bluefog`` or
+``BLUEFOG_WITH_NCCL=1 pip install bluefog`` if NCCL is supported (NCCL>=2.7). Check
 the ``install_bluefog`` page if you need more information or other install options.
 We provide high-level wrapper for torch optimizer. 
 Probably, the only thing you need to modify
 the existing script to distributed implementation is wrapping the optimizer
-with our ``DistributedBluefogOptimizer``,
+with our ``DistributedNeighborAllreduceOptimizer``,
 then run it through ``bfrun``. That is it!
 
 .. code-block:: python
@@ -65,7 +66,7 @@ then run it through ``bfrun``. That is it!
    ...
    bf.init()
    optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
-   optimizer = bf.DistributedBluefogOptimizer(
+   optimizer = bf.DistributedNeighborAllreduceOptimizer(
       optimizer, model=model
    )
    ...

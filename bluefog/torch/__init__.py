@@ -39,6 +39,7 @@ from bluefog.torch.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
 from bluefog.torch.mpi_ops import mpi_threads_supported
 from bluefog.torch.mpi_ops import unified_mpi_window_model_supported
 from bluefog.torch.mpi_ops import nccl_built
+from bluefog.torch.mpi_ops import set_skip_negotiate_stage, get_skip_negotiate_stage
 
 from bluefog.torch.mpi_ops import allreduce, allreduce_nonblocking
 from bluefog.torch.mpi_ops import allgather, allgather_nonblocking

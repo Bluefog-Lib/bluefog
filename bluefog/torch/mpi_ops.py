@@ -40,6 +40,8 @@ out_neighbor_ranks = _basics.out_neighbor_ranks
 mpi_threads_supported = _basics.mpi_threads_supported
 unified_mpi_window_model_supported = _basics.unified_mpi_window_model_supported
 nccl_built = _basics.nccl_built
+set_skip_negotiate_stage = _basics.set_skip_negotiate_stage
+get_skip_negotiate_stage = _basics.get_skip_negotiate_stage
 
 timeline_context = _basics.timeline_context
 timeline_start_activity = _basics.timeline_start_activity
@@ -659,7 +661,7 @@ def win_create(tensor: torch.Tensor, name: str, zero_init: bool = False) -> bool
         bool: Indicate the creation succeed or not.
 
     Note: The window with same name across different bluefog processes should associate
-    the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put will
+    the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put may
     encounter unrecoverable memory segmentation fault.
     """
     function = _check_function(_win_create_function_factory, tensor)

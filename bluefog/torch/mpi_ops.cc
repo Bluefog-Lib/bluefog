@@ -584,7 +584,7 @@ void Barrier() {
   ThrowIfError(common::CheckInitialized());
   auto handle = handle_manager.AllocateHandle();
 
-  auto status = common::EnqueueBarrier([handle](const Status& status) {
+  auto status = common::ExecuteBarrier([handle](const Status& status) {
     handle_manager.MarkDone(handle, status);
   });
   ThrowIfError(status);
