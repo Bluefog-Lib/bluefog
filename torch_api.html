@@ -182,24 +182,101 @@
 <dd></dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.torch.DistributedAllreduceOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.</p>
+<dt id="bluefog.torch.DistributedGradientAllreduceOptimizer">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedGradientAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em>, <em class="sig-param"><span class="n">backward_passes_per_step</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedGradientAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
+The communication happens when backward propagation happens, which is the same as Horovod.
+In addition, allreduce is applied on gradient instead of parameters.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
 <li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected backward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
 </ul>
+</dd>
+</dl>
+<dl>
+<dt>Example for two scenarios to use num_steps_per_communication:</dt><dd><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedGradientAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>                                               <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens here</span>
+<span class="go">Scenario 2) Local updating the model. (Used in case that decreasing the communication).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedGradientAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>                                               <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens at the last iteration</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedAllreduceOptimizer">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em>, <em class="sig-param"><span class="n">num_steps_per_communication</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
+The communication for allreduce is applied on the parameters when forward propagation happens.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected model forward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
+</ul>
+</dd>
+</dl>
+<dl>
+<dt>Example for two scenarios to use num_steps_per_communication:</dt><dd><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="go">                                           num_steps_per_communication=J)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens here</span>
+<span class="go">Scenario 2) Local updating the model. (Used in case that decreasing the communication).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="go">                                           num_steps_per_communication=J)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens at the last iteration</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedNeighborAllreduceOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedNeighborAllreduceOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em>, <em class="sig-param"><span class="n">num_steps_per_communication</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
-neighbor_allreduce ops.</p>
+neighbor_allreduce ops over parameters.</p>
 <p>Returned optimizer has two extra parameters <cite>self_weight</cite> and <cite>neighbor_weights</cite>.
 Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
 per iteration to achieve win_put over dynamic graph behavior.</p>
@@ -208,14 +285,44 @@ per iteration to achieve win_put over dynamic graph behavior.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
 <li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected model forward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
 </ul>
+</dd>
+</dl>
+<dl>
+<dt>Example for two scenarios to use num_steps_per_communication:</dt><dd><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedNeighborAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="go">                                                   num_steps_per_communication=J)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Neighbor allreducing happens here</span>
+<span class="go">Scenario 2) Local updating the model. (Used in case that decreasing the communication).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedNeighborAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="go">                                                   num_steps_per_communication=J)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Neighbor allreducing happens at the last iteration</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedPushSumOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPushSumOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedPushSumOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPushSumOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em>, <em class="sig-param"><span class="n">num_steps_per_communication</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedPushSumOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
 win_accumulate ops to implement the gradient push algorithm.</p>
 <p>Returned optimizer has two extra parameters <cite>self_weight</cite> and <cite>neighbor_weights</cite>.
@@ -226,14 +333,42 @@ per iteration to achieve win_put over dynamic graph behavior.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
 <li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected model forward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
 </ul>
+</dd>
+</dl>
+<dl>
+<dt>Example for two scenarios to use num_steps_per_communication:</dt><dd><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedPushSumOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># PushSum reducing happens here</span>
+<span class="go">Scenario 2) Local updating the model. (Used in case that decreasing the communication).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedPushSumOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># PushSum reducing happens at the last iteration</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedPullGetOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPullGetOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedPullGetOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedPullGetOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em>, <em class="sig-param"><span class="n">num_steps_per_communication</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedPullGetOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
 pull model average through bf.win_get ops.</p>
 <dl class="field-list simple">
@@ -241,7 +376,35 @@ pull model average through bf.win_get ops.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
 <li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected model forward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
 </ul>
+</dd>
+</dl>
+<dl>
+<dt>Example for two scenarios to use num_steps_per_communication:</dt><dd><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedPullGetOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># PullGet communication happens here</span>
+<span class="go">Scenario 2) Local updating the model. (Used in case that decreasing the communication).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedPullGetOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># PullGet communication happens at the last iteration</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 <p>Returned optimizer has two extra parameters <cite>src_weights</cite> and <cite>force_barrier</cite>.
@@ -252,7 +415,7 @@ will put at <cite>step()</cite> to synchronous processes.</p>
 
 <dl class="py function">
 <dt id="bluefog.torch.DistributedBluefogOptimizer">
-<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">DistributedBluefogOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">optimizer</span></em>, <em class="sig-param"><span class="n">model</span></em>, <em class="sig-param"><span class="n">num_steps_per_communication</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedBluefogOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
 pull model average through bf.win_put ops.</p>
 <dl class="field-list simple">
@@ -260,7 +423,35 @@ pull model average through bf.win_put ops.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
 <li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected model forward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
 </ul>
+</dd>
+</dl>
+<dl>
+<dt>Example for two scenarios to use num_steps_per_communication:</dt><dd><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedBluefogOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Window operation happens here</span>
+<span class="go">Scenario 2) Local updating the model. (Used in case that decreasing the communication).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedBluefogOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Window operation happens at the last iteration</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 <p>Returned optimizer has two extra parameters <cite>dst_weights</cite> and <cite>force_barrier</cite>.
