@@ -396,8 +396,6 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
             sorted_ranks = sorted_ranks[1:]  # remove the self-loop
         sorted_send_ranks.append(sorted_ranks)
 
-    # print('line 343:', sorted_send_ranks)
-
     self_degree = topo.out_degree(self_rank) - 1
     index = 0
     while True:
@@ -410,40 +408,10 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
             if sorted_send_ranks[other_rank][index % degree] == self_rank:
                 recv_ranks.append(other_rank)
 
-        # print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
-        # print('rank {}, send_rank:{}, recv_ranks:{}'.format(self_rank, send_rank, recv_ranks))
         yield send_rank, recv_ranks
         index += 1
 
-def GetInnerOuterRingDynamicSendRank(world_size: int, local_size: int, 
-                                     self_rank: int, index: int) -> int:
-    num_machines = world_size//local_size
-    nodes_per_machine = local_size
-
-    machine_id = self_rank // nodes_per_machine 
-    local_rank_id = self_rank % nodes_per_machine
-    local_rank_to_go_outside_id = index % nodes_per_machine
-
-    # find send_rank
-    if local_rank_to_go_outside_id == local_rank_id:
-        target_machine_id = (machine_id + 1) % num_machines
-        target_rank_id = target_machine_id * nodes_per_machine + local_rank_id
-        send_rank = target_rank_id
-    else:
-        if nodes_per_machine == 2:
-            send_rank = -1  # do not send info. Needs discussion!
-            return send_rank
-
-        target_rank_id = (local_rank_id + 1) % nodes_per_machine
-        if target_rank_id == local_rank_to_go_outside_id:
-            target_rank_id = (target_rank_id + 1) % nodes_per_machine
-
-        send_rank = target_rank_id + machine_id*nodes_per_machine
-    return send_rank
-        
-
-def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, 
-                                          self_rank: int) -> Iterator[Tuple[int, List[int]]]:
+def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self_rank: int) -> int:
     """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
        for Inner-Ring-Outer-Ring topology
 
@@ -458,26 +426,51 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int,
     Example:
 
         >>> from bluefog.common import topology_util
-        >>> world_size, local_size = 64, 8
+        >>> world_size, local_size = bf.size(), bf.local_size()
         >>> gen = topology_util.GetDynamicSendRecvRanks(world_size, local_size, 0)
         >>> for _ in range(10):
         >>>     print(next(gen))
     """
 
+    num_machines = world_size//local_size
+    nodes_per_machine = local_size
     index = 0
     while True:
+        machine_id = self_rank // nodes_per_machine 
+        local_rank_id = self_rank % nodes_per_machine
+        local_rank_to_go_outside_id = index % nodes_per_machine
 
-        send_rank = GetInnerOuterRingDynamicSendRank(world_size, local_size, self_rank, index)
         recv_ranks = []
+        if local_rank_to_go_outside_id == local_rank_id:
+            # find send_rank
+            target_machine_id = (machine_id + 1) % num_machines
+            target_rank_id = target_machine_id * nodes_per_machine + local_rank_id
+            send_rank = target_rank_id
 
-        for other_rank in range(world_size):
-            if other_rank == self_rank:
-                continue
-            target_rank_id = GetInnerOuterRingDynamicSendRank(world_size, local_size, other_rank, index)
-            # print('index:{}, self_rank:{}, send_rank:{}, other_rank:{}, target_rank_id:{}'.format(index, self_rank, send_rank, other_rank, target_rank_id))
+            # find recv_rank
+            source_machine_id = (machine_id - 1) % num_machines
+            source_rank_id = source_machine_id * nodes_per_machine + local_rank_id
+            recv_ranks.append(source_rank_id)
 
-            if target_rank_id == self_rank:
-                recv_ranks.append(other_rank)
-        
+        else:
+            if nodes_per_machine == 2:
+                send_rank = -1  # do not send info. Needs discussion!
+                recv_ranks.append(-1)
+            else:
+                # find send_rank
+                target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
+                if target_local_rank_id == local_rank_to_go_outside_id:
+                    target_local_rank_id = (target_local_rank_id + 1) % nodes_per_machine
+                target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
+                send_rank = target_rank_id
+
+                # find recv_rank
+                source_local_rank_id = (local_rank_id - 1) % nodes_per_machine
+                if source_local_rank_id == local_rank_to_go_outside_id:
+                    source_local_rank_id = (source_local_rank_id - 1) % nodes_per_machine
+                source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
+                recv_ranks.append(source_rank_id)
+
+        # print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
         yield send_rank, recv_ranks
         index += 1
