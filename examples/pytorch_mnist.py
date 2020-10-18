@@ -189,6 +189,9 @@ elif args.dist_optimizer == 'neighbor_allreduce':
 elif args.dist_optimizer == 'allreduce':
     optimizer = optimizer = bf.DistributedAllreduceOptimizer(
         optimizer, model=model)
+elif args.dist_optimizer == 'horovod_allreduce':
+    optimizer = optimizer = bf.DistributedHorovodOptimizer(
+        optimizer, model=model)
 elif args.dist_optimizer == 'push_sum':
     optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'horovod':

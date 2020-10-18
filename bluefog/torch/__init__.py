@@ -23,6 +23,7 @@ import os
 import torch
 from bluefog.common.util import check_extension
 from bluefog.torch.optimizers import (
+    DistributedHorovodOptimizer,
     DistributedAllreduceOptimizer,
     DistributedNeighborAllreduceOptimizer,
     DistributedPushSumOptimizer,
