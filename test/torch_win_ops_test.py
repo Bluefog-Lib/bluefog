@@ -263,7 +263,7 @@ class WinOpsTests(unittest.TestCase):
             assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_get_win_version_with_win_put(self):
-        """Test that versions are initialized as 0; win put increments the verions; versions are reset to 0 after win update."""
+        """Test version window is initialized, updated and cleared correctly with win put."""
         size = bf.size()
         rank = bf.rank()
         if size <= 1:
@@ -546,7 +546,7 @@ class WinOpsTests(unittest.TestCase):
                     recv_tensor.min(), recv_tensor.max(), avg_value, rank))
 
     def test_get_win_version_with_win_get(self):
-        """Test that versions are initialized as 0; win get increments the verions; versions are reset to 0 after win update."""
+        """Test version window is initialized, updated and cleared correctly with win get."""
         size = bf.size()
         rank = bf.rank()
         if size <= 1:

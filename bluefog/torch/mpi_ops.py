@@ -1010,15 +1010,15 @@ def win_wait(handle: int) -> bool:
 
 
 def get_win_version(name: str) -> Dict[int, int]:
-    """Get the version of the window in each node and return a dictionary between the rank and the version.
+    """The unique name to get the associated window object.
 
     Args:
         name: The name of existing MPI_win object. 
     
     """
     versions = [0] * size()
-    versions = mpi_lib.bluefog_torch_get_win_version(name, versions)
-    neighbor_version = {r: versions[r] for r in in_neighbor_ranks()}
+    returned_versions = mpi_lib.bluefog_torch_get_win_version(name, versions)
+    neighbor_version = {r: returned_versions[r] for r in in_neighbor_ranks()}
     return neighbor_version
 
 
