@@ -69,7 +69,8 @@ class WindowManager {
   bool InitializeMutexWin(const MPI_Comm& mpi_comm);
   bool DestroyMutexWin();
 
-  bool InitializeVersionWin(const MPI_Comm& mpi_comm, const std::vector<int>& neighbor_in_ranks);
+  bool InitializeVersionWin(const MPI_Comm& mpi_comm,
+                            const std::vector<int>& neighbor_in_ranks);
   bool DestroyVersionWin();
 
   std::vector<int> GetVersionMemoryCopy();

@@ -976,7 +976,7 @@ Status MPIController::WinMutexRelease(const std::string& name,
 }
 
 /**
- * This function increaments the local version for the corresponding rank 
+ * This function increaments the local version for the corresponding rank
  * when there is a win get operation.
  **/
 Status MPIController::WinVersionGetUpdate(const std::string& name,
@@ -998,7 +998,7 @@ Status MPIController::WinVersionGetUpdate(const std::string& name,
   }
 
   MPI_Win_lock(MPI_LOCK_EXCLUSIVE, mpi_ctx_.rank_, MPI_MODE_NOCHECK,
-                 *version_win);
+               *version_win);
   for (int position : ranks) {
     it->second->incrementVersionWinMem(position);
   }
@@ -1009,7 +1009,7 @@ Status MPIController::WinVersionGetUpdate(const std::string& name,
 }
 
 /**
- * This function increaments the remote version for the corresponding rank 
+ * This function increaments the remote version for the corresponding rank
  * when there is a win put operation.
  **/
 Status MPIController::WinVersionPutUpdate(const std::string& name,
@@ -1034,8 +1034,8 @@ Status MPIController::WinVersionPutUpdate(const std::string& name,
 
   for (int rank : ranks) {
     MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, *version_win);
-    MPI_Accumulate(&one, 1, MPI_INT, rank, /*target_disp=*/mpi_ctx_.rank_, 1, MPI_INT, MPI_SUM,
-                   *version_win);
+    MPI_Accumulate(&one, 1, MPI_INT, rank, /*target_disp=*/mpi_ctx_.rank_, 1,
+                   MPI_INT, MPI_SUM, *version_win);
     MPI_Win_unlock(rank, *version_win);
   }
 
@@ -1069,7 +1069,7 @@ Status MPIController::VersionWinClear(const std::string& name) {
 }
 
 Status MPIController::GetWindowVersionValue(const std::string& name,
-                                    std::vector<int>& versions) {
+                                            std::vector<int>& versions) {
   BFLOG(TRACE, mpi_ctx_.rank_)
       << "Get Win Version for " << name << " is released.";
 

@@ -289,16 +289,20 @@ class WinOpsTests(unittest.TestCase):
             bf.barrier()
             bf.win_put(tensor, window_name)
             bf.barrier()
-            versions_after_win_get = list(bf.get_win_version(window_name).values())
+            versions_after_win_get = list(
+                bf.get_win_version(window_name).values())
             bf.win_update(window_name)
-            versions_after_win_update = list(bf.get_win_version(window_name).values())
+            versions_after_win_update = list(
+                bf.get_win_version(window_name).values())
             neighbor_ranks_number = len(neighbor_ranks)
 
-            zero_number_in_original_versions = len(original_versions) - np.count_nonzero(original_versions)
+            zero_number_in_original_versions = len(
+                original_versions) - np.count_nonzero(original_versions)
             assert (zero_number_in_original_versions == neighbor_ranks_number), (
                 "version initialization is wrong.")
 
-            zero_number_after_win_update = len(versions_after_win_update) - np.count_nonzero(versions_after_win_update)
+            zero_number_after_win_update = len(
+                versions_after_win_update) - np.count_nonzero(versions_after_win_update)
             assert (zero_number_after_win_update == neighbor_ranks_number), (
                 "version clear up is wrong.")
 
@@ -572,16 +576,20 @@ class WinOpsTests(unittest.TestCase):
             bf.barrier()
             bf.win_get(window_name)
             bf.barrier()
-            versions_after_win_get = list(bf.get_win_version(window_name).values())
+            versions_after_win_get = list(
+                bf.get_win_version(window_name).values())
             bf.win_update(window_name, clone=True)
-            versions_after_win_update = list(bf.get_win_version(window_name).values())
+            versions_after_win_update = list(
+                bf.get_win_version(window_name).values())
             neighbor_ranks_number = len(neighbor_ranks)
 
-            zero_number_in_original_versions = len(original_versions) - np.count_nonzero(original_versions)
+            zero_number_in_original_versions = len(
+                original_versions) - np.count_nonzero(original_versions)
             assert ((zero_number_in_original_versions) == neighbor_ranks_number), (
                 "version initialization is wrong.")
 
-            zero_number_after_win_update = len(versions_after_win_update) - np.count_nonzero(versions_after_win_update)
+            zero_number_after_win_update = len(
+                versions_after_win_update) - np.count_nonzero(versions_after_win_update)
             assert ((zero_number_after_win_update) == neighbor_ranks_number), (
                 "version clear up is wrong.")
 

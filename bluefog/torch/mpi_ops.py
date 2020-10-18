@@ -1010,11 +1010,15 @@ def win_wait(handle: int) -> bool:
 
 
 def get_win_version(name: str) -> Dict[int, int]:
-    """The unique name to get the associated window object.
+    """ Get the version of tensor stored in the win buffer.
 
     Args:
-        name: The name of existing MPI_win object. 
-    
+        name: The unique name to get the associated window object.
+
+    Returns:
+        A dictionary maps from neighbor ranks to version. 0 means the latest
+        tensor stored in win buffer has been read/sync. Non-negative value
+        means the tensor has been updated through put or get before read/sync.
     """
     versions = [0] * size()
     returned_versions = mpi_lib.bluefog_torch_get_win_version(name, versions)
