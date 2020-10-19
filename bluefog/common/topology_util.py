@@ -363,7 +363,7 @@ def InnerOuterExp2Graph(world_size: int, local_size: int) -> nx.DiGraph:
         for j in range(total_nodes):
             machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
             machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
-            machine_dist = (machine_i - machine_j) % num_machines
+            machine_dist = (machine_j - machine_i) % num_machines
             if machine_i == machine_j:
                 topo[i, j] = 1
             elif isPowerOf(machine_dist, 2):
@@ -448,7 +448,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(
 
         >>> from bluefog.common import topology_util
         >>> world_size, local_size = bf.size(), bf.local_size()
-        >>> gen = topology_util.GetDynamicSendRecvRanks(world_size, local_size, 0)
+        >>> gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(world_size, local_size, 0)
         >>> for _ in range(10):
         >>>     print(next(gen))
     """
@@ -519,7 +519,7 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
 
         >>> from bluefog.common import topology_util
         >>> world_size, local_size = bf.size(), bf.local_size()
-        >>> gen = topology_util.GetDynamicSendRecvRanks(world_size, local_size, 0)
+        >>> gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(world_size, local_size, 0)
         >>> for _ in range(10):
         >>>     print(next(gen))
     """
@@ -574,5 +574,6 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
                 recv_ranks.append(source_rank_id)
 
+        print('ite:{}, rank:{}, send_neighbors:{}, recv_neighbors:{}'.format(index, self_rank, send_rank, recv_ranks))
         yield [send_rank], recv_ranks
         index += 1
