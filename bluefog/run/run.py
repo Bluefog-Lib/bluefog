@@ -258,7 +258,7 @@ def main():
         '{prefix}mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '
         '-bind-to none -map-by slot '
-        '-mca pml ob1 {ib_arg}'
+        '-mca pml ob1 {ib_arg} '
         '{ssh_port_arg} {tcp_intf_arg} '
         '{nccl_socket_intf_arg} '
         '{extra_flags} {env} {command}'

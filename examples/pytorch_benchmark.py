@@ -139,6 +139,9 @@ elif args.dist_optimizer == 'neighbor_allreduce':
 elif args.dist_optimizer == 'allreduce':
     optimizer = optimizer = bf.DistributedAllreduceOptimizer(
         optimizer, model=model)
+elif args.dist_optimizer == 'gradient_allreduce':
+    optimizer = optimizer = bf.DistributedGradientAllreduceOptimizer(
+        optimizer, model=model)
 elif args.dist_optimizer == 'push_sum':
     optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'horovod':
@@ -150,7 +153,8 @@ elif args.dist_optimizer == 'pull_get':
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
-                     '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
+                     '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
+                     'win_put, push_sum, horovod]')
 
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
 bf.broadcast_optimizer_state(optimizer, root_rank=0)
@@ -198,8 +202,8 @@ def dynamic_topology_update(batch_idx):
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
-        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-        optimizer.send_neighbors = [send_neighbor]
+        send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {
             r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)

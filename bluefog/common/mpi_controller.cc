@@ -79,9 +79,20 @@ void MPIController::Initialize() {
       mpi_ctx_.is_homogeneous_ = false;
       break;
     }
+    // also require the rank is continuous
+    if (mpi_ctx_.rank_ % local_sizes[i] != mpi_ctx_.local_rank_) {
+      mpi_ctx_.is_homogeneous_ = false;
+      break;
+    }
   }
   BFLOG(TRACE) << "Running environment " << (mpi_ctx_.is_homogeneous_ ? "is" : "is NOT")
-               << " homogeneous (i.e. same local size on each node)";
+               << " homogeneous (i.e. same local size on each machine)";
+  if (!mpi_ctx_.is_homogeneous_) {
+    BFLOG(WARNING)
+        << "Running environment is not homogeneous (i.e. same local size on "
+           "each machine), which may disable some functionality or degrade "
+           "performance.";
+  }
 
   BFLOG(DEBUG) << "MPI controller initialized.";
 }

@@ -302,25 +302,24 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
-def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate ring structure of graph (uniliteral).
-    Argument connect_style should be an integer between 0 and 2, where
-    0 represents the bi-connection, 1 represents the left-connection,
-    and 2 represents the right-connection.
 
-    Example: A RingGraph with 16 nodes:
+def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
+    """Generate Inner Ring and Outer Ring (Unilateral) Graph.
+
+    Within one machine all inner rank/processes is connected in ring and all
+    nodes with same local size across all machines is connected through another ring.
 
     .. plot::
 
         >>> import networkx as nx
         >>> from bluefog.common import topology_util
-        >>> G = topology_util.RingGraph(16)
+        >>> G = topology_util.InnerOuterRingGraph(12, 3)
         >>> nx.draw_circular(G)
     """
-    
     total_nodes = world_size
     num_machines = world_size // local_size
     nodes_per_machine = local_size
+    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
 
     topo = np.zeros([total_nodes, total_nodes])
 
@@ -329,34 +328,52 @@ def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
             machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
             machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
             if machine_i == machine_j:
-                topo[i,j] = 1
+                topo[i, j] = 1
             elif ((machine_i + 1) % num_machines) == machine_j:
-                topo[i,j] = 1 if local_rank_i == local_rank_j else 0
+                topo[i, j] = 1 if local_rank_i == local_rank_j else 0
             else:
-                topo[i,j] = 0
-    
+                topo[i, j] = 0
+
     topo = topo / topo.sum(axis=1)
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
-    # x = np.zeros(size)
-    # x[0] = 0.5
-    # if connect_style == 0:  # bi-connection
-    #     x[0] = 1/3.0
-    #     x[-1] = 1/3.0
-    #     x[1] = 1/3.0
-    # elif connect_style == 1:  # left-connection
-    #     x[-1] = 0.5
-    # elif connect_style == 2:  # right-connection
-    #     x[1] = 0.5
-    # else:
-    #     raise ValueError("Connect_style has to be int between 0 and 2")
 
-    # topo = np.empty((size, size))
-    # for i in range(size):
-    #     topo[i] = np.roll(x, i)
-    # G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
-    # return G
+def InnerOuterExp2Graph(world_size: int, local_size: int) -> nx.DiGraph:
+    """Generate Inner Ring and Outer Exponential-2 Graph.
+
+    Within one machine all inner rank/processes is fully-connected and all
+    nodes with same local size across all machines forms exponential-2 graph.
+
+    .. plot::
+
+        >>> import networkx as nx
+        >>> from bluefog.common import topology_util
+        >>> G = topology_util.InnerOuterExp2Graph(12, 3)
+        >>> nx.draw_circular(G)
+    """
+    total_nodes = world_size
+    num_machines = world_size // local_size
+    nodes_per_machine = local_size
+    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
+
+    topo = np.zeros([total_nodes, total_nodes])
+
+    for i in range(total_nodes):
+        for j in range(total_nodes):
+            machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
+            machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
+            machine_dist = (machine_i - machine_j) % num_machines
+            if machine_i == machine_j:
+                topo[i, j] = 1
+            elif isPowerOf(machine_dist, 2):
+                topo[i, j] = 1 if local_rank_i == local_rank_j else 0
+            else:
+                topo[i, j] = 0
+
+    topo = topo / topo.sum(axis=1)
+    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
+    return G
 
 
 def IsRegularGraph(topo: nx.DiGraph) -> bool:
@@ -368,15 +385,16 @@ def IsRegularGraph(topo: nx.DiGraph) -> bool:
     return True
 
 
-def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[int, List[int]]]:
-    """A utility function to generate 1-outoging send rank and corresponding recieving rank(s). 
+def GetDynamicSendRecvRanks(
+        topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[List[int], List[int]]]:
+    """A utility function to generate 1-outoging send rank and corresponding recieving rank(s).
 
     Args:
         topo (nx.DiGraph): The base topology to generate dynamic send and receive ranks.
         self_rank (int): The self rank.
 
     Yields:
-        Iterator[Tuple[int, List[int]]]: send_rank, recv_ranks.
+        send_ranks, recv_ranks.
 
     Example:
 
@@ -408,10 +426,13 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
             if sorted_send_ranks[other_rank][index % degree] == self_rank:
                 recv_ranks.append(other_rank)
 
-        yield send_rank, recv_ranks
+        yield [send_rank], recv_ranks
         index += 1
 
-def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self_rank: int) -> int:
+
+def GetInnerOuterRingDynamicSendRecvRanks(
+        world_size: int, local_size: int, self_rank: int
+    ) -> Iterator[Tuple[List[int], List[int]]]:
     """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
        for Inner-Ring-Outer-Ring topology
 
@@ -421,7 +442,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
         self_rank (int): The self rank.
 
     Yields:
-        Iterator[Tuple[int, List[int]]]: send_rank, recv_ranks.
+        Iterator[Tuple[List[int], List[int]]]: send_ranks, recv_ranks.
 
     Example:
 
@@ -434,9 +455,11 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
 
     num_machines = world_size//local_size
     nodes_per_machine = local_size
+    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
+
     index = 0
     while True:
-        machine_id = self_rank // nodes_per_machine 
+        machine_id = self_rank // nodes_per_machine
         local_rank_id = self_rank % nodes_per_machine
         local_rank_to_go_outside_id = index % nodes_per_machine
 
@@ -454,23 +477,102 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
 
         else:
             if nodes_per_machine == 2:
-                send_rank = -1  # do not send info. Needs discussion!
-                recv_ranks.append(-1)
+                # Do not send. But our neighbor_allreduce haven't supported this yet.
+                raise ValueError(
+                    "Unfortunately, nodes_per_machine is 2 case is not supported yet.")
             else:
                 # find send_rank
                 target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
                 if target_local_rank_id == local_rank_to_go_outside_id:
-                    target_local_rank_id = (target_local_rank_id + 1) % nodes_per_machine
+                    target_local_rank_id = (
+                        target_local_rank_id + 1) % nodes_per_machine
                 target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
                 send_rank = target_rank_id
 
                 # find recv_rank
                 source_local_rank_id = (local_rank_id - 1) % nodes_per_machine
                 if source_local_rank_id == local_rank_to_go_outside_id:
-                    source_local_rank_id = (source_local_rank_id - 1) % nodes_per_machine
+                    source_local_rank_id = (
+                        source_local_rank_id - 1) % nodes_per_machine
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
                 recv_ranks.append(source_rank_id)
 
-        # print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
-        yield send_rank, recv_ranks
+        yield [send_rank], recv_ranks
+        index += 1
+
+
+def GetInnerOuterExp2DynamicSendRecvRanks(
+        world_size: int, local_size: int, self_rank: int
+    ) -> Iterator[Tuple[List[int], List[int]]]:
+    """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+       for Inner-Exp2-Outer-Exp2 ring topology
+
+    Args:
+        world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
+        local_size (int): number of nodes in each machine
+        self_rank (int): The self rank.
+
+    Yields:
+        Iterator[Tuple[List[int], List[int]]]: send_ranks, recv_ranks.
+
+    Example:
+
+        >>> from bluefog.common import topology_util
+        >>> world_size, local_size = bf.size(), bf.local_size()
+        >>> gen = topology_util.GetDynamicSendRecvRanks(world_size, local_size, 0)
+        >>> for _ in range(10):
+        >>>     print(next(gen))
+    """
+
+    num_machines = world_size//local_size
+    nodes_per_machine = local_size
+    exp_2_out_size = int(np.log2(num_machines-1))
+    exp_2_in_size = int(np.log2(nodes_per_machine-2))
+    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
+
+    index = 0
+    while True:
+        machine_id = self_rank // nodes_per_machine
+        local_rank_id = self_rank % nodes_per_machine
+        local_rank_to_go_outside_id = index % nodes_per_machine
+
+        recv_ranks = []
+        if local_rank_to_go_outside_id == local_rank_id:
+            next_machine_dist = 2**(index % (exp_2_out_size+1))
+            # find send_rank
+            target_machine_id = (machine_id + next_machine_dist) % num_machines
+            target_rank_id = target_machine_id * nodes_per_machine + local_rank_id
+            send_rank = target_rank_id
+
+            # find recv_rank
+            source_machine_id = (machine_id - next_machine_dist) % num_machines
+            source_rank_id = source_machine_id * nodes_per_machine + local_rank_id
+            recv_ranks.append(source_rank_id)
+
+        else:
+            if nodes_per_machine == 2:
+                # Do not send. But our neighbor_allreduce haven't supported this yet.
+                raise ValueError(
+                    "Unfortunately, nodes_per_machine is 2 case is not supported yet.")
+            else:
+                # Distance from self to out-rank:
+                dist_to_out = (local_rank_to_go_outside_id -
+                               local_rank_id) % nodes_per_machine
+                next_inner_dist = 2**(index % (exp_2_in_size+1))
+                if next_inner_dist >= dist_to_out:
+                    next_inner_dist += 1
+
+                # find send_rank
+                target_local_rank_id = (
+                    local_rank_id + next_inner_dist) % nodes_per_machine
+                target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
+                send_rank = target_rank_id
+
+                # find recv_rank
+                source_local_rank_id = (
+                    local_rank_id - next_inner_dist) % nodes_per_machine
+                source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
+                recv_ranks.append(source_rank_id)
+
+        yield [send_rank], recv_ranks
         index += 1
