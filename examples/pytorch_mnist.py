@@ -180,6 +180,8 @@ optimizer = optim.SGD(
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
 bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
+# bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=4))
+
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.dist_optimizer == 'win_put':
     optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
@@ -202,6 +204,10 @@ else:
                      'Please set the argument to be one of ' +
                      '[win_put, neighbor_allreduce, allreduce, push_sum, horovod]')
 
+# if args.enable_dynamic_topology:
+#     print('line 171\n')
+#     dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+#         bf.size(), local_size=4, self_rank=bf.rank())
 
 if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
     dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
@@ -307,6 +313,6 @@ def test(record):
 test_record = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
-test(test_record)
+    test(test_record)
 print(f"[{bf.rank()}]: ", test_record)
 bf.barrier()
