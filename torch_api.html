@@ -1074,7 +1074,7 @@ operation.</p>
 <dt id="bluefog.torch.barrier">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">barrier</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.barrier" title="Permalink to this definition">¶</a></dt>
 <dd><p>Barrier function to sychronize all MPI processes.</p>
-<p>After this function returns, it is guaranteed that all async functions
+<p>After this function returns, it is guaranteed that all blocking functions
 before it is finished.</p>
 </dd></dl>
 
@@ -1520,6 +1520,22 @@ Typical usage is to broadcast the <code class="docutils literal notranslate"><sp
 <li><p><strong>root_rank</strong> – The rank of the process from which parameters will be
 broadcasted to all other processes.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allreduce_parameters">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">allreduce_parameters</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">params</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.allreduce_parameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Allreduce the parameters of all other processes, i.e., forcing all
+processes to have same average model.
+Typical usage is to allreduce the <code class="docutils literal notranslate"><span class="pre">model.named_parameters()</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">model.parameters()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>params</strong> – One of the following:
+- list of parameters to allreduce
+- dict of parameters to allreduce</p>
 </dd>
 </dl>
 </dd></dl>
