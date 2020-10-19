@@ -302,22 +302,20 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
-def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate ring structure of graph (uniliteral).
-    Argument connect_style should be an integer between 0 and 2, where
-    0 represents the bi-connection, 1 represents the left-connection,
-    and 2 represents the right-connection.
 
-    Example: A RingGraph with 16 nodes:
+def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
+    """Generate Inner Ring and Outer Ring (Unilateral) Graph.
+
+    Within one machine all inner rank/processes is connected in ring and all
+    nodes with same local size across all machines is connected through another ring.
 
     .. plot::
 
         >>> import networkx as nx
         >>> from bluefog.common import topology_util
-        >>> G = topology_util.RingGraph(16)
-        >>> nx.draw_circular(G)
+        >>> G = topology_util.InnerOuterRingGraph(12, 3)
+        >>> nx.draw_spring(G)
     """
-    
     total_nodes = world_size
     num_machines = world_size // local_size
     nodes_per_machine = local_size
@@ -329,34 +327,15 @@ def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
             machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
             machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
             if machine_i == machine_j:
-                topo[i,j] = 1
+                topo[i, j] = 1
             elif ((machine_i + 1) % num_machines) == machine_j:
-                topo[i,j] = 1 if local_rank_i == local_rank_j else 0
+                topo[i, j] = 1 if local_rank_i == local_rank_j else 0
             else:
-                topo[i,j] = 0
-    
+                topo[i, j] = 0
+
     topo = topo / topo.sum(axis=1)
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
-
-    # x = np.zeros(size)
-    # x[0] = 0.5
-    # if connect_style == 0:  # bi-connection
-    #     x[0] = 1/3.0
-    #     x[-1] = 1/3.0
-    #     x[1] = 1/3.0
-    # elif connect_style == 1:  # left-connection
-    #     x[-1] = 0.5
-    # elif connect_style == 2:  # right-connection
-    #     x[1] = 0.5
-    # else:
-    #     raise ValueError("Connect_style has to be int between 0 and 2")
-
-    # topo = np.empty((size, size))
-    # for i in range(size):
-    #     topo[i] = np.roll(x, i)
-    # G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
-    # return G
 
 
 def IsRegularGraph(topo: nx.DiGraph) -> bool:
@@ -411,6 +390,7 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
         yield send_rank, recv_ranks
         index += 1
 
+
 def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self_rank: int) -> int:
     """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
        for Inner-Ring-Outer-Ring topology
@@ -436,7 +416,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
     nodes_per_machine = local_size
     index = 0
     while True:
-        machine_id = self_rank // nodes_per_machine 
+        machine_id = self_rank // nodes_per_machine
         local_rank_id = self_rank % nodes_per_machine
         local_rank_to_go_outside_id = index % nodes_per_machine
 
@@ -460,17 +440,18 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
                 # find send_rank
                 target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
                 if target_local_rank_id == local_rank_to_go_outside_id:
-                    target_local_rank_id = (target_local_rank_id + 1) % nodes_per_machine
+                    target_local_rank_id = (
+                        target_local_rank_id + 1) % nodes_per_machine
                 target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
                 send_rank = target_rank_id
 
                 # find recv_rank
                 source_local_rank_id = (local_rank_id - 1) % nodes_per_machine
                 if source_local_rank_id == local_rank_to_go_outside_id:
-                    source_local_rank_id = (source_local_rank_id - 1) % nodes_per_machine
+                    source_local_rank_id = (
+                        source_local_rank_id - 1) % nodes_per_machine
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
                 recv_ranks.append(source_rank_id)
 
-        # print('index:{}, self_rank:{}, send_rank:{}, recv_ranks:{}'.format(index, self_rank, send_rank, recv_ranks))
         yield send_rank, recv_ranks
         index += 1
