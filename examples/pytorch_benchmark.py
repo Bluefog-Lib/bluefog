@@ -202,8 +202,8 @@ def dynamic_topology_update(batch_idx):
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
-        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-        optimizer.send_neighbors = [send_neighbor]
+        send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {
             r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)

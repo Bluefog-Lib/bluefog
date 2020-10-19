@@ -507,8 +507,6 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                          "the same time")
     if send_neighbors is None:
         first_dim = tensor.shape[0] * len(in_neighbor_ranks())
-    elif send_neighbors == []:
-        return tensor.clone().detach()
     else:
         first_dim = tensor.shape[0] * len(neighbor_weights)
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))

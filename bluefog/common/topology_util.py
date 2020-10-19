@@ -347,15 +347,16 @@ def IsRegularGraph(topo: nx.DiGraph) -> bool:
     return True
 
 
-def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[int, List[int]]]:
-    """A utility function to generate 1-outoging send rank and corresponding recieving rank(s). 
+def GetDynamicSendRecvRanks(
+        topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[List[int], List[int]]]:
+    """A utility function to generate 1-outoging send rank and corresponding recieving rank(s).
 
     Args:
         topo (nx.DiGraph): The base topology to generate dynamic send and receive ranks.
         self_rank (int): The self rank.
 
     Yields:
-        Iterator[Tuple[int, List[int]]]: send_rank, recv_ranks.
+        send_ranks, recv_ranks.
 
     Example:
 
@@ -387,11 +388,13 @@ def GetDynamicSendRecvRanks(topo: nx.DiGraph, self_rank: int) -> Iterator[Tuple[
             if sorted_send_ranks[other_rank][index % degree] == self_rank:
                 recv_ranks.append(other_rank)
 
-        yield send_rank, recv_ranks
+        yield [send_rank], recv_ranks
         index += 1
 
 
-def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self_rank: int) -> int:
+def GetInnerOuterRingDynamicSendRecvRanks(
+        world_size: int, local_size: int, self_rank: int
+    ) -> Iterator[Tuple[List[int], List[int]]]:
     """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
        for Inner-Ring-Outer-Ring topology
 
@@ -401,7 +404,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
         self_rank (int): The self rank.
 
     Yields:
-        Iterator[Tuple[int, List[int]]]: send_rank, recv_ranks.
+        Iterator[Tuple[List[int], List[int]]]: send_ranks, recv_ranks.
 
     Example:
 
@@ -434,8 +437,8 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
 
         else:
             if nodes_per_machine == 2:
-                send_rank = -1  # do not send info. Needs discussion!
-                recv_ranks.append(-1)
+                # Do not send. But our neighbor_allreduce haven't supported this yet.
+                yield [], []
             else:
                 # find send_rank
                 target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
@@ -453,5 +456,5 @@ def GetInnerOuterRingDynamicSendRecvRanks(world_size: int, local_size: int, self
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
                 recv_ranks.append(source_rank_id)
 
-        yield send_rank, recv_ranks
+        yield [send_rank], recv_ranks
         index += 1

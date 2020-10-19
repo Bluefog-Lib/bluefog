@@ -43,46 +43,32 @@ parser = argparse.ArgumentParser(
     description="PyTorch ImageNet Example",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
-parser.add_argument(
-    "--log-dir",
-    default=os.path.join(cwd_folder_loc, "logs"),
-    help="tensorboard log directory",
-)
-parser.add_argument(
-    "--checkpoint-format",
-    default=os.path.join(
-        cwd_folder_loc, "checkpoint", "cifar10-checkpoint-{epoch}.pth.tar"
-    ),
-    help="checkpoint file format",
-)
-parser.add_argument(
-    "--batches-per-allreduce",
-    type=int,
-    default=1,
-    help="number of batches processed locally before "
-    "executing allreduce across workers; it multiplies "
-    "total batch size.",
-)
+parser.add_argument('--log-dir', default='./logs',
+                    help='tensorboard log directory')
+parser.add_argument('--checkpoint-format', default='./checkpoint-{epoch}.pth.tar',
+                    help='checkpoint file format')
+parser.add_argument('--batches-per-allreduce', type=int, default=1,
+                    help='number of batches processed locally before '
+                         'executing allreduce across workers; it multiplies '
+                         'total batch size.')
 parser.add_argument('--model', type=str, default='resnet18',
                     help='model to benchmark')
 
 # Default settings from https://arxiv.org/abs/1706.02677.
-parser.add_argument(
-    "--batch-size", type=int, default=32, help="input batch size for training"
-)
-parser.add_argument(
-    "--val-batch-size", type=int, default=32, help="input batch size for validation"
-)
-parser.add_argument("--epochs", type=int, default=90,
-                    help="number of epochs to train")
-parser.add_argument(
-    "--base-lr", type=float, default=0.0125, help="learning rate for a single GPU"
-)
-parser.add_argument(
-    "--warmup-epochs", type=float, default=5, help="number of warmup epochs"
-)
-parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
-parser.add_argument("--wd", type=float, default=0.00005, help="weight decay")
+parser.add_argument('--batch-size', type=int, default=32,
+                    help='input batch size for training')
+parser.add_argument('--val-batch-size', type=int, default=32,
+                    help='input batch size for validation')
+parser.add_argument('--epochs', type=int, default=90,
+                    help='number of epochs to train')
+parser.add_argument('--base-lr', type=float, default=0.0125,
+                    help='learning rate for a single GPU')
+parser.add_argument('--warmup-epochs', type=float, default=5,
+                    help='number of warmup epochs')
+parser.add_argument('--momentum', type=float, default=0.9,
+                    help='SGD momentum')
+parser.add_argument('--wd', type=float, default=0.00005,
+                    help='weight decay')
 
 parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
@@ -376,8 +362,8 @@ def dynamic_topology_update(epoch, batch_idx):
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
-        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-        optimizer.send_neighbors = [send_neighbor]
+        send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
         optimizer.enable_topo_check = False

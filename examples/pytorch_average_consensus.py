@@ -97,8 +97,7 @@ if not args.asynchronous_mode:
 
     for ite in range(args.max_iters):
         if args.enable_dynamic_topology:
-            send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-            send_neighbors = [send_neighbor]
+            send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
             neighbor_weights = {
                 r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
             self_weight = 1 / (len(recv_neighbors) + 1)
