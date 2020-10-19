@@ -50,6 +50,7 @@ class MPIController {
   inline const std::vector<int>& GetLocalCommRanks() const {
     return mpi_ctx_.local_comm_ranks_;
   };
+  inline bool IsHomogeneous() const { return mpi_ctx_.is_homogeneous_; };
 
   inline bool IsMpiThreadsSupported() const { return mpi_threads_supported_; }
   inline bool IsWinObjectEmpty() const {

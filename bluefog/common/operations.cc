@@ -1125,6 +1125,13 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
   return 1;
 }
 
+int bluefog_is_homogeneous() {
+  if (!bluefog_global.initialization_done) {
+    return -1;
+  }
+  return bluefog_global.controller->IsHomogeneous();
+}
+
 int bluefog_nccl_built() {
   int result = 0;
 #if HAVE_NCCL

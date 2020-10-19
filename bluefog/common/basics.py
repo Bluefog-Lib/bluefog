@@ -270,6 +270,18 @@ class BlueFogBasics(object):
         self._is_topo_weighted = is_weighted
         return True
 
+    def is_homogeneous(self) -> bool:
+        """Returns True if the cluster is homogeneous.
+
+        Returns:
+          A boolean value indicating whether every node in the cluster has same number of ranks
+          and if it is true it also indicates the ranks are continuous in machines.
+        """
+        is_homogeneous = self._MPI_LIB_CTYPES.bluefog_is_homogeneous()
+        if is_homogeneous == -1:
+            raise ValueError("BlueFog has not been initialized; use bf.init().")
+        return bool(is_homogeneous)
+
     def nccl_built(self) -> bool:
         """Returns True if BlueFog was compiled with NCCL support.
 
