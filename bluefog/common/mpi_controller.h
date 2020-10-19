@@ -105,8 +105,7 @@ class MPIController {
 
  protected:
   void MemcpyInFusionBuffer(const std::vector<TensorTableEntry>& entries,
-                            const void*& fused_input_data, void*& buffer_data,
-                            size_t& buffer_len);
+                            void*& buffer_data, size_t& buffer_len);
 
   void MemcpyOutFusionBuffer(const void* buffer_data,
                              std::vector<TensorTableEntry>& entries);

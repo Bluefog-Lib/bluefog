@@ -445,8 +445,7 @@ void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {
   GetBluefogTimeline(timeline_ptr);
 
   timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_FUSION_BUFFER");
-  const void* fused_input_data;
-  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
   timeline_ptr->ActivityEndAll(entries);
 
   timeline_ptr->ActivityStartAll(entries, "COMMUNICATE");
@@ -502,9 +501,9 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   }
 
   timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_FUSION_BUFFER");
-  const void* fused_input_data;
-  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
   timeline_ptr->ActivityEndAll(entries);
+  const void* fused_input_data = buffer_data;
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
   // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
@@ -1113,13 +1112,17 @@ Status MPIController::WinMutexRelease(const std::string& name,
 }
 
 void MPIController::MemcpyInFusionBuffer(
-    const std::vector<TensorTableEntry>& entries, const void*& fused_input_data,
-    void*& buffer_data, size_t& buffer_len) {
+    const std::vector<TensorTableEntry>& entries, void*& buffer_data,
+    size_t& buffer_len) {
   // Access the fusion buffer.
   auto& first_entry = entries[0];
   FusionBufferManager* buffer_manager;
-  GetBluefogFusionBuffer(buffer_manager);
-  std::shared_ptr<PersistentBuffer> buffer = buffer_manager->GetBuffer(first_entry.device);
+  auto fusion_status = GetBluefogFusionBuffer(buffer_manager);
+  if (!fusion_status.ok()){
+    throw std::runtime_error(fusion_status.reason());
+  }
+  std::shared_ptr<PersistentBuffer> buffer =
+      buffer_manager->GetBuffer(first_entry.device);
   buffer_data = const_cast<void*>(buffer->AccessData(first_entry.context));
 
   int64_t offset = 0;
@@ -1130,9 +1133,6 @@ void MPIController::MemcpyInFusionBuffer(
   }
 
   buffer_len = (size_t)offset;
-
-  // Set the input data to originate from the buffer.
-  fused_input_data = buffer_data;
 }
 
 void MPIController::MemcpyOutFusionBuffer(
@@ -1198,6 +1198,13 @@ void MPIController::MemcpyEntryOutFusionBuffer(
 void MPIController::MemcpyEntryOutFusionBufferForNeighbors(
     const void* buffer_data_at_offset, TensorTableEntry& e,
     const int num_recv_neighbors, const int64_t fused_data_size) {
+  // The buffer data looks like
+  // [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  //           ^               ^
+  //           |-------------->| fused_data_size
+  //           buffer_data_at_offset
+  // Output for t_1 is [t_1_n1, t_1_n2]
+  //            t_2 is [t_2_n1, t_2_n2]
   for (int i = 0; i < num_recv_neighbors; ++i) {
     void* output_at_offset =
         (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();

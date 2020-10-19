@@ -571,10 +571,10 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::ALLGATHER:
-        timeline.ActivityStart(entry.tensor_name, "PROC_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
+        timeline.ActivityStart(entry.tensor_name, "PROC_ALLGATHER");
         if (controller_vendor == Vendor::MPI) {
           bluefog_global.controller->Allgather(entry);
         }
@@ -586,10 +586,10 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         timeline.ActivityEnd(entry.tensor_name);
         break;
       case MPIOpsType::NEIGHBOR_ALLGATHER:
-        timeline.ActivityStart(entry.tensor_name, "PROC_NEIGHBOR_ALLGATHER");
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name  << " with "
             << Vendor_Name(controller_vendor);
+        timeline.ActivityStart(entry.tensor_name, "PROC_NEIGHBOR_ALLGATHER");
         if (controller_vendor == Vendor::MPI) {
           bluefog_global.controller->NeighborAllgather(entry);
         }
@@ -619,7 +619,7 @@ void PerformOperation(std::vector<TensorTableEntry>& entries) {
         BFLOG(TRACE, bluefog_global.controller->GetRank())
             << "Processing " << entry.tensor_name << " with "
             << Vendor_Name(controller_vendor);
-        timeline.ActivityStart(entry.tensor_name, "PAIR_GOSSIP");
+        timeline.ActivityStart(entry.tensor_name, "PROC_PAIR_GOSSIP");
         bluefog_global.controller->PairGossip(entry);
         timeline.ActivityEnd(entry.tensor_name);
         break;
@@ -753,6 +753,9 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
     }
   }
 
+  // Only Allreduce and Neighbor_Allreduce are supported, mainly because
+  // other ops either no need to use fusion like win ops or not performance
+  // critical ops like allgather, broadcast, etc.
   switch (first_entry.mpi_ops_type) {
     case MPIOpsType::ALLREDUCE:
       BFLOG(TRACE, bluefog_global.controller->GetRank())
@@ -791,254 +794,270 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
   }
 }
 
+void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
+                                std::deque<Request>& message_queue_buffer,
+                                bool& should_change_topo,
+                                bool& should_shut_down) {
+  std::vector<std::string> ready_to_reduce;
+  RequestList message_list;
+  message_list.set_shutdown(should_shut_down);
+  message_list.set_change_topo(should_change_topo);
+  while (!message_queue_buffer.empty()) {
+    Request& message = message_queue_buffer.front();
+    message_list.add_request(message);
+    bool reduce = IncrementTensorCount(state.message_table.get(), message,
+                                       mpi_context.size_);
+    if (reduce) {
+      ready_to_reduce.push_back(message.tensor_name());
+    }
+    message_queue_buffer.pop_front();
+  }
+
+  // Rank zero has put all its own tensors in the tensor count table.
+  // Now, it should count all the tensors that are coming from other
+  // ranks at this tick.
+  // 1. Get message lengths from every rank.
+  auto recvcounts = new int[bluefog_size()];
+  recvcounts[0] = 0;
+  MPI_Gather(MPI_IN_PLACE, 1, MPI_INT, recvcounts, 1, MPI_INT, COORDINATE_RANK,
+             mpi_context.mpi_comm);
+
+  // 2. Compute displacements.
+  auto displcmnts = new int[bluefog_size()];
+  size_t total_size = 0;
+  for (int i = 0; i < bluefog_size(); i++) {
+    if (i == 0) {
+      displcmnts[i] = 0;
+    } else {
+      displcmnts[i] = recvcounts[i - 1] + displcmnts[i - 1];
+    }
+    total_size += recvcounts[i];
+  }
+
+  // 3. Collect messages from every rank.
+  auto buffer = new uint8_t[total_size];
+  MPI_Gatherv(nullptr, 0, MPI_BYTE, buffer, recvcounts, displcmnts, MPI_BYTE,
+              COORDINATE_RANK, mpi_context.mpi_comm);
+
+  // 4. Process messages.
+  for (int i = 1; i < bluefog_size(); i++) {
+    auto rank_buffer_ptr = buffer + displcmnts[i];
+    RequestList received_message_list;
+    RequestList::ParseFromBytes(received_message_list, rank_buffer_ptr);
+    for (auto& received_message : received_message_list.requests()) {
+      auto& received_name = received_message.tensor_name();
+      bool reduce = IncrementTensorCount(state.message_table.get(),
+                                         received_message, mpi_context.size_);
+      if (reduce) {
+        ready_to_reduce.push_back(received_name);
+      }
+    }
+    if (received_message_list.shutdown()) {
+      // Received SHUTDOWN request from one of the workers.
+      should_shut_down = true;
+    }
+    if (received_message_list.change_topo()) {
+      should_change_topo = true;
+    }
+  }
+  // 5. Free buffers.
+  delete[] recvcounts;
+  delete[] displcmnts;
+  delete[] buffer;
+
+  // At this point, rank zero should have a fully updated tensor count
+  // table and should know all the tensors that need to be reduced or
+  // gathered, and everyone else should have sent all their information
+  // to rank zero. We can now do reductions and gathers; rank zero will
+  // choose which ones and in what order, and will notify the other ranks
+  // before doing each reduction.
+  std::deque<Response> responses;
+  for (auto& tensor_name : ready_to_reduce) {
+    Response response =
+        ConstructResponse(state.message_table.get(), tensor_name);
+    responses.push_back(std::move(response));
+  }
+
+  ResponseList response_list;
+  response_list.set_shutdown(should_shut_down);
+  response_list.set_change_topo(should_change_topo);
+
+  while (!responses.empty()) {
+    Response response = responses.front();
+    assert(response.tensor_names().size() == 1);
+    responses.pop_front();
+
+    if (response.response_type() == Response::ResponseType::ALLREDUCE) {
+      // Attempt to add more responses to this fused response.
+      const TensorTableEntry& entry =
+          state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
+      int64_t tensor_size = entry.tensor->size();
+      while (!responses.empty()) {
+        Response new_response = responses.front();
+        assert(new_response.tensor_names().size() == 1);
+        const TensorTableEntry& new_entry =
+            state.tensor_queue.GetTensorEntry(new_response.tensor_names()[0]);
+        int64_t new_tensor_size = new_entry.tensor->size();
+        if (response.response_type() == new_response.response_type() &&
+            response.devices() == new_response.devices() &&
+            entry.tensor->dtype() == new_entry.tensor->dtype() &&
+            tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
+          // These tensors will fuse together well.
+          tensor_size += new_tensor_size;
+          response.add_tensor_name(new_response.tensor_names()[0]);
+          responses.pop_front();
+        } else {
+          // Don't try to fuse additional tensors since they are usually
+          // computed in order of requests and skipping tensors may mean
+          // that the batch will have to wait longer while skipped tensors
+          // could be reduced at that time.
+          break;
+        }
+      }
+    } else if (response.response_type() ==
+               Response::ResponseType::NEIGHBOR_ALLREDUCE) {
+      // Attempt to add more responses to this fused response.
+      const TensorTableEntry& entry =
+          state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
+      auto IsSameNeighborList =
+          [](std::shared_ptr<std::vector<int>> n1,
+             std::shared_ptr<std::vector<int>> n2) -> bool {
+        if (n1 == nullptr && n2 == nullptr) return true;
+        if (n1 == nullptr || n2 == nullptr) return false;
+        if (n1->size() != n2->size()) return false;
+        // The order matters as well.
+        for (int i = 0; i < n1->size(); i++) {
+          if (n1->at(i) != n2->at(i)) {
+            return false;
+          }
+        }
+        return true;
+      };
+      // Recall that send_neighbors is empty or not determines we use partial
+      // neighbor allreduce or not.
+      int num_recv_neighbors = entry.send_neighbors->empty()
+                                   ? mpi_context.neighbor_indgree_
+                                   : entry.recv_neighbors->size();
+      // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
+      // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
+      // Here t_1 and t_2  means self tensor 1 and 2 and _n1 and _n2 means the
+      // recieving tensors for neighbor 1 and 2;
+      int64_t tensor_size = entry.tensor->size() * (1 + num_recv_neighbors);
+
+      while (!responses.empty()) {
+        Response new_response = responses.front();
+        assert(new_response.tensor_names().size() == 1);
+        const TensorTableEntry& new_entry =
+            state.tensor_queue.GetTensorEntry(new_response.tensor_names()[0]);
+        int64_t new_tensor_size =
+            new_entry.tensor->size() * (1 + num_recv_neighbors);
+        if (response.response_type() == new_response.response_type() &&
+            response.devices() == new_response.devices() &&
+            entry.tensor->dtype() == new_entry.tensor->dtype() &&
+            IsSameNeighborList(entry.send_neighbors,
+                               new_entry.send_neighbors) &&
+            IsSameNeighborList(entry.recv_neighbors,
+                               new_entry.recv_neighbors) &&
+            tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
+          // These tensors will fuse together well.
+          tensor_size += new_tensor_size;
+          response.add_tensor_name(new_response.tensor_names()[0]);
+          responses.pop_front();
+        } else {
+          break;
+        }
+      }
+    }
+
+    response_list.add_response(response);
+  }
+
+  // Notify all nodes which tensors we'd like to reduce at this step.
+  std::string encoded_response;
+  ResponseList::SerializeToString(response_list, encoded_response);
+  int encoded_response_length = (int)encoded_response.length() + 1;
+  MPI_Bcast(&encoded_response_length, 1, MPI_INT, COORDINATE_RANK,
+            mpi_context.mpi_comm);
+  MPI_Bcast((void*)encoded_response.c_str(), encoded_response_length, MPI_BYTE,
+            COORDINATE_RANK, mpi_context.mpi_comm);
+  // Perform the collective operation. All nodes should end up performing
+  // the same operation.
+  for (auto& response : response_list.responses()) {
+    std::vector<TensorTableEntry> nego_entries;
+    state.tensor_queue.GetTensorEntriesFromResponse(response, nego_entries);
+    if (nego_entries.size() > 1) {
+      PerformOperationWithFusion(nego_entries);
+    } else {
+      PerformOperation(nego_entries);
+    }
+  }
+
+  // Check for stalled tensors.
+  if (std::chrono::steady_clock::now() - state.last_stall_check >
+      STALL_WARNING_TIME) {
+    CheckForStalledTensors(state);
+    state.last_stall_check = std::chrono::steady_clock::now();
+  }
+}
+
+void NegotiateOfRequestOfSlave(BluefogGlobalState& state,
+                               std::deque<Request>& message_queue_buffer,
+                               bool& should_change_topo,
+                               bool& should_shut_down) {
+  std::string encoded_message;
+  RequestList message_list;
+  message_list.set_shutdown(state.shut_down);
+  message_list.set_change_topo(should_change_topo);
+  while (!message_queue_buffer.empty()) {
+    message_list.add_request(message_queue_buffer.front());
+    message_queue_buffer.pop_front();
+  }
+  RequestList::SerializeToString(message_list, encoded_message);
+  int encoded_message_length = (int)encoded_message.length() + 1;
+  MPI_Gather(&encoded_message_length, 1, MPI_INT, nullptr, 1, MPI_INT,
+             COORDINATE_RANK, mpi_context.mpi_comm);
+  MPI_Gatherv((void*)encoded_message.c_str(), encoded_message_length, MPI_BYTE,
+              nullptr, nullptr, nullptr, MPI_BYTE, COORDINATE_RANK,
+              mpi_context.mpi_comm);
+
+  int msg_length;
+  MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
+  auto buffer = new uint8_t[msg_length];
+  MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK,
+            mpi_context.mpi_comm);
+  ResponseList response_list;
+  ResponseList::ParseFromBytes(response_list, buffer);
+  delete[] buffer;
+
+  // Perform the collective operation. All nodes should end up performing
+  // the same operation.
+  for (auto& response : response_list.responses()) {
+    std::vector<TensorTableEntry> nego_entries;
+    state.tensor_queue.GetTensorEntriesFromResponse(response, nego_entries);
+    if (nego_entries.size() > 1) {
+      PerformOperationWithFusion(nego_entries);
+    } else {
+      PerformOperation(nego_entries);
+    }
+  }
+
+  if (response_list.shutdown()) {
+    should_shut_down = true;
+  }
+  if (response_list.change_topo()) {
+    should_change_topo = true;
+  }
+}
+
 void NegotiationOfRequest(BluefogGlobalState& state,
                           std::deque<Request>& message_queue_buffer,
                           bool& should_change_topo, bool& should_shut_down) {
   if (bluefog_rank() == COORDINATE_RANK) {
-    std::vector<std::string> ready_to_reduce;
-    RequestList message_list;
-    message_list.set_shutdown(should_shut_down);
-    message_list.set_change_topo(should_change_topo);
-    while (!message_queue_buffer.empty()) {
-      Request& message = message_queue_buffer.front();
-      message_list.add_request(message);
-      bool reduce = IncrementTensorCount(state.message_table.get(), message,
-                                         mpi_context.size_);
-      if (reduce) {
-        ready_to_reduce.push_back(message.tensor_name());
-      }
-      message_queue_buffer.pop_front();
-    }
-
-    // Rank zero has put all its own tensors in the tensor count table.
-    // Now, it should count all the tensors that are coming from other
-    // ranks at this tick.
-    // 1. Get message lengths from every rank.
-    auto recvcounts = new int[bluefog_size()];
-    recvcounts[0] = 0;
-    MPI_Gather(MPI_IN_PLACE, 1, MPI_INT, recvcounts, 1, MPI_INT,
-               COORDINATE_RANK, mpi_context.mpi_comm);
-
-    // 2. Compute displacements.
-    auto displcmnts = new int[bluefog_size()];
-    size_t total_size = 0;
-    for (int i = 0; i < bluefog_size(); i++) {
-      if (i == 0) {
-        displcmnts[i] = 0;
-      } else {
-        displcmnts[i] = recvcounts[i - 1] + displcmnts[i - 1];
-      }
-      total_size += recvcounts[i];
-    }
-
-    // 3. Collect messages from every rank.
-    auto buffer = new uint8_t[total_size];
-    MPI_Gatherv(nullptr, 0, MPI_BYTE, buffer, recvcounts, displcmnts, MPI_BYTE,
-                COORDINATE_RANK, mpi_context.mpi_comm);
-
-    // 4. Process messages.
-    for (int i = 1; i < bluefog_size(); i++) {
-      auto rank_buffer_ptr = buffer + displcmnts[i];
-      RequestList received_message_list;
-      RequestList::ParseFromBytes(received_message_list, rank_buffer_ptr);
-      for (auto& received_message : received_message_list.requests()) {
-        auto& received_name = received_message.tensor_name();
-        bool reduce = IncrementTensorCount(state.message_table.get(),
-                                           received_message, mpi_context.size_);
-        if (reduce) {
-          ready_to_reduce.push_back(received_name);
-        }
-      }
-      if (received_message_list.shutdown()) {
-        // Received SHUTDOWN request from one of the workers.
-        should_shut_down = true;
-      }
-      if (received_message_list.change_topo()) {
-        should_change_topo = true;
-      }
-    }
-    // 5. Free buffers.
-    delete[] recvcounts;
-    delete[] displcmnts;
-    delete[] buffer;
-
-    // At this point, rank zero should have a fully updated tensor count
-    // table and should know all the tensors that need to be reduced or
-    // gathered, and everyone else should have sent all their information
-    // to rank zero. We can now do reductions and gathers; rank zero will
-    // choose which ones and in what order, and will notify the other ranks
-    // before doing each reduction.
-    std::deque<Response> responses;
-    for (auto& tensor_name : ready_to_reduce) {
-      Response response =
-          ConstructResponse(state.message_table.get(), tensor_name);
-      responses.push_back(std::move(response));
-    }
-
-    ResponseList response_list;
-    response_list.set_shutdown(should_shut_down);
-    response_list.set_change_topo(should_change_topo);
-
-    while (!responses.empty()) {
-      auto response = responses.front();
-      assert(response.tensor_names().size() == 1);
-      responses.pop_front();
-
-      if (response.response_type() == Response::ResponseType::ALLREDUCE) {
-        // Attempt to add more responses to this fused response.
-        auto& entry =
-            state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
-        int64_t tensor_size = entry.tensor->size();
-        while (!responses.empty()) {
-          auto new_response = responses.front();
-          assert(new_response.tensor_names().size() == 1);
-          auto& new_entry =
-              state.tensor_queue.GetTensorEntry(new_response.tensor_names()[0]);
-          int64_t new_tensor_size = new_entry.tensor->size();
-          if (response.response_type() == new_response.response_type() &&
-              response.devices() == new_response.devices() &&
-              entry.tensor->dtype() == new_entry.tensor->dtype() &&
-              tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
-            // These tensors will fuse together well.
-            tensor_size += new_tensor_size;
-            response.add_tensor_name(new_response.tensor_names()[0]);
-            responses.pop_front();
-          } else {
-            // Don't try to fuse additional tensors since they are usually
-            // computed in order of requests and skipping tensors may mean
-            // that the batch will have to wait longer while skipped tensors
-            // could be reduced at that time.
-            break;
-          }
-        }
-      } else if (response.response_type() ==
-                 Response::ResponseType::NEIGHBOR_ALLREDUCE) {
-        // Attempt to add more responses to this fused response.
-        auto& entry =
-            state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
-        auto IsSameNeighborList =
-            [](std::shared_ptr<std::vector<int>> n1,
-               std::shared_ptr<std::vector<int>> n2) -> bool {
-          if (n1 == nullptr && n2 == nullptr) return true;
-          if (n1 == nullptr || n2 == nullptr) return false;
-          if (n1->size() != n2->size()) return false;
-          // The order matters as well.
-          for (int i = 0; i < n1->size(); i++) {
-            if (n1->at(i) != n2->at(i)) {
-              return false;
-            }
-          }
-          return true;
-        };
-        // Recall that send_neighbors is empty or not determines we use partial
-        // neighbor allreduce or not.
-        int num_recv_neighbors = entry.send_neighbors->empty()
-                                     ? mpi_context.neighbor_indgree_
-                                     : entry.recv_neighbors->size();
-        // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
-        // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
-        // Here t_1 and t_2  means self tensor 1 and 2 and _n1 and _n2 means the
-        // recieving tensors for neighbor 1 and 2;
-        int64_t tensor_size = entry.tensor->size() * (1 + num_recv_neighbors);
-
-        while (!responses.empty()) {
-          auto new_response = responses.front();
-          assert(new_response.tensor_names().size() == 1);
-          auto& new_entry =
-              state.tensor_queue.GetTensorEntry(new_response.tensor_names()[0]);
-          int64_t new_tensor_size =
-              new_entry.tensor->size() * (1 + num_recv_neighbors);
-          if (response.response_type() == new_response.response_type() &&
-              response.devices() == new_response.devices() &&
-              entry.tensor->dtype() == new_entry.tensor->dtype() &&
-              IsSameNeighborList(entry.send_neighbors,
-                                 new_entry.send_neighbors) &&
-              IsSameNeighborList(entry.recv_neighbors,
-                                 new_entry.recv_neighbors) &&
-              tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
-            // These tensors will fuse together well.
-            tensor_size += new_tensor_size;
-            response.add_tensor_name(new_response.tensor_names()[0]);
-            responses.pop_front();
-          } else {
-            break;
-          }
-        }
-      }
-
-      response_list.add_response(response);
-    }
-
-    // Notify all nodes which tensors we'd like to reduce at this step.
-    std::string encoded_response;
-    ResponseList::SerializeToString(response_list, encoded_response);
-    int encoded_response_length = (int)encoded_response.length() + 1;
-    MPI_Bcast(&encoded_response_length, 1, MPI_INT, COORDINATE_RANK,
-              mpi_context.mpi_comm);
-    MPI_Bcast((void*)encoded_response.c_str(), encoded_response_length,
-              MPI_BYTE, COORDINATE_RANK, mpi_context.mpi_comm);
-    // Perform the collective operation. All nodes should end up performing
-    // the same operation.
-    for (auto& response : response_list.responses()) {
-      std::vector<TensorTableEntry> nego_entries;
-      state.tensor_queue.GetTensorEntriesFromResponse(response, nego_entries);
-      if (nego_entries.size() > 1) {
-        PerformOperationWithFusion(nego_entries);
-      } else {
-        PerformOperation(nego_entries);
-      }
-    }
-
-    // Check for stalled tensors.
-    if (std::chrono::steady_clock::now() - state.last_stall_check >
-        STALL_WARNING_TIME) {
-      CheckForStalledTensors(state);
-      state.last_stall_check = std::chrono::steady_clock::now();
-    }
+    NegotiateOfRequestOfMaster(state, message_queue_buffer, should_change_topo,
+                               should_shut_down);
   } else {
-    std::string encoded_message;
-    RequestList message_list;
-    message_list.set_shutdown(state.shut_down);
-    message_list.set_change_topo(should_change_topo);
-    while (!message_queue_buffer.empty()) {
-      message_list.add_request(message_queue_buffer.front());
-      message_queue_buffer.pop_front();
-    }
-    RequestList::SerializeToString(message_list, encoded_message);
-    int encoded_message_length = (int)encoded_message.length() + 1;
-    MPI_Gather(&encoded_message_length, 1, MPI_INT, nullptr, 1, MPI_INT,
-               COORDINATE_RANK, mpi_context.mpi_comm);
-    MPI_Gatherv((void*)encoded_message.c_str(), encoded_message_length,
-                MPI_BYTE, nullptr, nullptr, nullptr, MPI_BYTE, COORDINATE_RANK,
-                mpi_context.mpi_comm);
-
-    int msg_length;
-    MPI_Bcast(&msg_length, 1, MPI_INT, COORDINATE_RANK, mpi_context.mpi_comm);
-    auto buffer = new uint8_t[msg_length];
-    MPI_Bcast(buffer, msg_length, MPI_BYTE, COORDINATE_RANK,
-              mpi_context.mpi_comm);
-    ResponseList response_list;
-    ResponseList::ParseFromBytes(response_list, buffer);
-    delete[] buffer;
-
-    // Perform the collective operation. All nodes should end up performing
-    // the same operation.
-    for (auto& response : response_list.responses()) {
-      std::vector<TensorTableEntry> nego_entries;
-      state.tensor_queue.GetTensorEntriesFromResponse(response, nego_entries);
-      if (nego_entries.size() > 1) {
-        PerformOperationWithFusion(nego_entries);
-      } else {
-        PerformOperation(nego_entries);
-      }
-    }
-
-    if (response_list.shutdown()) {
-      should_shut_down = true;
-    }
-    if (response_list.change_topo()) {
-      should_change_topo = true;
-    }
+    NegotiateOfRequestOfSlave(state, message_queue_buffer, should_change_topo,
+                              should_shut_down);
   }
 }
 

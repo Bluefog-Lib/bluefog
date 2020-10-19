@@ -788,12 +788,12 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   }
   std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
 
-  // TODO(ybc) Timeline add record event to measure the time on GPU.
-  const void* fused_input_data;
-  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  
+  MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "MEM_CPY_IN");
   }
+  const void* fused_input_data = buffer_data;
 
   ncclResult_t ret_code =
       ncclAllReduce(fused_input_data, buffer_data, num_elements,
@@ -864,8 +864,9 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   }
 
 #if NCCL_MINOR > 6
-  const void* fused_input_data;
-  MemcpyInFusionBuffer(entries, fused_input_data, buffer_data, buffer_len);
+  MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
+
+  const void* fused_input_data = buffer_data;
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "MEM_CPY_IN");
   }
@@ -1655,12 +1656,15 @@ Status NCCLController::WinMutexRelease(const std::string& name,
 }
 
 void NCCLController::MemcpyInFusionBuffer(
-    const std::vector<TensorTableEntry>& entries, const void*& fused_input_data,
-    void*& buffer_data, size_t& buffer_len) {
+    const std::vector<TensorTableEntry>& entries, void*& buffer_data,
+    size_t& buffer_len) {
   // Access the fusion buffer.
   auto& first_entry = entries[0];
   FusionBufferManager* buffer_manager;
-  GetBluefogFusionBuffer(buffer_manager);
+  auto fusion_status = GetBluefogFusionBuffer(buffer_manager);
+  if (!fusion_status.ok()){
+    throw std::runtime_error(fusion_status.reason());
+  }
   auto buffer = buffer_manager->GetBuffer(first_entry.device);
   buffer_data = const_cast<void*>(buffer->AccessData(first_entry.context));
 
@@ -1672,9 +1676,6 @@ void NCCLController::MemcpyInFusionBuffer(
   }
 
   buffer_len = (size_t)offset;
-
-  // Set the input data to originate from the buffer.
-  fused_input_data = buffer_data;
 }
 
 void NCCLController::MemcpyOutFusionBuffer(
@@ -1724,6 +1725,13 @@ void NCCLController::MemcpyEntryOutFusionBuffer(
 void NCCLController::MemcpyEntryOutFusionBufferForNeighbors(
     const void* buffer_data_at_offset, TensorTableEntry& e,
     const int num_recv_neighbors, const int64_t fused_data_size) {
+  // The buffer data looks like
+  // [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  //           ^               ^
+  //           |-------------->| fused_data_size
+  //           buffer_data_at_offset
+  // Output for t_1 is [t_1_n1, t_1_n2]
+  //            t_2 is [t_2_n1, t_2_n2]
   for (int i = 0; i < num_recv_neighbors; ++i) {
     void* output_at_offset =
         (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();
