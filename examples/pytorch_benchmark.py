@@ -181,7 +181,7 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
 if args.enable_dynamic_topology and args.virtual_topology == 'InnerOuterRing':
     print('line 171\n')
     dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
-        bf.size(), local_size=4, self_rank=bf.rank())
+    bf.size(), local_size=4, self_rank=bf.rank())
 
 def dynamic_topology_update(batch_idx):
     if args.dist_optimizer == 'win_put':
