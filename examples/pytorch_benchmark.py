@@ -36,7 +36,8 @@ parser.add_argument('--model', type=str, default='resnet50',
                     help='model to benchmark')
 parser.add_argument('--batch-size', type=int, default=32,
                     help='input batch size')
-
+parser.add_argument('--local-size', type=int, default=4,
+                    help='number of nodes per machine')
 parser.add_argument('--num-warmup-batches', type=int, default=10,
                     help='number of warm-up batches that don\'t count towards benchmark')
 parser.add_argument('--num-batches-per-iter', type=int, default=10,
@@ -90,7 +91,10 @@ if args.dist_optimizer != 'horovod':
         bf.set_topology(topology_util.StarGraph(bf.size()))
     elif args.virtual_topology == "InnerOuterRing":
         print('line 85\n')
-        bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=4))
+        bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=args.local_size))
+    elif args.virtual_topology == "InnerOuterExp2":
+        print('line 96\n')
+        bf.set_topology(topology_util.InnerOuterExp2Graph(bf.size(), local_size=args.local_size))
     else:
         print('line 76-5\n')
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
@@ -185,7 +189,12 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
 if args.enable_dynamic_topology and args.virtual_topology == 'InnerOuterRing':
     print('line 171\n')
     dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
-    bf.size(), local_size=4, self_rank=bf.rank())
+    bf.size(), local_size=args.local_size, self_rank=bf.rank())
+
+if args.enable_dynamic_topology and args.virtual_topology == 'InnerOuterExp2':
+    print('line 191\n')
+    dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+    bf.size(), local_size=args.local_size, self_rank=bf.rank())
 
 def dynamic_topology_update(batch_idx):
     if args.dist_optimizer == 'win_put':
@@ -202,7 +211,9 @@ def dynamic_topology_update(batch_idx):
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
+        print('rank {}, line 214\n'.format(bf.rank()))
         send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        print('rank {}, line 216\n'.format(bf.rank()))
         optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {
             r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
