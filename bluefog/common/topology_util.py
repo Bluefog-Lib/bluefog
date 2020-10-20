@@ -558,22 +558,27 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
                 # Distance from self to out-rank:
                 dist_to_out = (local_rank_to_go_outside_id -
                                local_rank_id) % nodes_per_machine
-                next_inner_dist = 2**(index % (exp_2_in_size+1))
+                next_inner_dist = 2**(index % (exp_2_in_size + 1))
                 if next_inner_dist >= dist_to_out:
                     next_inner_dist += 1
 
                 # find send_rank
-                target_local_rank_id = (
-                    local_rank_id + next_inner_dist) % nodes_per_machine
+                target_local_rank_id = (local_rank_id +
+                                        next_inner_dist) % nodes_per_machine
                 target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
                 send_rank = target_rank_id
 
+                reverse_inner_dist = 2**(index % (exp_2_in_size + 1))
+                reverse_dist_to_out = (
+                    local_rank_id - local_rank_to_go_outside_id) % nodes_per_machine
+                if reverse_inner_dist >= reverse_dist_to_out:
+                    reverse_inner_dist += 1
+
                 # find recv_rank
-                source_local_rank_id = (
-                    local_rank_id - next_inner_dist) % nodes_per_machine
+                source_local_rank_id = (local_rank_id -
+                                        reverse_inner_dist) % nodes_per_machine
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
                 recv_ranks.append(source_rank_id)
 
-        print('ite:{}, rank:{}, send_neighbors:{}, recv_neighbors:{}'.format(index, self_rank, send_rank, recv_ranks))
         yield [send_rank], recv_ranks
         index += 1
