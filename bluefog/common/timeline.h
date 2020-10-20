@@ -89,6 +89,11 @@ class Timeline {
                      const std::thread::id* tid_ptr = nullptr);
   void ActivityEnd(const std::string& tensor_name,
                    const std::thread::id* tid_ptr = nullptr);
+  void ActivityStartAll(const std::vector<TensorTableEntry>& entries,
+                        const std::string& activity,
+                        const std::thread::id* tid_ptr = nullptr);
+  void ActivityEndAll(const std::vector<TensorTableEntry>& entries,
+                      const std::thread::id* tid_ptr = nullptr);
 
  private:
   long TimeSinceStartMicros() const;

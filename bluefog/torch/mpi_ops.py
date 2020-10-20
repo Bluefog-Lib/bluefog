@@ -400,10 +400,18 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
-        avg_computation = True
+        uniform_weights = 1.0/(len(neighbor_weights)+1)
+        avg_computation = False
+        if abs(self_weight - uniform_weights) > 1e-6:
+            avg_computation = True
+        for n_weights in neighbor_weights.values():
+            if abs(n_weights - uniform_weights) > 1e-6:
+                avg_computation = True
+                break
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
+
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
                                         name.encode() if name is not None else "")
@@ -632,10 +640,13 @@ def synchronize(handle: int) -> torch.Tensor:
 def barrier():
     """Barrier function to sychronize all MPI processes.
 
-    After this function returns, it is guaranteed that all async functions
+    After this function returns, it is guaranteed that all blocking functions
     before it is finished.
     """
-    return mpi_lib.bluefog_torch_barrier()
+    if get_skip_negotiate_stage():
+        mpi_lib.bluefog_torch_barrier()
+    else:
+        allreduce(torch.Tensor([1.0]), name="barrier")
 
 # MPI one sided ops, which will be useful in the asynchronized algorithm.
 

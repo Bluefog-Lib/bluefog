@@ -66,6 +66,9 @@ class MPIController {
   void NeighborAllreduce(TensorTableEntry& entry);
   void PairGossip(TensorTableEntry& entry);
 
+  void Allreduce(std::vector<TensorTableEntry>& entries);
+  void NeighborAllreduce(std::vector<TensorTableEntry>& entries);
+
   void WinCreate(TensorTableEntry& entry);
   void WinFree(TensorTableEntry& entry);
   void WinFreeAll(TensorTableEntry& entry);
@@ -102,6 +105,28 @@ class MPIController {
                                         double weight);
 
  protected:
+  void MemcpyInFusionBuffer(const std::vector<TensorTableEntry>& entries,
+                            void*& buffer_data, size_t& buffer_len);
+
+  void MemcpyOutFusionBuffer(const void* buffer_data,
+                             std::vector<TensorTableEntry>& entries);
+
+  void MemcpyOutFusionBufferForNeighbors(const void* buffer_data,
+                                         std::vector<TensorTableEntry>& entries,
+                                         const int num_recv_neighbors,
+                                         const int64_t fused_data_size);
+
+  void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
+                                 void* buffer_data_at_offset);
+
+  void MemcpyEntryOutFusionBuffer(const void* buffer_data_at_offset,
+                                  TensorTableEntry& e);
+
+  void MemcpyEntryOutFusionBufferForNeighbors(const void* buffer_data_at_offset,
+                                              TensorTableEntry& e,
+                                              const int num_recv_neighbors,
+                                              const int64_t fused_data_size);
+
   // Outside dependencies
   MPIContext& mpi_ctx_;
 

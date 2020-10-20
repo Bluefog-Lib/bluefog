@@ -18,7 +18,6 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import sys
 
 def mpi_env_rank_and_size():
     """Get MPI rank and size from environment variables and return them as a
@@ -41,3 +40,11 @@ def mpi_env_rank_and_size():
 
     # Default to rank zero and size one if there are no environment variables
     return 0, 1
+
+
+def is_openmpi_built():
+    rank = os.environ.get("OMPI_COMM_WORLD_RANK")
+    size = os.environ.get("OMPI_COMM_WORLD_SIZE")
+    if rank is not None and size is not None:
+        return True
+    return False

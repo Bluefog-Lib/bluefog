@@ -65,6 +65,32 @@ class TensorQueue {
   mutable std::mutex mutex_;
 };
 
+// Encapsulates the process of creating and destroying fusion buffers as the requested
+// threshold is changed.
+class FusionBufferManager {
+ public:
+  // Initializes a buffer of the given threshold size if not already cached.
+  //
+  // Args:
+  //  threshold: Size of the buffer in bytes.
+  //  device: Device ID to associate the buffer.
+  //  context: Framework used to create the buffer and associate it.
+  //  on_start_init: Callback on starting buffer initialization.
+  //  on_end_init: Callback on completing buffer initialization.
+  Status InitializeBuffer(int64_t threshold, int device,
+                          std::shared_ptr<OpContext> context,
+                          std::function<void()> on_start_init,
+                          std::function<void()> on_end_init);
+
+  // Returns the buffer associated with the given device and framework, or null.
+  std::shared_ptr<PersistentBuffer> GetBuffer(int device);
+
+ private:
+  // Memory buffers for Tensor Fusion.  They are keyed by device ID.
+  std::unordered_map<int, std::pair<std::shared_ptr<PersistentBuffer>, int64_t>>
+      tensor_fusion_buffers_;
+};
+
 }  // namespace common
 }  // namespace bluefog
 

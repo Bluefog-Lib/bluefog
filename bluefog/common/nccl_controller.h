@@ -32,35 +32,6 @@
 #include "tensor_queue.h"
 #include "timeline.h"
 
-#define MPICHECK(cmd)                                                  \
-  do {                                                                 \
-    int e = cmd;                                                       \
-    if (e != MPI_SUCCESS) {                                            \
-      printf("Failed: MPI error %s:%d '%d'\n", __FILE__, __LINE__, e); \
-      exit(EXIT_FAILURE);                                              \
-    }                                                                  \
-  } while (0)
-
-#define CUDACHECK(cmd)                                              \
-  do {                                                              \
-    cudaError_t e = cmd;                                            \
-    if (e != cudaSuccess) {                                         \
-      printf("Failed: Cuda error %s:%d '%s'\n", __FILE__, __LINE__, \
-             cudaGetErrorString(e));                                \
-      exit(EXIT_FAILURE);                                           \
-    }                                                               \
-  } while (0)
-
-#define NCCLCHECK(cmd)                                              \
-  do {                                                              \
-    ncclResult_t r = cmd;                                           \
-    if (r != ncclSuccess) {                                         \
-      printf("Failed, NCCL error %s:%d '%s'\n", __FILE__, __LINE__, \
-             ncclGetErrorString(r));                                \
-      exit(EXIT_FAILURE);                                           \
-    }                                                               \
-  } while (0)
-
 namespace bluefog {
 namespace common {
 
@@ -161,8 +132,8 @@ class NCCLController {
   // window ops is used.
   void Initialize();
 #if NCCL_MINOR < 7
-  void InitPeerCommunicator();
-  void DestroyPeerCommunicator();
+  void InitPeerCommunicators();
+  void DestroyPeerCommunicators();
 #endif
   void InitWindowCommunicators();
   void DestroyWindowCommunicators();
@@ -176,6 +147,9 @@ class NCCLController {
   void Broadcast(TensorTableEntry& entry);
   void NeighborAllgather(TensorTableEntry& entry);
   void NeighborAllreduce(TensorTableEntry& entry);
+
+  void Allreduce(std::vector<TensorTableEntry>& entries);
+  void NeighborAllreduce(std::vector<TensorTableEntry>& entries);
 
   void WinPut(TensorTableEntry& entry);
   void WinGet(TensorTableEntry& entry);
@@ -201,6 +175,37 @@ class NCCLController {
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
 #endif
+
+  void MemcpyInFusionBuffer(const std::vector<TensorTableEntry>& entries,
+                            void*& buffer_data, size_t& buffer_len);
+
+  void MemcpyOutFusionBuffer(const void* buffer_data,
+                             std::vector<TensorTableEntry>& entries);
+
+  void MemcpyOutFusionBufferForNeighbors(const void* buffer_data,
+                                         std::vector<TensorTableEntry>& entries,
+                                         const int num_recv_neighbors,
+                                         const int64_t fused_data_size);
+
+  void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
+                                 void* buffer_data_at_offset);
+
+  void MemcpyEntryOutFusionBuffer(const void* buffer_data_at_offset,
+                                  TensorTableEntry& e);
+
+  void MemcpyEntryOutFusionBufferForNeighbors(const void* buffer_data_at_offset,
+                                              TensorTableEntry& e,
+                                              const int num_recv_neighbors,
+                                              const int64_t fused_data_size);
+
+  void RecordEvent(std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+                   std::string name);
+
+  void WaitForEvents(
+      std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+      const std::vector<TensorTableEntry>& entries, Timeline* timeline,
+      const std::thread::id tid);
+
  private:
   // Outside dependencies
   NCCLContext& nccl_ctx_;
