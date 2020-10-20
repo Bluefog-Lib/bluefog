@@ -452,10 +452,10 @@ def GetInnerOuterRingDynamicSendRecvRanks(
         >>> for _ in range(10):
         >>>     print(next(gen))
     """
-
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
+    assert nodes_per_machine > 2, "We do not support the case nodes per machine < 2 yet."
 
     index = 0
     while True:
@@ -523,12 +523,12 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
         >>> for _ in range(10):
         >>>     print(next(gen))
     """
-
     num_machines = world_size//local_size
     nodes_per_machine = local_size
+    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
+    assert nodes_per_machine > 2, "We do not support the case nodes per machine < 2 yet."
     exp_2_out_size = int(np.log2(num_machines-1))
     exp_2_in_size = int(np.log2(nodes_per_machine-2))
-    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
 
     index = 0
     while True:

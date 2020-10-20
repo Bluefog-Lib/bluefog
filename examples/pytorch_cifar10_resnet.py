@@ -109,9 +109,17 @@ if args.dist_optimizer != 'horovod':
             bf.size(), connect_style=0), is_weighted=True)
     elif args.virtual_topology == "star":
         bf.set_topology(topology_util.StarGraph(bf.size()))
+    elif args.virtual_topology == "InnerOuterRing":
+        assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterRingGraph(
+            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+    elif args.virtual_topology == "InnerOuterExp2":
+        assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterExp2Graph(
+            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[power2(Default), ring, mesh, star].")
+                         "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
 
 if args.cuda:
     print("using cuda.")
@@ -338,8 +346,19 @@ def adjust_learning_rate(epoch, batch_idx):
         )
 
 if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
-    dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
-        bf.load_topology(), bf.rank())
+    if args.virtual_topology == 'InnerOuterRing':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+            bf.size(),
+            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            self_rank=bf.rank())
+    elif args.virtual_topology == 'InnerOuterExp2':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+            bf.size(),
+            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            self_rank=bf.rank())
+    else:
+        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+            bf.load_topology(), bf.rank())
 
 def dynamic_topology_update(epoch, batch_idx):
     if args.dist_optimizer == 'win_put':
