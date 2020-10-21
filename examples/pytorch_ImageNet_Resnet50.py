@@ -272,8 +272,8 @@ def validate(epoch):
         log_writer.add_scalar('val/accuracy', val_accuracy.avg, epoch)
 
 
-# Bluefog: using `lr = base_lr * hvd.size()` from the very beginning leads to worse final
-# accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * hvd.size()` during
+# Bluefog: using `lr = base_lr * bf.size()` from the very beginning leads to worse final
+# accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * bf.size()` during
 # the first five epochs. See https://arxiv.org/abs/1706.02677 for details.
 # After the warmup reduce learning rate by 10 on the 30th, 60th and 80th epochs.
 def adjust_learning_rate(epoch, batch_idx):
@@ -335,7 +335,7 @@ class Metric(object):
         self.n = torch.tensor(0.)
 
     def update(self, val):
-        self.sum += hvd.allreduce(val.detach().cpu(), name=self.name)
+        self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
         self.n += 1
 
     @property
