@@ -269,6 +269,7 @@ def train(epoch):
             dynamic_topology_update(epoch, batch_idx)
         if args.cuda:
             data, target = data.cuda(), target.cuda()
+
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
@@ -287,8 +288,6 @@ def train(epoch):
                     loss.item(),
                 )
             )
-    if args.dist_optimizer == 'neighbor_allreduce':
-        bf.allreduce_parameters(list(model.named_parameters()))
 
 
 def metric_average(val, name):
