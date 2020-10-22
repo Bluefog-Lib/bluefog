@@ -44,7 +44,7 @@
 #define BLUEFOG_FUSION_THRESHOLD "BLUEFOG_FUSION_THRESHOLD"
 
 // Stall-check warning time
-#define STALL_WARNING_TIME std::chrono::seconds(15)
+#define STALL_WARNING_TIME std::chrono::seconds(60)
 
 namespace bluefog {
 namespace common {
