@@ -411,10 +411,10 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-
+    is_hierachical = False
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        False, name.encode() if name is not None else "")
+                                        is_hierachical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
@@ -587,16 +587,15 @@ def _hierachical_neighbor_allreduce_nonblocking(
                 break
     else:
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
-
     # Translate machine id into rank id.
     node_per_machine = local_size()
     neighbor_weights = {
         node_per_machine*m: weights for (m, weights) in neighbor_machine_weights.items()}
     send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
-    avg_computation = False
+    is_hierachical = True
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        True, name.encode() if name is not None else "")
+                                        is_hierachical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
