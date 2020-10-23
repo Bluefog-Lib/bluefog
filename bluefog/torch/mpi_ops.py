@@ -414,7 +414,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
 
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        name.encode() if name is not None else "")
+                                        is_hierarchical=False,
+                                        name=name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
@@ -518,9 +519,86 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     else:
         first_dim = tensor.shape[0] * len(neighbor_weights)
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
-    output = tensor.new(new_shape) # Pre-allocate the memory for the output.
+    output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
-                                           send_neighbors, enable_topo_check, name)
+                                           send_neighbors, enable_topo_check, name=name)
+
+
+def hierachical_neighbor_allreduce(tensor: torch.Tensor,
+                                   self_weight: float,
+                                   neighbor_machine_weights: Dict[int, float],
+                                   send_neighbor_machines: List[int],
+                                   enable_topo_check: bool = True,
+                                   name: Optional[str] = None) -> torch.Tensor:
+    # TODO(ybc) add check for self_weight and neighbor_machine_weights.
+    if (self_weight is None and neighbor_machine_weights is not None) or \
+       (self_weight is not None and send_neighbor_machines is None):
+        raise ValueError("Arguments self_weight and neighbor_machine_weights have to "
+                         "be presented at the same time")
+    handle = hierachical_neighbor_allreduce_nonblocking(
+        tensor, self_weight, neighbor_machine_weights, send_neighbor_machines,
+        enable_topo_check, name)
+    return synchronize(handle)
+
+
+def hierachical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
+                                               self_weight: float,
+                                               neighbor_machine_weights: Dict[int, float],
+                                               send_neighbor_machines: List[int],
+                                               enable_topo_check: bool = True,
+                                               name: Optional[str] = None) -> int:
+    if (self_weight is None or neighbor_machine_weights is None):
+        raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
+    if (self_weight is None and neighbor_machine_weights is not None) or \
+       (self_weight is not None and neighbor_machine_weights is None):
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+                         "the same time")
+
+    first_dim = tensor.shape[0] * len(neighbor_machine_weights)
+    new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
+    output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
+
+    return _hierachical_neighbor_allreduce_nonblocking(
+        tensor, output, self_weight, neighbor_machine_weights,
+        send_neighbor_machines, enable_topo_check, name=name)
+
+
+def _hierachical_neighbor_allreduce_nonblocking(
+        tensor, output, self_weight, neighbor_machine_weights,
+        send_neighbor_machines, enable_topo_check, name):
+    assert not is_homogeneous, \
+        "hierachical_neighbor_allreduce should be used under homogeneous environment only"
+    function = _check_function(_neighbor_allreduce_function_factory, tensor)
+    if self_weight is not None and neighbor_machine_weights is not None:
+        if not isinstance(neighbor_machine_weights, dict):
+            raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
+                             "(in-)neighbor rank to the weights.")
+        if not isinstance(self_weight, float):
+            raise ValueError(
+                "Argument self_weight has to be a float for self rank.")
+        uniform_weights = 1.0/(len(neighbor_machine_weights)+1)
+        avg_computation = False
+        if abs(self_weight - uniform_weights) > 1e-6:
+            avg_computation = True
+        for n_weights in neighbor_machine_weights.values():
+            if abs(n_weights - uniform_weights) > 1e-6:
+                avg_computation = True
+                break
+    else:
+        raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
+
+    # Translate machine id into rank id.
+    node_per_machine = local_size()
+    neighbor_weights = {
+        node_per_machine*m: weights for (m, weights) in neighbor_machine_weights.items()}
+    send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
+    avg_computation = False
+    handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
+                                        send_neighbors, enable_topo_check, avg_computation,
+                                        is_hierarchical=True,
+                                        name=name.encode() if name is not None else "")
+    _handle_map[handle] = (tensor, output)
+    return handle
 
 
 def _pair_gossip_nonblocking_function_factory(tensor):

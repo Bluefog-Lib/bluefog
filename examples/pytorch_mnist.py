@@ -270,6 +270,9 @@ def train(epoch):
         if args.cuda:
             data, target = data.cuda(), target.cuda()
 
+        if args.dist_optimizer == 'neighbor_allreduce' and (batch_idx % 100 == 99):
+            optimizer.use_allreduce_in_communication()
+
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
@@ -288,6 +291,9 @@ def train(epoch):
                     loss.item(),
                 )
             )
+
+        if args.dist_optimizer == 'neighbor_allreduce' and (batch_idx % 100 == 99):
+            optimizer.use_neighbor_allreduce_in_communication()
 
 
 def metric_average(val, name):

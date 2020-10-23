@@ -306,7 +306,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                         double self_weight, const std::unordered_map<int, double>& neighbor_weights,
                         const std::vector<int>& send_neighbors, bool enable_topo_check,
-                        bool avg_computation, const std::string& name) {
+                        bool avg_computation, bool is_hierarchical, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
