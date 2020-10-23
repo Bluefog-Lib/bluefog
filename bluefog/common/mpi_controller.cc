@@ -359,6 +359,11 @@ std::string GenerateNeighborAllreduceErrorMessage(const std::vector<MPI_Status>&
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
+  // TODO(ybc) support this
+  if (entry.is_hierarchical) {
+    throw std::runtime_error(
+        "Hierachical neighbor_allreduce is only supported under NCCL case.");
+  }
 
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
@@ -484,6 +489,11 @@ void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {
 void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   auto& first_entry = entries[0];
   with_device device_guard(first_entry.device);
+  // TODO(ybc) support this
+  if (first_entry.is_hierarchical) {
+    throw std::runtime_error(
+        "Hierachical neighbor_allreduce is only supported under NCCL case.");
+  }
 
   void* buffer_data;
   size_t buffer_len = 0;

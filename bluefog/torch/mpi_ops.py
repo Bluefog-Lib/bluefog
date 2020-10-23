@@ -414,8 +414,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
 
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        is_hierarchical=False,
-                                        name=name.encode() if name is not None else "")
+                                        False, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
@@ -595,8 +594,7 @@ def _hierachical_neighbor_allreduce_nonblocking(
     avg_computation = False
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        is_hierarchical=True,
-                                        name=name.encode() if name is not None else "")
+                                        True, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 

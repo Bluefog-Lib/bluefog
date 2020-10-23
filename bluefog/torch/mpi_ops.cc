@@ -338,11 +338,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     auto ready_event = RecordReadyEvent(device);
-    auto enqueue_result = EnqueueTensorNeighborAllreduce(            
-        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([self_weight, neighbor_weights,
-        avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
-        mutable {
+    auto enqueue_result = EnqueueTensorNeighborAllreduce(
+        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors,
+        bf_send_neighbors, is_hierarchical, enable_topo_check, op_name,
+        CPU_DEVICE_ID,
+        callback_wrapper([self_weight, neighbor_weights, avg_computation,
+                          cpu_output, tensor, recv_neighbors, send_neighbors,
+                          output, device]() mutable {
           with_device device_guard(device);
           output.copy_(cpu_output);
           int recv_size = bluefog_neighbor_size();
@@ -381,8 +383,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
                 int recv_rank;
-                if(send_neighbors.empty()) recv_rank = *(sources_ptr+i);
-                else recv_rank = recv_neighbors[i];
+                if(send_neighbors.empty())
+                  recv_rank = *(sources_ptr + i);
+                else
+                  recv_rank = recv_neighbors[i];
                 auto it = neighbor_weights.find(recv_rank);
                 if (it != neighbor_weights.end()) {
                   weight = it->second;
@@ -430,7 +434,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
+        is_hierarchical, enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, recv_neighbors, send_neighbors, tensor, output] () mutable {
           int recv_size = bluefog_neighbor_size();
           if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
@@ -450,10 +454,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               int outdegree = 0;
               int* sources_ptr = nullptr;
               int* destinations_ptr = nullptr;
-              bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                    destinations_ptr);
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              if (!send_neighbors.empty()) indgree = recv_neighbors.size();
+              if (send_neighbors.empty()) {
+                bluefog_load_topology(&indgree, sources_ptr, &outdegree,
+                                      destinations_ptr);
+              } else {
+                indgree = recv_neighbors.size();
+              }
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
                 int recv_rank;

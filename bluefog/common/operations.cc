@@ -296,6 +296,8 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
     }
   }
 
+  // TODO(ybc) add check for is_hierarchical for neighbor_allreduce.
+
   // If we are doing an (neighbor_)allreduce or broadcast, check that all tensor
   // shapes are identical.
   if (!error) {
@@ -954,6 +956,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
         if (response.response_type() == new_response.response_type() &&
             response.devices() == new_response.devices() &&
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
+            entry.is_hierarchical == new_entry.is_hierarchical &&
             IsSameNeighborList(entry.send_neighbors,
                                new_entry.send_neighbors) &&
             IsSameNeighborList(entry.recv_neighbors,
@@ -1484,6 +1487,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
+                                      bool is_hierarchical,
                                       bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
@@ -1505,6 +1509,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   e.ready_event = ready_event;
   e.recv_neighbors = recv_neighbors;
   e.send_neighbors = send_neighbors;
+  e.is_hierarchical = is_hierarchical;
   e.enable_topo_check = enable_topo_check;
   e.device = device;
   e.callback = callback;
