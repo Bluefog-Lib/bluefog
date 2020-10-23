@@ -26,6 +26,7 @@ from bluefog.torch.optimizers import (
     DistributedGradientAllreduceOptimizer,
     DistributedAllreduceOptimizer,
     DistributedNeighborAllreduceOptimizer,
+    DistributedHierarchicalNeighborAllreduceOptimizer,
     DistributedPushSumOptimizer,
     DistributedPullGetOptimizer,
     DistributedBluefogOptimizer)

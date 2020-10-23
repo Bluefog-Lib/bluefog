@@ -295,10 +295,14 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
-        self.neighbor_weights = None
+        # knobs for neighbor communication behavior
         self.self_weight = None
+        self.neighbor_weights = None
         self.send_neighbors = None
+        self.neighbor_machine_weights = None
+        self.send_neighbor_machines = None
         self.enable_topo_check = False
+
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
@@ -314,6 +318,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
             self._reduce_method = 0
         elif self._reduce_type_str == "neighbor.allreduce":
             self._reduce_method = 1
+        elif self._reduce_type_str == "hierarchical.neighbor.allreduce":
+            self._reduce_method = 2
         else:
             raise ValueError("Unknown reduce type for internal class _DistributedReduceOptimizer")
 
@@ -352,6 +358,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                             handle = self._allreduce_data_async(p)
                         elif self._reduce_method == 1:
                             handle = self._neighbor_allreduce_data_async(p)
+                        elif self._reduce_method == 2:
+                            handle = self._hierarchical_neighbor_allreduce_data_async(p)
                         else:
                             raise ValueError(
                                 "Unknown reduce method. Do not change _reduce_method manually.")
@@ -364,6 +372,15 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                                                    neighbor_weights=self.neighbor_weights,
                                                    send_neighbors=self.send_neighbors,
                                                    enable_topo_check=self.enable_topo_check)
+        return handle
+
+    def _hierarchical_neighbor_allreduce_data_async(self, p):
+        name = self._parameter_names.get(p)
+        handle = bf.hierarchical_neighbor_allreduce_nonblocking(
+            p.data, name=name, self_weight=self.self_weight,
+            neighbor_machine_weights=self.neighbor_machine_weights,
+            send_neighbor_machines=self.send_neighbor_machines,
+            enable_topo_check=self.enable_topo_check)
         return handle
 
     def _allreduce_data_async(self, p):
@@ -388,6 +405,9 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
     def use_neighbor_allreduce_in_communication(self):
         self._reduce_method = 1
+
+    def use_hierarchical_neighbor_allreduce_in_communication(self):
+        self._reduce_method = 2
 
     def synchronize(self):
         with torch.no_grad():
@@ -791,6 +811,7 @@ def DistributedPushSumOptimizer(optimizer, model,
     )
     return cls(optimizer.param_groups, model, num_steps_per_communication)
 
+
 def DistributedPullGetOptimizer(optimizer, model,
                                 num_steps_per_communication=1):
     """
@@ -890,6 +911,7 @@ def DistributedBluefogOptimizer(optimizer, model,
     )
     return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=False)
 
+
 def DistributedAllreduceOptimizer(optimizer, model,
                                   num_steps_per_communication=1):
     """
@@ -982,6 +1004,17 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
         dict(_DistributedReduceOptimizer.__dict__),
     )
     return cls(optimizer.param_groups, model, "neighbor.allreduce", num_steps_per_communication)
+
+
+def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
+                                                      num_steps_per_communication=1):
+    cls = type(
+        optimizer.__class__.__name__,
+        (optimizer.__class__,),
+        dict(_DistributedReduceOptimizer.__dict__),
+    )
+    return cls(optimizer.param_groups, model, "hierarchical.neighbor.allreduce",
+               num_steps_per_communication)
 
 
 def DistributedGradientAllreduceOptimizer(optimizer, model,
