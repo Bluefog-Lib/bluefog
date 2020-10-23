@@ -69,7 +69,8 @@ ncclDataType_t GetNCCLDataType(const DataType bf_data_type) {
 }
 
 void NCCLContext::Initialize(const int rank, const int size,
-                             const int local_rank) {
+                             const int local_rank, const int local_size,
+                             const MPI_Comm& world_comm, const MPI_Comm& local_comm) {
   if (is_initialized) {
     BFLOG(DEBUG)
         << "NCCL context has been initialized but NCCLContext::Initialize "
@@ -84,7 +85,7 @@ void NCCLContext::Initialize(const int rank, const int size,
   ncclUniqueId nccl_id;
   if (rank == 0) ncclGetUniqueId(&nccl_id);
   MPICHECK(
-      MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, MPI_COMM_WORLD));
+      MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, world_comm));
 
   // Assume one device per process
   int nDevices = 0;
@@ -96,6 +97,15 @@ void NCCLContext::Initialize(const int rank, const int size,
                                          greatest_priority));
   // TODO(ybc) Handle the error case then np > number of GPU properly.
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
+  MPI_Barrier(world_comm);
+
+  // Build local nccl
+  ncclUniqueId local_nccl_id;
+  if (local_rank == 0) ncclGetUniqueId(&local_nccl_id);
+  MPICHECK(MPI_Bcast((void*)&local_nccl_id, sizeof(local_nccl_id), MPI_BYTE, 0,
+                     local_comm));
+  NCCLCHECK(ncclCommInitRank(&nccl_local_comm, local_size, local_nccl_id,
+                             local_rank));
 
   cuda_device = local_rank % nDevices;
   is_initialized = true;
@@ -182,7 +192,9 @@ cudaError_t NCCLContext::ReleaseCudaEvent(cudaEvent_t event) {
 }
 
 void NCCLController::Initialize() {
-  nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
+  nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_,
+                       mpi_ctx_.local_size_, mpi_ctx_.mpi_comm,
+                       mpi_ctx_.local_comm);
 #if NCCL_MINOR < 7
   InitPeerCommunicators();
 #endif
