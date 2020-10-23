@@ -527,8 +527,10 @@ def hierachical_neighbor_allreduce(tensor: torch.Tensor,
                                    self_weight: float,
                                    neighbor_machine_weights: Dict[int, float],
                                    send_neighbor_machines: List[int],
-                                   enable_topo_check: bool = True,
+                                   enable_topo_check: bool = False,
                                    name: Optional[str] = None) -> torch.Tensor:
+    # TODO(hhb) Implement the logics for topo check for hierachical_neighbor_allreduce.
+
     # TODO(ybc) add check for self_weight and neighbor_machine_weights.
     if (self_weight is None and neighbor_machine_weights is not None) or \
        (self_weight is not None and send_neighbor_machines is None):
@@ -544,7 +546,7 @@ def hierachical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                                self_weight: float,
                                                neighbor_machine_weights: Dict[int, float],
                                                send_neighbor_machines: List[int],
-                                               enable_topo_check: bool = True,
+                                               enable_topo_check: bool = False,
                                                name: Optional[str] = None) -> int:
     if (self_weight is None or neighbor_machine_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
@@ -565,7 +567,7 @@ def hierachical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
 def _hierachical_neighbor_allreduce_nonblocking(
         tensor, output, self_weight, neighbor_machine_weights,
         send_neighbor_machines, enable_topo_check, name):
-    assert not is_homogeneous, \
+    assert is_homogeneous, \
         "hierachical_neighbor_allreduce should be used under homogeneous environment only"
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if self_weight is not None and neighbor_machine_weights is not None:
