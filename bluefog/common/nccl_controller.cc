@@ -670,33 +670,70 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   }
 
 #if NCCL_MINOR > 6
-  ncclGroupStart();
-  if (entry.send_neighbors->empty()) {
-    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
-      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
-      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
-                              num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  if (!entry.is_hierarchical) {
+    ncclGroupStart();
+    if (entry.send_neighbors->empty()) {
+      for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+        int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+    } else {
+      for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+        int recv_rank = entry.recv_neighbors->at(i);
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *entry.send_neighbors) {
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
     }
-    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
-      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-    }
+    ncclGroupEnd();
   } else {
-    for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
-      int recv_rank = entry.recv_neighbors->at(i);
-      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
-                              num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    if (entry.send_neighbors->empty()) {
+      throw std::runtime_error(
+          "Under hierachical neighbor_allreduce, argument "
+          "send_machine_neighbors should "
+          "not be empty.");
     }
-    for (int send_rank : *entry.send_neighbors) {
-      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
+    // divided by local size at call back stage.
+    NCCLCHECK(ncclAllReduce(sendbuf, (void*)sendbuf, num_elements,
+                            GetNCCLDataType(entry.tensor), ncclSum,
+                            nccl_ctx_.nccl_local_comm, nccl_ctx_.stream));
+    // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
+    if (mpi_ctx_.local_rank_ == 0) {
+      ncclGroupStart();
+      for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+        int recv_rank = entry.recv_neighbors->at(i);
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                           recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *entry.send_neighbors) {
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                           send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      ncclGroupEnd();
+    } else {
+      // No need to do anything
     }
+    // 3. Broadcast recv data from local rank = 0 to other local ranks.
+    int recv_num_elements = num_elements * entry.recv_neighbors->size();
+    NCCLCHECK(ncclBroadcast(entry.output->data(), (void*)entry.output->data(),
+                            recv_num_elements, GetNCCLDataType(entry.output), 0,
+                            nccl_ctx_.nccl_local_comm, nccl_ctx_.stream));
   }
-  ncclGroupEnd();
 
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "COMM. (NCCL)");
@@ -721,7 +758,9 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                       "which doesn't support point-to-point communication. "
                       "Hence, the performance may be largely degraded";
   });
-
+  if (entry.is_hierarchical) {
+    throw std::runtime_error("Hierachical neighbor allreduce is not supported under NCCL < 2.7");
+  }
   ncclGroupStart();
   uint recv_rank_index = 0;
   uint send_rank_index = 0;
@@ -890,37 +929,78 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // Hence, we need to offset the buffer data to location for neighbors.
   buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
 
-  ncclGroupStart();
-  if (first_entry.send_neighbors->empty()) {
-    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
-      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
-      void* recvbuf =
-          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                         GetNCCLDataType(first_entry.tensor), recv_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  if (!first_entry.is_hierarchical) {
+    ncclGroupStart();
+    if (first_entry.send_neighbors->empty()) {
+      for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+        int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+        NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                           GetNCCLDataType(first_entry.tensor), send_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+    } else {
+      for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+        int recv_rank = first_entry.recv_neighbors->at(i);
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *first_entry.send_neighbors) {
+        NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                           GetNCCLDataType(first_entry.tensor), send_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
     }
-    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
-      NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                         GetNCCLDataType(first_entry.tensor), send_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-    }
+    ncclGroupEnd();
   } else {
-    for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
-      int recv_rank = first_entry.recv_neighbors->at(i);
-      void* recvbuf =
-          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                         GetNCCLDataType(first_entry.tensor), recv_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    if (first_entry.send_neighbors->empty()) {
+      throw std::runtime_error(
+          "Under hierachical neighbor_allreduce, argument "
+          "send_machine_neighbors should not be empty.");
     }
-    for (int send_rank : *first_entry.send_neighbors) {
-      NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                         GetNCCLDataType(first_entry.tensor), send_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+
+    // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
+    // divided by local size at call back stage.
+    NCCLCHECK(ncclAllReduce(fused_input_data, (void*)fused_input_data,
+                            num_elements, GetNCCLDataType(first_entry.tensor),
+                            ncclSum, nccl_ctx_.nccl_local_comm,
+                            nccl_ctx_.stream));
+    // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
+    if (mpi_ctx_.local_rank_ == 0) {
+      ncclGroupStart();
+       for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+        int recv_rank = first_entry.recv_neighbors->at(i);
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *first_entry.send_neighbors) {
+        NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                           GetNCCLDataType(first_entry.tensor), send_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      ncclGroupEnd();
+    } else {
+      // No need to do anything
     }
+    // 3. Broadcast recv data from local rank = 0 to other local ranks.
+    int recv_num_elements = num_elements * first_entry.recv_neighbors->size();
+    NCCLCHECK(ncclBroadcast(buffer_data, (void*)buffer_data, recv_num_elements,
+                            GetNCCLDataType(first_entry.output), 0,
+                            nccl_ctx_.nccl_local_comm, nccl_ctx_.stream));
   }
-  ncclGroupEnd();
+
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "COMM. (NCCL)");
   }

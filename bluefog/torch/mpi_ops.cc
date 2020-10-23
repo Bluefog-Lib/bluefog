@@ -36,6 +36,7 @@ using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::bluefog_rank;
 using ::bluefog::common::bluefog_size;
+using ::bluefog::common::bluefog_local_size;
 using ::bluefog::common::with_device;
 using ::bluefog::common::GetBluefogTimeline;
 using ::bluefog::common::Status;
@@ -344,7 +345,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         CPU_DEVICE_ID,
         callback_wrapper([self_weight, neighbor_weights, avg_computation,
                           cpu_output, tensor, recv_neighbors, send_neighbors,
-                          output, device]() mutable {
+                          is_hierarchical, output, device]() mutable {
           with_device device_guard(device);
           output.copy_(cpu_output);
           int recv_size = bluefog_neighbor_size();
@@ -402,6 +403,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size());
+              }
             } else {
               int neighbor_size = send_neighbors.empty()
                                       ? bluefog_neighbor_size()
@@ -416,7 +421,12 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(neighbor_size + 1);
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size() * (neighbor_size + 1));
+              } else {
+                output_buffer.div_(neighbor_size + 1);
+              }
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
@@ -433,11 +443,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        is_hierarchical, enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
-        avg_computation, recv_neighbors, send_neighbors, tensor, output] () mutable {
+        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors,
+        bf_send_neighbors, is_hierarchical, enable_topo_check, op_name, device,
+        callback_wrapper([self_weight, neighbor_weights, avg_computation,
+                          recv_neighbors, send_neighbors, is_hierarchical,
+                          tensor, output]() mutable {
           int recv_size = bluefog_neighbor_size();
-          if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
+          if (!send_neighbors.empty()) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
             ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
             ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
@@ -481,6 +493,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size());
+              }
             } else {
               int neighbor_size = send_neighbors.empty()
                                       ? bluefog_neighbor_size()
@@ -495,7 +511,12 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.resize_(shape_vector);
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(neighbor_size + 1);
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size() * (neighbor_size + 1));
+              } else {
+                output_buffer.div_(neighbor_size + 1);
+              }
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
