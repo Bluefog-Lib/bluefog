@@ -362,7 +362,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // TODO(ybc) support this
   if (entry.is_hierarchical) {
     throw std::runtime_error(
-        "Hierachical neighbor_allreduce is only supported under NCCL case.");
+        "hierarchical neighbor_allreduce is only supported under NCCL case.");
   }
 
   Timeline* timeline_ptr;
@@ -492,7 +492,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // TODO(ybc) support this
   if (first_entry.is_hierarchical) {
     throw std::runtime_error(
-        "Hierachical neighbor_allreduce is only supported under NCCL case.");
+        "hierarchical neighbor_allreduce is only supported under NCCL case.");
   }
 
   void* buffer_data;

@@ -411,10 +411,10 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-    is_hierachical = False
+    is_hierarchical = False
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        is_hierachical, name.encode() if name is not None else "")
+                                        is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
@@ -523,31 +523,31 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                            send_neighbors, enable_topo_check, name=name)
 
 
-def hierachical_neighbor_allreduce(tensor: torch.Tensor,
-                                   self_weight: float,
-                                   neighbor_machine_weights: Dict[int, float],
-                                   send_neighbor_machines: List[int],
-                                   enable_topo_check: bool = False,
-                                   name: Optional[str] = None) -> torch.Tensor:
-    # TODO(hhb) Implement the logics for topo check for hierachical_neighbor_allreduce.
+def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
+                                    self_weight: float,
+                                    neighbor_machine_weights: Dict[int, float],
+                                    send_neighbor_machines: List[int],
+                                    enable_topo_check: bool = False,
+                                    name: Optional[str] = None) -> torch.Tensor:
+    # TODO(hhb) Implement the logics for topo check for hierarchical_neighbor_allreduce.
 
     # TODO(ybc) add check for self_weight and neighbor_machine_weights.
     if (self_weight is None and neighbor_machine_weights is not None) or \
        (self_weight is not None and send_neighbor_machines is None):
         raise ValueError("Arguments self_weight and neighbor_machine_weights have to "
                          "be presented at the same time")
-    handle = hierachical_neighbor_allreduce_nonblocking(
+    handle = hierarchical_neighbor_allreduce_nonblocking(
         tensor, self_weight, neighbor_machine_weights, send_neighbor_machines,
         enable_topo_check, name)
     return synchronize(handle)
 
 
-def hierachical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
-                                               self_weight: float,
-                                               neighbor_machine_weights: Dict[int, float],
-                                               send_neighbor_machines: List[int],
-                                               enable_topo_check: bool = False,
-                                               name: Optional[str] = None) -> int:
+def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
+                                                self_weight: float,
+                                                neighbor_machine_weights: Dict[int, float],
+                                                send_neighbor_machines: List[int],
+                                                enable_topo_check: bool = False,
+                                                name: Optional[str] = None) -> int:
     if (self_weight is None or neighbor_machine_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
     if (self_weight is None and neighbor_machine_weights is not None) or \
@@ -559,16 +559,16 @@ def hierachical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
     output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
 
-    return _hierachical_neighbor_allreduce_nonblocking(
+    return _hierarchical_neighbor_allreduce_nonblocking(
         tensor, output, self_weight, neighbor_machine_weights,
         send_neighbor_machines, enable_topo_check, name=name)
 
 
-def _hierachical_neighbor_allreduce_nonblocking(
+def _hierarchical_neighbor_allreduce_nonblocking(
         tensor, output, self_weight, neighbor_machine_weights,
         send_neighbor_machines, enable_topo_check, name):
     assert is_homogeneous, \
-        "hierachical_neighbor_allreduce should be used under homogeneous environment only"
+        "hierarchical_neighbor_allreduce should be used under homogeneous environment only"
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if self_weight is not None and neighbor_machine_weights is not None:
         if not isinstance(neighbor_machine_weights, dict):
@@ -592,10 +592,10 @@ def _hierachical_neighbor_allreduce_nonblocking(
     neighbor_weights = {
         node_per_machine*m: weights for (m, weights) in neighbor_machine_weights.items()}
     send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
-    is_hierachical = True
+    is_hierarchical = True
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        is_hierachical, name.encode() if name is not None else "")
+                                        is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 

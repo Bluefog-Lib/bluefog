@@ -701,7 +701,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   } else {
     if (entry.send_neighbors->empty()) {
       throw std::runtime_error(
-          "Under hierachical neighbor_allreduce, argument "
+          "Under hierarchical neighbor_allreduce, argument "
           "send_machine_neighbors should "
           "not be empty.");
     }
@@ -759,7 +759,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                       "Hence, the performance may be largely degraded";
   });
   if (entry.is_hierarchical) {
-    throw std::runtime_error("Hierachical neighbor allreduce is not supported under NCCL < 2.7");
+    throw std::runtime_error("hierarchical neighbor allreduce is not supported under NCCL < 2.7");
   }
   ncclGroupStart();
   uint recv_rank_index = 0;
@@ -964,7 +964,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   } else {
     if (first_entry.send_neighbors->empty()) {
       throw std::runtime_error(
-          "Under hierachical neighbor_allreduce, argument "
+          "Under hierarchical neighbor_allreduce, argument "
           "send_machine_neighbors should not be empty.");
     }
 
