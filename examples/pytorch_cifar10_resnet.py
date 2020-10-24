@@ -74,9 +74,9 @@ parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
 )
 parser.add_argument("--seed", type=int, default=42, help="random seed")
-parser.add_argument('--dist-optimizer', type=str, default='win_put',
+parser.add_argument('--dist-optimizer', type=str, default='hierarchical_neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are ' +
-                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
+                    '[win_put, neighbor_allreduce, allreduce, pull_get, hierarchical_neighbor_allreduce, horovod]')
 parser.add_argument("--average-test-result", action="store_true",
                     default=False,
                     help=("Allreduce called to average test result. Warning this will " +
@@ -226,6 +226,9 @@ elif args.dist_optimizer == 'allreduce':
 elif args.dist_optimizer == 'gradient_allreduce':
     optimizer = optimizer = bf.DistributedGradientAllreduceOptimizer(
         optimizer, model=model)
+elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+    optimizer = optimizer = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
+        optimizer, model=model)
 elif args.dist_optimizer == 'push_sum':
     optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'horovod':
@@ -356,6 +359,14 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
             bf.size(),
             local_size=bf.local_size() if args.local_size == -1 else args.local_size,
             self_rank=bf.rank())
+    elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+        # This optimizer can use only,
+        dynamic_machine_neighbor_allreduce_gen = topology_util.GetExp2DynamicSendRecvMachineRanks(
+            world_size=bf.size(),
+            local_size=bf.local_size(),
+            self_rank=bf.rank(),
+            local_rank=bf.local_rank()
+        )
     else:
         dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
             bf.load_topology(), bf.rank())
@@ -384,6 +395,12 @@ def dynamic_topology_update(epoch, batch_idx):
         send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
         optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
+        optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
+        optimizer.enable_topo_check = False
+    elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+        send_machines, recv_machines = next(dynamic_machine_neighbor_allreduce_gen)
+        optimizer.send_neighbor_machines = send_machines
+        optimizer.neighbor_machine_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
         optimizer.enable_topo_check = False
     else:
