@@ -592,11 +592,12 @@ def _hierarchical_neighbor_allreduce_nonblocking(
     neighbor_weights = {
         node_per_machine*m: weights for (m, weights) in neighbor_machine_weights.items()}
     send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
+    tensor_buffer = tensor.detach().clone()
     is_hierarchical = True
-    handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
+    handle = getattr(mpi_lib, function)(tensor_buffer, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
                                         is_hierarchical, name.encode() if name is not None else "")
-    _handle_map[handle] = (tensor, output)
+    _handle_map[handle] = (tensor_buffer, output)
     return handle
 
 
