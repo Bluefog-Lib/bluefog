@@ -112,11 +112,11 @@ if args.dist_optimizer != 'horovod':
     elif args.virtual_topology == "InnerOuterRing":
         assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
         bf.set_topology(topology_util.InnerOuterRingGraph(
-            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+            bf.size(), local_size=bf.local_size()))
     elif args.virtual_topology == "InnerOuterExp2":
         assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
         bf.set_topology(topology_util.InnerOuterExp2Graph(
-            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+            bf.size(), local_size=bf.local_size()))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
                          "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
@@ -352,12 +352,12 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
     if args.virtual_topology == 'InnerOuterRing':
         dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
             bf.size(),
-            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            local_size=bf.local_size(),
             self_rank=bf.rank())
     elif args.virtual_topology == 'InnerOuterExp2':
         dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
             bf.size(),
-            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            local_size=bf.local_size(),
             self_rank=bf.rank())
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
         # This optimizer can use only,
