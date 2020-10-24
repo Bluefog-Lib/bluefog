@@ -400,8 +400,8 @@ def dynamic_topology_update(epoch, batch_idx):
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
         send_machines, recv_machines = next(dynamic_machine_neighbor_allreduce_gen)
         optimizer.send_neighbor_machines = send_machines
-        optimizer.neighbor_machine_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
-        optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
+        optimizer.neighbor_machine_weights = {r: 1/(len(recv_machines) + 1) for r in recv_machines}
+        optimizer.self_weight = 1 / (len(recv_machines) + 1)
         optimizer.enable_topo_check = False
     else:
         pass
