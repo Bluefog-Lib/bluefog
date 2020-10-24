@@ -967,6 +967,12 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
           "Under hierarchical neighbor_allreduce, argument "
           "send_machine_neighbors should not be empty.");
     }
+    if (mpi_ctx_.local_size_ < 2) {
+      throw std::runtime_error(
+        "Local size is smaller than 2, in this case, you should use "
+        "neighbor_allreduce instead of hierarchical_neighbor_allreduce."
+      );
+    }
 
     // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
     // divided by local size at call back stage.
@@ -976,26 +982,30 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                             nccl_ctx_.stream));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
+      // Use rank 0 for receiving 
       ncclGroupStart();
-       for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+      for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
         int recv_rank = first_entry.recv_neighbors->at(i);
         void* recvbuf =
             (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
         NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           GetNCCLDataType(first_entry.tensor), recv_rank+1,
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
+      ncclGroupEnd();
+    } else if (mpi_ctx_.local_rank_ == 1) {
+      ncclGroupStart();
       for (int send_rank : *first_entry.send_neighbors) {
         NCCLCHECK(ncclSend(fused_input_data, num_elements,
                            GetNCCLDataType(first_entry.tensor), send_rank,
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
       ncclGroupEnd();
-      MemcpyOutFusionBufferForInputs(fused_input_data, entries);
     } else {
-      // Because the in-place modification, we need to copy fused_input_data back to tensor as well
-      MemcpyOutFusionBufferForInputs(fused_input_data, entries);
+      // Do nothing
     }
+    // Because the in-place modification, we need to copy fused_input_data back to tensor as well
+    MemcpyOutFusionBufferForInputs(fused_input_data, entries);
     // 3. Broadcast recv data from local rank = 0 to other local ranks.
     int recv_num_elements = num_elements * first_entry.recv_neighbors->size();
     NCCLCHECK(ncclBroadcast(buffer_data, (void*)buffer_data, recv_num_elements,
