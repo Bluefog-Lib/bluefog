@@ -188,6 +188,9 @@ class NCCLController {
                                          const int num_recv_neighbors,
                                          const int64_t fused_data_size);
 
+  void MemcpyOutFusionBufferForInputs(const void* fused_input_data,
+                                      std::vector<TensorTableEntry>& entries);
+
   void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                  void* buffer_data_at_offset);
 
