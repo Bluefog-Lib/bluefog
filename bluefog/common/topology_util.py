@@ -430,6 +430,25 @@ def GetDynamicSendRecvRanks(
         index += 1
 
 
+def GetExp2DynamicSendRecvMachineRanks(
+        world_size: int, local_size: int, self_rank: int, local_rank: int
+    ) -> Iterator[Tuple[List[int], List[int]]]:
+    assert (self_rank % local_size) == local_rank, \
+        "It should be used under homogeneous environment only."
+    assert (world_size % local_size) == 0, \
+        "It should be used under homogeneous environment only."
+    machine_id = self_rank // local_size
+    machine_size = world_size // local_size
+    exp_2_size = int(np.log2(machine_size-1))
+    index = 0
+    while True:
+        machine_dist = 2**(index % (exp_2_size + 1))
+        send_machine_rank = (machine_id + machine_dist) % machine_size
+        recv_machine_ranks = (machine_id - machine_dist) % machine_size
+        yield [send_machine_rank], [recv_machine_ranks]
+        index += 1
+
+
 def GetInnerOuterRingDynamicSendRecvRanks(
         world_size: int, local_size: int, self_rank: int
     ) -> Iterator[Tuple[List[int], List[int]]]:
