@@ -91,10 +91,10 @@ if args.dist_optimizer != 'horovod':
     if args.virtual_topology == "power2":
         pass
     elif args.virtual_topology == "ring":
-        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
+        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
     elif args.virtual_topology == "mesh":
-        bf.set_topology(topology_util.RingGraph(
-            bf.size(), connect_style=0), is_weighted=True)
+        bf.set_topology(topology_util.MeshGrid2DGraph(
+            bf.size()), is_weighted=True)
     elif args.virtual_topology == "star":
         bf.set_topology(topology_util.StarGraph(bf.size()))
     else:
