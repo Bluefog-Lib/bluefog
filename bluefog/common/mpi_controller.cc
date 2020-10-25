@@ -1342,6 +1342,7 @@ void MPIController::MemcpyEntryOutFusionBufferForNeighbors(
 #if HAVE_CUDA
     }
 #endif
+  }
 }
 
 // Extracted from book "Using Advanced MPI" Section 4.5
