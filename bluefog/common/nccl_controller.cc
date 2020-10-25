@@ -982,7 +982,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                             nccl_ctx_.stream));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
-      // Use rank 0 for receiving 
+      // Use local rank 0 for receiving 
       ncclGroupStart();
       for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
         int recv_rank = first_entry.recv_neighbors->at(i);
@@ -994,6 +994,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
       }
       ncclGroupEnd();
     } else if (mpi_ctx_.local_rank_ == 1) {
+      // Use local rank 0 for sending 
       ncclGroupStart();
       for (int send_rank : *first_entry.send_neighbors) {
         NCCLCHECK(ncclSend(fused_input_data, num_elements,

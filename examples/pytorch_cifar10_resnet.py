@@ -81,9 +81,9 @@ parser.add_argument("--average-test-result", action="store_true",
                     default=False,
                     help=("Allreduce called to average test result. Warning this will " +
                           "force the algorithm to sync every end of epoch."))
-parser.add_argument("--enable-dynamic-topology", action="store_true",
-                    default=False, help=("Enable each iteration to transmit one neighbor " +
-                                         "per iteration dynamically."))
+parser.add_argument('--disable-dynamic-topology', action='store_true',
+                    default=False, help=('Disable each iteration to transmit one neighbor ' +
+                                         'per iteration dynamically.'))
 parser.add_argument('--virtual-topology', type=str, default="power2",
                     help='The underlying virtual topology. Supporting options are ' +
                     '[power2(Default), ring, mesh, star].')
@@ -267,7 +267,7 @@ def train(epoch):
               disable=not verbose,) as t:
         for batch_idx, (data, target) in enumerate(train_loader):
             adjust_learning_rate(epoch, batch_idx)
-            if args.enable_dynamic_topology:
+            if not args.disable_dynamic_topology:
                 dynamic_topology_update(epoch, batch_idx)
 
             if args.cuda:
@@ -348,7 +348,7 @@ def adjust_learning_rate(epoch, batch_idx):
             args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj
         )
 
-if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
+if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
     if args.virtual_topology == 'InnerOuterRing':
         dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
             bf.size(),
@@ -360,7 +360,7 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
             local_size=bf.local_size(),
             self_rank=bf.rank())
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
-        # This optimizer can use only,
+        # This optimizer can use following dynamic topo only so far.
         dynamic_machine_neighbor_allreduce_gen = topology_util.GetExp2DynamicSendRecvMachineRanks(
             world_size=bf.size(),
             local_size=bf.local_size(),

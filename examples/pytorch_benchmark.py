@@ -55,9 +55,10 @@ parser.add_argument('--partition', type=int, default=None,
                     help='partition size')
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
                     help='The type of distributed optimizer. Supporting options are ' +
-                    '[win_put(default), neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
-parser.add_argument('--enable-dynamic-topology', action='store_true',
-                    default=False, help=('Enable each iteration to transmit one neighbor ' +
+                    '[win_put(default), neighbor_allreduce, allreduce, ' +
+                    'hierarchical_neighbor_allreduce, pull_get, push_sum, horovod]')
+parser.add_argument('--disable-dynamic-topology', action='store_true',
+                    default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
 parser.add_argument('--virtual-topology', type=str, default="power2",
                     help='The underlying virtual topology. Supporting options are ' +
@@ -142,6 +143,9 @@ elif args.dist_optimizer == 'gradient_allreduce':
         optimizer, model=model)
 elif args.dist_optimizer == 'push_sum':
     optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
+elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+    optimizer = optimizer = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
+        optimizer, model=model)
 elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
@@ -176,7 +180,7 @@ for _ in range(50):
 data_index = 0
 
 
-if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
+if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
     if args.virtual_topology == 'InnerOuterRing':
         dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
             bf.size(),
@@ -187,6 +191,14 @@ if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
             bf.size(),
             local_size=bf.local_size() if args.local_size == -1 else args.local_size,
             self_rank=bf.rank())
+    elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+        # This optimizer can use following dynamic topo only so far.
+        dynamic_machine_neighbor_allreduce_gen = topology_util.GetExp2DynamicSendRecvMachineRanks(
+            world_size=bf.size(),
+            local_size=bf.local_size(),
+            self_rank=bf.rank(),
+            local_rank=bf.local_rank()
+        )
     else:
         dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
             bf.load_topology(), bf.rank())
@@ -212,6 +224,12 @@ def dynamic_topology_update(batch_idx):
         optimizer.neighbor_weights = {
             r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
+        optimizer.enable_topo_check = False    
+    elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+        send_machines, recv_machines = next(dynamic_machine_neighbor_allreduce_gen)
+        optimizer.send_neighbor_machines = send_machines
+        optimizer.neighbor_machine_weights = {r: 1/(len(recv_machines) + 1) for r in recv_machines}
+        optimizer.self_weight = 1 / (len(recv_machines) + 1)
         optimizer.enable_topo_check = False
     else:
         pass
@@ -220,7 +238,7 @@ def dynamic_topology_update(batch_idx):
 def benchmark_step():
     global data_index
 
-    if args.enable_dynamic_topology:
+    if not args.disable_dynamic_topology:
         dynamic_topology_update(data_index)
     data = datasets[data_index % len(datasets)]
     data_index += 1
