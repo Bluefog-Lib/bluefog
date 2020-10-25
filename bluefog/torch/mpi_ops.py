@@ -569,7 +569,7 @@ def _hierarchical_neighbor_allreduce_nonblocking(
         send_neighbor_machines, enable_topo_check, name):
     assert is_homogeneous, \
         "hierarchical_neighbor_allreduce should be used under homogeneous environment only"
-    assert local_size() > 1, "If local size is 1, you should use neighbor allreduce directorly."
+    assert local_size() > 1, "If local size is 1, you should use neighbor allreduce directly."
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if self_weight is not None and neighbor_machine_weights is not None:
         if not isinstance(neighbor_machine_weights, dict):
