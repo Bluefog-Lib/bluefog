@@ -122,10 +122,11 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     // allocate two cpu memories.
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto bf_output = bf_tensor;
+    auto bf_context = std::make_shared<TorchOpContext>(CPU_DEVICE_ID, output);
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_tensor, ready_event, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_tensor, bf_context, ready_event, op_name, CPU_DEVICE_ID,
         callback_wrapper([average, output, cpu_buffer, device]() mutable {
             with_device device_guard(device);
             output.copy_(cpu_buffer);
@@ -141,10 +142,11 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_output = std::make_shared<TorchTensor>(output);
+    auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_output, ready_event, op_name, device,
+        bf_tensor, bf_output, bf_context, ready_event, op_name, device,
         callback_wrapper([average, output]() mutable {
           // Will execute in the `device` context.
           ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
@@ -322,6 +324,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
   std::vector<int> recv_neighbors;
   for (auto kv : neighbor_weights)
       recv_neighbors.push_back(kv.first);
+  std::sort(recv_neighbors.begin(), recv_neighbors.end());
 
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
@@ -330,14 +333,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         output.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
     auto bf_context =
-        std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output); // No need. Already allocated.
+        std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
-    // TODO(ybc) Figure out why ready_event may encounter signal abort (6) problem.
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(            
-        bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
+        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
         enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
         mutable {
@@ -356,24 +358,24 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               shape_vector.push_back(tensor_buffer.size(idx));
             }
 
-            // 1) For a distributed graph topology, created with
-            // MPI_Dist_graph_create, the sequence of neighbors in the send and
-            // receive buffers at each process is defined as the sequence returned
-            // by MPI_Dist_graph_neighbors for destinations and sources,
-            // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
-            // created with MPI_Dist_graph_create_adjacent then the order of the
-            // values in sources and destinations is identical to the input that
-            // was used by the process with the same rank in comm_old in the
-            // creation call.
-            int indgree = 0;
-            int outdegree = 0;
-            int* sources_ptr = nullptr;
-            int* destinations_ptr = nullptr;
-            bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                  destinations_ptr);
-
             // if avg_computation is set to be False, sum computation will be taken place.
             if (avg_computation) {
+              // 1) For a distributed graph topology, created with
+              // MPI_Dist_graph_create, the sequence of neighbors in the send and
+              // receive buffers at each process is defined as the sequence returned
+              // by MPI_Dist_graph_neighbors for destinations and sources,
+              // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
+              // created with MPI_Dist_graph_create_adjacent then the order of the
+              // values in sources and destinations is identical to the input that
+              // was used by the process with the same rank in comm_old in the
+              // creation call.
+              int indgree = 0;
+              int outdegree = 0;
+              int* sources_ptr = nullptr;
+              int* destinations_ptr = nullptr;
+              bluefog_load_topology(&indgree, sources_ptr, &outdegree,
+                                    destinations_ptr);
+
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
               if (!send_neighbors.empty()) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
@@ -397,15 +399,20 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
-              auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              for (int i = 1; i < bluefog_neighbor_size(); i++) {
-                output_reduced.add_(
-                    output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
+              int neighbor_size = send_neighbors.empty()
+                                      ? bluefog_neighbor_size()
+                                      : recv_neighbors.size();
+              if (neighbor_size > 1) {
+                auto output_reduced = output_buffer.slice(0, 0, first_dim);
+                for (int i = 1; i < neighbor_size; i++) {
+                  output_reduced.add_(
+                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
+                }
+                output_buffer.resize_(shape_vector);
               }
-              output_buffer.resize_(shape_vector);
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(bluefog_neighbor_size() + 1);
+              output_buffer.div_(neighbor_size + 1);
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
@@ -415,14 +422,14 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     ThrowIfError(enqueue_result);
   } else {
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
-    auto bf_context = std::make_shared<TorchOpContext>(device, output);  // No need.
+    auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto bf_output = std::make_shared<TorchTensor>(output);
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_context, bf_tensor, bf_output, ready_event, bf_recv_neighbors, bf_send_neighbors,
+        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
         enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
         avg_computation, recv_neighbors, send_neighbors, tensor, output] () mutable {
           int recv_size = bluefog_neighbor_size();
@@ -437,25 +444,14 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             for (int idx = 1; idx < tensor_buffer.dim(); ++idx) {
               shape_vector.push_back(tensor_buffer.size(idx));
             }
-
-            // 1) For a distributed graph topology, created with
-            // MPI_Dist_graph_create, the sequence of neighbors in the send and
-            // receive buffers at each process is defined as the sequence returned
-            // by MPI_Dist_graph_neighbors for destinations and sources,
-            // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
-            // created with MPI_Dist_graph_create_adjacent then the order of the
-            // values in sources and destinations is identical to the input that
-            // was used by the process with the same rank in comm_old in the
-            // creation call.
-            int indgree = 0;
-            int outdegree = 0;
-            int* sources_ptr = nullptr;
-            int* destinations_ptr = nullptr;
-            bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                  destinations_ptr);
-
             // if avg_computation is set to be True, average computation will be taken place.
             if (avg_computation) {
+              int indgree = 0;
+              int outdegree = 0;
+              int* sources_ptr = nullptr;
+              int* destinations_ptr = nullptr;
+              bluefog_load_topology(&indgree, sources_ptr, &outdegree,
+                                    destinations_ptr);
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
               if (!send_neighbors.empty()) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
@@ -479,15 +475,20 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
-              auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              for (int i = 1; i < bluefog_neighbor_size(); i++) {
-                output_reduced.add_(
-                    output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
+              int neighbor_size = send_neighbors.empty()
+                                      ? bluefog_neighbor_size()
+                                      : recv_neighbors.size();
+              if (neighbor_size > 1) {
+                auto output_reduced = output_buffer.slice(0, 0, first_dim);
+                for (int i = 1; i < neighbor_size; i++) {
+                  output_reduced.add_(
+                      output.slice(0, i * first_dim, (i + 1) * first_dim));
+                }
               }
               output_buffer.resize_(shape_vector);
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(bluefog_neighbor_size() + 1);
+              output_buffer.div_(neighbor_size + 1);
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);

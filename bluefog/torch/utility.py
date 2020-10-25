@@ -51,6 +51,37 @@ def broadcast_parameters(params, root_rank):
         bf.synchronize(handle)
 
 
+def allreduce_parameters(params):
+    """
+    Allreduce the parameters of all other processes, i.e., forcing all
+    processes to have same average model.
+    Typical usage is to allreduce the ``model.named_parameters()``,
+    or ``model.parameters()``.
+
+    Arguments:
+        params: One of the following:
+            - list of parameters to allreduce
+            - dict of parameters to allreduce
+    """
+    if isinstance(params, dict):
+        params = sorted(params.items())
+    elif isinstance(params, list):
+        # support both named_parameters() and regular parameters()
+        params = [p if isinstance(p, tuple) else (None, p) for p in params]
+    else:
+        raise ValueError("invalid params of type: %s" % type(params))
+
+    # Run asynchronous broadcasts.
+    handles = []
+    for name, p in params:
+        handle = bf.allreduce_nonblocking(p, name)
+        handles.append(handle)
+
+    # Wait for completion.
+    for handle in handles:
+        bf.synchronize(handle)
+
+
 def broadcast_optimizer_state(optimizer, root_rank):
     """
     Broadcasts an optimizer state from root rank to all other processes.

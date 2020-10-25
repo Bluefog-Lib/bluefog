@@ -61,7 +61,7 @@ struct BluefogGlobalState {
   bool timeline_enabled = false;
 
   // Background thread cycle time in milliseconds.  Fractional numbers are permitted.
-  double cycle_time_ms = 3;
+  double cycle_time_ms = 0.5;
 
   // Time point when last cycle started.
   std::chrono::steady_clock::time_point last_cycle_start;
@@ -76,6 +76,11 @@ struct BluefogGlobalState {
   #endif
 
   TensorQueue tensor_queue;
+
+  // Threshold for Tensor Fusion.  All tensors that occupy memory beyond this
+  // threshold will be fused.
+  int64_t tensor_fusion_threshold = 8 * 1024 * 1024;
+  FusionBufferManager fusion_buffer;
 
   // Because setting topology happens in the main thread instead of communication
   // thread. Following three variables are to sync between them.

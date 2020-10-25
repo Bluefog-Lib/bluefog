@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <string>
 #include <thread>
+#include <mutex>
 
 #include "common.h"
 #include "cuda_util.h"
@@ -28,6 +29,8 @@
 
 namespace bluefog {
 namespace common {
+
+static std::once_flag nccl27VersionLogOnceFlag;
 
 static const char* BF_MAX_SLEEP_USEC_FOR_WIN_PASSIVE = std::getenv("BLUEFOG_SLEEP_USEC_FOR_WIN_PASSIVE");
 static const int MAX_SLEEP_USEC_FOR_WIN_PASSIVE =
@@ -91,6 +94,7 @@ void NCCLContext::Initialize(const int rank, const int size,
   CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
   CUDACHECK(cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking,
                                          greatest_priority));
+  // TODO(ybc) Handle the error case then np > number of GPU properly.
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
 
   cuda_device = local_rank % nDevices;
@@ -144,7 +148,7 @@ void NCCLContext::Finalize() {
   CUDACHECK(cudaStreamDestroy(stream));
 
 #if NCCL_MINOR < 7
-  CleanPeerCommunicator();
+  CleanPeerCommunicators();
 #endif
   CleanWindowCommunicators();
 
@@ -180,13 +184,13 @@ cudaError_t NCCLContext::ReleaseCudaEvent(cudaEvent_t event) {
 void NCCLController::Initialize() {
   nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
 #if NCCL_MINOR < 7
-  InitPeerCommunicator();
+  InitPeerCommunicators();
 #endif
   const char* bluefog_num_finalizer_threads =
       std::getenv("BLUEFOG_NUM_FINALIZER_THREADS");
   const int num_finalizer_threads =
       bluefog_num_finalizer_threads == nullptr
-          ? 50
+          ? 1
           : std::strtol(bluefog_num_finalizer_threads, nullptr, 10);
 
   nccl_ctx_.finalizer_thread_pool.create(num_finalizer_threads);
@@ -200,7 +204,7 @@ void NCCLController::Initialize() {
 }
 
 #if NCCL_MINOR < 7
-void NCCLController::InitPeerCommunicator() {
+void NCCLController::InitPeerCommunicators() {
   int nDevices = 0;
   CUDACHECK(cudaGetDeviceCount(&nDevices));
   CUDACHECK(cudaSetDevice(mpi_ctx_.local_rank_ % nDevices));
@@ -388,32 +392,34 @@ void NCCLController::Allgather(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
   void* buffer_data = (void*)entry.output->data();
+  // GPU events are used as an alternative to host-device synchronization (which
+  // stalls the GPU pipeline) for the purpose of recording timing on the Horovod
+  // timeline.
+  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
 
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
 
-  ncclResult_t ret_code = ncclAllGather(sendbuf, buffer_data, num_elements,
-                                        GetNCCLDataType(entry.output),
-                                        nccl_ctx_.nccl_comm, nccl_ctx_.stream);
-  if (ret_code != ncclSuccess) {
-    throw std::runtime_error(
-        "ncclAllGather failed, see NCCL output (NCCL_DEBUG=INFO) for details.");
+  NCCLCHECK(ncclAllGather(sendbuf, buffer_data, num_elements,
+                          GetNCCLDataType(entry.output), nccl_ctx_.nccl_comm,
+                          nccl_ctx_.stream));
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "COMM. (NCCL)");
   }
+  // Blocking event (Not for timeline).
+  RecordEvent(event_queue, "");
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
-    with_device device_guard(entry.device);
-    cudaEvent_t event;
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    entry.callback(Status::OK());
-  });
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entry, event_queue, tid]() mutable {
+        with_device device_guard(entry.device);
+        WaitForEvents(event_queue, {entry}, this->timeline_ptr_, tid);
+        this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+        entry.callback(Status::OK());
+        this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+      });
 
   delete[] recvcounts;
   delete[] displcmnts;
@@ -424,33 +430,30 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   void* buffer_data = (void*)entry.output->data();
   int num_elements = entry.tensor->shape().num_elements();
 
+  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
+
   with_device device_guard(entry.device);
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
-  ncclResult_t ret_code = ncclAllReduce(sendbuf, buffer_data, num_elements,
-                                        GetNCCLDataType(entry.tensor), ncclSum,
-                                        nccl_ctx_.nccl_comm, nccl_ctx_.stream);
-  if (ret_code != ncclSuccess) {
-    std::string error_msg =
-        "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) "
-        "for details.";
-    BFLOG(ERROR) << error_msg;
-    entry.callback(Status::UnknownError(error_msg));
-    return;
+  NCCLCHECK(ncclAllReduce(sendbuf, buffer_data, num_elements,
+                          GetNCCLDataType(entry.tensor), ncclSum,
+                          nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "COMM. (NCCL)");
   }
+  // Blocking event (Not for timeline).
+  RecordEvent(event_queue, "");
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
-    with_device device_guard(entry.device);
-    cudaEvent_t event;
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    entry.callback(Status::OK());
-  });
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entry, event_queue, tid]() mutable {
+        with_device device_guard(entry.device);
+        WaitForEvents(event_queue, {entry}, this->timeline_ptr_, tid);
+        this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+        entry.callback(Status::OK());
+        this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+      });
 }
 
 void NCCLController::Broadcast(TensorTableEntry& entry) {
@@ -463,34 +466,27 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
   } else {
     data_ptr = (void*)entry.output->data();
   }
+  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
 
   with_device device_guard(entry.device);
 
-  timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
-  ncclResult_t ret_code =
-      ncclBcast(data_ptr, num_elements, GetNCCLDataType(entry.tensor),
-                root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream);
-  if (ret_code != ncclSuccess) {
-    std::string error_msg =
-        "ncclBcast failed, see NCCL output (NCCL_DEBUG=INFO) "
-        "for details.";
-    BFLOG(ERROR) << error_msg;
-    entry.callback(Status::UnknownError(error_msg));
-    return;
+  NCCLCHECK(ncclBcast(data_ptr, num_elements, GetNCCLDataType(entry.tensor),
+                      root_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "COMM. (NCCL)");
   }
+  // Blocking event (Not for timeline).
+  RecordEvent(event_queue, "");
 
   auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
-    with_device device_guard(entry.device);
-    cudaEvent_t event;
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    entry.callback(Status::OK());
-  });
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entry, event_queue, tid]() mutable {
+        with_device device_guard(entry.device);
+        WaitForEvents(event_queue, {entry}, this->timeline_ptr_, tid);
+        this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+        entry.callback(Status::OK());
+        this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+      });
 }
 
 void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
@@ -635,12 +631,11 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   const int num_elements = entry.tensor->shape().num_elements();
   const int element_size = mpi_ctx_.GetMPITypeSize(
       entry.tensor->dtype());  // Assume NCCL use same size as MPI
+  
+  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
 
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
-
-  Timeline* timeline_ptr;
-  Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
   // NCCL does not have neighbor_allreduce API. So neighbor_allgather 
   // is implemented through Send/Recv first.
@@ -653,7 +648,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
   bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, entry, timeline_ptr,
+      mpi_ctx_.size_, entry, timeline_ptr_,
       mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
@@ -662,7 +657,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     return; 
   }
 
-  timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
 #if NCCL_MINOR > 6
   ncclGroupStart();
   if (entry.send_neighbors->empty()) {
@@ -678,20 +672,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
     }
   } else {
-    int rank = mpi_ctx_.rank_;
-    int size = mpi_ctx_.size_;
-    std::sort(entry.send_neighbors->begin(), entry.send_neighbors->end(),
-              [rank, size](int a, int b) {
-                int a_index = a >= rank ? a - rank : a - rank + size;
-                int b_index = b >= rank ? b - rank : b - rank + size;
-                return a_index - b_index;
-              });
-    std::sort(entry.recv_neighbors->begin(), entry.recv_neighbors->end(),
-              [rank, size](int a, int b) {
-                int a_index = a >= rank ? a - rank : a - rank + size;
-                int b_index = b >= rank ? b - rank : b - rank + size;
-                return b_index - a_index;
-              });
     for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
       int recv_rank = entry.recv_neighbors->at(i);
       void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
@@ -706,21 +686,30 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   }
   ncclGroupEnd();
 
-  auto tid = std::this_thread::get_id();
-  nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
-    with_device device_guard(entry.device);
-    cudaEvent_t event;
-    CUDACHECK(this->nccl_ctx_.GetCudaEvent(&event));
-    CUDACHECK(cudaEventRecord(event, this->nccl_ctx_.stream));
-    CUDACHECK(cudaEventSynchronize(event));
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "COMM. (NCCL)");
+  }
 
-    CUDACHECK(this->nccl_ctx_.ReleaseCudaEvent(event));
-    this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
-    entry.callback(Status::OK());
-    this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
-  });
+  // Blocking event (Not for timeline).
+  RecordEvent(event_queue, "");
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entry, event_queue, tid]() mutable {
+        with_device device_guard(entry.device);
+        WaitForEvents(event_queue, {entry}, this->timeline_ptr_, tid);
+
+        this->timeline_ptr_->ActivityStart(entry.tensor_name, "CALLBACK", &tid);
+        entry.callback(Status::OK());
+        this->timeline_ptr_->ActivityEnd(entry.tensor_name, &tid);
+      });
 #else
+  std::call_once(nccl27VersionLogOnceFlag, []() {
+    BFLOG(WARNING) << "neighbor_allreduce is called under NCCL version < 2.7, "
+                      "which doesn't support point-to-point communication. "
+                      "Hence, the performance may be largely degraded";
+  });
+
   ncclGroupStart();
   uint recv_rank_index = 0;
   uint send_rank_index = 0;
@@ -743,7 +732,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       recv_rank = entry.recv_neighbors->at(recv_rank_index);
     }
 
-    int target_disp = displcmnts[recv_rank_index];
     bool should_recv = false;
     bool should_send = false;
     if (send_rank_index < num_send_size && peer_rank == send_rank) {
@@ -757,7 +745,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       BFLOG(DEBUG, mpi_ctx_.rank_) << "Should recv from rank " << peer_rank;
     }
 
-    void* recvbuf = (void*)(static_cast<const char*>(buffer_data) +
+    void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
                               num_elements * recv_rank_index * element_size);
     if (mpi_ctx_.rank_ == pair.second) {
       // Recv then send
@@ -785,6 +773,176 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     CUDACHECK(cudaStreamSynchronize(stream.second));
   }
   entry.callback(Status::OK());
+#endif
+}
+
+void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
+  auto& first_entry = entries[0];
+  with_device device_guard(first_entry.device);
+
+  void* buffer_data;
+  size_t buffer_len = 0;
+  int64_t num_elements = 0;
+  for (auto& e : entries) {
+    num_elements += e.tensor->shape().num_elements();
+  }
+  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
+
+  
+  MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "MEM_CPY_IN");
+  }
+  const void* fused_input_data = buffer_data;
+
+  ncclResult_t ret_code =
+      ncclAllReduce(fused_input_data, buffer_data, num_elements,
+                    GetNCCLDataType(first_entry.tensor), ncclSum,
+                    nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+  if (ret_code != ncclSuccess) {
+    std::string error_msg =
+        "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) "
+        "for details.";
+    BFLOG(ERROR) << error_msg;
+    for (auto& entry : entries) {
+      entry.callback(Status::UnknownError(error_msg));
+    }
+    return;
+  }
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "COMM. (NCCL)");
+  }
+
+  MemcpyOutFusionBuffer(buffer_data, entries);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "MEM_CPY_OUT");
+  }
+  // Blocking event (Not for timeline).
+  RecordEvent(event_queue, "");
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entries, event_queue, tid]() mutable {
+        auto& first_entry = entries[0];
+        with_device device_guard(first_entry.device);
+        WaitForEvents(event_queue, entries, this->timeline_ptr_, tid);
+        this->timeline_ptr_->ActivityStartAll(entries, "CALLBACK", &tid);
+        for (auto& entry : entries) {
+          entry.callback(Status::OK());
+        }
+        this->timeline_ptr_->ActivityEndAll(entries, &tid);
+      });
+}
+
+// TODO: reuse the code of NeighborAllreduce without fusion.
+void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
+  auto& first_entry = entries[0];
+  with_device device_guard(first_entry.device);
+
+  void* buffer_data;
+  size_t buffer_len = 0;
+  int64_t num_elements = 0;
+  for (auto& e : entries) {
+    num_elements += e.tensor->shape().num_elements();
+  }
+  const int element_size = mpi_ctx_.GetMPITypeSize(first_entry.tensor->dtype());
+  std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
+
+  // If only partial sending is enabled, the following code block checks whether
+  // the sending and recieving neighbors match each other when enable_topo_check
+  // is set to be True.
+  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
+      mpi_ctx_.size_, first_entry, timeline_ptr_,
+      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  if (is_topo_check_fail) {
+    for (auto& entry : entries) {
+      entry.callback(Status::InvalidArgument(
+          "Send and recv neighbors dont' match in neighbor "
+          "allreduce with partial send/recv request."));
+    }
+    return;
+  }
+
+#if NCCL_MINOR > 6
+  MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
+
+  const void* fused_input_data = buffer_data;
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "MEM_CPY_IN");
+  }
+
+  // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
+  // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
+  // Here t_1 and t_2  means self tensor 1 and 2 and _n1 and _n2 means the
+  // recieving tensors for neighbor 1 and 2;
+  // Hence, we need to offset the buffer data to location for neighbors.
+  buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
+
+  ncclGroupStart();
+  if (first_entry.send_neighbors->empty()) {
+    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+      void* recvbuf =
+          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                         GetNCCLDataType(first_entry.tensor), recv_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+      NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                         GetNCCLDataType(first_entry.tensor), send_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  } else {
+    for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+      int recv_rank = first_entry.recv_neighbors->at(i);
+      void* recvbuf =
+          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+      NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                         GetNCCLDataType(first_entry.tensor), recv_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+    for (int send_rank : *first_entry.send_neighbors) {
+      NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                         GetNCCLDataType(first_entry.tensor), send_rank,
+                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    }
+  }
+  ncclGroupEnd();
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "COMM. (NCCL)");
+  }
+  // Remember buffer_data is already pointed at offset location (after self
+  // tensor).
+  int num_recv_neighbors = first_entry.send_neighbors->empty()
+                               ? mpi_ctx_.neighbor_indgree_
+                               : first_entry.recv_neighbors->size();
+  int64_t fused_data_size = num_elements * element_size;
+  MemcpyOutFusionBufferForNeighbors(buffer_data, entries, num_recv_neighbors,
+                                    fused_data_size);
+  if (timeline_ptr_->Initialized()) {
+    RecordEvent(event_queue, "MEM_CPY_OUT");
+  }
+  // Blocking event (Not for timeline).
+  RecordEvent(event_queue, "");
+
+  auto tid = std::this_thread::get_id();
+  nccl_ctx_.finalizer_thread_pool.execute(
+      [this, entries, event_queue, tid, buffer_data]() mutable {
+        auto& first_entry = entries[0];
+        with_device device_guard(first_entry.device);
+        WaitForEvents(event_queue, entries, this->timeline_ptr_, tid);
+
+        this->timeline_ptr_->ActivityStartAll(entries, "CALLBACK", &tid);
+        for (auto& entry : entries) {
+          entry.callback(Status::OK());
+        }
+        this->timeline_ptr_->ActivityEndAll(entries, &tid);
+      });
+#else
+  for (auto& entry : entries) {
+    NeighborAllreduce(entry);
+  }
 #endif
 }
 
@@ -926,7 +1084,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                          /*source=*/0, win_comm, win_stream));
 #else
       NCCLCHECK(ncclBroadcast(/*sendbuf=*/nullptr, /*recvbuf=*/recvbuf,
-                              num_elements, GetNCCLDataType(entry.tensor),
+                              req.length, GetNCCLDataType(req.data_type),
                               /*root=*/0, win_comm, win_stream));
 #endif
     } else if (req.op_type == MPIOpsType::WIN_GET) {
@@ -939,7 +1097,7 @@ void WinPassiveRecvRequest(int self_rank, NCCLContext& nccl_ctx) {
                          /*dest=*/0, win_comm, win_stream));
 #else
       NCCLCHECK(ncclBroadcast(/*sendbuf=*/sendbuf, /*recvbuf=*/nullptr,
-                              num_elements, GetNCCLDataType(entry.tensor),
+                              req.length, GetNCCLDataType(req.data_type),
                               /*root=*/1, win_comm, win_stream));
 #endif
     } else if (req.op_type == MPIOpsType::WIN_ACCUMULATE) {
@@ -1495,6 +1653,124 @@ Status NCCLController::WinMutexRelease(const std::string& name,
   }
   std::shared_ptr<MPI_Win> mutex_win = it->second->GetMutexWin();
   return MPIWinMutexReleaseImpl(mutex_win, release_ranks, mpi_ctx_.rank_, is_sync);
+}
+
+void NCCLController::MemcpyInFusionBuffer(
+    const std::vector<TensorTableEntry>& entries, void*& buffer_data,
+    size_t& buffer_len) {
+  // Access the fusion buffer.
+  auto& first_entry = entries[0];
+  FusionBufferManager* buffer_manager;
+  auto fusion_status = GetBluefogFusionBuffer(buffer_manager);
+  if (!fusion_status.ok()){
+    throw std::runtime_error(fusion_status.reason());
+  }
+  auto buffer = buffer_manager->GetBuffer(first_entry.device);
+  buffer_data = const_cast<void*>(buffer->AccessData(first_entry.context));
+
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryInFusionBuffer(e, buffer_data_at_offset);
+    offset += e.tensor->size();
+  }
+
+  buffer_len = (size_t)offset;
+}
+
+void NCCLController::MemcpyOutFusionBuffer(
+    const void* buffer_data, std::vector<TensorTableEntry>& entries) {
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryOutFusionBuffer(buffer_data_at_offset, e);
+    offset += e.output->size();
+  }
+}
+
+void NCCLController::MemcpyOutFusionBufferForNeighbors(
+    const void* buffer_data, std::vector<TensorTableEntry>& entries,
+    const int num_recv_neighbors, const int64_t fused_data_size) {
+  // Remember buffer_data is already pointed at offset location (after self).
+  // Unfornately, we cannot simply use MemcpyOutFusionBuffer because:
+  // buffer -- [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  // needs to split into [t_1_n1, t_1_n2] and [t_2_n1, t_2_n2].
+  // Notice the size of t_1_n1 can be retrieved from the tensor size.
+  // And the size of [t_1_n1, t_1_n2] can be retrieved from the output size.
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
+    MemcpyEntryOutFusionBufferForNeighbors(buffer_data_at_offset, e,
+                                           num_recv_neighbors, fused_data_size);
+    offset += e.tensor->size();
+  }
+}
+
+void NCCLController::MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
+                                               void* buffer_data_at_offset) {
+  const void* src_data = e.tensor->data();
+  size_t count = (size_t)e.tensor->size();
+  CUDACHECK(cudaMemcpyAsync(buffer_data_at_offset, src_data, count,
+                            cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
+}
+
+void NCCLController::MemcpyEntryOutFusionBuffer(
+    const void* buffer_data_at_offset, TensorTableEntry& e) {
+  void* dst_data = (void*)e.output->data();
+  size_t count = (size_t)e.output->size();
+  CUDACHECK(cudaMemcpyAsync(dst_data, buffer_data_at_offset, count,
+                            cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
+}
+
+void NCCLController::MemcpyEntryOutFusionBufferForNeighbors(
+    const void* buffer_data_at_offset, TensorTableEntry& e,
+    const int num_recv_neighbors, const int64_t fused_data_size) {
+  // The buffer data looks like
+  // [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2]
+  //           ^               ^
+  //           |-------------->| fused_data_size
+  //           buffer_data_at_offset
+  // Output for t_1 is [t_1_n1, t_1_n2]
+  //            t_2 is [t_2_n1, t_2_n2]
+  for (int i = 0; i < num_recv_neighbors; ++i) {
+    void* output_at_offset =
+        (uint8_t*)e.output->data() + i * (size_t)e.tensor->size();
+    void* buffer_data_at_offset_for_neighbor =
+        (uint8_t*)buffer_data_at_offset + i * fused_data_size;
+    size_t count = (size_t)e.tensor->size();
+    CUDACHECK(cudaMemcpyAsync(output_at_offset,
+                              buffer_data_at_offset_for_neighbor, count,
+                              cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
+  }
+}
+
+void NCCLController::RecordEvent(
+    std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+    std::string name) {
+  cudaEvent_t event;
+  CUDACHECK(nccl_ctx_.GetCudaEvent(&event));
+  CUDACHECK(cudaEventRecord(event, nccl_ctx_.stream));
+  event_queue.emplace(name, event);
+}
+
+void NCCLController::WaitForEvents(
+    std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+    const std::vector<TensorTableEntry>& entries, Timeline* timeline,
+    const std::thread::id tid) {
+  while (!event_queue.empty()) {
+    std::string name;
+    cudaEvent_t event;
+    std::tie(name, event) = event_queue.front();
+    event_queue.pop();
+    if (name != "") {  // Incidate it is blocking event for one ops.
+      timeline->ActivityStartAll(entries, name, &tid);
+    }
+    CUDACHECK(cudaEventSynchronize(event));
+    if (name != "") {
+      timeline->ActivityEndAll(entries, &tid);
+    }
+    CUDACHECK(nccl_ctx_.ReleaseCudaEvent(event));
+  }
 }
 
 }  // namespace common

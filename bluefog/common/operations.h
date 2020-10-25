@@ -20,6 +20,7 @@
 #include <functional>
 #include "common.h"
 #include "timeline.h"
+#include "tensor_queue.h"
 
 namespace bluefog {
 namespace common {
@@ -105,6 +106,7 @@ int bluefog_get_skip_negotiate_stage();
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
+                              std::shared_ptr<OpContext> context,
                               std::shared_ptr<ReadyEvent> ready_event,
                               const std::string& name, const int device,
                               StatusCallback callback);
@@ -127,9 +129,9 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 
-Status EnqueueTensorNeighborAllreduce(std::shared_ptr<OpContext> context,
-                                      std::shared_ptr<Tensor> tensor,
+Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<Tensor> output,
+                                      std::shared_ptr<OpContext> context,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
@@ -201,6 +203,8 @@ void SetSkipNegotiateStageState(bool value);
 bool GetSkipNegotiateStageState();
 
 Status GetBluefogTimeline(Timeline*& timeline);
+
+Status GetBluefogFusionBuffer(FusionBufferManager*& fusion_buffer);
 
 // Following ops do not have NCCL support. (Remove them in the future?)
 Status WindowFence(const std::string& name);
