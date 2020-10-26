@@ -989,13 +989,9 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
         void* recvbuf =
             (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
         NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                           GetNCCLDataType(first_entry.tensor), recv_rank+1,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-      ncclGroupEnd();
-    } else if (mpi_ctx_.local_rank_ == 1) {
-      // Use local rank 0 for sending 
-      ncclGroupStart();
       for (int send_rank : *first_entry.send_neighbors) {
         NCCLCHECK(ncclSend(fused_input_data, num_elements,
                            GetNCCLDataType(first_entry.tensor), send_rank,
