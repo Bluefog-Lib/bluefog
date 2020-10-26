@@ -531,9 +531,9 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
                                     name: Optional[str] = None) -> torch.Tensor:
     """
     A function that performs weighted averaging of the input tensor over the negihbor machines and
-    itself in the Bluefog processes. It is similar to neighbor_allreduce except each machine,
-    containing multiple processes, runs allreduce internal to form a super node then executes the
-    neighbor allreduce. The default behavior is (uniformly) average.
+    itself in the Bluefog processes. It is similar to neighbor_allreduce. But each machine runs
+    allreduce internal first to form a super node then executes the neighbor allreduce at machine
+    level. The default behavior is (uniformly) average.
 
     The input tensor is not modified.
 
@@ -582,9 +582,9 @@ def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                                 name: Optional[str] = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the negihbor
-    machines and itself in the Bluefog processes. It is similar to neighbor_allreduce except each
-    machine containing multiple processes, runs allreduce internal to form a super node then executes
-    the neighbor allreduce. The default behavior is (uniformly) average.
+    machines and itself in the Bluefog processes. It is similar to neighbor_allreduce. But
+    each machine runs allreduce internal first to form a super node then executes
+    the neighbor allreduce at machine level. The default behavior is (uniformly) average.
 
     The input tensor is not modified.
 
