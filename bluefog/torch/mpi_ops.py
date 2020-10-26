@@ -437,7 +437,7 @@ def neighbor_allreduce(tensor: torch.Tensor,
     are ready to send and receive the tensor.
 
     Arguments:
-        tensor: A tensor to weighted average.
+        tensor: A tensor to execute weighted average with neighbors.
         self_weight: The weight for self node, used with neighbor_weights.
         neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
@@ -486,7 +486,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     are ready to send and receive the tensor.
 
     Arguments:
-        tensor: A tensor to neighbor_allreduce.
+        tensor: A tensor to execute weighted average with neighbors.
         self_weight: The weight for self node, used with neighbor_weights.
         neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
@@ -529,6 +529,38 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
                                     send_neighbor_machines: List[int],
                                     enable_topo_check: bool = False,
                                     name: Optional[str] = None) -> torch.Tensor:
+    """
+    A function that performs weighted averaging of the input tensor over the negihbor machines and
+    itself in the Bluefog processes. It is similar to neighbor_allreduce except each machine,
+    containing multiple processes, runs allreduce internal to form a super node then executes the
+    neighbor allreduce. The default behavior is (uniformly) average.
+
+    The input tensor is not modified.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Warning: This function should be called only under homogenerous environment, all machines have
+    same number of Bluefog processes -- bf.local_size().
+
+    Arguments:
+        tensor: A tensor to execute weighted average with neighbor machines.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_machine_weights: The weights for in-neighbor nodes, used with self weight.
+            The data structure of weights should be {machine id : weight}.  All processes under
+            same machine should specifiy the same weights dictionary.
+        send_neighbor_machines: The list of neighbor machines to be sent to. All processes under
+            same machine should specifiy the same machine id.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
+        name: A name of the reduction operation.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`,  across all processes.
+    """
     # TODO(hhb) Implement the logics for topo check for hierarchical_neighbor_allreduce.
 
     # TODO(ybc) add check for self_weight and neighbor_machine_weights.
@@ -548,6 +580,39 @@ def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
                                                 send_neighbor_machines: List[int],
                                                 enable_topo_check: bool = False,
                                                 name: Optional[str] = None) -> int:
+    """
+    A function that nonblockingly performs weighted averaging of the input tensor over the negihbor
+    machines and itself in the Bluefog processes. It is similar to neighbor_allreduce except each
+    machine containing multiple processes, runs allreduce internal to form a super node then executes
+    the neighbor allreduce. The default behavior is (uniformly) average.
+
+    The input tensor is not modified.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Warning: This function should be called only under homogenerous environment, all machines have
+    same number of Bluefog processes -- bf.local_size().
+
+    Arguments:
+        tensor: A tensor to execute weighted average with neighbor machines.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_machine_weights: The weights for in-neighbor nodes, used with self weight.
+            The data structure of weights should be {machine id : weight}.  All processes under
+            same machine should specifiy the same weights dictionary.
+        send_neighbor_machines: The list of neighbor machines to be sent to. All processes under
+            same machine should specifiy the same machine id.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
+        name: A name of the reduction operation.
+
+    Returns:
+        A handle to the hierarchical_neighbor_allreduce operation that can be used with `poll()` or
+        `synchronize()`.
+    """
     if (self_weight is None or neighbor_machine_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
     if (self_weight is None and neighbor_machine_weights is not None) or \
@@ -588,10 +653,17 @@ def _hierarchical_neighbor_allreduce_nonblocking(
                 break
     else:
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
+
+    machine_size = size() // local_size()
     # Translate machine id into rank id.
     node_per_machine = local_size()
-    neighbor_weights = {
-        node_per_machine*m: weights for (m, weights) in neighbor_machine_weights.items()}
+    neighbor_weights = {}
+    for (m, weights) in neighbor_machine_weights.items():
+        if m >= machine_size:
+            raise ValueError(
+                f"machine id is larger than number of machine we detected ({node_per_machine})."
+                "Note it is 0-based index.")
+        neighbor_weights[node_per_machine*m] = weights
     send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
     tensor_buffer = tensor.detach().clone()
     is_hierarchical = True
