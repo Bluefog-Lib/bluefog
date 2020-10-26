@@ -167,14 +167,14 @@ bool CheckRequestIsHierarchical(const std::vector<Request>& requests,
                                 std::ostringstream& error_message_stream) {
   auto message_type = requests[0].request_type();
   bool error = false;
-  int first_is_hierarchical = requests[0].is_hierarchical();
+  bool first_is_hierarchical = requests[0].is_hierarchical();
   for (unsigned int i = 1; i < requests.size(); i++) {
-    int this_is_hierarchical = requests[i].is_hierarchical();
+    bool this_is_hierarchical = requests[i].is_hierarchical();
     if (first_is_hierarchical != this_is_hierarchical) {
       error = true;
       error_message_stream
           << "Mismatched " << Request::RequestType_Name(message_type)
-          << " is_hierarchical. Some ranks specified for hierarchical ops "
+          << " is_hierarchical ops. Some ranks specified for hierarchical ops "
           << " but some ranks are not.";
       break;
     }

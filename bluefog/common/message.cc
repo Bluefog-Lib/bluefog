@@ -122,6 +122,7 @@ void Request_ParseFromWire(Request& request,
   request.set_tensor_name(obj->tensor_name()->str());
   request.set_root_rank(obj->root_rank());
   request.set_device(obj->device());
+  request.set_is_hierarchical(obj->is_hierarchical());
   request.set_tensor_shape(std::vector<int64_t>(obj->tensor_shape()->begin(),
                                                 obj->tensor_shape()->end()));
 }
@@ -141,6 +142,7 @@ void Request_SerializeToWire(const Request& request,
   request_builder.add_tensor_name(tensor_name_wire);
   request_builder.add_root_rank(request.root_rank());
   request_builder.add_device(request.device());
+  request_builder.add_is_hierarchical(request.is_hierarchical());
   request_builder.add_tensor_shape(tensor_shape_wire);
   obj = request_builder.Finish();
 }
