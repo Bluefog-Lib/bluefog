@@ -437,9 +437,12 @@ def GetExp2DynamicSendRecvMachineRanks(
         "It should be used under homogeneous environment only."
     assert (world_size % local_size) == 0, \
         "It should be used under homogeneous environment only."
+    assert world_size > local_size, \
+        "It should be used under at least two machines case."
+
     machine_id = self_rank // local_size
     machine_size = world_size // local_size
-    exp_2_size = int(np.log2(machine_size-1))
+    exp_2_size = int(np.log2(machine_size-1)) if machine_size > 1 else 0
     index = 0
     while True:
         machine_dist = 2**(index % (exp_2_size + 1))
