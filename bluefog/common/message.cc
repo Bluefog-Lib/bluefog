@@ -96,6 +96,10 @@ int32_t Request::device() const { return device_; }
 
 void Request::set_device(int32_t value) { device_ = value; }
 
+bool Request::is_hierarchical() const { return is_hierarchical_; }
+
+void Request::set_is_hierarchical(bool value) { is_hierarchical_ = value; }
+
 const std::vector<int64_t>& Request::tensor_shape() const {
   return tensor_shape_;
 }

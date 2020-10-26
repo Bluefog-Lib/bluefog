@@ -163,6 +163,25 @@ bool CheckRequestRootRank(const std::vector<Request>& requests,
   return error;
 }
 
+bool CheckRequestIsHierarchical(const std::vector<Request>& requests,
+                                std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  int first_is_hierarchical = requests[0].is_hierarchical();
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    int this_is_hierarchical = requests[i].is_hierarchical();
+    if (first_is_hierarchical != this_is_hierarchical) {
+      error = true;
+      error_message_stream
+          << "Mismatched " << Request::RequestType_Name(message_type)
+          << " is_hierarchical. Some ranks specified for hierarchical ops "
+          << " but some ranks are not.";
+      break;
+    }
+  }
+  return error;
+}
+
 bool CheckRequestTensorShape(const std::vector<Request>& requests,
                              std::ostringstream& error_message_stream) {
   bool error = false;
@@ -297,6 +316,11 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
   }
 
   // TODO(ybc) add check for is_hierarchical for neighbor_allreduce.
+  if(!error) {
+    if(message_type == Request::NEIGHBOR_ALLREDUCE) {
+      error = CheckRequestIsHierarchical(requests, error_message_stream);
+    }
+  }
 
   // If we are doing an (neighbor_)allreduce or broadcast, check that all tensor
   // shapes are identical.
@@ -1497,6 +1521,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::NEIGHBOR_ALLREDUCE);
+  message.set_is_hierarchical(is_hierarchical);
   for (int i = 0; i < tensor->shape().dims(); i++) {
     message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
   }
