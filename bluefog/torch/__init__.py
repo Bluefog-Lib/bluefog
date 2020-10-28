@@ -43,6 +43,7 @@ from bluefog.torch.mpi_ops import nccl_built, is_homogeneous
 from bluefog.torch.mpi_ops import set_skip_negotiate_stage, get_skip_negotiate_stage
 
 from bluefog.torch.mpi_ops import allreduce, allreduce_nonblocking
+from bluefog.torch.mpi_ops import allreduce_, allreduce_nonblocking_
 from bluefog.torch.mpi_ops import allgather, allgather_nonblocking
 from bluefog.torch.mpi_ops import broadcast, broadcast_nonblocking
 from bluefog.torch.mpi_ops import broadcast_, broadcast_nonblocking_

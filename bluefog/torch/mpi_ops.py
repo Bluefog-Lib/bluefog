@@ -143,6 +143,55 @@ def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
     return _allreduce_nonblocking(tensor, output, average, name)
 
 
+def allreduce_(tensor: torch.Tensor, average: bool = True,
+               name: Optional[str] = None) -> torch.Tensor:
+    """
+    A function that performs averaging or summation of the input tensor over all the
+    Bluefog processes. The operation is performed in-place.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Arguments:
+        tensor: A tensor to average and sum.
+        average: A flag indicating whether to compute average or summation,
+                 defaults to average.
+        name: A name of the reduction operation.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`, averaged or summed across all
+        processes.
+    """
+    handle = allreduce_nonblocking_(tensor, average, name)
+    return synchronize(handle)
+
+
+def allreduce_nonblocking_(tensor: torch.Tensor, average: bool = True,
+                           name: Optional[str] = None) -> int:
+    """
+    A function that performs nonblocking averaging or summation of the input tensor
+    over all the Bluefog processes. The operation is performed in-place.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Arguments:
+        tensor: A tensor to average and sum.
+        average: A flag indicating whether to compute average or summation,
+                 defaults to average.
+        name: A name of the reduction operation.
+
+    Returns:
+        A handle to the allreduce operation that can be used with `poll()` or
+        `synchronize()`.
+    """
+    return _allreduce_nonblocking(tensor, tensor, average, name)
+
+
 def _broadcast_function_factory(tensor):
     return 'bluefog_torch_broadcast_nonblocking_' + tensor.type().replace('.', '_')
 

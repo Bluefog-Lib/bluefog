@@ -74,7 +74,7 @@ def allreduce_parameters(params):
     # Run asynchronous broadcasts.
     handles = []
     for name, p in params:
-        handle = bf.allreduce_nonblocking(p, average=True, name=name)
+        handle = bf.allreduce_nonblocking_(p, average=True, name=name)
         handles.append(handle)
 
     # Wait for completion.
