@@ -69,7 +69,6 @@ args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 if args.dist_optimizer == 'horovod':
-    print("importing horovod")
     import horovod.torch as bf
 
 bf.init()
