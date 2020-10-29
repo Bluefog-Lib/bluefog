@@ -315,9 +315,10 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
     }
   }
 
-  // TODO(ybc) add check for is_hierarchical for neighbor_allreduce.
-  if(!error) {
-    if(message_type == Request::NEIGHBOR_ALLREDUCE) {
+  // If we are doing allreduce, make sure all are Hierarchical or are all not.
+  if (!error) {
+    if (message_type == Request::ALLREDUCE ||
+        message_type == Request::NEIGHBOR_ALLREDUCE) {
       error = CheckRequestIsHierarchical(requests, error_message_stream);
     }
   }
@@ -927,6 +928,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
         if (response.response_type() == new_response.response_type() &&
             response.devices() == new_response.devices() &&
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
+            entry.is_hierarchical == new_entry.is_hierarchical &&
             tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
           // These tensors will fuse together well.
           tensor_size += new_tensor_size;
@@ -1382,6 +1384,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
                               std::shared_ptr<OpContext> context,
                               std::shared_ptr<ReadyEvent> ready_event,
+                              bool is_hierarchical_local,
                               const std::string& name, const int device,
                               StatusCallback callback) {
   Request message;
@@ -1389,6 +1392,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   message.set_tensor_name(name);
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
+  message.set_is_hierarchical(is_hierarchical_local);
   message.set_request_type(Request::ALLREDUCE);
   for (int i = 0; i < tensor->shape().dims(); i++) {
     message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
@@ -1400,6 +1404,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   e.output = output;
   e.device = device;
   e.ready_event = ready_event;
+  e.is_hierarchical = is_hierarchical_local;
   e.context = context;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLREDUCE;

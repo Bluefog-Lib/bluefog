@@ -99,7 +99,7 @@ std::function<std::function<void(const Status&)>(std::function<void()>)>
 }
 
 int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
-                const std::string& name) {
+                bool is_hierarchical_local, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
@@ -127,17 +127,21 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_tensor, bf_context, ready_event, op_name, CPU_DEVICE_ID,
-        callback_wrapper([average, output, cpu_buffer, device]() mutable {
-            with_device device_guard(device);
-            output.copy_(cpu_buffer);
+        bf_tensor, bf_tensor, bf_context, ready_event, is_hierarchical_local,
+        op_name, CPU_DEVICE_ID,
+        callback_wrapper([average, output, is_hierarchical_local, cpu_buffer,
+                          device]() mutable {
+          with_device device_guard(device);
+          output.copy_(cpu_buffer);
 
-            // Will execute in the `device` context.
-            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-            if (average && bluefog_size() > 1) {
-              output_buffer.div_(bluefog_size());
-            }
-            MaybeCopyBufferBack(output, output_buffer);
+          // Will execute in the `device` context.
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+          int size =
+              is_hierarchical_local ? bluefog_local_size() : bluefog_size();
+          if (average && size > 1) {
+            output_buffer.div_(bluefog_size());
+          }
+          MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -147,15 +151,18 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, op_name, device,
-        callback_wrapper([average, output]() mutable {
+        bf_tensor, bf_output, bf_context, ready_event, is_hierarchical_local,
+        op_name, device,
+        callback_wrapper([average, output, is_hierarchical_local]() mutable {
           // Will execute in the `device` context.
           ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-          if (average && bluefog_size() > 1) {
-            output_buffer.div_(bluefog_size());
+          int size =
+              is_hierarchical_local ? bluefog_local_size() : bluefog_size();
+          if (average && size > 1) {
+            output_buffer.div_(size);
           }
           MaybeCopyBufferBack(output, output_buffer);
-          }));
+        }));
     ThrowIfError(enqueue_result);
   }
   return handle;

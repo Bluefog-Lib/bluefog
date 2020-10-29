@@ -142,12 +142,16 @@ void MPIController::Allreduce(TensorTableEntry& entry) {
   void* buffer_data = (void*)entry.output->data();
   int num_elements = entry.tensor->shape().num_elements();
 
+  // Here is_hierarchical == true means local allreduce.
+  auto communicator_type =
+      entry.is_hierarchical ? Communicator::LOCAL : Communicator::GLOBAL;
+
   // We need to explicitly set the device here.
   with_device device_guard(entry.device);
-  int ret_code = MPI_Allreduce(
-      sendbuf, buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
-      mpi_ctx_.GetMPISumOp(entry.tensor->dtype()),
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  int ret_code = MPI_Allreduce(sendbuf, buffer_data, num_elements,
+                               mpi_ctx_.GetMPIDataType(entry.tensor),
+                               mpi_ctx_.GetMPISumOp(entry.tensor->dtype()),
+                               mpi_ctx_.GetMPICommunicator(communicator_type));
   if (ret_code != MPI_SUCCESS) {
     throw std::runtime_error(
         "MPI_AllReduce failed, see MPI output for details.");
@@ -465,11 +469,14 @@ void MPIController::Allreduce(std::vector<TensorTableEntry>& entries) {
   timeline_ptr->ActivityEndAll(entries);
 
   timeline_ptr->ActivityStartAll(entries, "COMMUNICATE");
+  // Here is_hierarchical == true means local allreduce.
+  auto communicator_type =
+      first_entry.is_hierarchical ? Communicator::LOCAL : Communicator::GLOBAL;
   int ret_code =
       MPI_Allreduce(MPI_IN_PLACE, buffer_data, num_elements,
                     mpi_ctx_.GetMPIDataType(first_entry.tensor),
                     mpi_ctx_.GetMPISumOp(first_entry.tensor->dtype()),
-                    mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+                    mpi_ctx_.GetMPICommunicator(communicator_type));
   if (ret_code != MPI_SUCCESS) {
     throw std::runtime_error(
         "MPI_AllReduce failed, see MPI output for details.");

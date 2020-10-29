@@ -443,13 +443,15 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
 
   std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
+  auto& nccl_comm =
+      entry.is_hierarchical ? nccl_ctx_.nccl_local_comm : nccl_ctx_.nccl_comm;
 
   with_device device_guard(entry.device);
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   NCCLCHECK(ncclAllReduce(sendbuf, buffer_data, num_elements,
-                          GetNCCLDataType(entry.tensor), ncclSum,
-                          nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+                          GetNCCLDataType(entry.tensor), ncclSum, nccl_comm,
+                          nccl_ctx_.stream));
 
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "COMM. (NCCL)");
@@ -846,10 +848,13 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   }
   const void* fused_input_data = buffer_data;
 
+  auto& nccl_comm = first_entry.is_hierarchical ? nccl_ctx_.nccl_local_comm
+                                                : nccl_ctx_.nccl_comm;
+
   ncclResult_t ret_code =
       ncclAllReduce(fused_input_data, buffer_data, num_elements,
-                    GetNCCLDataType(first_entry.tensor), ncclSum,
-                    nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+                    GetNCCLDataType(first_entry.tensor), ncclSum, nccl_comm,
+                    nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
     std::string error_msg =
         "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) "

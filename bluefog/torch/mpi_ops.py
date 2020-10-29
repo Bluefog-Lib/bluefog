@@ -79,7 +79,7 @@ def _allreduce_function_factory(tensor):
     return 'bluefog_torch_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _allreduce_nonblocking(tensor, output, average, name):
+def _allreduce_nonblocking(tensor, output, average, is_hierarchical_local, name):
     function = _check_function(_allreduce_function_factory, tensor)
     if average:
         assert isinstance(tensor, (torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor,
@@ -87,14 +87,14 @@ def _allreduce_nonblocking(tensor, output, average, name):
                                    torch.cuda.HalfTensor)), \
             "If average is set in allreduce, only float or double tensor is allowed."
 
-    handle = getattr(mpi_lib, function)(tensor, output, average,
+    handle = getattr(mpi_lib, function)(tensor, output, average, is_hierarchical_local,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
 def allreduce(tensor: torch.Tensor, average: bool = True,
-              name: Optional[str] = None) -> torch.Tensor:
+              is_hierarchical_local=False, name: Optional[str] = None) -> torch.Tensor:
     """
     A function that performs averaging or summation of the input tensor over all the
     Bluefog processes. The input tensor is not modified.
@@ -108,18 +108,20 @@ def allreduce(tensor: torch.Tensor, average: bool = True,
         tensor: A tensor to average and sum.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
         name: A name of the reduction operation.
 
     Returns:
         A tensor of the same shape and type as `tensor`, averaged or summed across all
         processes.
     """
-    handle = allreduce_nonblocking(tensor, average, name)
+    handle = allreduce_nonblocking(tensor, average, is_hierarchical_local, name)
     return synchronize(handle)
 
 
 def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
-                          name: Optional[str] = None) -> int:
+                          is_hierarchical_local=False, name: Optional[str] = None) -> int:
     """
     A function that performs nonblocking averaging or summation of the input tensor
     over all the Bluefog processes. The input tensor is not modified.
@@ -133,6 +135,8 @@ def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
         tensor: A tensor to average and sum.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
         name: A name of the reduction operation.
 
     Returns:
@@ -140,11 +144,11 @@ def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
         `synchronize()`.
     """
     output = tensor.new(tensor.shape)
-    return _allreduce_nonblocking(tensor, output, average, name)
+    return _allreduce_nonblocking(tensor, output, average, is_hierarchical_local, name)
 
 
 def allreduce_(tensor: torch.Tensor, average: bool = True,
-               name: Optional[str] = None) -> torch.Tensor:
+               is_hierarchical_local=False, name: Optional[str] = None) -> torch.Tensor:
     """
     A function that performs averaging or summation of the input tensor over all the
     Bluefog processes. The operation is performed in-place.
@@ -158,18 +162,20 @@ def allreduce_(tensor: torch.Tensor, average: bool = True,
         tensor: A tensor to average and sum.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
         name: A name of the reduction operation.
 
     Returns:
         A tensor of the same shape and type as `tensor`, averaged or summed across all
         processes.
     """
-    handle = allreduce_nonblocking_(tensor, average, name)
+    handle = allreduce_nonblocking_(tensor, average, is_hierarchical_local, name)
     return synchronize(handle)
 
 
 def allreduce_nonblocking_(tensor: torch.Tensor, average: bool = True,
-                           name: Optional[str] = None) -> int:
+                           is_hierarchical_local=False, name: Optional[str] = None) -> int:
     """
     A function that performs nonblocking averaging or summation of the input tensor
     over all the Bluefog processes. The operation is performed in-place.
@@ -183,13 +189,15 @@ def allreduce_nonblocking_(tensor: torch.Tensor, average: bool = True,
         tensor: A tensor to average and sum.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
         name: A name of the reduction operation.
 
     Returns:
         A handle to the allreduce operation that can be used with `poll()` or
         `synchronize()`.
     """
-    return _allreduce_nonblocking(tensor, tensor, average, name)
+    return _allreduce_nonblocking(tensor, tensor, average, is_hierarchical_local, name)
 
 
 def _broadcast_function_factory(tensor):

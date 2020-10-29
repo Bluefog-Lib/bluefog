@@ -31,7 +31,8 @@ namespace torch {
 
 #define ALLREDUCE_H(torch_Tensor, THTensor)                                    \
   extern "C" int bluefog_torch_allreduce_nonblocking_##torch_Tensor(           \
-      THTensor* tensor, THTensor* output, int average, char* name);
+      THTensor* tensor, THTensor* output, int average,                         \
+      bool is_hierarchical_local, char* name);
 
 ALLREDUCE_H(torch_IntTensor, THIntTensor)
 ALLREDUCE_H(torch_LongTensor, THLongTensor)
