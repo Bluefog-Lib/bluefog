@@ -21,7 +21,7 @@ Below is a chart representing the benchmark that was done on ResNet50 benchmark.
 
 .. raw:: html
 
-    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97652354-653f0480-1a1b-11eb-89af-082d2aa25f69.png" alt="Benchmark 1" width="430"/><img src="https://user-images.githubusercontent.com/16711681/97652367-6e2fd600-1a1b-11eb-8b04-a3c52b055c20.png" alt="Benchmark 2" width="430"/></p>
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97652354-653f0480-1a1b-11eb-89af-082d2aa25f69.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97652367-6e2fd600-1a1b-11eb-8b04-a3c52b055c20.png" alt="Benchmark 2" width="400"/></p>
 
 where H_N_AR and N_AR represents the hierarchical neighbor allreduce and neighbor allreduce two main distributed optimizers we provided and black box represents the idea linear scaling. We can see bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under 64 batchsize. For more communication intensive like 32 batch size, the scaling efficiency between Bluefgo and Horovod becomes even larger.
 
