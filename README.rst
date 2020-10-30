@@ -17,7 +17,7 @@ Bluefog
 
 Performance
 -----------
-Below is a chart representing the benchmark that was done on ResNet50 benchmark. Tesla V100 32GB GPUs and set batch size equal to 32/64 per GPU. 32 batch size case represents communication intensive and 64 one for computation intensive. Each machine has 8 V100 GPUs (32GB memory) with NVLink-enabled. This is the same hardware setup you can get on AWS_.
+Below is the charts representing the performance of BlueFog that was done on ResNet50 benchmark. Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and inter-connected communication speed is 25Gbps. This is the same hardware setup you can get on AWS_. We test the scaling efficiency on 64 batch size, representing computation  intensive scenario, and 32 batch size case for communication intensive.
 
 .. raw:: html
 
