@@ -15,6 +15,16 @@ Bluefog
 
     <p align="center"><img src="https://user-images.githubusercontent.com/65107588/82258821-62d66b80-990f-11ea-9393-bf5456af67e6.png" alt="Logo" width="450"/></p>
 
+Performance
+-----------
+Below is a chart representing the benchmark that was done on ResNet50 benchmark. Tesla V100 32GB GPUs and set batch size equal to 32/64 per GPU. 32 batch size case represents communication intensive and 64 one for computation intensive. Each machine has 8 V100 GPUs (32GB memory) with NVLink-enabled. This is the same hardware setup you can get on AWS_.
+
+.. raw:: html
+
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97652354-653f0480-1a1b-11eb-89af-082d2aa25f69.png" alt="Benchmark 1" width="470"/><img src="https://user-images.githubusercontent.com/16711681/97652367-6e2fd600-1a1b-11eb-8b04-a3c52b055c20.png" alt="Benchmark 2" width="470"/></p>
+
+where H_N_AR and N_AR represents the hierarchical neighbor allreduce and neighbor allreduce two main distributed optimizers we provided.
+
 Overview
 --------
 
@@ -127,10 +137,9 @@ optimization algorithm quickly and easily through bluefog. If you want to unders
 how to use the low-level API as the building blocks for your own distributed
 algorithm, please read our *Bluefog Ops Explanation* page under docs.
 
-Performance
------------
-To be added.
 
 Citation
 --------
 To be added.
+
+.. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
