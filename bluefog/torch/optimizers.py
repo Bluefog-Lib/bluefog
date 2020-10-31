@@ -360,6 +360,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                             handle = self._neighbor_allreduce_data_async(p)
                         elif self._reduce_method == 2:
                             handle = self._hierarchical_neighbor_allreduce_data_async(p)
+                        elif self._reduce_method == -1:
+                            handle = None
                         else:
                             raise ValueError(
                                 "Unknown reduce method. Do not change _reduce_method manually.")
@@ -409,12 +411,16 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
     def use_hierarchical_neighbor_allreduce_in_communication(self):
         self._reduce_method = 2
 
+    def use_empty_function_in_communication(self):
+        self._reduce_method = -1
+
     def synchronize(self):
         with torch.no_grad():
             for p, handle in self._handles.items():
-                output = bf.synchronize(handle)
+                if handle is not None:
+                    output = bf.synchronize(handle)
+                    p.set_(output)
                 self._reduce_delay[p] = self._num_steps_per_communication
-                p.set_(output)
         self._handles.clear()
 
         self._synchronized = True
