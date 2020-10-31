@@ -115,7 +115,7 @@ def broadcast_optimizer_state(optimizer, root_rank):
             super(optimizer.__class__, optimizer).step()
         elif optimizer.__module__ == bf.DistributedPullGetOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
-        elif optimizer.__module__ == bf.DistributedBluefogOptimizer.__module__:
+        elif optimizer.__module__ == bf.DistributedWinPutOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
         else:
             optimizer.step()

@@ -917,6 +917,7 @@ def win_update_then_collect(name: str, require_mutex: bool = True) -> torch.Tens
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
+
     >>> win_update(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True,
                    require_mutex=require_mutex)
 

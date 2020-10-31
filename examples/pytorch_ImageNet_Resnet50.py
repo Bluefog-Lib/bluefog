@@ -182,7 +182,7 @@ optimizer = optim.SGD(model.parameters(),
 # Bluefog: wrap optimizer with DistributedOptimizer.
 # TODO(hhb) Pass  batches_per_allreduce to optimizer.
 if args.dist_optimizer == 'win_put':
-    optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
+    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'neighbor_allreduce':
     optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
         optimizer, model=model)

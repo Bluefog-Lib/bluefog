@@ -55,9 +55,9 @@ parser.add_argument("--momentum", type=float, default=0.5,
 parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
 )
-parser.add_argument('--dist-optimizer', type=str, default='win_put',
+parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are ' +
-                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
+                    '[win_put, neighbor_allreduce, allreduce, horovod]')
 parser.add_argument("--average-test-result", action="store_true",
                     default=False,
                     help=("Allreduce called to average test result. Warning this will " +
@@ -193,7 +193,7 @@ bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.dist_optimizer == 'win_put':
-    optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
+    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'neighbor_allreduce':
     optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
         optimizer, model=model)
@@ -206,8 +206,6 @@ elif args.dist_optimizer == 'gradient_allreduce':
 elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
     optimizer = optimizer = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
         optimizer, model=model)
-elif args.dist_optimizer == 'push_sum':
-    optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
@@ -218,7 +216,7 @@ else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
                      '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
-                     'win_put, push_sum, horovod]')
+                     'win_put, horovod]')
 
 if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
     if args.virtual_topology == 'InnerOuterRing':
@@ -250,17 +248,6 @@ def dynamic_topology_update(epoch, batch_idx):
         num_out_neighbors = len(bf.out_neighbor_ranks())
         sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
         optimizer.dst_weights = {sent_neighbor: 1.0}
-    elif args.dist_optimizer == 'pull_get':
-        if epoch < 3:
-            return
-        num_in_neighbors = len(bf.in_neighbor_ranks())
-        recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
-        optimizer.src_weights = {recv_neighbor: 1.0}
-    elif args.dist_optimizer == 'push_sum':
-        num_out_neighbors = len(bf.out_neighbor_ranks())
-        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
-        optimizer.dst_weights = {sent_neighbor: 0.5}
-        optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
         send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
         optimizer.send_neighbors = send_neighbors

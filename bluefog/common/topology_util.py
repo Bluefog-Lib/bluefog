@@ -433,6 +433,23 @@ def GetDynamicSendRecvRanks(
 def GetExp2DynamicSendRecvMachineRanks(
         world_size: int, local_size: int, self_rank: int, local_rank: int
     ) -> Iterator[Tuple[List[int], List[int]]]:
+    """
+    A utility function to generate 1-outgoing send machine id and corresponding recieving
+    machine id(s) for Exponentia-2 topology.
+
+    Args:
+        world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
+        local_size (int): number of nodes in each machine
+        self_rank (int): The self rank.
+        local_rank (int): The self local rank.
+
+    Yields:
+        Iterator[Tuple[List[int], List[int]]]: send_machine_ids, recv_machine_ids.
+
+    Warning:
+        This function should be used under homogeneous enviroment only, i.e. all machines have
+        the same number of local processes.
+    """
     assert (self_rank % local_size) == local_rank, \
         "It should be used under homogeneous environment only."
     assert (world_size % local_size) == 0, \
@@ -455,8 +472,9 @@ def GetExp2DynamicSendRecvMachineRanks(
 def GetInnerOuterRingDynamicSendRecvRanks(
         world_size: int, local_size: int, self_rank: int
     ) -> Iterator[Tuple[List[int], List[int]]]:
-    """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
-       for Inner-Ring-Outer-Ring topology
+    """
+    A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+    for Inner-Ring-Outer-Ring topology.
 
     Args:
         world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
@@ -526,8 +544,9 @@ def GetInnerOuterRingDynamicSendRecvRanks(
 def GetInnerOuterExp2DynamicSendRecvRanks(
         world_size: int, local_size: int, self_rank: int
     ) -> Iterator[Tuple[List[int], List[int]]]:
-    """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
-       for Inner-Exp2-Outer-Exp2 ring topology
+    """
+    A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+    for Inner-Exp2-Outer-Exp2 ring topology.
 
     Args:
         world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine

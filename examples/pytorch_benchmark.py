@@ -53,10 +53,10 @@ parser.add_argument('--profiler', action='store_true', default=False,
                     help='disables profiler')
 parser.add_argument('--partition', type=int, default=None,
                     help='partition size')
-parser.add_argument('--dist-optimizer', type=str, default='win_put',
+parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are ' +
-                    '[win_put(default), neighbor_allreduce, allreduce, ' +
-                    'hierarchical_neighbor_allreduce, pull_get, push_sum, horovod]')
+                    '[win_put, neighbor_allreduce, allreduce, ' +
+                    'hierarchical_neighbor_allreduce, horovod]')
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
@@ -130,7 +130,7 @@ optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.dist_optimizer == 'win_put':
-    optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
+    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'neighbor_allreduce':
     optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
         optimizer, model=model)
@@ -140,8 +140,6 @@ elif args.dist_optimizer == 'allreduce':
 elif args.dist_optimizer == 'gradient_allreduce':
     optimizer = optimizer = bf.DistributedGradientAllreduceOptimizer(
         optimizer, model=model)
-elif args.dist_optimizer == 'push_sum':
-    optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
     optimizer = optimizer = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
         optimizer, model=model)
@@ -149,13 +147,11 @@ elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
-elif args.dist_optimizer == 'pull_get':
-    optimizer = bf.DistributedPullGetOptimizer(optimizer, model=model)
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
                      '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
-                     'win_put, push_sum, horovod]')
+                     'win_put, horovod]')
 
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
 bf.broadcast_optimizer_state(optimizer, root_rank=0)
@@ -208,15 +204,6 @@ def dynamic_topology_update(batch_idx):
         num_out_neighbors = len(bf.out_neighbor_ranks())
         sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
         optimizer.dst_weights = {sent_neighbor: 1.0}
-    elif args.dist_optimizer == 'pull_get':
-        num_in_neighbors = len(bf.in_neighbor_ranks())
-        recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
-        optimizer.src_weights = {recv_neighbor: 1.0}
-    elif args.dist_optimizer == 'push_sum':
-        num_out_neighbors = len(bf.out_neighbor_ranks())
-        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
-        optimizer.dst_weights = {sent_neighbor: 0.5}
-        optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
         send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
         optimizer.send_neighbors = send_neighbors
