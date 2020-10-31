@@ -647,6 +647,15 @@ void DoWinMutexRelease(const std::string& name, const std::vector<int>& ranks,
   ThrowIfError(status);
 }
 
+std::vector<int> GetWinVersion(char* name,
+                  std::vector<int>& versions) {
+  ThrowIfError(common::CheckInitialized());
+  Status status =
+      common::GetWindowVersion(name, versions);
+  ThrowIfError(status);
+  return versions;
+}
+
 void SetWinOpsWithAssociatedPState(bool value) {
   common::SetWinOpsWithAssociatedPState(value);
 }
@@ -712,6 +721,8 @@ void AddWinOpsIntoPybind(py::module& m) {
   m.def("bluefog_torch_win_mutex_acquire", &DoWinMutexAcquire);
   m.def("bluefog_torch_win_mutex_release", &DoWinMutexRelease);
 
+  m.def("bluefog_torch_get_win_version", &GetWinVersion);
+  
   m.def("bluefog_torch_win_associated_p", &GetWinAssociatedP);
   m.def("bluefog_torch_set_win_ops_with_associated_p_state", &SetWinOpsWithAssociatedPState);
 }

@@ -68,6 +68,18 @@ class WindowManager {
 
   bool InitializeMutexWin(const MPI_Comm& mpi_comm);
   bool DestroyMutexWin();
+
+  bool InitializeVersionWin(const MPI_Comm& mpi_comm,
+                            const std::vector<int>& neighbor_in_ranks);
+  bool DestroyVersionWin();
+
+  std::vector<int> GetVersionMemoryCopy();
+
+  void resetVersionWinMem(int initialValue = 0);
+  void incrementVersionWinMem(int position);
+  void setVersionWinMem(int value, int position);
+
+  inline std::shared_ptr<MPI_Win> GetVersionWin() { return version_win_; }
   inline std::shared_ptr<MPI_Win> GetMutexWin() { return mutex_win_; }
 
   bool InitializePWin(const MPI_Comm& mpi_comm);
@@ -91,6 +103,11 @@ class WindowManager {
   // MPI Window used for mutex.
   std::shared_ptr<MPI_Win> mutex_win_;
   std::vector<int> mutex_mem_;
+
+  // MPI Window usd for version.
+  std::shared_ptr<MPI_Win> version_win_;
+  // Each element represents the version of corresponding rank.
+  std::vector<int> version_mem_;
 
   // MPI Window used for p. Mainly used for push-sum algorithm.
   std::shared_ptr<MPI_Win> p_win_;
