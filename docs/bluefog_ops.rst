@@ -11,13 +11,15 @@ are highly associated with the virtual topology of network.
 The communication ops that bluefog supported can be catogorized into three types:
 
 1. Collective Ops: ``broadcast``, ``allreduce``, ``allgather``.
-2. Neighbor Colletive Ops: ``neighbor_allreduce``, ``neighbor_allgather``.
-3. One-sided Communication Ops: ``win_create``, ``win_free``, ``win_put``, ``win_get``, ``win_accumulate``, ``win_update``, ``win_update_then_collect``.
+2. Neighbor Collective Ops: ``neighbor_allreduce``, ``neighbor_allgather``.
+3. Hierarchical Collective Ops:  ``hierarchical_local_allreduce``, ``hierarchical_neighbor_allreduce``.
+4. One-sided Communication Ops: ``win_create``, ``win_free``, ``win_put``, ``win_get``, ``win_accumulate``, ``win_update``, ``win_update_then_collect``.
 
 We use figure to illustrate all those ops with 
 similar style as in `MPI tutorials blog`_. 
 In the figure, we use *circle* to represent one process, which is exchangeablely called node,
-agent, host, etc. under some circumstance, and use *square* to represent the data or tensor. 
+agent, host, etc. under some circumstance, and use green and red *square* to represent the data or tensor while
+orange *square* for one machine. 
 The number inside of circle is the rank of that process and th number inside of square is the value of data.
 If you need more background information about MPI, we recommend this nice `tutorial`_.
 
@@ -74,6 +76,32 @@ neighbor_allreduce
 .. Note::
    In the figure, we only show the neighbor_allreduce with average with uniform weight. Actually, our
    API allows for any weights for incoming edges. Check out API doc to see how to use it.
+
+
+Hierarchical Collective Ops
+---------------------------
+In practice, the communication speed and behavior is different between intra-machine and inter-machine communcation.
+Hence, we also provided two hierarchical collective ops. The basic unit in this case is each (physical) machine.
+
+hierarchical_local_allreduce
+############################
+.. image:: _static/bf_hier_local_allreduce.png
+    :alt: BluefogHierarchicalLocalAllreduceExplanation
+    :width: 700
+
+hierarchical_neighbor_allreduce
+###############################
+.. image:: _static/bf_hier_neighbor_allreduce.png
+    :alt: BluefogHierarchicalNeighborAllreduceExplanation
+    :width: 700
+
+The basic logics under hierarchical operations is, within the machine, each local rank performances the local allreduce
+operation first so that in the view of external machines, all processes within same machine forms a super node.
+
+.. warning::
+    hierarchical_neighbor_allreduce only should be used under the homogeneous environment only, i.e. each machine owns same number of 
+    the local processes.
+
 
 
 One-sided Communication Ops
