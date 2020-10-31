@@ -468,7 +468,45 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
                   mpi_ctx_.GetMPIDataType(entry.tensor), MPI_SUM,
                   mpi_ctx_.GetMPICommunicator(Communicator::LOCAL));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
-
+    if (mpi_ctx_.local_rank_ == 0) {
+      int nsend = entry.send_neighbors->size();
+      int nrecv = entry.recv_neighbors->size();
+      std::vector<MPI_Request> requests(nsend + nrecv);
+      std::vector<MPI_Status> statuses(nsend + nrecv);
+      int element_size = mpi_ctx_.GetMPITypeSize(entry.output->dtype());
+      for (int i = 0; i < nrecv; ++i) {
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        int ret_code = MPI_Irecv(
+            recvbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+            entry.recv_neighbors->at(i),
+            mpi_ctx_.rank_ + entry.recv_neighbors->at(i),
+            mpi_ctx_.GetMPICommunicator(Communicator::GRAPH),
+            &requests[i + nsend]);
+        if (ret_code != MPI_SUCCESS) {
+          throw std::runtime_error(
+              "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI "
+              "output for details.");
+        }
+      }
+      for (int i = 0; i < nsend; ++i) {
+        int ret_code = MPI_Isend(
+            sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
+            entry.send_neighbors->at(i),
+            mpi_ctx_.rank_ + entry.send_neighbors->at(i),
+            mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
+        if (ret_code != MPI_SUCCESS) {
+          throw std::runtime_error(
+              "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI "
+              "output for details.");
+        }
+      }
+      MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+      error_message =
+          GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+    } else {
+      // Do nothing here.
+    }
     // 3. Broadcast recv data from local rank = 0 to other local ranks.
     int recv_num_elements = num_elements * entry.recv_neighbors->size();
     MPI_Bcast(buffer_data, recv_num_elements,
