@@ -92,11 +92,6 @@ if args.dist_optimizer != 'horovod':
         pass
     elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
-    elif args.virtual_topology == "mesh":
-        bf.set_topology(topology_util.MeshGrid2DGraph(
-            bf.size()), is_weighted=True)
-    elif args.virtual_topology == "star":
-        bf.set_topology(topology_util.StarGraph(bf.size()))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
                          "[power2(Default), ring, mesh, star].")
@@ -180,7 +175,6 @@ optimizer = optim.SGD(model.parameters(),
                       momentum=args.momentum, weight_decay=args.wd)
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
-# TODO(hhb) Pass  batches_per_allreduce to optimizer.
 if args.dist_optimizer == 'win_put':
     optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'neighbor_allreduce':

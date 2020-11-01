@@ -77,11 +77,6 @@ if args.dist_optimizer != 'horovod':
         pass
     elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
-    elif args.virtual_topology == "mesh":
-        bf.set_topology(topology_util.MeshGrid2DGraph(
-            bf.size()), is_weighted=True)
-    elif args.virtual_topology == "star":
-        bf.set_topology(topology_util.StarGraph(bf.size()))
     elif args.virtual_topology == "InnerOuterRing":
         assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
         bf.set_topology(topology_util.InnerOuterRingGraph(

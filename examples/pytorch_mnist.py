@@ -210,8 +210,6 @@ elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
-elif args.dist_optimizer == 'pull_get':
-    optimizer = bf.DistributedPullGetOptimizer(optimizer, model=model)
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
@@ -228,7 +226,7 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
         dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
             bf.size(),
             local_size=bf.local_size() if args.local_size == -1 else args.local_size,
-            self_rank=bf.rank())    
+            self_rank=bf.rank())
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
         # This optimizer can use following dynamic topo only so far.
         dynamic_machine_neighbor_allreduce_gen = topology_util.GetExp2DynamicSendRecvMachineRanks(
