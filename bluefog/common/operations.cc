@@ -1873,6 +1873,21 @@ Status WindowUnlock(const std::string& name) {
   return status;
 }
 
+Status GetWindowVersion(const std::string& name, std::vector<int>& versions) {
+  if (bluefog_global.shut_down) {
+    return SHUT_DOWN_ERROR;
+  }
+
+  Status status =
+      bluefog_global.controller->GetWindowVersionValue(name, versions);
+
+  if (!status.ok()) {
+    BFLOG(ERROR) << "Cannot get window version";
+    BFLOG(ERROR) << status.reason();
+  }
+  return status;
+}
+
 // TODO(ybc) Add NCCL version for this as well.
 Status GetWinAssociatedPByNameAndRank(const std::string& name,
                                            const int rank, double* weight) {

@@ -262,6 +262,60 @@ class WinOpsTests(unittest.TestCase):
             is_freed = bf.win_free(window_name)
             assert is_freed, "bf.win_free do not free window object successfully."
 
+    def test_get_win_version_with_win_put(self):
+        """Test version window is initialized, updated and cleared correctly with win put."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) %
+                          size for i in range(indegree)]  # in-neighbor
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_version_put_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            original_versions = list(bf.get_win_version(window_name).values())
+            bf.barrier()
+            bf.win_put(tensor, window_name)
+            bf.barrier()
+            versions_after_win_get = list(
+                bf.get_win_version(window_name).values())
+            bf.win_update(window_name)
+            versions_after_win_update = list(
+                bf.get_win_version(window_name).values())
+            neighbor_ranks_number = len(neighbor_ranks)
+
+            zero_number_in_original_versions = len(
+                original_versions) - np.count_nonzero(original_versions)
+            assert (zero_number_in_original_versions == neighbor_ranks_number), (
+                "version initialization is wrong.")
+
+            zero_number_after_win_update = len(
+                versions_after_win_update) - np.count_nonzero(versions_after_win_update)
+            assert (zero_number_after_win_update == neighbor_ranks_number), (
+                "version clear up is wrong.")
+
+            expected_versions_after_win_get = [1] * neighbor_ranks_number
+
+            assert (versions_after_win_get == expected_versions_after_win_get), (
+                "version after win put is wrong.")
+
+        for dtype, dim in itertools.product(dtypes, dims):
+            window_name = "win_version_put_{}_{}".format(dim, dtype)
+            is_freed = bf.win_free(window_name)
+            assert is_freed, "bf.win_free do not free window object successfully."
+
     def test_win_put_with_varied_tensor_elements(self):
         """Test that the window put operation."""
         size = bf.size()
@@ -494,6 +548,60 @@ class WinOpsTests(unittest.TestCase):
                 "bf.win_get produce wrong tensor value " +
                 "[{}-{}]!={} at rank {}.".format(
                     recv_tensor.min(), recv_tensor.max(), avg_value, rank))
+
+    def test_get_win_version_with_win_get(self):
+        """Test version window is initialized, updated and cleared correctly with win get."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) %
+                          size for i in range(indegree)]  # in-neighbor
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            window_name = "win_version_get_{}_{}".format(dim, dtype)
+            bf.win_create(tensor, window_name)
+            original_versions = list(bf.get_win_version(window_name).values())
+            bf.barrier()
+            bf.win_get(window_name)
+            bf.barrier()
+            versions_after_win_get = list(
+                bf.get_win_version(window_name).values())
+            bf.win_update(window_name, clone=True)
+            versions_after_win_update = list(
+                bf.get_win_version(window_name).values())
+            neighbor_ranks_number = len(neighbor_ranks)
+
+            zero_number_in_original_versions = len(
+                original_versions) - np.count_nonzero(original_versions)
+            assert ((zero_number_in_original_versions) == neighbor_ranks_number), (
+                "version initialization is wrong.")
+
+            zero_number_after_win_update = len(
+                versions_after_win_update) - np.count_nonzero(versions_after_win_update)
+            assert ((zero_number_after_win_update) == neighbor_ranks_number), (
+                "version clear up is wrong.")
+
+            expected_versions_after_win_get = [1] * neighbor_ranks_number
+
+            assert (versions_after_win_get == expected_versions_after_win_get), (
+                "version after win get is wrong.")
+
+        for dtype, dim in itertools.product(dtypes, dims):
+            window_name = "win_version_get_{}_{}".format(dim, dtype)
+            is_freed = bf.win_free(window_name)
+            assert is_freed, "bf.win_free do not free window object successfully."
 
     def test_win_get_with_varied_tensor_elements(self):
         """Test that the window get operation."""

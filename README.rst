@@ -15,6 +15,16 @@ Bluefog
 
     <p align="center"><img src="https://user-images.githubusercontent.com/65107588/82258821-62d66b80-990f-11ea-9393-bf5456af67e6.png" alt="Logo" width="450"/></p>
 
+Performance
+-----------
+Below is the charts representing the performance of BlueFog that was done on ResNet50 benchmark. Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and inter-connected communication speed is 25Gbps. This is the same hardware setup you can get on AWS_. We test the scaling efficiency on 64 batch size, representing computation  intensive scenario, and 32 batch size case for communication intensive.
+
+.. raw:: html
+
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97652354-653f0480-1a1b-11eb-89af-082d2aa25f69.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97652367-6e2fd600-1a1b-11eb-8b04-a3c52b055c20.png" alt="Benchmark 2" width="400"/></p>
+
+where H_N_AR and N_AR represents the hierarchical neighbor allreduce and neighbor allreduce two main distributed optimizers we provided and black box represents the idea linear scaling. We can see bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under 64 batchsize. For more communication intensive like 32 batch size, the scaling efficiency between Bluefgo and Horovod becomes even larger.
+
 Overview
 --------
 
@@ -127,10 +137,9 @@ optimization algorithm quickly and easily through bluefog. If you want to unders
 how to use the low-level API as the building blocks for your own distributed
 algorithm, please read our *Bluefog Ops Explanation* page under docs.
 
-Performance
------------
-To be added.
 
 Citation
 --------
 To be added.
+
+.. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/

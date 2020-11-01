@@ -197,6 +197,9 @@ Status GetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
 Status SetWinAssociatedPByNameAndRank(const std::string& name, const int rank,
                                       double weight);
 
+Status GetWindowVersion(const std::string& name,
+                        std::vector<int>& versions);
+
 void SetWinOpsWithAssociatedPState(bool value);
 
 bool GetWinOpsWithAssociatedPState();
