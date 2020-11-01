@@ -304,10 +304,14 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
 
 
 def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate Inner Ring and Outer Ring (Unilateral) Graph.
+    """Generate Inner Ring and Outer Ring (Unilateral) Static Graph for dynamic usage.
 
-    Within one machine all inner rank/processes is connected in ring and all
+    Within one machine all inner rank/processes is fully connected and all
     nodes with same local size across all machines is connected through another ring.
+
+    .. note::
+        Currently, our implementation has requirement that dyanmic graph has to be the
+        subgraph of static graph. Hence, the inner connection here is fully connected.
 
     .. plot::
 
@@ -316,6 +320,7 @@ def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
         >>> G = topology_util.InnerOuterRingGraph(12, 3)
         >>> nx.draw_circular(G)
     """
+    # TODO(hhb) remove this statis topology requirement.
     total_nodes = world_size
     num_machines = world_size // local_size
     nodes_per_machine = local_size
@@ -340,10 +345,14 @@ def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
 
 
 def InnerOuterExp2Graph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate Inner Ring and Outer Exponential-2 Graph.
+    """Generate Inner Ring and Outer Exponential-2 Graph Static Graph for dynamic usage.
 
     Within one machine all inner rank/processes is fully-connected and all
     nodes with same local size across all machines forms exponential-2 graph.
+
+     .. note::
+        Currently, our implementation has requirement that dyanmic graph has to be the
+        subgraph of static graph. Hence, the inner connection here is fully connected.
 
     .. plot::
 
@@ -352,6 +361,7 @@ def InnerOuterExp2Graph(world_size: int, local_size: int) -> nx.DiGraph:
         >>> G = topology_util.InnerOuterExp2Graph(12, 3)
         >>> nx.draw_circular(G)
     """
+    # TODO(hhb) remove this statis topology requirement.
     total_nodes = world_size
     num_machines = world_size // local_size
     nodes_per_machine = local_size
@@ -394,7 +404,7 @@ def GetDynamicSendRecvRanks(
         self_rank (int): The self rank.
 
     Yields:
-        send_ranks, recv_ranks.
+        Iterator[Tuple[List[int], List[int]]]: send_ranks, recv_ranks.
 
     Example:
 
@@ -455,7 +465,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert nodes_per_machine > 2, "We do not support the case nodes per machine < 2 yet."
+    assert nodes_per_machine > 2, "We do not support the case nodes per machine <= 2 yet."
 
     index = 0
     while True:
@@ -463,7 +473,6 @@ def GetInnerOuterRingDynamicSendRecvRanks(
         local_rank_id = self_rank % nodes_per_machine
         local_rank_to_go_outside_id = index % nodes_per_machine
 
-        recv_ranks = []
         if local_rank_to_go_outside_id == local_rank_id:
             # find send_rank
             target_machine_id = (machine_id + 1) % num_machines
@@ -473,7 +482,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(
             # find recv_rank
             source_machine_id = (machine_id - 1) % num_machines
             source_rank_id = source_machine_id * nodes_per_machine + local_rank_id
-            recv_ranks.append(source_rank_id)
+            recv_rank = source_rank_id
 
         else:
             if nodes_per_machine == 2:
@@ -495,9 +504,9 @@ def GetInnerOuterRingDynamicSendRecvRanks(
                     source_local_rank_id = (
                         source_local_rank_id - 1) % nodes_per_machine
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
-                recv_ranks.append(source_rank_id)
+                recv_rank = source_rank_id
 
-        yield [send_rank], recv_ranks
+        yield [send_rank], [recv_rank]
         index += 1
 
 
@@ -526,9 +535,9 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert nodes_per_machine > 2, "We do not support the case nodes per machine < 2 yet."
+    assert nodes_per_machine > 2, "We do not support the case nodes per machine <= 2 yet."
     exp_2_out_size = int(np.log2(num_machines-1))
-    exp_2_in_size = int(np.log2(nodes_per_machine-2))
+    exp_2_in_size = int(np.log2(nodes_per_machine-2))  # -2 because we need to remove outgoing node.
 
     index = 0
     while True:
@@ -536,7 +545,6 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
         local_rank_id = self_rank % nodes_per_machine
         local_rank_to_go_outside_id = index % nodes_per_machine
 
-        recv_ranks = []
         if local_rank_to_go_outside_id == local_rank_id:
             next_machine_dist = 2**(index % (exp_2_out_size+1))
             # find send_rank
@@ -547,7 +555,7 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
             # find recv_rank
             source_machine_id = (machine_id - next_machine_dist) % num_machines
             source_rank_id = source_machine_id * nodes_per_machine + local_rank_id
-            recv_ranks.append(source_rank_id)
+            recv_rank = source_rank_id
 
         else:
             if nodes_per_machine == 2:
@@ -578,7 +586,7 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
                 source_local_rank_id = (local_rank_id -
                                         reverse_inner_dist) % nodes_per_machine
                 source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
-                recv_ranks.append(source_rank_id)
+                recv_rank = source_rank_id
 
-        yield [send_rank], recv_ranks
+        yield [send_rank], [recv_rank]
         index += 1
