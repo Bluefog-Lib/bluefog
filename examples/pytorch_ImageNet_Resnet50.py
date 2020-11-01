@@ -103,7 +103,7 @@ if args.dist_optimizer != 'horovod':
 
 if args.cuda:
     # Bluefog: pin GPU to local rank.
-    torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
+    torch.cuda.set_device(bf.local_rank())
     torch.cuda.manual_seed(args.seed)
 
 cudnn.benchmark = True

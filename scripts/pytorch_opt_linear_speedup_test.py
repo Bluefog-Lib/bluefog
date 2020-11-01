@@ -75,7 +75,7 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 bf.init()
 
 if args.cuda:
-    torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
+    torch.cuda.set_device(bf.local_rank())
     cudnn.benchmark = True
 
 def logistic_loss_step(x_, rho, X, y, tensor_name, calculate_by_hand=True):

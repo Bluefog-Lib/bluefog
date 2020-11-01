@@ -95,7 +95,7 @@ if args.dist_optimizer != 'horovod':
                          "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
 
 if args.cuda:
-    torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
+    torch.cuda.set_device(bf.local_rank())
     cudnn.benchmark = True
 
 # Set up standard model.
