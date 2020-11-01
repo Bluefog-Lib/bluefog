@@ -716,6 +716,8 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     } else {
       // Do nothing here.
     }
+    // Because the in-place modification, we need to copy fused_input_data back to tensor as well
+    MemcpyOutFusionBufferForInputs(fused_input_data, entries);
     // 3. Broadcast recv data from local rank = 0 to other local ranks.
     int recv_num_elements = num_elements * first_entry.recv_neighbors->size();
     MPI_Bcast(buffer_data, recv_num_elements,
@@ -1317,6 +1319,30 @@ void MPIController::MemcpyOutFusionBufferForNeighbors(
     void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
     MemcpyEntryOutFusionBufferForNeighbors(buffer_data_at_offset, e,
                                            num_recv_neighbors, fused_data_size);
+    offset += e.tensor->size();
+  }
+}
+
+void MPIController::MemcpyOutFusionBufferForInputs(
+    const void* fused_input_data, std::vector<TensorTableEntry>& entries) {
+  // Copy the input data stored in the fusion buffer back to input, which is
+  // used in hierarchical neighbor allreduce since it has allreduce step to
+  // modified the input data.
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* fused_input_data_at_offset = (uint8_t*)fused_input_data + offset;
+    void* dst_data = (void*)e.tensor->data();
+    size_t count = (size_t)e.tensor->size();
+#if HAVE_CUDA
+    if (e.device != CPU_DEVICE_ID) {
+      CUDACHECK(cudaMemcpy(dst_data, fused_input_data_at_offset, count,
+                           cudaMemcpyDeviceToDevice));
+    } else {
+#endif
+      std::memcpy(dst_data, fused_input_data, count);
+#if HAVE_CUDA
+    }
+#endif
     offset += e.tensor->size();
   }
 }
