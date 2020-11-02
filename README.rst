@@ -40,11 +40,20 @@ that we introduce the virtual topology into the multiple processes and
 
 .. math::
 
-     LOCAL_AVG(grad_{k}) ==> GLOBAL_AVG(grad_{k})) as algorithm keep iterating
+     LOCAL_AVG(param - lr*grad_{k}) ==> param - lr*GLOBAL_AVG(grad_{k})) as algorithm keep iterating
 
-where local averaging is defined based on the connection in the virtual topology. We support both **static** topology
-and **dynamic** topology usage.
+where local average is defined based on the connection in the virtual topology. We support both **static** topology
+and **dynamic** topology usage. Among most topologies, we find the dynamic Exponential-2 can achieve the best performance
+if the number of processes is the power of 2 such as 4, 16, 128 processes. Exponential-2 is defined as each process periodically 
+communicates with neighbors that are  2^0, 2^1, ..., 2^t hops away. Dynamic means all processes select
+one neighbor only in one iteration and select next neighbor in next iteration as illustrated in following figure:
 
+.. raw:: html
+
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97928035-04654400-1d1b-11eb-91d2-2da890b4522e.png" alt="one-peer-exp2" width="650"/></p>
+
+Under this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict, which
+is better than ring-allreduce promised. As for loss and accuracy guarantee, please check out our theoratical paper.
 
 Quick Start
 -----------
