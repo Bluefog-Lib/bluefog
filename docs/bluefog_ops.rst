@@ -82,6 +82,8 @@ Hierarchical Collective Ops
 ---------------------------
 In practice, the communication speed and behavior is different between intra-machine and inter-machine communcation.
 Hence, we also provided two hierarchical collective ops. The basic unit in this case is each (physical) machine.
+Hence, unlike previous neighbor collective ops, of which the topology is defined over the connection between ranks/processes,
+the topology of hierarchical collective ops is defined over the connection between machines.
 
 hierarchical_local_allreduce
 ############################
@@ -89,17 +91,27 @@ hierarchical_local_allreduce
     :alt: BluefogHierarchicalLocalAllreduceExplanation
     :width: 700
 
+Because it is (machine) local operation, the topology definition will not impact this operation. Hence, the rank 0 and rank 1
+simply applied the local allreduce average to get (8+4)/2 = 6. Other ranks is like-wise.
+
 hierarchical_neighbor_allreduce
 ###############################
 .. image:: _static/bf_hier_neighbor_allreduce.png
     :alt: BluefogHierarchicalNeighborAllreduceExplanation
     :width: 700
 
-The basic logics under hierarchical operations is, within the machine, each local rank performances the local allreduce
-operation first so that in the view of external machines, all processes within same machine forms a super node.
+Similar to the *hierarchical_local_allreduce* operation, it first applied the local allreduce average within the machine.
+So that in the view of external machines, all processes within same machine forms a super node. Then, the super node exchange the
+information with their neighbor machines like *neighbor_allreduce*. For example, machine 0, 2, and 3 first formed a local average value
+6, 3, and 3 respectively. Then, a machine-wise neighbor allreduce produce (6+3+3)/3 = 4.
+
+In order to minimize the cross machines communcation, the real implementation is four steps actually: 1. Local Average. 2. All local rank
+0 processes do the *neihbor_allreduce*. 3. local rank 0 processes broadcast the received tensors to other local ranks. 4. Compute the average of
+received neighbor tensors within the process.
+
 
 .. warning::
-    hierarchical_neighbor_allreduce only should be used under the homogeneous environment only, i.e. each machine owns same number of 
+    hierarchical_neighbor_allreduce should be used under the homogeneous environment only, i.e., each machine owns same number of 
     the local processes.
 
 
