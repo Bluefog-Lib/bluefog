@@ -36,41 +36,23 @@ sys.path.insert(0, os.path.abspath(
 # Training settings
 parser = argparse.ArgumentParser(description="PyTorch MNIST Example")
 parser.add_argument(
-    "--batch-size",
-    type=int,
-    default=64,
-    metavar="N",
-    help="input batch size for training (default: 64)",
-)
+    "--batch-size", type=int, default=64,
+    metavar="N", help="input batch size for training (default: 64)")
+parser.add_argument('--local-size', type=int, default=-1,
+                    help='number of nodes per machine. Only used in test.')
 parser.add_argument(
-    "--test-batch-size",
-    type=int,
-    default=1000,
-    metavar="N",
-    help="input batch size for testing (default: 1000)",
-)
+    "--test-batch-size", type=int, default=1000,
+    metavar="N", help="input batch size for testing (default: 1000)")
+parser.add_argument("--epochs", type=int, default=10, metavar="N",
+                    help="number of epochs to train (default: 10)")
 parser.add_argument(
-    "--epochs",
-    type=int,
-    default=10,
-    metavar="N",
-    help="number of epochs to train (default: 10)",
-)
+    "--lr", type=float, default=0.01, metavar="LR", help="learning rate (default: 0.01)")
+parser.add_argument("--momentum", type=float, default=0.5,
+                    metavar="M", help="SGD momentum (default: 0.5)")
 parser.add_argument(
-    "--lr", type=float, default=0.01, metavar="LR", help="learning rate (default: 0.01)"
-)
-parser.add_argument(
-    "--momentum",
-    type=float,
-    default=0.5,
-    metavar="M",
-    help="SGD momentum (default: 0.5)",
-)
-parser.add_argument(
-    "--no-cuda", action="store_true", default=False, help="disables CUDA training"
-)
+    "--no-cuda", action="store_true", default=False, help="disables CUDA training")
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
-                    help='The type of distributed optimizer. Supporting options are '+
+                    help='The type of distributed optimizer. Supporting options are ' +
                     '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
 parser.add_argument("--average-test-result", action="store_true",
                     default=False,
@@ -79,6 +61,9 @@ parser.add_argument("--average-test-result", action="store_true",
 parser.add_argument("--enable-dynamic-topology", action="store_true",
                     default=False, help=("Enable each iteration to transmit one neighbor " +
                                          "per iteration dynamically."))
+parser.add_argument('--virtual-topology', type=str, default="power2",
+                    help='The underlying virtual topology. Supporting options are ' +
+                    '[power2(Default), ring, mesh, star, InnerOuterRing, InnerOuterExp2].')
 
 parser.add_argument(
     "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
@@ -100,7 +85,27 @@ if args.dist_optimizer == 'horovod':
     import horovod.torch as bf
 
 bf.init()
-
+if args.dist_optimizer != 'horovod':
+    if args.virtual_topology == "power2":
+        pass
+    elif args.virtual_topology == "ring":
+        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
+    elif args.virtual_topology == "mesh":
+        bf.set_topology(topology_util.RingGraph(
+            bf.size(), connect_style=0), is_weighted=True)
+    elif args.virtual_topology == "star":
+        bf.set_topology(topology_util.StarGraph(bf.size()))
+    elif args.virtual_topology == "InnerOuterRing":
+        assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterRingGraph(
+            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+    elif args.virtual_topology == "InnerOuterExp2":
+        assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterExp2Graph(
+            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+    else:
+        raise ValueError("Unknown args.virtual_topology, supporting options are " +
+                         "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
 
 if args.cuda:
     # Bluefog: pin GPU to local rank.
@@ -206,10 +211,20 @@ else:
                      '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
                      'win_put, push_sum, horovod]')
 
-
 if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
-    dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
-        bf.load_topology(), bf.rank())
+    if args.virtual_topology == 'InnerOuterRing':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+            bf.size(),
+            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            self_rank=bf.rank())
+    elif args.virtual_topology == 'InnerOuterExp2':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+            bf.size(),
+            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            self_rank=bf.rank())
+    else:
+        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+            bf.load_topology(), bf.rank())
 
 def dynamic_topology_update(epoch, batch_idx):
     if args.dist_optimizer == 'win_put':
@@ -230,8 +245,8 @@ def dynamic_topology_update(epoch, batch_idx):
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
-        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-        optimizer.send_neighbors = [send_neighbor]
+        send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
         optimizer.enable_topo_check = False
@@ -248,6 +263,7 @@ def train(epoch):
             dynamic_topology_update(epoch, batch_idx)
         if args.cuda:
             data, target = data.cuda(), target.cuda()
+
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
@@ -311,6 +327,6 @@ def test(record):
 test_record = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
-test(test_record)
+    test(test_record)
 print(f"[{bf.rank()}]: ", test_record)
 bf.barrier()

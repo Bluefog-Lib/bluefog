@@ -44,7 +44,7 @@
 #define BLUEFOG_FUSION_THRESHOLD "BLUEFOG_FUSION_THRESHOLD"
 
 // Stall-check warning time
-#define STALL_WARNING_TIME std::chrono::seconds(15)
+#define STALL_WARNING_TIME std::chrono::seconds(60)
 
 namespace bluefog {
 namespace common {
@@ -1323,6 +1323,13 @@ int bluefog_timeline(const bool start_activity, const char* tensor_name,
     timeline_ptr->ActivityEnd(tensor_name);
   }
   return 1;
+}
+
+int bluefog_is_homogeneous() {
+  if (!bluefog_global.initialization_done) {
+    return -1;
+  }
+  return bluefog_global.controller->IsHomogeneous();
 }
 
 int bluefog_nccl_built() {

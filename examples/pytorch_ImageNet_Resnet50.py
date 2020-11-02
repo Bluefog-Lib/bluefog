@@ -272,8 +272,8 @@ def validate(epoch):
         log_writer.add_scalar('val/accuracy', val_accuracy.avg, epoch)
 
 
-# Bluefog: using `lr = base_lr * hvd.size()` from the very beginning leads to worse final
-# accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * hvd.size()` during
+# Bluefog: using `lr = base_lr * bf.size()` from the very beginning leads to worse final
+# accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * bf.size()` during
 # the first five epochs. See https://arxiv.org/abs/1706.02677 for details.
 # After the warmup reduce learning rate by 10 on the 30th, 60th and 80th epochs.
 def adjust_learning_rate(epoch, batch_idx):
@@ -303,8 +303,8 @@ def dynamic_topology_update(epoch, batch_idx):
         sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
         optimizer.dst_weights = {sent_neighbor: 1.0}
     elif args.dist_optimizer == 'neighbor_allreduce':
-        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-        optimizer.send_neighbors = [send_neighbor]
+        send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
         optimizer.enable_topo_check = False
@@ -335,7 +335,7 @@ class Metric(object):
         self.n = torch.tensor(0.)
 
     def update(self, val):
-        self.sum += hvd.allreduce(val.detach().cpu(), name=self.name)
+        self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
         self.n += 1
 
     @property

@@ -318,7 +318,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
             raise ValueError("Unknown reduce type for internal class _DistributedReduceOptimizer")
 
         self._reduce_delay = {v: self._num_steps_per_communication
-                                          for _, v in sorted(named_parameters)}
+                              for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -352,6 +352,9 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                             handle = self._allreduce_data_async(p)
                         elif self._reduce_method == 1:
                             handle = self._neighbor_allreduce_data_async(p)
+                        else:
+                            raise ValueError(
+                                "Unknown reduce method. Do not change _reduce_method manually.")
                         self._handles[p] = handle
         return hook
 
@@ -379,6 +382,12 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
             hook.remove()
         self._timeline_hook_handles.clear()
         self._use_timeline = False
+
+    def use_allreduce_in_communication(self):
+        self._reduce_method = 0
+
+    def use_neighbor_allreduce_in_communication(self):
+        self._reduce_method = 1
 
     def synchronize(self):
         with torch.no_grad():

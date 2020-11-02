@@ -36,7 +36,8 @@ parser.add_argument('--model', type=str, default='resnet50',
                     help='model to benchmark')
 parser.add_argument('--batch-size', type=int, default=32,
                     help='input batch size')
-
+parser.add_argument('--local-size', type=int, default=-1,
+                    help='number of nodes per machine')
 parser.add_argument('--num-warmup-batches', type=int, default=10,
                     help='number of warm-up batches that don\'t count towards benchmark')
 parser.add_argument('--num-batches-per-iter', type=int, default=10,
@@ -60,7 +61,7 @@ parser.add_argument('--enable-dynamic-topology', action='store_true',
                                          'per iteration dynamically.'))
 parser.add_argument('--virtual-topology', type=str, default="power2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star].')
+                    '[power2(Default), ring, mesh, star, InnerOuterRing, InnerOuterExp2].')
 
 
 args = parser.parse_args()
@@ -81,9 +82,17 @@ if args.dist_optimizer != 'horovod':
             bf.size(), connect_style=0), is_weighted=True)
     elif args.virtual_topology == "star":
         bf.set_topology(topology_util.StarGraph(bf.size()))
+    elif args.virtual_topology == "InnerOuterRing":
+        assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterRingGraph(
+            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+    elif args.virtual_topology == "InnerOuterExp2":
+        assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterExp2Graph(
+            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[power2(Default), ring, mesh, star].")
+                         "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
 
 if args.cuda:
     torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
@@ -168,8 +177,19 @@ data_index = 0
 
 
 if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
-    dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
-        bf.load_topology(), bf.rank())
+    if args.virtual_topology == 'InnerOuterRing':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+            bf.size(),
+            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            self_rank=bf.rank())
+    elif args.virtual_topology == 'InnerOuterExp2':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+            bf.size(),
+            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            self_rank=bf.rank())
+    else:
+        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+            bf.load_topology(), bf.rank())
 
 
 def dynamic_topology_update(batch_idx):
@@ -187,8 +207,8 @@ def dynamic_topology_update(batch_idx):
         optimizer.dst_weights = {sent_neighbor: 0.5}
         optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
-        send_neighbor, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
-        optimizer.send_neighbors = [send_neighbor]
+        send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+        optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {
             r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
