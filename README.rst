@@ -43,10 +43,10 @@ that we introduce the virtual topology into the multiple processes and
      LOCAL_AVG(param - lr*grad_{k}) ==> param - lr*GLOBAL_AVG(grad_{k})) as algorithm keep iterating
 
 where local average is defined based on the connection in the virtual topology. We support both **static** topology
-and **dynamic** topology usage. Among most topologies, we find the dynamic Exponential-2 can achieve the best performance
-if the number of processes is the power of 2 such as 4, 16, 128 processes. Exponential-2 is defined as each process periodically 
+and **dynamic** topology usages. Among most topologies, we find the dynamic Exponential-2 graph can achieve the best performance
+if the number of processes is the power of 2 such as 4, 32, 128 processes. Exponential-2 graph is defined as each process only 
 communicates with neighbors that are  2^0, 2^1, ..., 2^t hops away. Dynamic means all processes select
-one neighbor only in one iteration and select next neighbor in next iteration as illustrated in following figure:
+one neighbor only in one iteration and select next neighbor in next iteration as illustrated in the figure:
 
 .. raw:: html
 
