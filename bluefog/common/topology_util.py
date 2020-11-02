@@ -537,7 +537,7 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
     assert nodes_per_machine > 2, "We do not support the case nodes per machine <= 2 yet."
     exp_2_out_size = int(np.log2(num_machines-1))
-    exp_2_in_size = int(np.log2(nodes_per_machine-2))  # -2 because we need to remove outgoing node.
+    exp_2_in_size = int(np.log2(nodes_per_machine-2))  # -2 because we need to remove outgoing node
 
     index = 0
     while True:
@@ -546,6 +546,13 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
         local_rank_to_go_outside_id = index % nodes_per_machine
 
         if local_rank_to_go_outside_id == local_rank_id:
+            # Note: currently design is still not very good. Because some local rank i may NEVER
+            # directly talk to other machine's local rank i. Example:
+            #
+            # Assume num_machines=16, nodes_per_machine=4, and self_rank=1, then we know that
+            # exp_2_out_size=3, and local_rank_id=1. If this branch is reached,
+            # local_rank_to_go_outside_id=1, and index % (exp_2_out_size+1)=1, resulting in
+            # next_machine_dist always equal to 2.
             next_machine_dist = 2**(index % (exp_2_out_size+1))
             # find send_rank
             target_machine_id = (machine_id + next_machine_dist) % num_machines
