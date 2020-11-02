@@ -638,6 +638,18 @@ this information.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt id="bluefog.torch.is_homogeneous">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">is_homogeneous</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.is_homogeneous" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns True if the cluster is homogeneous.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating whether every node in the cluster has same number of ranks
+and if it is true it also indicates the ranks are continuous in machines.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt id="bluefog.torch.set_skip_negotiate_stage">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">set_skip_negotiate_stage</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">value</span><span class="p">:</span> <span class="n">bool</span></em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#bluefog.torch.set_skip_negotiate_stage" title="Permalink to this definition">¶</a></dt>
 <dd><p>Skip the negotiate stage or not. (Default state is no skip).</p>
