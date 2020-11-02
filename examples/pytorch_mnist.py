@@ -65,9 +65,9 @@ parser.add_argument("--average-test-result", action="store_true",
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
-parser.add_argument('--virtual-topology', type=str, default="power2",
+parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star, InnerOuterRing, InnerOuterExp2].')
+                    '[expo2(Default), ring, mesh, star, InnerOuterRing, InnerOuterExpo2].')
 
 parser.add_argument(
     "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
@@ -90,7 +90,7 @@ if args.dist_optimizer == 'horovod':
 
 bf.init()
 if args.dist_optimizer != 'horovod':
-    if args.virtual_topology == "power2":
+    if args.virtual_topology == "expo2":
         pass
     elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
@@ -103,13 +103,13 @@ if args.dist_optimizer != 'horovod':
         assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
         bf.set_topology(topology_util.InnerOuterRingGraph(
             bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
-    elif args.virtual_topology == "InnerOuterExp2":
-        assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
-        bf.set_topology(topology_util.InnerOuterExp2Graph(
+    elif args.virtual_topology == "InnerOuterExpo2":
+        assert bf.is_homogeneous, "InnerOuterExpo2 topo should be used under homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterExpo2Graph(
             bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
+                         "[expo2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExpo2].")
 
 if args.cuda:
     # Bluefog: pin GPU to local rank.
@@ -222,8 +222,8 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
             bf.size(),
             local_size=bf.local_size() if args.local_size == -1 else args.local_size,
             self_rank=bf.rank())
-    elif args.virtual_topology == 'InnerOuterExp2':
-        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+    elif args.virtual_topology == 'InnerOuterExpo2':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
             bf.size(),
             local_size=bf.local_size() if args.local_size == -1 else args.local_size,
             self_rank=bf.rank())

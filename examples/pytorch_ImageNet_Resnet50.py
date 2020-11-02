@@ -72,9 +72,9 @@ parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
 parser.add_argument("--disable-dynamic-topology", action="store_true",
                     default=False, help=("Disable each iteration to transmit one neighbor " +
                                          "per iteration dynamically."))
-parser.add_argument('--virtual-topology', type=str, default="power2",
+parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star].')
+                    '[expo2(Default), ring, mesh, star].')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -88,13 +88,13 @@ bf.init()
 torch.manual_seed(args.seed)
 
 if args.dist_optimizer != 'horovod':
-    if args.virtual_topology == "power2":
+    if args.virtual_topology == "expo2":
         pass
     elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[power2(Default), ring, mesh, star].")
+                         "[expo2(Default), ring, mesh, star].")
 
 if args.cuda:
     # Bluefog: pin GPU to local rank.

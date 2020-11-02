@@ -84,9 +84,9 @@ parser.add_argument("--average-test-result", action="store_true",
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
-parser.add_argument('--virtual-topology', type=str, default="power2",
+parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star].')
+                    '[expo2(Default), ring, mesh, star].')
 
 args = parser.parse_args()
 args.cuda = (not args.no_cuda) and (torch.cuda.is_available())
@@ -100,7 +100,7 @@ if args.dist_optimizer == 'horovod':
 bf.init()
 torch.manual_seed(args.seed)
 if args.dist_optimizer != 'horovod':
-    if args.virtual_topology == "power2":
+    if args.virtual_topology == "expo2":
         pass
     elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
@@ -108,13 +108,13 @@ if args.dist_optimizer != 'horovod':
         assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
         bf.set_topology(topology_util.InnerOuterRingGraph(
             bf.size(), local_size=bf.local_size()))
-    elif args.virtual_topology == "InnerOuterExp2":
-        assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
-        bf.set_topology(topology_util.InnerOuterExp2Graph(
+    elif args.virtual_topology == "InnerOuterExpo2":
+        assert bf.is_homogeneous, "InnerOuterExpo2 topo should be used under homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterExpo2Graph(
             bf.size(), local_size=bf.local_size()))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
+                         "[expo2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExpo2].")
 
 if args.cuda:
     print("using cuda.")
@@ -125,21 +125,6 @@ else:
     print("using cpu")
 
 cudnn.benchmark = True
-
-# If set > 0, will resume training from a given checkpoint.
-resume_from_epoch = 0
-# for try_epoch in range(args.epochs, 0, -1):
-#     if os.path.exists(args.checkpoint_format.format(epoch=try_epoch)):
-#         resume_from_epoch = try_epoch
-#         break
-
-# Bluefog: broadcast resume_from_epoch from rank 0 (which will have
-# checkpoints) to other ranks.
-resume_from_epoch = bf.broadcast(
-    torch.tensor(resume_from_epoch),  # pylint: disable=not-callable
-    root_rank=0,
-    name="resume_from_epoch",
-).item()
 
 # Bluefog: print logs on the first worker.
 verbose = 1 if bf.rank() == 0 else 0
@@ -233,15 +218,6 @@ else:
                      'Please set the argument to be one of ' +
                      '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
                      'win_put, horovod]')
-
-print("resume_from_epoch: ", resume_from_epoch)
-# Restore from a previous checkpoint, if initial_epoch is specified.
-# Bluefog: restore on the first worker which will broadcast weights to other workers.
-# if resume_from_epoch > 0 and bf.rank() == 0:
-#     filepath = args.checkpoint_format.format(epoch=resume_from_epoch)
-#     checkpoint = torch.load(filepath)
-#     model.load_state_dict(checkpoint["model"])
-#     optimizer.load_state_dict(checkpoint["optimizer"])
 
 # Bluefog: broadcast parameters & optimizer state.
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
@@ -345,8 +321,8 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
             bf.size(),
             local_size=bf.local_size(),
             self_rank=bf.rank())
-    elif args.virtual_topology == 'InnerOuterExp2':
-        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+    elif args.virtual_topology == 'InnerOuterExpo2':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
             bf.size(),
             local_size=bf.local_size(),
             self_rank=bf.rank())
@@ -421,7 +397,7 @@ class Metric(object):
         return self.sum / self.n
 
 
-for epoch in range(resume_from_epoch, args.epochs):
+for epoch in range(args.epochs):
     train(epoch)
     validate(epoch)
     # save_checkpoint(epoch)

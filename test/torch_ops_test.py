@@ -371,7 +371,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -404,7 +404,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -435,7 +435,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         self_weight = 0.0
         neighbor_weights = {(rank-1) % size : 1.0}
         send_ranks = [(rank + 2) % size]
@@ -461,7 +461,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         self_weight = 0.0
         neighbor_weights = {(rank-1) % size : 1.0}
         send_ranks = [(rank + 1) % size]
@@ -495,7 +495,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -534,7 +534,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -727,7 +727,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -795,7 +795,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -846,7 +846,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -892,7 +892,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -953,7 +953,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
 

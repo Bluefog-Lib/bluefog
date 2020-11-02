@@ -48,7 +48,7 @@ parser.add_argument(
     default='logistic_regression'
 )
 parser.add_argument(
-    "--topology", help="this example supports mesh, star, ring, and power_two",
+    "--topology", help="this example supports mesh, star, ring, and expo2",
     default='ring'
 )
 args = parser.parse_args()
@@ -431,8 +431,8 @@ def push_diging(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
 bf.init()
 if args.topology == 'mesh':
     bf.set_topology(topology_util.MeshGrid2DGraph(bf.size()), is_weighted=True)
-elif args.topology == 'power_two':
-    bf.set_topology(topology_util.PowerGraph(bf.size()))
+elif args.topology == 'expo2':
+    bf.set_topology(topology_util.ExponentialGraph(bf.size()))
 elif args.topology == 'star':
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
 elif args.topology == 'ring':
@@ -440,7 +440,7 @@ elif args.topology == 'ring':
 else:
     raise NotImplementedError(
         'Topology not supported. This example only supports' +
-        ' mesh, star, ring and power_two'
+        ' mesh, star, ring and expo2'
     )
 
 

@@ -825,7 +825,7 @@ void MPIController::WinCreate(TensorTableEntry& entry) {
   win_manager->SetGlobalWin(global_mpi_win_ptr);
 
   // Build extra buffers for win_put.
-  // For example: size=4 power two ring topology
+  // For example: size=4 exponential two ring topology
   // r\s   0    1    2    3
   //  0    g    x         x
   //  1    x    g    x
