@@ -21,9 +21,10 @@ Below is the charts representing the performance of BlueFog that was done on Res
 
 .. raw:: html
 
-    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97652354-653f0480-1a1b-11eb-89af-082d2aa25f69.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97652367-6e2fd600-1a1b-11eb-8b04-a3c52b055c20.png" alt="Benchmark 2" width="400"/></p>
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97819514-cf46ec00-1c5d-11eb-933e-459783d974a6.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97819502-c6eeb100-1c5d-11eb-9930-065cdd48818d.png" alt="Benchmark 2" width="400"/></p>
 
-where H_N_AR and N_AR represents the hierarchical neighbor allreduce and neighbor allreduce two main distributed optimizers we provided and black box represents the idea linear scaling. We can see bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under 64 batchsize. For more communication intensive like 32 batch size, the scaling efficiency between Bluefgo and Horovod becomes even larger.
+where black box represents the idea linear scaling. We can see bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under 64 batchsize. For more communication intensive like 32 batch size, the scaling efficiency between Bluefgo and Horovod becomes even larger. To 
+understand more details about BlueFog Benchmark, checkout our performance page.
 
 Overview
 --------
@@ -41,17 +42,9 @@ that we introduce the virtual topology into the multiple processes and
 
      LOCAL_AVG(grad_{k}) ==> GLOBAL_AVG(grad_{k})) as algorithm keep iterating
 
-where local averaging is defined based on the connection in the virtual topology.
+where local averaging is defined based on the connection in the virtual topology. We support both **static** topology
+and **dynamic** topology usage.
 
-Leveraging the *One-sided Communication Ops* (i.e. remote-memory access) of MPI, Bluefog is not only distributed 
-but also decentralized training framework with high performance.
-
-* Unlike the *ring-allreduce* based Bulk Synchronous Parallel algorithm, each process in bluefog is highly decoupled so that we can maximize the power of asynchronous algorithm. 
-* Unlike the *parameter-server* (PS) based architecture, there is no central node to collect and distribute information so that we can avoid the bottleneck problem existing in the PS. 
-
-The cost of those advantages is the inconsistence between models. Please check our papers to see the theoratical guarantee.
-
-NOTE: Although the most torch-based APIs perform well, this repository is still in the early stage of development and more features are waiting to be implemented. If you are interested, you are more than welcome to join us and contribute this project!
 
 Quick Start
 -----------
@@ -80,6 +73,8 @@ then run it through ``bfrun``. That is it!
       optimizer, model=model
    )
    ...
+Check our BlueFog Distributed Optimizer Guide to understand how our distributed optimizer 
+works and which distributed optimizer fits your requirement the best.
 
 We also provide lots of low-level functions, which you can use those as building
 blocks to construct your own distributed trainning algorithm. The following example
@@ -96,50 +91,11 @@ illustrates how to run a simple consensus algorithm through bluefog.
       x = bf.neighbor_allreduce(x)
    print(f"{bf.rank()}: Average value of all ranks is {x}")
 
-One noteable feature of Bluefog is that we leverage the One-sided Communication of MPI
-to build a real decentralized and asynchronized algorithms. This is another example about
-how to use Bluefog to implement an asynchronized push-sum consensus algorithm.
-
-.. code-block:: python
-
-   import torch
-   import bluefog.torch as bf
-   from bluefog.common import topology_util
-
-   bf.init()
-
-   # Setup the topology for communication
-   bf.set_topology(topology_util.PowerGraph(bf.size()))
-   outdegree = len(bf.out_neighbor_ranks())
-   indegree = len(bf.in_neighbor_ranks())
-
-   # Create the buffer for neighbors.
-   x = torch.Tensor([bf.rank(), 1.0])
-   bf.win_create(x, name="x_buff", zero_init=True)
-
-   for _ in range(100):
-      bf.win_accumulate(
-         x, name="x_buff",
-         dst_weights={rank: 1.0 / (outdegree + 1)
-                      for rank in bf.out_neighbor_ranks()},
-         require_mutex=True)
-      x.div_(1+outdegree)
-      bf.win_update_then_collect(name="x_buff")
-
-   bf.barrier()
-   # Do not forget to sync at last!
-   bf.win_update_then_collect(name="x_buff")
-   print(f"{bf.rank()}: Average value of all ranks is {x[0]/x[-1]}")
-
-Please explore our *examples* folder to see more about
-how to implemented deep learning trainning and distributed 
-optimization algorithm quickly and easily through bluefog. If you want to understand more on
-how to use the low-level API as the building blocks for your own distributed
-algorithm, please read our *Bluefog Ops Explanation* page under docs.
+Checkout our ops explanation page to see all supported *synchronous* and *asynchronous* features.
 
 
 Citation
 --------
-To be added.
+*A Tutorial of Decentralized Optimization using BlueFog*, Bluefog Team, To be Appeared in 2020
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
