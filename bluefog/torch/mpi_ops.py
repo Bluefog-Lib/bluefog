@@ -711,6 +711,9 @@ def _hierarchical_neighbor_allreduce_nonblocking(
     else:
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
 
+    if not send_neighbor_machines:
+        raise ValueError("Argument send_neighbor_machines has to be presented and non-empty.")
+
     machine_size = size() // local_size()
     # Translate machine id into rank id.
     node_per_machine = local_size()

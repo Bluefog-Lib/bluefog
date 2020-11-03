@@ -107,13 +107,13 @@ def broadcast_optimizer_state(optimizer, root_rank):
         # forces allreduce on all model parameters, which will result in deadlock
         # unless every rank calls step(). Therefore, to finish state initialization
         # only call optimizer.step() with a torch.optim.Optimizer.
-        if optimizer.__module__ == bf.DistributedAllreduceOptimizer.__module__:
+        if optimizer.__module__ == bf.DistributedHierarchicalNeighborAllreduceOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
         elif optimizer.__module__ == bf.DistributedNeighborAllreduceOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
-        elif optimizer.__module__ == bf.DistributedPushSumOptimizer.__module__:
+        elif optimizer.__module__ == bf.DistributedAllreduceOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
-        elif optimizer.__module__ == bf.DistributedPullGetOptimizer.__module__:
+        elif optimizer.__module__ == bf.DistributedGradientAllreduceOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()
         elif optimizer.__module__ == bf.DistributedWinPutOptimizer.__module__:
             super(optimizer.__class__, optimizer).step()

@@ -983,6 +983,7 @@ class OpsTests(unittest.TestCase):
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
 
+    @unittest.skip("Need re-design of API.")
     def test_pair_gossip(self):
         size = bf.size()
         rank = bf.rank()
@@ -1002,7 +1003,7 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gossiped_tensor = bf.pair_gossip(tensor, target_rank)
+            # gossiped_tensor = bf.pair_gossip(tensor, target_rank)
             tensor, gossiped_tensor = self.convert_cpu_fp16_to_fp32(tensor, gossiped_tensor)
 
             assert (
@@ -1014,6 +1015,7 @@ class OpsTests(unittest.TestCase):
 
         bf.set_skip_negotiate_stage(False)
 
+    @unittest.skip("Need re-design of API.")
     def test_pair_gossip_weighted(self):
         size = bf.size()
         rank = bf.rank()
@@ -1034,8 +1036,8 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gossiped_tensor = bf.pair_gossip(
-                tensor, target_rank, self_weight=0.25, pair_weight=0.75)
+            # gossiped_tensor = bf.pair_gossip(
+            #    tensor, target_rank, self_weight=0.25, pair_weight=0.75)
             tensor, gossiped_tensor = self.convert_cpu_fp16_to_fp32(tensor, gossiped_tensor)
             assert (
                 list(gossiped_tensor.shape) == [23] * dim

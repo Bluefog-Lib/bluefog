@@ -53,6 +53,12 @@ parser.add_argument('--batches-per-allreduce', type=int, default=1,
                          'total batch size.')
 parser.add_argument('--model', type=str, default='resnet18',
                     help='model to benchmark')
+parser.add_argument('--dataset', type=str, default='cifar10',
+                    help='The dataset to train with.')
+parser.add_argument('--train-dir', default=os.path.expanduser('~/imagenet/train'),
+                    help='path to training data')
+parser.add_argument('--val-dir', default=os.path.expanduser('~/imagenet/validation'),
+                    help='path to validation data')
 
 # Default settings from https://arxiv.org/abs/1706.02677.
 parser.add_argument('--batch-size', type=int, default=32,
@@ -77,10 +83,6 @@ parser.add_argument("--seed", type=int, default=42, help="random seed")
 parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are [win_put, ' +
                     'neighbor_allreduce, allreduce, hierarchical_neighbor_allreduce, horovod]')
-parser.add_argument("--average-test-result", action="store_true",
-                    default=False,
-                    help=("Allreduce called to average test result. Warning this will " +
-                          "force the algorithm to sync every end of epoch."))
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
@@ -135,18 +137,30 @@ log_writer = tensorboardX.SummaryWriter(
 
 
 kwargs = {"num_workers": 4, "pin_memory": True} if args.cuda else {}
-train_dataset = datasets.CIFAR10(
-    os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
-    train=True,
-    download=True,
-    transform=transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-        ]
-    ),
-)
+if args.dataset == "cifar10":
+    train_dataset = datasets.CIFAR10(
+        os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
+        train=True,
+        download=True,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ]
+        ),
+    )
+elif args.dataset == "imagenet":
+    train_dataset = datasets.ImageFolder(args.train_dir,
+                                         transform=transforms.Compose([
+                                             transforms.RandomResizedCrop(224),
+                                             transforms.RandomHorizontalFlip(),
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                  std=[0.229, 0.224, 0.225])
+                                         ]))
+else:
+    raise ValueError("Args dataset should be either cifar10 or imagenet")
 
 # Bluefog: use DistributedSampler to partition data among workers. Manually specify
 # `num_replicas=bf.size()` and `rank=bf.rank()`.
@@ -157,29 +171,40 @@ train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=allreduce_batch_size, sampler=train_sampler, **kwargs
 )
 
-val_dataset = datasets.CIFAR10(
-    os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
-    train=False,
-    transform=transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-        ]
-    ),
-)
-if args.average_test_result:
-    val_sampler = torch.utils.data.distributed.DistributedSampler(
-        val_dataset, num_replicas=bf.size(), rank=bf.rank()
+if args.dataset == "cifar10":
+    val_dataset = datasets.CIFAR10(
+        os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
+        train=False,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ]
+        ),
     )
-else:
-    val_sampler = None
+elif args.dataset == "imagenet":
+    val_dataset = datasets.ImageFolder(args.val_dir,
+                                       transform=transforms.Compose([
+                                           transforms.Resize(256),
+                                           transforms.CenterCrop(224),
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                std=[0.229, 0.224, 0.225])
+                                       ]))
+
+val_sampler = torch.utils.data.distributed.DistributedSampler(
+    val_dataset, num_replicas=bf.size(), rank=bf.rank()
+)
 
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=args.val_batch_size, sampler=val_sampler, **kwargs
 )
 
-model = getattr(models, args.model)(num_classes=10)
+if args.dataset == "cifar10":
+    model = getattr(models, args.model)(num_classes=10)
+elif args.dataset == "imagenet":
+    model = getattr(models, args.model)(num_classes=1000)
 
 if args.cuda:
     # Move model to GPU.
@@ -373,8 +398,7 @@ def save_checkpoint(epoch):
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
             os.makedirs(dirpath)
-        state = {"model": model.state_dict(
-        ), "optimizer": optimizer.state_dict()}
+        state = {"model": model.state_dict(), "optimizer": optimizer.state_dict()}
         torch.save(state, filepath)
 
 
@@ -386,10 +410,7 @@ class Metric(object):
         self.n = torch.tensor(0.0)  # pylint: disable=not-callable
 
     def update(self, val):
-        if args.average_test_result:
-            self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
-        else:
-            self.sum += val.detach().cpu()
+        self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
         self.n += 1
 
     @property
