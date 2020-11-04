@@ -138,7 +138,7 @@ algorithm, please read our :ref:`Ops Explanation` page.
 
    Bluefog Ops Explanation <bluefog_ops>
    Bluefog Performance <performance>
-   Static and Dynamic Neighbor Averaging <neighbor_average>
+   Static and Dynamic Topology Neighbor Averaging <neighbor_average>
    Lauching Application Through bfrun <running>
    Bluefog Docker Usage <docker>
    Bluefog Environment Variable <env_variable>
