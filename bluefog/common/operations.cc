@@ -935,7 +935,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
       };
       // Recall that send_neighbors is empty or not determines we use partial
       // neighbor allreduce or not.
-      int num_recv_neighbors = entry.send_neighbors->empty()
+      int num_recv_neighbors = !entry.send_neighbors_enabled
                                    ? mpi_context.neighbor_indgree_
                                    : entry.recv_neighbors->size();
       // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
@@ -954,6 +954,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
         if (response.response_type() == new_response.response_type() &&
             response.devices() == new_response.devices() &&
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
+            entry.send_neighbors_enabled == new_entry.send_neighbors_enabled &&
             IsSameNeighborList(entry.send_neighbors,
                                new_entry.send_neighbors) &&
             IsSameNeighborList(entry.recv_neighbors,
@@ -1484,6 +1485,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
+                                      bool send_neighbors_enabled,
                                       bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
@@ -1505,6 +1507,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   e.ready_event = ready_event;
   e.recv_neighbors = recv_neighbors;
   e.send_neighbors = send_neighbors;
+  e.send_neighbors_enabled = send_neighbors_enabled;
   e.enable_topo_check = enable_topo_check;
   e.device = device;
   e.callback = callback;

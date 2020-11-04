@@ -369,8 +369,6 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     if send_neighbors is None:
         send_neighbors = []
         send_neighbors_enabled = False
-    elif not send_neighbors:
-        raise ValueError("Argument send_neighbors cannot be empty.")
     elif len(set(send_neighbors)) != len(send_neighbors):
         raise ValueError("Argument send_neighbors should only contain the unique ranks.")
     elif self_weight is None or neighbor_weights is None:
@@ -413,7 +411,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
                          "the same time")
 
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        send_neighbors, enable_topo_check, avg_computation,
+                                        send_neighbors, send_neighbors_enabled,
+                                        enable_topo_check, avg_computation,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle

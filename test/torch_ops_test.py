@@ -453,6 +453,47 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data - (rank-1) % size).abs().max() < eps
             ), "bf.neighbor_allreduce (move) produces incorrect reduced tensor"
 
+    def test_neighbor_allreduce_dynamic_topo_with_empty_send_neighbors(self):
+        """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly with empty
+           send_neighbors."""
+        size = bf.size()
+        rank = bf.rank()
+        if size % 2 == 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to odd size".format(fname))
+            return
+        dtypes = [torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # By default, we use power two ring topology.
+        self_weight = 1.0
+        if rank % 2 == 0:
+            neighbor_weights = {}
+            send_ranks = [rank+1]
+            expected_value = rank
+        else: 
+            neighbor_weights = {rank-1: 1.0}
+            send_ranks = []
+            expected_value = rank*2-1
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(
+                tensor, name=name, self_weight=self_weight,
+                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor.data - expected_value).abs().max() < eps
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
+
     def test_neighbor_allreduce_dynamic_topo_avg(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
         size = bf.size()
