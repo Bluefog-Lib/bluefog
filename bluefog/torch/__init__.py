@@ -38,7 +38,6 @@ from bluefog.torch.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
 from bluefog.torch.mpi_ops import mpi_threads_supported
 from bluefog.torch.mpi_ops import unified_mpi_window_model_supported
 from bluefog.torch.mpi_ops import nccl_built, is_homogeneous
-from bluefog.torch.mpi_ops import set_skip_negotiate_stage, get_skip_negotiate_stage
 
 from bluefog.torch.mpi_ops import allreduce, allreduce_nonblocking
 from bluefog.torch.mpi_ops import allreduce_, allreduce_nonblocking_
@@ -63,6 +62,7 @@ from bluefog.torch.mpi_ops import get_win_version
 from bluefog.torch.mpi_ops import win_associated_p
 from bluefog.torch.mpi_ops import turn_on_win_ops_with_associated_p
 from bluefog.torch.mpi_ops import turn_off_win_ops_with_associated_p
+from bluefog.torch.mpi_ops import set_skip_negotiate_stage, get_skip_negotiate_stage
 
 from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
 from bluefog.torch.mpi_ops import timeline_context

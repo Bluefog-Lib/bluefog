@@ -107,11 +107,11 @@ if args.dist_optimizer != 'horovod':
     elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
     elif args.virtual_topology == "InnerOuterRing":
-        assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
+        assert bf.is_homogeneous, "InnerOuterRing should be used under homogeneous environment"
         bf.set_topology(topology_util.InnerOuterRingGraph(
             bf.size(), local_size=bf.local_size()))
     elif args.virtual_topology == "InnerOuterExpo2":
-        assert bf.is_homogeneous, "InnerOuterExpo2 topo should be used under homogeneous environment"
+        assert bf.is_homogeneous, "InnerOuterExpo2 should be used under homogeneous environment"
         bf.set_topology(topology_util.InnerOuterExpo2Graph(
             bf.size(), local_size=bf.local_size()))
     else:

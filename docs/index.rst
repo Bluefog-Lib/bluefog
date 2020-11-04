@@ -137,11 +137,11 @@ algorithm, please read our :ref:`Ops Explanation` page.
    :caption: More Information
 
    Bluefog Ops Explanation <bluefog_ops>
+   Bluefog Performance <performance>
+   Static and Dynamic Neighbor Averaging <neighbor_average>
    Lauching Application Through bfrun <running>
    Bluefog Docker Usage <docker>
    Bluefog Environment Variable <env_variable>
-   Bluefog Perform Comparison <performance>
-   Bluefog Rationale <rationale>
    Bluefog Timeline <timeline>
    Spectrum of Machine Learning Algorithm<alg_spectrum>
    Codebase Structure <code_structure>
