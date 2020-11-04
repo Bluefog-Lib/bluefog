@@ -82,6 +82,31 @@ then run it through ``bfrun``. That is it!
       optimizer, model=model
    )
    ...
+Previous example is for static topology usage. For dynamic topology case, you need a little bit
+more code:
+
+.. code-block:: python
+   
+  from bluefog.common import topology_util
+  ...
+  # Same setup code as previous snippets
+  dynamic_neighbors_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
+            bf.size(), local_size=bf.local_size(), self_rank=bf.rank())
+  def dynamic_topology_update(epoch, batch_idx):
+    send_neighbors, recv_neighbors = next(dynamic_neighbors_gen)
+    avg_weight = 1/(len(recv_neighbors) + 1)
+    optimizer.send_neighbors = to_neighbors
+    optimizer.neighbor_weights = {r: avg_weight for r in recv_neighbors}
+    optimizer.self_weight = avg_weight
+
+  # Torch training code
+  for epoch in range(epochs):
+    for batch_idx, (data, target) in enumerate(train_loader):
+        dynamic_topology_update(epoch, batch_idx)
+        ...
+        loss.backward()
+        optimizer.step()
+
 Check our BlueFog Distributed Optimizer Guide to understand how our distributed optimizer 
 works and which distributed optimizer fits your requirement best.
 
