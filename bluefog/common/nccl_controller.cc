@@ -69,7 +69,8 @@ ncclDataType_t GetNCCLDataType(const DataType bf_data_type) {
 }
 
 void NCCLContext::Initialize(const int rank, const int size,
-                             const int local_rank) {
+                             const int local_rank, const int local_size,
+                             const MPI_Comm& world_comm, const MPI_Comm& local_comm) {
   if (is_initialized) {
     BFLOG(DEBUG)
         << "NCCL context has been initialized but NCCLContext::Initialize "
@@ -84,7 +85,7 @@ void NCCLContext::Initialize(const int rank, const int size,
   ncclUniqueId nccl_id;
   if (rank == 0) ncclGetUniqueId(&nccl_id);
   MPICHECK(
-      MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, MPI_COMM_WORLD));
+      MPI_Bcast((void*)&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, world_comm));
 
   // Assume one device per process
   int nDevices = 0;
@@ -96,6 +97,15 @@ void NCCLContext::Initialize(const int rank, const int size,
                                          greatest_priority));
   // TODO(ybc) Handle the error case then np > number of GPU properly.
   NCCLCHECK(ncclCommInitRank(&nccl_comm, size, nccl_id, rank));
+  MPI_Barrier(world_comm);
+
+  // Build local nccl
+  ncclUniqueId local_nccl_id;
+  if (local_rank == 0) ncclGetUniqueId(&local_nccl_id);
+  MPICHECK(MPI_Bcast((void*)&local_nccl_id, sizeof(local_nccl_id), MPI_BYTE, 0,
+                     local_comm));
+  NCCLCHECK(ncclCommInitRank(&nccl_local_comm, local_size, local_nccl_id,
+                             local_rank));
 
   cuda_device = local_rank % nDevices;
   is_initialized = true;
@@ -182,7 +192,9 @@ cudaError_t NCCLContext::ReleaseCudaEvent(cudaEvent_t event) {
 }
 
 void NCCLController::Initialize() {
-  nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_);
+  nccl_ctx_.Initialize(mpi_ctx_.rank_, mpi_ctx_.size_, mpi_ctx_.local_rank_,
+                       mpi_ctx_.local_size_, mpi_ctx_.mpi_comm,
+                       mpi_ctx_.local_comm);
 #if NCCL_MINOR < 7
   InitPeerCommunicators();
 #endif
@@ -431,13 +443,15 @@ void NCCLController::Allreduce(TensorTableEntry& entry) {
   int num_elements = entry.tensor->shape().num_elements();
 
   std::queue<std::pair<std::string, cudaEvent_t>> event_queue;
+  auto& nccl_comm =
+      entry.is_hierarchical ? nccl_ctx_.nccl_local_comm : nccl_ctx_.nccl_comm;
 
   with_device device_guard(entry.device);
 
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   NCCLCHECK(ncclAllReduce(sendbuf, buffer_data, num_elements,
-                          GetNCCLDataType(entry.tensor), ncclSum,
-                          nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+                          GetNCCLDataType(entry.tensor), ncclSum, nccl_comm,
+                          nccl_ctx_.stream));
 
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "COMM. (NCCL)");
@@ -658,33 +672,70 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   }
 
 #if NCCL_MINOR > 6
-  ncclGroupStart();
-  if (!entry.dynamic_neighbors_enabled) {
-    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
-      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
-      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
-                              num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  if (!entry.is_hierarchical) {
+    ncclGroupStart();
+    if (!entry.dynamic_neighbors_enabled) {
+      for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+        int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+    } else {
+      for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+        int recv_rank = entry.recv_neighbors->at(i);
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *entry.send_neighbors) {
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
     }
-    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
-      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-    }
+    ncclGroupEnd();
   } else {
-    for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
-      int recv_rank = entry.recv_neighbors->at(i);
-      void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
-                              num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    if (entry.send_neighbors->empty()) {
+      throw std::runtime_error(
+          "Under hierarchical neighbor_allreduce, argument "
+          "send_machine_neighbors should "
+          "not be empty.");
     }
-    for (int send_rank : *entry.send_neighbors) {
-      NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                         send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
+    // divided by local size at call back stage.
+    NCCLCHECK(ncclAllReduce(sendbuf, (void*)sendbuf, num_elements,
+                            GetNCCLDataType(entry.tensor), ncclSum,
+                            nccl_ctx_.nccl_local_comm, nccl_ctx_.stream));
+    // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
+    if (mpi_ctx_.local_rank_ == 0) {
+      ncclGroupStart();
+      for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+        int recv_rank = entry.recv_neighbors->at(i);
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                           recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *entry.send_neighbors) {
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                           send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      ncclGroupEnd();
+    } else {
+      // No need to do anything
     }
+    // 3. Broadcast recv data from local rank = 0 to other local ranks.
+    int recv_num_elements = num_elements * entry.recv_neighbors->size();
+    NCCLCHECK(ncclBroadcast(entry.output->data(), (void*)entry.output->data(),
+                            recv_num_elements, GetNCCLDataType(entry.output), 0,
+                            nccl_ctx_.nccl_local_comm, nccl_ctx_.stream));
   }
-  ncclGroupEnd();
 
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "COMM. (NCCL)");
@@ -709,7 +760,9 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                       "which doesn't support point-to-point communication. "
                       "Hence, the performance may be largely degraded";
   });
-
+  if (entry.is_hierarchical) {
+    throw std::runtime_error("hierarchical neighbor allreduce is not supported under NCCL < 2.7");
+  }
   ncclGroupStart();
   uint recv_rank_index = 0;
   uint send_rank_index = 0;
@@ -795,10 +848,13 @@ void NCCLController::Allreduce(std::vector<TensorTableEntry>& entries) {
   }
   const void* fused_input_data = buffer_data;
 
+  auto& nccl_comm = first_entry.is_hierarchical ? nccl_ctx_.nccl_local_comm
+                                                : nccl_ctx_.nccl_comm;
+
   ncclResult_t ret_code =
       ncclAllReduce(fused_input_data, buffer_data, num_elements,
-                    GetNCCLDataType(first_entry.tensor), ncclSum,
-                    nccl_ctx_.nccl_comm, nccl_ctx_.stream);
+                    GetNCCLDataType(first_entry.tensor), ncclSum, nccl_comm,
+                    nccl_ctx_.stream);
   if (ret_code != ncclSuccess) {
     std::string error_msg =
         "ncclAllReduce failed, see NCCL output (NCCL_DEBUG=INFO) "
@@ -878,40 +934,91 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // Hence, we need to offset the buffer data to location for neighbors.
   buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
 
-  ncclGroupStart();
-  if (!first_entry.dynamic_neighbors_enabled) {
-    for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
-      int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
-      void* recvbuf =
-          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                         GetNCCLDataType(first_entry.tensor), recv_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  if (!first_entry.is_hierarchical) {
+    ncclGroupStart();
+    if (!first_entry.dynamic_neighbors_enabled) {
+      for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
+        int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
+        NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                           GetNCCLDataType(first_entry.tensor), send_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+    } else {
+      for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+        int recv_rank = first_entry.recv_neighbors->at(i);
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *first_entry.send_neighbors) {
+        NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                           GetNCCLDataType(first_entry.tensor), send_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
     }
-    for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
-      NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                         GetNCCLDataType(first_entry.tensor), send_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-    }
+    ncclGroupEnd();
   } else {
-    for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
-      int recv_rank = first_entry.recv_neighbors->at(i);
-      void* recvbuf =
-          (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-      NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                         GetNCCLDataType(first_entry.tensor), recv_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    if (first_entry.send_neighbors->empty()) {
+      throw std::runtime_error(
+          "Under hierarchical neighbor_allreduce, argument "
+          "send_machine_neighbors should not be empty.");
     }
-    for (int send_rank : *first_entry.send_neighbors) {
-      NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                         GetNCCLDataType(first_entry.tensor), send_rank,
-                         nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+    if (mpi_ctx_.local_size_ < 2) {
+      throw std::runtime_error(
+        "Local size is smaller than 2, in this case, you should use "
+        "neighbor_allreduce instead of hierarchical_neighbor_allreduce."
+      );
     }
+
+    // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
+    // divided by local size at call back stage.
+    NCCLCHECK(ncclAllReduce(fused_input_data, (void*)fused_input_data,
+                            num_elements, GetNCCLDataType(first_entry.tensor),
+                            ncclSum, nccl_ctx_.nccl_local_comm,
+                            nccl_ctx_.stream));
+    // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
+    if (mpi_ctx_.local_rank_ == 0) {
+      // Use local rank 0 for receiving 
+      ncclGroupStart();
+      for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+        int recv_rank = first_entry.recv_neighbors->at(i);
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                           GetNCCLDataType(first_entry.tensor), recv_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      for (int send_rank : *first_entry.send_neighbors) {
+        NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                           GetNCCLDataType(first_entry.tensor), send_rank,
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      }
+      ncclGroupEnd();
+    } else {
+      // Do nothing
+    }
+    // Because the in-place modification, we need to copy fused_input_data back to tensor as well
+    MemcpyOutFusionBufferForInputs(fused_input_data, entries);
+    // 3. Broadcast recv data from local rank = 0 to other local ranks.
+    int recv_num_elements = num_elements * first_entry.recv_neighbors->size();
+    NCCLCHECK(ncclBroadcast(buffer_data, (void*)buffer_data, recv_num_elements,
+                            GetNCCLDataType(first_entry.output), 0,
+                            nccl_ctx_.nccl_local_comm, nccl_ctx_.stream));
   }
-  ncclGroupEnd();
+
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "COMM. (NCCL)");
   }
+
   // Remember buffer_data is already pointed at offset location (after self
   // tensor).
   int num_recv_neighbors = !first_entry.dynamic_neighbors_enabled
@@ -1702,6 +1809,22 @@ void NCCLController::MemcpyOutFusionBufferForNeighbors(
     void* buffer_data_at_offset = (uint8_t*)buffer_data + offset;
     MemcpyEntryOutFusionBufferForNeighbors(buffer_data_at_offset, e,
                                            num_recv_neighbors, fused_data_size);
+    offset += e.tensor->size();
+  }
+}
+
+void NCCLController::MemcpyOutFusionBufferForInputs(
+    const void* fused_input_data, std::vector<TensorTableEntry>& entries) {
+  // Copy the input data stored in the fusion buffer back to input, which is
+  // used in hierarchical neighbor allreduce since it has allreduce step to
+  // modified the input data.
+  int64_t offset = 0;
+  for (auto& e : entries) {
+    void* fused_input_data_at_offset = (uint8_t*)fused_input_data + offset;
+    void* dst_data = (void*)e.tensor->data();
+    size_t count = (size_t)e.tensor->size();
+    CUDACHECK(cudaMemcpyAsync(dst_data, fused_input_data_at_offset, count,
+                              cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
     offset += e.tensor->size();
   }
 }

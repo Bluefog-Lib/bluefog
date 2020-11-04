@@ -72,7 +72,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([DIM_SIZE] * dim)).fill_(1).mul_(rank)
@@ -233,7 +233,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(indegree)]  # in-neighbor
@@ -274,7 +274,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(indegree)]  # in-neighbor
@@ -328,7 +328,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(indegree)]  # in-neighbor
@@ -372,7 +372,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         # We use given destination to form a (right-)ring.
         avg_value = (rank*indegree + 1.23*((rank-1) %
@@ -413,7 +413,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(outdegree)]  # in-neighbor
@@ -449,7 +449,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         outdegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(outdegree)]  # in-neighbor
@@ -526,7 +526,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(indegree)]  # in-neighbor
@@ -561,7 +561,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(indegree)]  # in-neighbor
@@ -615,7 +615,7 @@ class WinOpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) %
                           size for i in range(indegree)]  # in-neighbor

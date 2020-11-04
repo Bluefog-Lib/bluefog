@@ -70,6 +70,9 @@ class Request {
   int32_t device() const;
   void set_device(int32_t value);
 
+  bool is_hierarchical() const;
+  void set_is_hierarchical(bool value);
+
   const std::vector<int64_t>& tensor_shape() const;
   void set_tensor_shape(const std::vector<int64_t>& value);
   void add_tensor_shape(int64_t value);
@@ -84,6 +87,7 @@ private:
   DataType tensor_type_ = DataType::BLUEFOG_UINT8;
   int32_t root_rank_ = 0;
   int32_t device_ = 0;
+  bool is_hierarchical_ = false;
   std::string tensor_name_;
   std::vector<int64_t> tensor_shape_;
 };

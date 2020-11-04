@@ -53,6 +53,12 @@ parser.add_argument('--batches-per-allreduce', type=int, default=1,
                          'total batch size.')
 parser.add_argument('--model', type=str, default='resnet18',
                     help='model to benchmark')
+parser.add_argument('--dataset', type=str, default='cifar10',
+                    help='The dataset to train with.')
+parser.add_argument('--train-dir', default=os.path.expanduser('~/imagenet/train'),
+                    help='path to training data')
+parser.add_argument('--val-dir', default=os.path.expanduser('~/imagenet/validation'),
+                    help='path to validation data')
 
 # Default settings from https://arxiv.org/abs/1706.02677.
 parser.add_argument('--batch-size', type=int, default=32,
@@ -74,19 +80,15 @@ parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
 )
 parser.add_argument("--seed", type=int, default=42, help="random seed")
-parser.add_argument('--dist-optimizer', type=str, default='win_put',
-                    help='The type of distributed optimizer. Supporting options are ' +
-                    '[win_put, neighbor_allreduce, allreduce, pull_get, push_sum, horovod]')
-parser.add_argument("--average-test-result", action="store_true",
-                    default=False,
-                    help=("Allreduce called to average test result. Warning this will " +
-                          "force the algorithm to sync every end of epoch."))
-parser.add_argument("--enable-dynamic-topology", action="store_true",
-                    default=False, help=("Enable each iteration to transmit one neighbor " +
-                                         "per iteration dynamically."))
-parser.add_argument('--virtual-topology', type=str, default="power2",
+parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
+                    help='The type of distributed optimizer. Supporting options are [win_put, ' +
+                    'neighbor_allreduce, allreduce, hierarchical_neighbor_allreduce, horovod]')
+parser.add_argument('--disable-dynamic-topology', action='store_true',
+                    default=False, help=('Disable each iteration to transmit one neighbor ' +
+                                         'per iteration dynamically.'))
+parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star].')
+                    '[expo2(Default), ring, mesh, star].')
 
 args = parser.parse_args()
 args.cuda = (not args.no_cuda) and (torch.cuda.is_available())
@@ -100,51 +102,31 @@ if args.dist_optimizer == 'horovod':
 bf.init()
 torch.manual_seed(args.seed)
 if args.dist_optimizer != 'horovod':
-    if args.virtual_topology == "power2":
+    if args.virtual_topology == "expo2":
         pass
     elif args.virtual_topology == "ring":
-        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
-    elif args.virtual_topology == "mesh":
-        bf.set_topology(topology_util.RingGraph(
-            bf.size(), connect_style=0), is_weighted=True)
-    elif args.virtual_topology == "star":
-        bf.set_topology(topology_util.StarGraph(bf.size()))
+        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
     elif args.virtual_topology == "InnerOuterRing":
-        assert bf.is_homogeneous, "InnerOuterRing topo should be used only homogeneous environment"
+        assert bf.is_homogeneous, "InnerOuterRing should be used under homogeneous environment"
         bf.set_topology(topology_util.InnerOuterRingGraph(
-            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
-    elif args.virtual_topology == "InnerOuterExp2":
-        assert bf.is_homogeneous, "InnerOuterExp2 topo should be used under homogeneous environment"
-        bf.set_topology(topology_util.InnerOuterExp2Graph(
-            bf.size(), local_size=bf.local_size() if args.local_size == -1 else args.local_size))
+            bf.size(), local_size=bf.local_size()))
+    elif args.virtual_topology == "InnerOuterExpo2":
+        assert bf.is_homogeneous, "InnerOuterExpo2 should be used under homogeneous environment"
+        bf.set_topology(topology_util.InnerOuterExpo2Graph(
+            bf.size(), local_size=bf.local_size()))
     else:
         raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[power2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExp2].")
+                         "[expo2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExpo2].")
 
 if args.cuda:
     print("using cuda.")
     # Bluefog: pin GPU to local rank.
-    torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
+    torch.cuda.set_device(bf.local_rank())
     torch.cuda.manual_seed(args.seed)
 else:
     print("using cpu")
 
 cudnn.benchmark = True
-
-# If set > 0, will resume training from a given checkpoint.
-resume_from_epoch = 0
-# for try_epoch in range(args.epochs, 0, -1):
-#     if os.path.exists(args.checkpoint_format.format(epoch=try_epoch)):
-#         resume_from_epoch = try_epoch
-#         break
-
-# Bluefog: broadcast resume_from_epoch from rank 0 (which will have
-# checkpoints) to other ranks.
-resume_from_epoch = bf.broadcast(
-    torch.tensor(resume_from_epoch),  # pylint: disable=not-callable
-    root_rank=0,
-    name="resume_from_epoch",
-).item()
 
 # Bluefog: print logs on the first worker.
 verbose = 1 if bf.rank() == 0 else 0
@@ -155,18 +137,30 @@ log_writer = tensorboardX.SummaryWriter(
 
 
 kwargs = {"num_workers": 4, "pin_memory": True} if args.cuda else {}
-train_dataset = datasets.CIFAR10(
-    os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
-    train=True,
-    download=True,
-    transform=transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                                 0.229, 0.224, 0.225]),
-        ]
-    ),
-)
+if args.dataset == "cifar10":
+    train_dataset = datasets.CIFAR10(
+        os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
+        train=True,
+        download=True,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ]
+        ),
+    )
+elif args.dataset == "imagenet":
+    train_dataset = datasets.ImageFolder(args.train_dir,
+                                         transform=transforms.Compose([
+                                             transforms.RandomResizedCrop(224),
+                                             transforms.RandomHorizontalFlip(),
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                  std=[0.229, 0.224, 0.225])
+                                         ]))
+else:
+    raise ValueError("Args dataset should be either cifar10 or imagenet")
 
 # Bluefog: use DistributedSampler to partition data among workers. Manually specify
 # `num_replicas=bf.size()` and `rank=bf.rank()`.
@@ -177,29 +171,40 @@ train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=allreduce_batch_size, sampler=train_sampler, **kwargs
 )
 
-val_dataset = datasets.CIFAR10(
-    os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
-    train=False,
-    transform=transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                                 0.229, 0.224, 0.225]),
-        ]
-    ),
-)
-if args.average_test_result:
-    val_sampler = torch.utils.data.distributed.DistributedSampler(
-        val_dataset, num_replicas=bf.size(), rank=bf.rank()
+if args.dataset == "cifar10":
+    val_dataset = datasets.CIFAR10(
+        os.path.join(cwd_folder_loc, "..", "data", "data-%d" % bf.rank()),
+        train=False,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ]
+        ),
     )
-else:
-    val_sampler = None
+elif args.dataset == "imagenet":
+    val_dataset = datasets.ImageFolder(args.val_dir,
+                                       transform=transforms.Compose([
+                                           transforms.Resize(256),
+                                           transforms.CenterCrop(224),
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                std=[0.229, 0.224, 0.225])
+                                       ]))
+
+val_sampler = torch.utils.data.distributed.DistributedSampler(
+    val_dataset, num_replicas=bf.size(), rank=bf.rank()
+)
 
 val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=args.val_batch_size, sampler=val_sampler, **kwargs
 )
 
-model = getattr(models, args.model)(num_classes=10)
+if args.dataset == "cifar10":
+    model = getattr(models, args.model)(num_classes=10)
+elif args.dataset == "imagenet":
+    model = getattr(models, args.model)(num_classes=1000)
 
 if args.cuda:
     # Move model to GPU.
@@ -216,7 +221,7 @@ optimizer = optim.SGD(
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
 if args.dist_optimizer == 'win_put':
-    optimizer = bf.DistributedBluefogOptimizer(optimizer, model=model)
+    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'neighbor_allreduce':
     optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
         optimizer, model=model)
@@ -226,28 +231,18 @@ elif args.dist_optimizer == 'allreduce':
 elif args.dist_optimizer == 'gradient_allreduce':
     optimizer = optimizer = bf.DistributedGradientAllreduceOptimizer(
         optimizer, model=model)
-elif args.dist_optimizer == 'push_sum':
-    optimizer = bf.DistributedPushSumOptimizer(optimizer, model=model)
+elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+    optimizer = optimizer = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
+        optimizer, model=model)
 elif args.dist_optimizer == 'horovod':
     optimizer = optimizer = bf.DistributedOptimizer(
         optimizer, named_parameters=model.named_parameters()
     )
-elif args.dist_optimizer == 'pull_get':
-    optimizer = bf.DistributedPullGetOptimizer(optimizer, model=model)
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
                      '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
-                     'win_put, push_sum, horovod]')
-
-print("resume_from_epoch: ", resume_from_epoch)
-# Restore from a previous checkpoint, if initial_epoch is specified.
-# Bluefog: restore on the first worker which will broadcast weights to other workers.
-# if resume_from_epoch > 0 and bf.rank() == 0:
-#     filepath = args.checkpoint_format.format(epoch=resume_from_epoch)
-#     checkpoint = torch.load(filepath)
-#     model.load_state_dict(checkpoint["model"])
-#     optimizer.load_state_dict(checkpoint["optimizer"])
+                     'win_put, horovod]')
 
 # Bluefog: broadcast parameters & optimizer state.
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
@@ -264,7 +259,7 @@ def train(epoch):
               disable=not verbose,) as t:
         for batch_idx, (data, target) in enumerate(train_loader):
             adjust_learning_rate(epoch, batch_idx)
-            if args.enable_dynamic_topology:
+            if not args.disable_dynamic_topology:
                 dynamic_topology_update(epoch, batch_idx)
 
             if args.cuda:
@@ -345,17 +340,25 @@ def adjust_learning_rate(epoch, batch_idx):
             args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj
         )
 
-if args.enable_dynamic_topology and args.dist_optimizer != 'horovod':
+if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
     if args.virtual_topology == 'InnerOuterRing':
         dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
             bf.size(),
-            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            local_size=bf.local_size(),
             self_rank=bf.rank())
-    elif args.virtual_topology == 'InnerOuterExp2':
-        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+    elif args.virtual_topology == 'InnerOuterExpo2':
+        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
             bf.size(),
-            local_size=bf.local_size() if args.local_size == -1 else args.local_size,
+            local_size=bf.local_size(),
             self_rank=bf.rank())
+    elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+        # This optimizer can use following dynamic topo only so far.
+        dynamic_machine_neighbor_allreduce_gen = topology_util.GetExp2DynamicSendRecvMachineRanks(
+            world_size=bf.size(),
+            local_size=bf.local_size(),
+            self_rank=bf.rank(),
+            local_rank=bf.local_rank()
+        )
     else:
         dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
             bf.load_topology(), bf.rank())
@@ -367,24 +370,17 @@ def dynamic_topology_update(epoch, batch_idx):
         num_out_neighbors = len(bf.out_neighbor_ranks())
         sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
         optimizer.dst_weights = {sent_neighbor: 1.0}
-    elif args.dist_optimizer == 'pull_get':
-        if epoch < 3:
-            return
-        num_in_neighbors = len(bf.in_neighbor_ranks())
-        recv_neighbor = bf.in_neighbor_ranks()[batch_idx % num_in_neighbors]
-        optimizer.src_weights = {recv_neighbor: 1.0}
-    elif args.dist_optimizer == 'push_sum':
-        if epoch < 3:
-            return
-        num_out_neighbors = len(bf.out_neighbor_ranks())
-        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
-        optimizer.dst_weights = {sent_neighbor: 0.5}
-        optimizer.self_weight = 0.5
     elif args.dist_optimizer == 'neighbor_allreduce':
         send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
         optimizer.send_neighbors = send_neighbors
         optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
+        optimizer.enable_topo_check = False
+    elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
+        send_machines, recv_machines = next(dynamic_machine_neighbor_allreduce_gen)
+        optimizer.send_neighbor_machines = send_machines
+        optimizer.neighbor_machine_weights = {r: 1/(len(recv_machines) + 1) for r in recv_machines}
+        optimizer.self_weight = 1 / (len(recv_machines) + 1)
         optimizer.enable_topo_check = False
     else:
         pass
@@ -402,8 +398,7 @@ def save_checkpoint(epoch):
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
             os.makedirs(dirpath)
-        state = {"model": model.state_dict(
-        ), "optimizer": optimizer.state_dict()}
+        state = {"model": model.state_dict(), "optimizer": optimizer.state_dict()}
         torch.save(state, filepath)
 
 
@@ -415,10 +410,7 @@ class Metric(object):
         self.n = torch.tensor(0.0)  # pylint: disable=not-callable
 
     def update(self, val):
-        if args.average_test_result:
-            self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
-        else:
-            self.sum += val.detach().cpu()
+        self.sum += bf.allreduce(val.detach().cpu(), name=self.name)
         self.n += 1
 
     @property
@@ -426,7 +418,7 @@ class Metric(object):
         return self.sum / self.n
 
 
-for epoch in range(resume_from_epoch, args.epochs):
+for epoch in range(args.epochs):
     train(epoch)
     validate(epoch)
     # save_checkpoint(epoch)

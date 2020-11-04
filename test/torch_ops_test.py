@@ -131,7 +131,7 @@ class OpsTests(unittest.TestCase):
             ), "bf.broadcast_ produces incorrect broadcasted tensor"
 
     def test_allreduce_avg(self):
-        """Test that the allreduce correctly sums 1D, 2D, 3D tensors."""
+        """Test that the allreduce correctly average 1D, 2D, 3D tensors."""
         size = bf.size()
         if size <= 1:
             fname = inspect.currentframe().f_code.co_name
@@ -168,7 +168,6 @@ class OpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
-            torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
             tensor = self.cast_and_place(tensor, dtype)
             name = "allreduce_tensor_{}_{}".format(dim, dtype)
@@ -178,6 +177,32 @@ class OpsTests(unittest.TestCase):
             assert (
                 torch.allclose(output, tensor.mul(size))
             ), "bf.allreduce(sum) produces incorrect tensor"
+
+    def test_allreduce_avg_inplace(self):
+        """Test that the allreduce correctly averages 1D, 2D, 3D tensors inplace."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.HalfTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            torch.manual_seed(123456)
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            name = "allreduce_tensor_{}_{}".format(dim, dtype)
+            tensor = self.cast_and_place(tensor, dtype)
+
+            bf.allreduce_(tensor, average=True, name=name)
+            tensor = self.convert_cpu_fp16_to_fp32(tensor)[0]
+            exp_tenosr = torch.ones_like(tensor).mul_((size-1)/2)
+            assert (
+                torch.allclose(tensor, exp_tenosr)
+            ), "bf.allreduce_(avg) produces incorrect tensor"
 
     def test_allreduce_fusion(self):
         """Test that the allreduce works under tensor fusion."""
@@ -212,6 +237,46 @@ class OpsTests(unittest.TestCase):
             ), "bf.allreduce(fusion) produces incorrect tensor 1"
             assert (
                 torch.allclose(tensor_2, output_2)
+            ), "bf.allreduce(fusion) produces incorrect tensor 2"
+
+    def test_allreduce_fusion_inplace(self):
+        """Test that the allreduce works under tensor fusion."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.DoubleTensor, torch.HalfTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            torch.manual_seed(123456)
+            tensor_1 = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor_2 = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank+0.5)
+            name_1 = "allreduce_fusion_tensor_{}_{}_1".format(dim, dtype)
+            name_2 = "allreduce_fusion_tensor_{}_{}_2".format(dim, dtype)
+            tensor_1 = self.cast_and_place(tensor_1, dtype)
+            tensor_2 = self.cast_and_place(tensor_2, dtype)
+
+            handle_1 = bf.allreduce_nonblocking_(
+                tensor_1, average=True, name=name_1)
+            handle_2 = bf.allreduce_nonblocking_(
+                tensor_2, average=True, name=name_2)
+
+            bf.synchronize(handle_1)
+            bf.synchronize(handle_2)
+            tensor_1 = self.convert_cpu_fp16_to_fp32(tensor_1)[0]
+            tensor_2 = self.convert_cpu_fp16_to_fp32(tensor_2)[0]
+            exp_tenosr_1 = torch.ones_like(tensor_1).mul_((size-1)/2)
+            exp_tenosr_2 = torch.ones_like(tensor_2).mul_((size-1)/2 + 0.5)
+            assert (
+                torch.allclose(tensor_1, exp_tenosr_1)
+            ), "bf.allreduce(fusion) produces incorrect tensor 1"
+            assert (
+                torch.allclose(tensor_2, exp_tenosr_2)
             ), "bf.allreduce(fusion) produces incorrect tensor 2"
 
     def test_allgather(self):
@@ -306,7 +371,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -339,7 +404,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -370,7 +435,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         self_weight = 0.0
         neighbor_weights = {(rank-1) % size : 1.0}
         send_ranks = [(rank + 2) % size]
@@ -431,7 +496,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         self_weight = 0.0
         neighbor_weights = {(rank-1) % size : 1.0}
         send_ranks = [(rank + 1) % size]
@@ -506,7 +571,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -545,7 +610,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -738,7 +803,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -806,7 +871,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -857,7 +922,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -903,7 +968,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
         sum_value = np.sum(neighbor_ranks) + rank
@@ -964,7 +1029,7 @@ class OpsTests(unittest.TestCase):
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
-        # By default, we use power two ring topology.
+        # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
         neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
 
@@ -994,6 +1059,7 @@ class OpsTests(unittest.TestCase):
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
 
+    @unittest.skip("Need re-design of API.")
     def test_pair_gossip(self):
         size = bf.size()
         rank = bf.rank()
@@ -1013,7 +1079,7 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gossiped_tensor = bf.pair_gossip(tensor, target_rank)
+            # gossiped_tensor = bf.pair_gossip(tensor, target_rank)
             tensor, gossiped_tensor = self.convert_cpu_fp16_to_fp32(tensor, gossiped_tensor)
 
             assert (
@@ -1025,6 +1091,7 @@ class OpsTests(unittest.TestCase):
 
         bf.set_skip_negotiate_stage(False)
 
+    @unittest.skip("Need re-design of API.")
     def test_pair_gossip_weighted(self):
         size = bf.size()
         rank = bf.rank()
@@ -1045,8 +1112,8 @@ class OpsTests(unittest.TestCase):
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gossiped_tensor = bf.pair_gossip(
-                tensor, target_rank, self_weight=0.25, pair_weight=0.75)
+            # gossiped_tensor = bf.pair_gossip(
+            #    tensor, target_rank, self_weight=0.25, pair_weight=0.75)
             tensor, gossiped_tensor = self.convert_cpu_fp16_to_fp32(tensor, gossiped_tensor)
             assert (
                 list(gossiped_tensor.shape) == [23] * dim

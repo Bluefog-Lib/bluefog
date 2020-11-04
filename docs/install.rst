@@ -33,13 +33,19 @@ After you think the environment is all set, just run following command to instal
 Installing Bluefog from Pip (GPU)
 ---------------------------------
 All steps for GPU case are the same as CPU case except for the OpenMPI installation.
-In order to get full support of GPU, you have to install `CUDA>=10.0` 
-and install pytorch and/or tensorflow with the GPU support version. 
-To maximize the efficiency of GPU and MPI, our implementation assumes the 
-MPI installed is GPU-aware if GPU is available. It will avoid the extra cost 
-that copy and moving the data from the GPU and host memory, i.e. the address of 
-GPU location can be used directly. However, if MPI built is not GPU-aware, 
-there will be a segmentation fault. To do that, you can configure the open install setting
+In order to get full support of GPU, you have to install `CUDA>=10.1` 
+and install pytorch with the GPU support version. 
+It is highly recommended to use NCCL instead of OpenMPI as GPU
+communication implementation. We require the ``NCCL>=2.7`` since our implementation heavily
+relied on the new `ncclSend` and `ncclRecv` API introduced after version 2.7.
+To install Bluefog with NCCL implementation, you need to run
+
+.. code-block:: bash
+
+    BLUEFOG_WITH_NCCL=1 pip install --no-cache-dir bluefog
+
+You can also install the GPU-aware OpenMPI as GPU communication implementation.
+To do that, you can configure the open install setting
 after the download of OpenMPI:
 
 .. code-block:: bash
@@ -48,16 +54,15 @@ after the download of OpenMPI:
     make -j $(nproc) all && \
     make install
 
-If you have NCCL installed in your system, it is also recommend to use NCCL instead of OpenMPI as
-communication implementation. To install Bluefog with NCCL implementation, you need to run
-
-.. code-block:: bash
-
-    BLUEFOG_WITH_NCCL=1 pip install --no-cache-dir bluefog
-
 
 Installing Bluefog from Github Directly
 ---------------------------------------
+
+.. important:: 
+
+    The lastest functionality may not be able avaiable through ``pip install bluefog``.
+    Installing from Github is better during our early development stage.
+
 First, please check your environment as mentioned in above subsections. Then,
 clone or download the bluefog repository from `Github`_. Last, just run the
 following command under the root folder of bluefog repository:

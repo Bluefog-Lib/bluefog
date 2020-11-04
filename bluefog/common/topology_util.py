@@ -63,18 +63,18 @@ def GetSendWeights(topo: nx.DiGraph, rank: int) -> Tuple[float, Dict[int, float]
     return self_weight, neighbor_weights
 
 
-def PowerTwoRingGraph(size: int) -> nx.DiGraph:
+def ExponentialTwoGraph(size: int) -> nx.DiGraph:
     """Generate graph topology such that each points only
-    connected to a point such that the index difference is power of 2.
+    connected to a point such that the index difference is the power of 2.
 
-    Example: A PowerTwoRingGraph with 12 nodes:
+    Example: A ExponentialTwoGraph with 12 nodes:
 
     .. plot::
         :context: close-figs
 
         >>> import networkx as nx
         >>> from bluefog.common import topology_util
-        >>> G = topology_util.PowerTwoRingGraph(12)
+        >>> G = topology_util.ExponentialTwoGraph(12)
         >>> nx.draw_circular(G)
     """
     assert size > 0
@@ -96,18 +96,18 @@ def isPowerOf(x, base):
     return False
 
 
-def PowerGraph(size: int, base: int = 2) -> nx.DiGraph:
+def ExponentialGraph(size: int, base: int = 2) -> nx.DiGraph:
     """Generate graph topology such that each points only
     connected to a point such that the index difference is power of base. (Default is 2)
 
-    Example: A PowerGraph with 12 nodes:
+    Example: A ExponentialGraph with 12 nodes:
 
     .. plot::
         :context: close-figs
 
         >>> import networkx as nx
         >>> from bluefog.common import topology_util
-        >>> G = topology_util.PowerGraph(12)
+        >>> G = topology_util.ExponentialGraph(12)
         >>> nx.draw_circular(G)
     """
     x = [1.0]
@@ -125,20 +125,20 @@ def PowerGraph(size: int, base: int = 2) -> nx.DiGraph:
     return G
 
 
-def SymmetricPowerGraph(size: int, base: int = 4) -> nx.DiGraph:
+def SymmetricExponentialGraph(size: int, base: int = 4) -> nx.DiGraph:
     """
      Generate symmeteric graph topology such that for the first half of nodes
      only connected to a point such that the index difference is power of base (Default is 4)
      and the connectivity for the second half of nodes just mirrored to the first half.
 
-    Example: A SymmetricPowerGraph with 12 nodes
+    Example: A SymmetricExponentialGraph with 12 nodes
 
     .. plot::
         :context: close-figs
 
         >>> import networkx as nx
         >>> from bluefog.common import topology_util
-        >>> G = topology_util.SymmetricPowerGraph(12)
+        >>> G = topology_util.SymmetricExponentialGraph(12)
         >>> nx.draw_circular(G)
     """
     x = [1.0]
@@ -344,8 +344,8 @@ def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
     return G
 
 
-def InnerOuterExp2Graph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate Inner Ring and Outer Exponential-2 Graph Static Graph for dynamic usage.
+def InnerOuterExpo2Graph(world_size: int, local_size: int) -> nx.DiGraph:
+    """Generate Inner Ring and Outer Exponential-2 Graph.
 
     Within one machine all inner rank/processes is fully-connected and all
     nodes with same local size across all machines forms exponential-2 graph.
@@ -358,7 +358,7 @@ def InnerOuterExp2Graph(world_size: int, local_size: int) -> nx.DiGraph:
 
         >>> import networkx as nx
         >>> from bluefog.common import topology_util
-        >>> G = topology_util.InnerOuterExp2Graph(12, 3)
+        >>> G = topology_util.InnerOuterExpo2Graph(12, 3)
         >>> nx.draw_circular(G)
     """
     # TODO(hhb) remove this statis topology requirement.
@@ -440,11 +440,51 @@ def GetDynamicSendRecvRanks(
         index += 1
 
 
+def GetExp2DynamicSendRecvMachineRanks(
+        world_size: int, local_size: int, self_rank: int, local_rank: int
+    ) -> Iterator[Tuple[List[int], List[int]]]:
+    """
+    A utility function to generate 1-outgoing send machine id and corresponding recieving
+    machine id(s) for Exponentia-2 topology.
+
+    Args:
+        world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
+        local_size (int): number of nodes in each machine
+        self_rank (int): The self rank.
+        local_rank (int): The self local rank.
+
+    Yields:
+        Iterator[Tuple[List[int], List[int]]]: send_machine_ids, recv_machine_ids.
+
+    Warning:
+        This function should be used under homogeneous enviroment only, i.e. all machines have
+        the same number of local processes.
+    """
+    assert (self_rank % local_size) == local_rank, \
+        "It should be used under homogeneous environment only."
+    assert (world_size % local_size) == 0, \
+        "It should be used under homogeneous environment only."
+    assert world_size > local_size, \
+        "It should be used under at least two machines case."
+
+    machine_id = self_rank // local_size
+    machine_size = world_size // local_size
+    exp_2_size = int(np.log2(machine_size-1)) if machine_size > 1 else 0
+    index = 0
+    while True:
+        machine_dist = 2**(index % (exp_2_size + 1))
+        send_machine_rank = (machine_id + machine_dist) % machine_size
+        recv_machine_ranks = (machine_id - machine_dist) % machine_size
+        yield [send_machine_rank], [recv_machine_ranks]
+        index += 1
+
+
 def GetInnerOuterRingDynamicSendRecvRanks(
         world_size: int, local_size: int, self_rank: int
     ) -> Iterator[Tuple[List[int], List[int]]]:
-    """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
-       for Inner-Ring-Outer-Ring topology
+    """
+    A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+    for Inner-Ring-Outer-Ring topology.
 
     Args:
         world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
@@ -510,11 +550,12 @@ def GetInnerOuterRingDynamicSendRecvRanks(
         index += 1
 
 
-def GetInnerOuterExp2DynamicSendRecvRanks(
+def GetInnerOuterExpo2DynamicSendRecvRanks(
         world_size: int, local_size: int, self_rank: int
     ) -> Iterator[Tuple[List[int], List[int]]]:
-    """A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
-       for Inner-Exp2-Outer-Exp2 ring topology
+    """
+    A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+    for Inner-Exp2-Outer-Exp2 ring topology.
 
     Args:
         world_size (int): the size of all nodes; world_size = num_machines * nodes_per_machine
@@ -528,7 +569,7 @@ def GetInnerOuterExp2DynamicSendRecvRanks(
 
         >>> from bluefog.common import topology_util
         >>> world_size, local_size = bf.size(), bf.local_size()
-        >>> gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(world_size, local_size, 0)
+        >>> gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(world_size, local_size, 0)
         >>> for _ in range(10):
         >>>     print(next(gen))
     """

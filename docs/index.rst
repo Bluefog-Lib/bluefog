@@ -44,7 +44,7 @@ the :ref:`install_bluefog` page if you need more information or other install op
 We provide high-level wrapper for torch optimizer. 
 Probably, the only thing you need to modify
 the existing script to distributed implementation is wrapping the optimizer
-with our ``DistributedBluefogOptimizer``,
+with our ``DistributedNeighborAllreduceOptimizer``,
 then run it through ``bfrun``. That is it!
 
 .. code-block:: python
@@ -57,7 +57,7 @@ then run it through ``bfrun``. That is it!
    ...
    bf.init()
    optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
-   optimizer = bf.DistributedBluefogOptimizer(
+   optimizer = bf.DistributedNeighborAllreduceOptimizer(
       optimizer, model
    )
    ...
@@ -137,11 +137,11 @@ algorithm, please read our :ref:`Ops Explanation` page.
    :caption: More Information
 
    Bluefog Ops Explanation <bluefog_ops>
+   Bluefog Performance <performance>
+   Static and Dynamic Topology Neighbor Averaging <neighbor_average>
    Lauching Application Through bfrun <running>
    Bluefog Docker Usage <docker>
    Bluefog Environment Variable <env_variable>
-   Bluefog Perform Comparison <performance>
-   Bluefog Rationale <rationale>
    Bluefog Timeline <timeline>
    Spectrum of Machine Learning Algorithm<alg_spectrum>
    Codebase Structure <code_structure>

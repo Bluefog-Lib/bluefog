@@ -67,6 +67,9 @@ table Request {
 
     // We use a repeated integer to represent the tensor shape.
     tensor_shape:[long];
+
+    // Indicates it is hierarchical operation or not.
+    is_hierarchical: bool;
 }
 table RequestList {
     requests:[Request];

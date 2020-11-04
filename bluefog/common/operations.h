@@ -112,6 +112,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
                               std::shared_ptr<OpContext> context,
                               std::shared_ptr<ReadyEvent> ready_event,
+                              bool is_hierarchical_local,
                               const std::string& name, const int device,
                               StatusCallback callback);
 
@@ -140,6 +141,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
                                       bool dynamic_neighbors_enabled,
+                                      bool is_hierarchical,
                                       bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback);

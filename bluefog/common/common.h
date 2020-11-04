@@ -281,6 +281,9 @@ struct TensorTableEntry {
   // Boolean value for enabling topology check.
   bool enable_topo_check = false;
 
+  // Boolean value for hierarchical operation or not.
+  bool is_hierarchical = false;
+
   // The ops requires the mutex.
   bool require_mutex = false;
 

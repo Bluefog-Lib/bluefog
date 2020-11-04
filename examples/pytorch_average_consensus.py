@@ -27,9 +27,9 @@ parser.add_argument('--max-iters', type=int, default=200,
                     help='maximum iterations')
 parser.add_argument('--local-size', type=int, default=4,
                     help='number of nodes per machine')
-parser.add_argument('--virtual-topology', type=str, default="power2",
+parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star, InnerOuterRing].')
+                    '[expo2(Default), ring, mesh, star, InnerOuterRing].')
 parser.add_argument('--asynchronous-mode', action='store_true', default=False,
                     help='Use one-sided ops to run asynchronous push sum algorithm')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -58,12 +58,12 @@ if args.cuda:
 else:
     x = torch.randn(args.data_size, dtype=torch.double)
 
-if args.virtual_topology == "power2":
+if args.virtual_topology == "expo2":
     pass
-elif args.virtual_topology == "power3":
-    bf.set_topology(topology_util.PowerGraph(bf.size(), base=3))
-elif args.virtual_topology == "power4":
-    bf.set_topology(topology_util.PowerGraph(bf.size(), base=4))
+elif args.virtual_topology == "expo3":
+    bf.set_topology(topology_util.ExponentialGraph(bf.size(), base=3))
+elif args.virtual_topology == "expo4":
+    bf.set_topology(topology_util.ExponentialGraph(bf.size(), base=4))
 elif args.virtual_topology == "ring":
     bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
 elif args.virtual_topology == "mesh":
@@ -77,7 +77,7 @@ elif args.virtual_topology == "full":
     bf.set_topology(topology_util.FullyConnectedGraph(bf.size()))
 else:
     raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                     "[power2(Default), ring, mesh, star].")
+                     "[expo2(Default), ring, mesh, star].")
 
 x_bar = bf.allreduce(x, average=True)
 mse = [torch.norm(x-x_bar, p=2) / torch.norm(x_bar, p=2)]

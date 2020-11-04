@@ -26,6 +26,15 @@ You can also hide the time in logs by setting:
 Performance
 -----------
 
+Our implementation is based upon the architecture of Horovod. Hence, we also have the tensor fusion functionality, which
+batches small allreduce/neighbor_allreduce operations into one to improve the performance. Cycle time is anthor tuning parameter 
+to determine within the certain period of time, the ready tensor will be fused into one if it doesnot exceed the threshold of fusion.
+
+* BLUEFOG_FUSION_THRESHOLD
+* BLUEFOG_CYCLE_TIME
+
+The fusion threshold is based on the Byte size and cycle time is based on the milliseconds.
+
 **Timeline**:
 
 You can set `BLUEFOG_TIMELINE` with some filename to turn on the timeline. See our timeline document for more details.
@@ -78,7 +87,7 @@ define this number as the maximum size of win_ops can send.
 When the NCCL implementation is used, the callback functions are executed through
 a thread pool. The size of thread pool can be controlled by following:
 
-* BLUEFOG_NUM_FINALIZER_THREADS (Default: 50)
+* BLUEFOG_NUM_FINALIZER_THREADS (Default: 1)
 
 Installation
 ------------

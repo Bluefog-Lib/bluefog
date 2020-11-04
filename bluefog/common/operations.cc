@@ -163,6 +163,25 @@ bool CheckRequestRootRank(const std::vector<Request>& requests,
   return error;
 }
 
+bool CheckRequestIsHierarchical(const std::vector<Request>& requests,
+                                std::ostringstream& error_message_stream) {
+  auto message_type = requests[0].request_type();
+  bool error = false;
+  bool first_is_hierarchical = requests[0].is_hierarchical();
+  for (unsigned int i = 1; i < requests.size(); i++) {
+    bool this_is_hierarchical = requests[i].is_hierarchical();
+    if (first_is_hierarchical != this_is_hierarchical) {
+      error = true;
+      error_message_stream
+          << "Mismatched " << Request::RequestType_Name(message_type)
+          << " is_hierarchical ops. Some ranks specified for hierarchical ops "
+          << " but some ranks are not.";
+      break;
+    }
+  }
+  return error;
+}
+
 bool CheckRequestTensorShape(const std::vector<Request>& requests,
                              std::ostringstream& error_message_stream) {
   bool error = false;
@@ -293,6 +312,14 @@ Response ConstructResponse(MessageTable* message_table, std::string name) {
   if (!error) {
     if (message_type == Request::BROADCAST) {
       error = CheckRequestRootRank(requests, error_message_stream);
+    }
+  }
+
+  // If we are doing allreduce, make sure all are Hierarchical or are all not.
+  if (!error) {
+    if (message_type == Request::ALLREDUCE ||
+        message_type == Request::NEIGHBOR_ALLREDUCE) {
+      error = CheckRequestIsHierarchical(requests, error_message_stream);
     }
   }
 
@@ -901,6 +928,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
         if (response.response_type() == new_response.response_type() &&
             response.devices() == new_response.devices() &&
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
+            entry.is_hierarchical == new_entry.is_hierarchical &&
             tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
           // These tensors will fuse together well.
           tensor_size += new_tensor_size;
@@ -955,6 +983,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
             response.devices() == new_response.devices() &&
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
             entry.dynamic_neighbors_enabled == new_entry.dynamic_neighbors_enabled &&
+            entry.is_hierarchical == new_entry.is_hierarchical &&
             IsSameNeighborList(entry.send_neighbors,
                                new_entry.send_neighbors) &&
             IsSameNeighborList(entry.recv_neighbors,
@@ -1356,6 +1385,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
                               std::shared_ptr<Tensor> output,
                               std::shared_ptr<OpContext> context,
                               std::shared_ptr<ReadyEvent> ready_event,
+                              bool is_hierarchical_local,
                               const std::string& name, const int device,
                               StatusCallback callback) {
   Request message;
@@ -1363,6 +1393,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   message.set_tensor_name(name);
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
+  message.set_is_hierarchical(is_hierarchical_local);
   message.set_request_type(Request::ALLREDUCE);
   for (int i = 0; i < tensor->shape().dims(); i++) {
     message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
@@ -1374,6 +1405,7 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   e.output = output;
   e.device = device;
   e.ready_event = ready_event;
+  e.is_hierarchical = is_hierarchical_local;
   e.context = context;
   e.callback = callback;
   e.mpi_ops_type = MPIOpsType::ALLREDUCE;
@@ -1486,6 +1518,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
                                       bool dynamic_neighbors_enabled,
+                                      bool is_hierarchical,
                                       bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback) {
@@ -1495,6 +1528,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::NEIGHBOR_ALLREDUCE);
+  message.set_is_hierarchical(is_hierarchical);
   for (int i = 0; i < tensor->shape().dims(); i++) {
     message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
   }
@@ -1508,6 +1542,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   e.recv_neighbors = recv_neighbors;
   e.send_neighbors = send_neighbors;
   e.dynamic_neighbors_enabled = dynamic_neighbors_enabled;
+  e.is_hierarchical = is_hierarchical;
   e.enable_topo_check = enable_topo_check;
   e.device = device;
   e.callback = callback;
