@@ -275,8 +275,8 @@ struct TensorTableEntry {
   std::shared_ptr<std::vector<int>> send_neighbors;
   std::shared_ptr<std::vector<int>> recv_neighbors;
 
-  // Boolean value if send_neighbors is enabled.
-  bool send_neighbors_enabled = false;
+  // Boolean value if dynamic neighbor is enabled.
+  bool dynamic_neighbors_enabled = false;
 
   // Boolean value for enabling topology check.
   bool enable_topo_check = false;

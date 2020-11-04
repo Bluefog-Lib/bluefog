@@ -368,14 +368,14 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if send_neighbors is None:
         send_neighbors = []
-        send_neighbors_enabled = False
+        dynamic_neighbors_enabled = False
     elif len(set(send_neighbors)) != len(send_neighbors):
         raise ValueError("Argument send_neighbors should only contain the unique ranks.")
     elif self_weight is None or neighbor_weights is None:
         raise ValueError("Arguments self_weight and neighbor_weights should be presented if"
                          "enabling dynamic topology.")
     else:
-        send_neighbors_enabled = True
+        dynamic_neighbors_enabled = True
     if self_weight is None and neighbor_weights is None:
         # Implying this is static graph.
         if is_topo_weighted():
@@ -394,7 +394,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         if not isinstance(self_weight, float):
             raise ValueError(
                 "Argument self_weight has to be a float for self rank.")
-        if not send_neighbors_enabled and \
+        if not dynamic_neighbors_enabled and \
            not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
@@ -411,7 +411,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
                          "the same time")
 
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        send_neighbors, send_neighbors_enabled,
+                                        send_neighbors, dynamic_neighbors_enabled,
                                         enable_topo_check, avg_computation,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)

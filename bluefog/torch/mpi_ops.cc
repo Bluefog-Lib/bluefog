@@ -305,7 +305,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                         double self_weight, const std::unordered_map<int, double>& neighbor_weights,
-                        const std::vector<int>& send_neighbors, bool send_neighbors_enabled,
+                        const std::vector<int>& send_neighbors, bool dynamic_neighbors_enabled,
                         bool enable_topo_check, bool avg_computation, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
@@ -340,13 +340,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllreduce(            
         bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        send_neighbors_enabled, enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([
+        dynamic_neighbors_enabled, enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([
         self_weight, neighbor_weights, avg_computation, cpu_output, tensor, recv_neighbors,
-        send_neighbors, send_neighbors_enabled, output, device] () mutable {
+        send_neighbors, dynamic_neighbors_enabled, output, device] () mutable {
           with_device device_guard(device);
           output.copy_(cpu_output);
           int recv_size = bluefog_neighbor_size();
-          if (send_neighbors_enabled) recv_size = recv_neighbors.size();
+          if (dynamic_neighbors_enabled) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
             ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
             ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
@@ -377,11 +377,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                                     destinations_ptr);
 
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              if (send_neighbors_enabled) indgree = recv_neighbors.size();
+              if (dynamic_neighbors_enabled) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
                 int recv_rank;
-                if (!send_neighbors_enabled) recv_rank = *(sources_ptr+i);
+                if (!dynamic_neighbors_enabled) recv_rank = *(sources_ptr+i);
                 else recv_rank = recv_neighbors[i];
                 auto it = neighbor_weights.find(recv_rank);
                 if (it != neighbor_weights.end()) {
@@ -399,7 +399,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
-              int neighbor_size = !send_neighbors_enabled
+              int neighbor_size = !dynamic_neighbors_enabled
                                   ? bluefog_neighbor_size()
                                   : recv_neighbors.size();
               if (neighbor_size > 1) {
@@ -430,11 +430,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        send_neighbors_enabled, enable_topo_check, op_name, device, callback_wrapper([self_weight,
-        neighbor_weights, avg_computation, recv_neighbors, send_neighbors, send_neighbors_enabled,
-        tensor, output] () mutable {
+        dynamic_neighbors_enabled, enable_topo_check, op_name, device, callback_wrapper([
+        self_weight, neighbor_weights, avg_computation, recv_neighbors, send_neighbors,
+        dynamic_neighbors_enabled, tensor, output] () mutable {
           int recv_size = bluefog_neighbor_size();
-          if (send_neighbors_enabled) recv_size = recv_neighbors.size();
+          if (dynamic_neighbors_enabled) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
             ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
             ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
@@ -454,11 +454,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               bluefog_load_topology(&indgree, sources_ptr, &outdegree,
                                     destinations_ptr);
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              if (send_neighbors_enabled) indgree = recv_neighbors.size();
+              if (dynamic_neighbors_enabled) indgree = recv_neighbors.size();
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
                 int recv_rank;
-                if (!send_neighbors_enabled) recv_rank = *(sources_ptr+i);
+                if (!dynamic_neighbors_enabled) recv_rank = *(sources_ptr+i);
                 else recv_rank = recv_neighbors[i];
                 auto it = neighbor_weights.find(recv_rank);
                 if (it != neighbor_weights.end()) {
@@ -476,7 +476,7 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
             } else {
-              int neighbor_size = !send_neighbors_enabled
+              int neighbor_size = !dynamic_neighbors_enabled
                                   ? bluefog_neighbor_size()
                                   : recv_neighbors.size();
               if (neighbor_size > 1) {

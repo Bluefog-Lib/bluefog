@@ -114,7 +114,7 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
   extern "C" int bluefog_torch_neighbor_allreduce_nonblocking_##torch_Tensor(    \
       THTensor* tensor, THTensor* output, double self_weight,                    \
       const std::unordered_map<int, double>& neighbor_weights,                   \
-      const std::vector<int>& send_neighbors, bool send_neighbors_enabled,       \
+      const std::vector<int>& send_neighbors, bool dynamic_neighbors_enabled,    \
       bool enable_topo_check, bool avg_computation, char* name);
 
 NEIGHBOR_ALLREDUCE_H(torch_HalfTensor, THHalfTensor)

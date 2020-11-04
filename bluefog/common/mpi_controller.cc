@@ -294,7 +294,7 @@ bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
   bool res = false;
   // enabled the check if enable_topo_check is true and partial
   // neighbor_allreduce is activated.
-  if (entry.enable_topo_check && entry.send_neighbors_enabled) {
+  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
     timeline_ptr->ActivityStart(entry.tensor_name, "NEGOTIATION");
     // Put all the send and recv neighbors in a single vector, and obtain a send
     // matrix and a recv matrix through MPI_Allgather.
@@ -392,7 +392,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // is no need to transfer the local info again. However, for computation view,
   // including itself is more intuitive.
   std::string error_message = "";
-  if (!entry.send_neighbors_enabled) {
+  if (!entry.dynamic_neighbors_enabled) {
     int ret_code = MPI_Neighbor_allgather(
         sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
         num_elements, mpi_ctx_.GetMPIDataType(entry.output),
@@ -529,7 +529,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // is no need to transfer the local info again. However, for computation view,
   // including itself is more intuitive.
   std::string error_message = "";
-  if (!first_entry.send_neighbors_enabled) {
+  if (!first_entry.dynamic_neighbors_enabled) {
     int ret_code = MPI_Neighbor_allgather(
         fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
         buffer_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.output),
@@ -579,7 +579,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
 
   // Remember buffer_data is already pointed at offset location (after self tensor).
   timeline_ptr->ActivityStartAll(entries, "MEMCPY_OUT_FUSION_BUFFER");
-  int num_recv_neighbors = !first_entry.send_neighbors_enabled
+  int num_recv_neighbors = !first_entry.dynamic_neighbors_enabled
                            ? mpi_ctx_.neighbor_indgree_
                            : first_entry.recv_neighbors->size();
   MemcpyOutFusionBufferForNeighbors(
