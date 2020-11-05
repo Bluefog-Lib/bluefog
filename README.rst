@@ -1,4 +1,4 @@
-Bluefog
+BlueFog
 =======
 
 .. image:: https://travis-ci.com/Bluefog-Lib/bluefog.svg?branch=master
@@ -14,25 +14,23 @@ Bluefog
 .. raw:: html
 
     <p align="center"><img src="https://user-images.githubusercontent.com/65107588/82258821-62d66b80-990f-11ea-9393-bf5456af67e6.png" alt="Logo" width="450"/></p>
+    
+BlueFog is a high-performance distributed training framework for PyTorch built with decentralized optimization algorithms. The goal of Bluefog is to make decentralized machine learning easy to use, fault-tolerant, friendly to heterogeneous environment, and even faster than training frameworks built with parameter server, or ring-allreduce.
 
 Performance
 -----------
-Below is the charts representing the performance of BlueFog that was done on ResNet50 benchmark. Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and inter-connected communication speed is 25Gbps. This is the same hardware setup you can get on AWS_. We test the scaling efficiency with a batch size of 64, representing computation  intensive scenario, and a batch size of 32 for communication intensive scenario.
+Below are the charts representing the performance of BlueFog that was done on ResNet50 benchmark. Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and the inter-connected communication speed is 25Gbps. This is the same hardware setup you can get on AWS_. We test the scaling efficiency with a batch size of 64 for a computationally intensive scenario, and a batch size of 32 for a communicationally intensive scenario.
 
 .. raw:: html
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97819514-cf46ec00-1c5d-11eb-933e-459783d974a6.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97819502-c6eeb100-1c5d-11eb-9930-065cdd48818d.png" alt="Benchmark 2" width="400"/></p>
 
-where the black box represents the idea of linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under a batch size of 64. For more communication intensive case with a batch size of 32, the scaling efficiency between Bluefog and Horovod becomes even larger. To 
+In the figures, the black box represents the ideal linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod reaches around 78% sacling efficiency with batch size 64. For the communicationally intensive scenario with batch size 32, the scaling efficiency gap between Bluefog and Horovod becomes even larger. To 
 understand more details about the BlueFog benchmark, checkout our performance page.
 
 Overview
 --------
-
-Bluefog is a distributed training framework for PyTorch based
-on diffusion/consensus-type algorithms.
-The goal of Bluefog is to make distributed and decentralized machine learning fast,
-fault-tolerant, friendly to heterogeneous environment, and easy to use.
+BlueFog is built with **decentralized optimization** algorithms. In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual (and probably dynamic) network topology (that can be in any shape) to achieve most communication efficiency. 
 
 The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
 DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
