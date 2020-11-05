@@ -43,14 +43,14 @@ Decentralized training algorithms are proved in literature to converge to the sa
 
 The topology decides the communication efficiency. BlueFog supports both **static** topology and **dynamic** topology usages. After tremendous trials, the dynamic Exponential-2 graph is observed to achieve the best performance
 if the number of agents is the power of 2, such as 4, 32, 128 agents. In Exponential-2 graph, each agent will 
-communicates with the neighbors that are  2<sup>0</sup>, 2<sup>1</sup>, ..., 2<sup>t</sup> hops away. **Dynamic** toplogy means all processes select
+communicates with the neighbors that are  2<sup>0</sup>, 2<sup>1</sup>, ..., 2<sup>t</sup> hops away. **Dynamic** toplogy means all agents select
 one neighbor only in one iteration and select next neighbor in next iteration as illustrated in the following figure:
 
 .. raw:: html
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97928035-04654400-1d1b-11eb-91d2-2da890b4522e.png" alt="one-peer-exp2" width="650"/></p>
 
-In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what ring-allreduce promises. As for loss and accuracy guarantee, please check out our theoratical paper.
+In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what parameter server or ring-allreduce promises. As for loss and accuracy guarantees, please check out our theoratical paper.
 
 Quick Start
 -----------
