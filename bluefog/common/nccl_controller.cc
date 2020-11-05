@@ -674,7 +674,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 #if NCCL_MINOR > 6
   if (!entry.is_hierarchical) {
     ncclGroupStart();
-    if (entry.send_neighbors->empty()) {
+    if (!entry.dynamic_neighbors_enabled) {
       for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
         int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
         void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
@@ -768,7 +768,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   uint send_rank_index = 0;
   int send_rank, recv_rank;
   int num_recv_size, num_send_size;
-  if (entry.send_neighbors->empty()) {
+  if (!entry.dynamic_neighbors_enabled) {
     num_recv_size = mpi_ctx_.neighbor_in_ranks_.size();
     num_send_size = mpi_ctx_.neighbor_out_ranks_.size();
   } else {
@@ -777,7 +777,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   }
   for (const auto& pair : nccl_ctx_.pair_order) {
     int peer_rank = mpi_ctx_.rank_ == pair.first ? pair.second : pair.first;
-    if (entry.send_neighbors->empty()) {
+    if (!entry.dynamic_neighbors_enabled) {
       send_rank = mpi_ctx_.neighbor_out_ranks_[send_rank_index];
       recv_rank = mpi_ctx_.neighbor_in_ranks_[recv_rank_index];
     } else {
@@ -936,7 +936,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
 
   if (!first_entry.is_hierarchical) {
     ncclGroupStart();
-    if (first_entry.send_neighbors->empty()) {
+    if (!first_entry.dynamic_neighbors_enabled) {
       for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
         int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
         void* recvbuf =
@@ -1021,7 +1021,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
 
   // Remember buffer_data is already pointed at offset location (after self
   // tensor).
-  int num_recv_neighbors = first_entry.send_neighbors->empty()
+  int num_recv_neighbors = !first_entry.dynamic_neighbors_enabled
                                ? mpi_ctx_.neighbor_indgree_
                                : first_entry.recv_neighbors->size();
   int64_t fused_data_size = num_elements * element_size;
