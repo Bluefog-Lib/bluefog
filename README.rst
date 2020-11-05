@@ -30,7 +30,7 @@ understand more details about the BlueFog benchmark, checkout our performance pa
 
 Overview
 --------
-BlueFog is built with **decentralized optimization** algorithms. In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual (and probably dynamic) network topology (that can be in any shape) to achieve most communication efficiency. 
+BlueFog is built with **decentralized optimization** algorithms. In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual (and probably dynamic) network topology (that can be in any shape) to achieve most communication efficiency. Another [To be continued]
 
 The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
 DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
