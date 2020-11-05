@@ -919,7 +919,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     return;
   }
 
-#if NCCL_MINOR > 6
+#if NCCL_MINOR > 6             
   MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
 
   const void* fused_input_data = buffer_data;
@@ -1025,8 +1025,10 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                                ? mpi_ctx_.neighbor_indgree_
                                : first_entry.recv_neighbors->size();
   int64_t fused_data_size = num_elements * element_size;
-  MemcpyOutFusionBufferForNeighbors(buffer_data, entries, num_recv_neighbors,
-                                    fused_data_size);
+  if (num_recv_neighbors > 0) {
+    MemcpyOutFusionBufferForNeighbors(buffer_data, entries, num_recv_neighbors,
+                                      fused_data_size);
+  }
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "MEM_CPY_OUT");
   }
