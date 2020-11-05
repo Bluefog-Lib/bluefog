@@ -86,9 +86,6 @@ parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
-parser.add_argument('--virtual-topology', type=str, default="expo2",
-                    help='The underlying virtual topology. Supporting options are ' +
-                    '[expo2(Default), ring, mesh, star].')
 
 args = parser.parse_args()
 args.cuda = (not args.no_cuda) and (torch.cuda.is_available())
@@ -101,22 +98,6 @@ if args.dist_optimizer == 'horovod':
 # Bluefog: initialize library.
 bf.init()
 torch.manual_seed(args.seed)
-if args.dist_optimizer != 'horovod':
-    if args.virtual_topology == "expo2":
-        pass
-    elif args.virtual_topology == "ring":
-        bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=1))
-    elif args.virtual_topology == "InnerOuterRing":
-        assert bf.is_homogeneous, "InnerOuterRing should be used under homogeneous environment"
-        bf.set_topology(topology_util.InnerOuterRingGraph(
-            bf.size(), local_size=bf.local_size()))
-    elif args.virtual_topology == "InnerOuterExpo2":
-        assert bf.is_homogeneous, "InnerOuterExpo2 should be used under homogeneous environment"
-        bf.set_topology(topology_util.InnerOuterExpo2Graph(
-            bf.size(), local_size=bf.local_size()))
-    else:
-        raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                         "[expo2(Default), ring, mesh, star，InnerOuterRing， InnerOuterExpo2].")
 
 if args.cuda:
     print("using cuda.")
@@ -340,17 +321,17 @@ def adjust_learning_rate(epoch, batch_idx):
             args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj
         )
 
+
 if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
-    if args.virtual_topology == 'InnerOuterRing':
-        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
-            bf.size(),
-            local_size=bf.local_size(),
-            self_rank=bf.rank())
-    elif args.virtual_topology == 'InnerOuterExpo2':
-        dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
-            bf.size(),
-            local_size=bf.local_size(),
-            self_rank=bf.rank())
+    if args.dist_optimizer == 'neighbor_allreduce':
+        if bf.is_homogeneous() and bf.size() > bf.local_size():
+            dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
+                bf.size(),
+                local_size=bf.local_size(),
+                self_rank=bf.rank())
+        else:
+            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+                bf.load_topology(), bf.rank())
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
         # This optimizer can use following dynamic topo only so far.
         dynamic_machine_neighbor_allreduce_gen = topology_util.GetExp2DynamicSendRecvMachineRanks(
