@@ -25,20 +25,19 @@ Below are the charts representing the performance of BlueFog that was done on Re
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97819514-cf46ec00-1c5d-11eb-933e-459783d974a6.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97819502-c6eeb100-1c5d-11eb-9930-065cdd48818d.png" alt="Benchmark 2" width="400"/></p>
 
-In the figures, the black box represents the ideal linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod reaches around 78% sacling efficiency with batch size 64. For the communicationally intensive scenario with batch size 32, the scaling efficiency gap between Bluefog and Horovod becomes even larger. To 
+In the figures, the black box represents the ideal linear scaling. It is observed that Bluefog can achieve over 95% scaling efficiency while Horovod reaches around 78% sacling efficiency with batch size 64. For the communicationally intensive scenario with batch size 32, the scaling efficiency gap between Bluefog and Horovod becomes even larger. To 
 understand more details about the BlueFog benchmark, checkout our performance page.
 
 Overview
 --------
-BlueFog is built with **decentralized optimization** algorithms. In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual (and probably dynamic) network topology (that can be in any shape) to achieve most communication efficiency. Another [To be continued]
-
-The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
-DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
-that we introduce virtual topology into multiple processes and 
+BlueFog is built with *decentralized optimization* algorithms. In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual and probably dynamic network topology (that can be in any shape) to achieve most communication efficiency. For each iteration, a computing agent will update its model with information received from its *direct* neighbors defined by the virtual topology. No global average is required in decentralized training algorithms. In summary, the training mechanism at agent k can be described as follows
 
 .. math::
 
-     LOCAL_AVG(param - lr*grad_{k}) ==> param - lr*GLOBAL_AVG(grad_{k})) as algorithm keep iterating
+     param_{k} = LOCAL_AVG(param_{j} for j in Nb_{k}) - lr*grad_{k} as algorithm keeps iterating
+
+where ``Nb_{k}`` denotes all direct neighbors of agent k, and local average is taken over this neighborhood set. With the above training update, it is observed all communications only occur over the predefied virtual topolgy and no global communication is required. This is fundamentally different from other popular distributed training frameworks, such as DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc.
+
 
 where the local average is defined based on the connection in the virtual topology. We support both **static** topology
 and **dynamic** topology usages. Among most topologies, we find the dynamic Exponential-2 graph can achieve the best performance
