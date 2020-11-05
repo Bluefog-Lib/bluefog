@@ -15,7 +15,7 @@ BlueFog
 
     <p align="center"><img src="https://user-images.githubusercontent.com/65107588/82258821-62d66b80-990f-11ea-9393-bf5456af67e6.png" alt="Logo" width="450"/></p>
     
-BlueFog is a high-performance distributed training framework for PyTorch built with decentralized optimization algorithms. The goal of Bluefog is to make decentralized machine learning easy to use, fault-tolerant, friendly to heterogeneous environment, and even faster than training frameworks built with parameter server, or ring-allreduce.
+BlueFog is a high-performance distributed training framework for PyTorch built with **decentralized optimization** algorithms. The goal of Bluefog is to make decentralized algorithms easy to use, fault-tolerant, friendly to heterogeneous environment, and even faster than training frameworks built with parameter server, or ring-allreduce.
 
 Performance
 -----------
@@ -30,9 +30,9 @@ understand more details about the BlueFog benchmark, checkout our performance pa
 
 Overview
 --------
-BlueFog is built with *decentralized optimization* algorithms. This is fundamentally different from other popular distributed training frameworks, such as DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc. 
+BlueFog is built with decentralized optimization algorithms. This is fundamentally different from other popular distributed training frameworks, such as DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc. 
 
-In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual and probably dynamic network topology (that can be in any shape) to achieve most communication efficiency. For each iteration, a computing agent will update its model with information received from its *direct* neighbors defined by the virtual topology. The training mechanism at agent k can be described as follows
+In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual and probably dynamic network topology (that can be in any shape) to achieve most communication efficiency. For each iteration, a computing agent will update its model with information received from its **direct** neighbors defined by the virtual topology. The training mechanism at agent k can be described as follows
 
 .. math::
 
