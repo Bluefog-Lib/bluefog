@@ -505,7 +505,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert nodes_per_machine > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
+    assert local_size > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
 
     index = 0
     while True:
@@ -576,9 +576,13 @@ def GetInnerOuterExpo2DynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert nodes_per_machine > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
+    assert local_size > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
     exp_2_out_size = int(np.log2(num_machines-1))
-    exp_2_in_size = int(np.log2(nodes_per_machine-2))  # -2 because we need to remove outgoing node
+    if nodes_per_machine == 2:
+        exp_2_in_size = 0
+    else:
+        # -2 because we need to remove outgoing node
+        exp_2_in_size = int(np.log2(nodes_per_machine-2))  
 
     index = 0
     while True:
