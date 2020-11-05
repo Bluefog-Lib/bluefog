@@ -36,7 +36,6 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'matplotlib.sphinxext.plot_directive',
-    'autodocsumm',
 ]
 
 # Include the example source for plots in API docs
