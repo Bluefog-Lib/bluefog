@@ -17,41 +17,50 @@ Bluefog
 
 Performance
 -----------
-Below is the charts representing the performance of BlueFog that was done on ResNet50 benchmark. Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and inter-connected communication speed is 25Gbps. This is the same hardware setup you can get on AWS_. We test the scaling efficiency on 64 batch size, representing computation  intensive scenario, and 32 batch size case for communication intensive.
+Below is the charts representing the performance of BlueFog that was done on ResNet50 benchmark. Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and inter-connected communication speed is 25Gbps. This is the same hardware setup you can get on AWS_. We test the scaling efficiency with a batch size of 64, representing computation  intensive scenario, and a batch size of 32 for communication intensive scenario.
 
 .. raw:: html
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97819514-cf46ec00-1c5d-11eb-933e-459783d974a6.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97819502-c6eeb100-1c5d-11eb-9930-065cdd48818d.png" alt="Benchmark 2" width="400"/></p>
 
-where black box represents the idea linear scaling. We can see bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under 64 batchsize. For more communication intensive like 32 batch size, the scaling efficiency between Bluefgo and Horovod becomes even larger. To 
-understand more details about BlueFog Benchmark, checkout our performance page.
+where the black box represents the idea of linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod is around 78% sacling efficiency under a batch size of 64. For more communication intensive case with a batch size of 32, the scaling efficiency between Bluefog and Horovod becomes even larger. To 
+understand more details about the BlueFog benchmark, checkout our performance page.
 
 Overview
 --------
 
 Bluefog is a distributed training framework for PyTorch based
-on diffusion/consensus-type algorithm.
+on diffusion/consensus-type algorithms.
 The goal of Bluefog is to make distributed and decentralized machine learning fast,
 fault-tolerant, friendly to heterogeneous environment, and easy to use.
 
 The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as 
-DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
-that we introduce the virtual topology into the multiple processes and 
+DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
+that we introduce virtual topology into multiple processes and 
 
 .. math::
 
-     LOCAL_AVG(grad_{k}) ==> GLOBAL_AVG(grad_{k})) as algorithm keep iterating
+     LOCAL_AVG(param - lr*grad_{k}) ==> param - lr*GLOBAL_AVG(grad_{k})) as algorithm keep iterating
 
-where local averaging is defined based on the connection in the virtual topology. We support both **static** topology
-and **dynamic** topology usage.
+where the local average is defined based on the connection in the virtual topology. We support both **static** topology
+and **dynamic** topology usages. Among most topologies, we find the dynamic Exponential-2 graph can achieve the best performance
+if the number of processes is the power of 2, such as 4, 32, 128 processes. Exponential-2 graph is defined in the way that each process only 
+communicates with the neighbors which are  2<sup>0</sup>, 2<sup>1</sup>, ..., 2<sup>t</sup> away. **Dynamic** toplogy means all processes select
+one neighbor only in one iteration and select next neighbor in next iteration as illustrated in the following figure:
 
+.. raw:: html
+
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97928035-04654400-1d1b-11eb-91d2-2da890b4522e.png" alt="one-peer-exp2" width="650"/></p>
+
+Under this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which
+is better than what ring-allreduce promises. As for loss and accuracy guarantee, please check out our theoratical paper.
 
 Quick Start
 -----------
 
 First, make sure your environment is with ``python>=3.7`` and ``openmpi >= 4.0``.
 Then, install Bluefog with: ``pip install --no-cache-dir bluefog`` or
-``BLUEFOG_WITH_NCCL=1 pip install bluefog`` if NCCL is supported (NCCL>=2.7). Check
+``BLUEFOG_WITH_NCCL=1 pip install bluefog`` if NCCL is supported (``NCCL>=2.7``). Check
 the ``install_bluefog`` page if you need more information or other install options.
 
 We provide high-level wrapper for torch optimizer. You just need to modify
@@ -74,10 +83,10 @@ then run it through ``bfrun``. That is it!
    )
    ...
 Check our BlueFog Distributed Optimizer Guide to understand how our distributed optimizer 
-works and which distributed optimizer fits your requirement the best.
+works and which distributed optimizer fits your requirement best.
 
 We also provide lots of low-level functions, which you can use those as building
-blocks to construct your own distributed trainning algorithm. The following example
+blocks to construct your own distributed training algorithm. The following example
 illustrates how to run a simple consensus algorithm through bluefog.
 
 .. code-block:: python
@@ -91,7 +100,7 @@ illustrates how to run a simple consensus algorithm through bluefog.
       x = bf.neighbor_allreduce(x)
    print(f"{bf.rank()}: Average value of all ranks is {x}")
 
-Checkout our ops explanation page to see all supported *synchronous* and *asynchronous* features.
+Checkout our API explanation page to see all supported *synchronous* and *asynchronous* features.
 
 
 Citation

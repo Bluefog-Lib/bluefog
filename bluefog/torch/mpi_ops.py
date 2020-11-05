@@ -425,19 +425,16 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if send_neighbors is None:
         send_neighbors = []
-    elif not send_neighbors:
-        raise ValueError("Argument send_neighbors cannot be empty.")
-    elif not set(send_neighbors).issubset(set(out_neighbor_ranks())):
-        raise ValueError("Argument send_neighbors should only contain the ranks that belong to "
-                         " out-neighbors.")
+        dynamic_neighbors_enabled = False
     elif len(set(send_neighbors)) != len(send_neighbors):
         raise ValueError("Argument send_neighbors should only contain the unique ranks.")
     elif self_weight is None or neighbor_weights is None:
         raise ValueError("Arguments self_weight and neighbor_weights should be presented if"
                          "enabling dynamic topology.")
     else:
-        pass
+        dynamic_neighbors_enabled = True
     if self_weight is None and neighbor_weights is None:
+        # Implying this is static graph.
         if is_topo_weighted():
             topology = load_topology()
             self_weight, neighbor_weights = GetRecvWeights(topology, rank())
@@ -454,7 +451,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         if not isinstance(self_weight, float):
             raise ValueError(
                 "Argument self_weight has to be a float for self rank.")
-        if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
+        if not dynamic_neighbors_enabled and \
+           not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
         uniform_weights = 1.0/(len(neighbor_weights)+1)
@@ -470,7 +468,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
                          "the same time")
     is_hierarchical = False
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        send_neighbors, enable_topo_check, avg_computation,
+                                        send_neighbors, dynamic_neighbors_enabled,
+                                        enable_topo_check, avg_computation,
                                         is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
@@ -505,7 +504,8 @@ def neighbor_allreduce(tensor: torch.Tensor,
         send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
             the current node sends to all of its (out-)neighbors. If having values, assume only
             part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-            partial neighbors listed in this variable.
+            partial neighbors listed in this variable in a dynamic graph, and `self_weight` and
+            `neighbor_weights` must be present.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
             sending and recieving neighbors match with each other. Disabling this check can boost
             the performance.
@@ -554,7 +554,8 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
         send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
             the current node sends to all of its (out-)neighbors. If having values, assume only
             part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-            partial neighbors listed in this variable.
+            partial neighbors listed in this variable in a dynamic graph, and `self_weight` and
+            `neighbor_weights` must be present.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
             sending and recieving neighbors match with each other. Disabling this check can boost
             the performance.

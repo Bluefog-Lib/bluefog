@@ -298,7 +298,7 @@ bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
   bool res = false;
   // enabled the check if enable_topo_check is true and partial
   // neighbor_allreduce is activated.
-  if (entry.enable_topo_check && !entry.send_neighbors->empty()) {
+  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
     if (entry.is_hierarchical) {
       // TODO: support check.
       BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
@@ -404,7 +404,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   std::string error_message = "";
 
   if (!entry.is_hierarchical) {
-    if (entry.send_neighbors->empty()) {
+    if (!entry.dynamic_neighbors_enabled) {
       int ret_code = MPI_Neighbor_allgather(
           sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
           buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
@@ -616,7 +616,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   std::string error_message = "";
 
   if (!first_entry.is_hierarchical) {
-    if (first_entry.send_neighbors->empty()) {
+    if (!first_entry.dynamic_neighbors_enabled) {
       int ret_code = MPI_Neighbor_allgather(
           fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
           buffer_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.output),
@@ -728,9 +728,9 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
 
   // Remember buffer_data is already pointed at offset location (after self tensor).
   timeline_ptr->ActivityStartAll(entries, "MEMCPY_OUT_FUSION_BUFFER");
-  int num_recv_neighbors = first_entry.send_neighbors->empty()
-                               ? mpi_ctx_.neighbor_indgree_
-                               : first_entry.recv_neighbors->size();
+  int num_recv_neighbors = !first_entry.dynamic_neighbors_enabled
+                           ? mpi_ctx_.neighbor_indgree_
+                           : first_entry.recv_neighbors->size();
   MemcpyOutFusionBufferForNeighbors(
       buffer_data, entries, num_recv_neighbors,
       /*fused_data_size=*/ num_elements * element_size);
