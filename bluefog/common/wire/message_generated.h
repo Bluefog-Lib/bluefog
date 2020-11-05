@@ -199,7 +199,8 @@ struct Request FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_TENSOR_NAME = 10,
     VT_ROOT_RANK = 12,
     VT_DEVICE = 14,
-    VT_TENSOR_SHAPE = 16
+    VT_TENSOR_SHAPE = 16,
+    VT_IS_HIERARCHICAL = 18
   };
   int32_t request_rank() const {
     return GetField<int32_t>(VT_REQUEST_RANK, 0);
@@ -222,6 +223,9 @@ struct Request FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const flatbuffers::Vector<int64_t> *tensor_shape() const {
     return GetPointer<const flatbuffers::Vector<int64_t> *>(VT_TENSOR_SHAPE);
   }
+  bool is_hierarchical() const {
+    return GetField<uint8_t>(VT_IS_HIERARCHICAL, 0) != 0;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_REQUEST_RANK) &&
@@ -233,6 +237,7 @@ struct Request FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<int32_t>(verifier, VT_DEVICE) &&
            VerifyOffset(verifier, VT_TENSOR_SHAPE) &&
            verifier.VerifyVector(tensor_shape()) &&
+           VerifyField<uint8_t>(verifier, VT_IS_HIERARCHICAL) &&
            verifier.EndTable();
   }
 };
@@ -262,6 +267,9 @@ struct RequestBuilder {
   void add_tensor_shape(flatbuffers::Offset<flatbuffers::Vector<int64_t>> tensor_shape) {
     fbb_.AddOffset(Request::VT_TENSOR_SHAPE, tensor_shape);
   }
+  void add_is_hierarchical(bool is_hierarchical) {
+    fbb_.AddElement<uint8_t>(Request::VT_IS_HIERARCHICAL, static_cast<uint8_t>(is_hierarchical), 0);
+  }
   explicit RequestBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -282,13 +290,15 @@ inline flatbuffers::Offset<Request> CreateRequest(
     flatbuffers::Offset<flatbuffers::String> tensor_name = 0,
     int32_t root_rank = 0,
     int32_t device = 0,
-    flatbuffers::Offset<flatbuffers::Vector<int64_t>> tensor_shape = 0) {
+    flatbuffers::Offset<flatbuffers::Vector<int64_t>> tensor_shape = 0,
+    bool is_hierarchical = false) {
   RequestBuilder builder_(_fbb);
   builder_.add_tensor_shape(tensor_shape);
   builder_.add_device(device);
   builder_.add_root_rank(root_rank);
   builder_.add_tensor_name(tensor_name);
   builder_.add_request_rank(request_rank);
+  builder_.add_is_hierarchical(is_hierarchical);
   builder_.add_tensor_type(tensor_type);
   builder_.add_request_type(request_type);
   return builder_.Finish();
@@ -302,7 +312,8 @@ inline flatbuffers::Offset<Request> CreateRequestDirect(
     const char *tensor_name = nullptr,
     int32_t root_rank = 0,
     int32_t device = 0,
-    const std::vector<int64_t> *tensor_shape = nullptr) {
+    const std::vector<int64_t> *tensor_shape = nullptr,
+    bool is_hierarchical = false) {
   auto tensor_name__ = tensor_name ? _fbb.CreateString(tensor_name) : 0;
   auto tensor_shape__ = tensor_shape ? _fbb.CreateVector<int64_t>(*tensor_shape) : 0;
   return bluefog::common::wire::CreateRequest(
@@ -313,7 +324,8 @@ inline flatbuffers::Offset<Request> CreateRequestDirect(
       tensor_name__,
       root_rank,
       device,
-      tensor_shape__);
+      tensor_shape__,
+      is_hierarchical);
 }
 
 struct RequestList FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {

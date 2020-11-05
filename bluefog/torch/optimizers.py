@@ -295,10 +295,14 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
-        self.neighbor_weights = None
+        # knobs for neighbor communication behavior
         self.self_weight = None
+        self.neighbor_weights = None
         self.send_neighbors = None
+        self.neighbor_machine_weights = None
+        self.send_neighbor_machines = None
         self.enable_topo_check = False
+
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
         self._handles = {}
@@ -314,6 +318,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
             self._reduce_method = 0
         elif self._reduce_type_str == "neighbor.allreduce":
             self._reduce_method = 1
+        elif self._reduce_type_str == "hierarchical.neighbor.allreduce":
+            self._reduce_method = 2
         else:
             raise ValueError("Unknown reduce type for internal class _DistributedReduceOptimizer")
 
@@ -352,6 +358,10 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                             handle = self._allreduce_data_async(p)
                         elif self._reduce_method == 1:
                             handle = self._neighbor_allreduce_data_async(p)
+                        elif self._reduce_method == 2:
+                            handle = self._hierarchical_neighbor_allreduce_data_async(p)
+                        elif self._reduce_method == -1:
+                            handle = None
                         else:
                             raise ValueError(
                                 "Unknown reduce method. Do not change _reduce_method manually.")
@@ -364,6 +374,15 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                                                    neighbor_weights=self.neighbor_weights,
                                                    send_neighbors=self.send_neighbors,
                                                    enable_topo_check=self.enable_topo_check)
+        return handle
+
+    def _hierarchical_neighbor_allreduce_data_async(self, p):
+        name = self._parameter_names.get(p)
+        handle = bf.hierarchical_neighbor_allreduce_nonblocking(
+            p.data, name=name, self_weight=self.self_weight,
+            neighbor_machine_weights=self.neighbor_machine_weights,
+            send_neighbor_machines=self.send_neighbor_machines,
+            enable_topo_check=self.enable_topo_check)
         return handle
 
     def _allreduce_data_async(self, p):
@@ -389,12 +408,19 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
     def use_neighbor_allreduce_in_communication(self):
         self._reduce_method = 1
 
+    def use_hierarchical_neighbor_allreduce_in_communication(self):
+        self._reduce_method = 2
+
+    def use_empty_function_in_communication(self):
+        self._reduce_method = -1
+
     def synchronize(self):
         with torch.no_grad():
             for p, handle in self._handles.items():
-                output = bf.synchronize(handle)
+                if handle is not None:
+                    output = bf.synchronize(handle)
+                    p.set_(output)
                 self._reduce_delay[p] = self._num_steps_per_communication
-                p.set_(output)
         self._handles.clear()
 
         self._synchronized = True
@@ -436,7 +462,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
-class _DistributedBluefogOptimizer(torch.optim.Optimizer):
+class _DistributedWinOptimizer(torch.optim.Optimizer):
 
     def __init__(self, params, model, num_steps_per_communication, pull_style):
         super(self.__class__, self).__init__(params)
@@ -791,6 +817,7 @@ def DistributedPushSumOptimizer(optimizer, model,
     )
     return cls(optimizer.param_groups, model, num_steps_per_communication)
 
+
 def DistributedPullGetOptimizer(optimizer, model,
                                 num_steps_per_communication=1):
     """
@@ -832,13 +859,13 @@ def DistributedPullGetOptimizer(optimizer, model,
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
-        dict(_DistributedBluefogOptimizer.__dict__),
+        dict(_DistributedWinOptimizer.__dict__),
     )
     return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=True)
 
 
-def DistributedBluefogOptimizer(optimizer, model,
-                                num_steps_per_communication=1):
+def DistributedWinPutOptimizer(optimizer, model,
+                               num_steps_per_communication=1):
     """An distributed optimizer that wraps another torch.optim.Optimizer with
     pull model average through bf.win_put ops.
 
@@ -850,45 +877,20 @@ def DistributedBluefogOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for two scenarios to use num_steps_per_communication:
-        Scenario 1) Local accumulation of gradient without update model.
-                    (Used in large batch size or large model cases)
-        >>> opt = bf.DistributedBluefogOptimizer(optimizer, model, num_steps_per_communication=J)
-        >>> opt.zero_grad()
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     loss.backward()
-        >>> opt.step()  # Window operation happens here
-        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
-        >>> opt = bf.DistributedBluefogOptimizer(optimizer, model, num_steps_per_communication=J)
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     opt.zero_grad()
-        >>>     loss.backward()
-        >>>     opt.step()  # Window operation happens at the last iteration
-
     Returned optimizer has two extra parameters `dst_weights` and `force_barrier`.
     Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
     win_put over dynamic graph behavior. If force_barrier is True, a barrier function
     will put at `step()` to synchronous processes.
-
-    Example:
-        >>> import bluefog.torch as bf
-        >>> ...
-        >>> bf.init()
-        >>> optimizer = optim.SGD(model.parameters(), lr=lr * bf.size())
-        >>> optimizer = bf.DistributedBluefogOptimizer(optimizer, model)
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method.
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
-        dict(_DistributedBluefogOptimizer.__dict__),
+        dict(_DistributedWinOptimizer.__dict__),
     )
     return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=False)
+
 
 def DistributedAllreduceOptimizer(optimizer, model,
                                   num_steps_per_communication=1):
@@ -904,9 +906,10 @@ def DistributedAllreduceOptimizer(optimizer, model,
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
 
-    Example for two scenarios to use num_steps_per_communication:
+    Example for two scenarios to use num_steps_per_communication.
         Scenario 1) Local accumulation of gradient without update model.
                     (Used in large batch size or large model cases)
+
         >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model,
                                                    num_steps_per_communication=J)
         >>> opt.zero_grad()
@@ -915,7 +918,9 @@ def DistributedAllreduceOptimizer(optimizer, model,
         >>>     loss = ...
         >>>     loss.backward()
         >>> opt.step()  # Allreducing happens here
+
         Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+
         >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model,
                                                    num_steps_per_communication=J)
         >>> for j in range(J):
@@ -941,9 +946,9 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops over parameters.
 
-    Returned optimizer has two extra parameters `self_weight` and `neighbor_weights`.
-    Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
-    per iteration to achieve win_put over dynamic graph behavior.
+    Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
+    `send_neighbors` to control the behavior of neighbor allreduce. Changing the values
+    of these knobs to achieve dynamic topologies.
 
     Arguments:
         optimizer: Optimizer to use for computing gradients and applying updates.
@@ -952,27 +957,6 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
                                      communication. This allows local model parameter updates
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
-
-    Example for two scenarios to use num_steps_per_communication:
-        Scenario 1) Local accumulation of gradient without update model.
-                    (Used in large batch size or large model cases)
-        >>> opt = bf.DistributedNeighborAllreduceOptimizer(optimizer, model,
-                                                           num_steps_per_communication=J)
-        >>> opt.zero_grad()
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     loss.backward()
-        >>> opt.step()  # Neighbor allreducing happens here
-        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
-        >>> opt = bf.DistributedNeighborAllreduceOptimizer(optimizer, model,
-                                                           num_steps_per_communication=J)
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     opt.zero_grad()
-        >>>     loss.backward()
-        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with neighbor_allreduce implementation.
@@ -982,6 +966,61 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
         dict(_DistributedReduceOptimizer.__dict__),
     )
     return cls(optimizer.param_groups, model, "neighbor.allreduce", num_steps_per_communication)
+
+
+def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
+                                                      num_steps_per_communication=1):
+    """
+    An distributed optimizer that wraps another torch.optim.Optimizer through
+    hierarchical_neighbor_allreduce ops over parameters.
+
+    Returned optimizer has three extra parameters `self_weight`, `neighbor_machine_weights` and
+    `send_neighbor_machines` to control the behavior of hierarchical neighbor allreduce. Changing
+    the values of these knobs to achieve dynamic topologies.
+
+    Arguments:
+        optimizer: Optimizer to use for computing gradients and applying updates.
+        model: The model or a list of models you want to train with.
+        num_steps_per_communication: Number of expected model forward function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
+
+    Warning:
+        The processes within the same machine should provide the same `neighbor_machine_weights` and
+        `send_neighbor_machines` to avoid unexpected behavior.
+
+    Example for two scenarios to use num_steps_per_communication:
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+
+        >>> opt = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
+                        optimizer, model, num_steps_per_communication=J)
+        >>> opt.zero_grad()
+        >>> for j in range(J):
+        >>>     output = model(data_batch_i)
+        >>>     loss = ...
+        >>>     loss.backward()
+        >>> opt.step()  # Neighbor allreducing happens here
+
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+
+        >>> opt = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
+                        optimizer, model, num_steps_per_communication=J)
+        >>> for j in range(J):
+        >>>     output = model(data_batch_i)
+        >>>     loss = ...
+        >>>     opt.zero_grad()
+        >>>     loss.backward()
+        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
+    """
+    cls = type(
+        optimizer.__class__.__name__,
+        (optimizer.__class__,),
+        dict(_DistributedReduceOptimizer.__dict__),
+    )
+    return cls(optimizer.param_groups, model, "hierarchical.neighbor.allreduce",
+               num_steps_per_communication)
 
 
 def DistributedGradientAllreduceOptimizer(optimizer, model,
@@ -1000,8 +1039,10 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
                                      distributed computation resources.
 
     Example for two scenarios to use num_steps_per_communication:
+
         Scenario 1) Local accumulation of gradient without update model.
                     (Used in large batch size or large model cases)
+
         >>> opt = bf.DistributedGradientAllreduceOptimizer(optimizer, model,
         >>>                                                num_steps_per_communication=J)
         >>> opt.zero_grad()
@@ -1010,7 +1051,9 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
         >>>     loss = ...
         >>>     loss.backward()
         >>> opt.step()  # Allreducing happens here
+
         Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+
         >>> opt = bf.DistributedGradientAllreduceOptimizer(optimizer, model,
         >>>                                                num_steps_per_communication=J)
         >>> for j in range(J):

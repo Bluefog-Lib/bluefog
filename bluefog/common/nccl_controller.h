@@ -56,8 +56,9 @@ class NCCLContext {
   NCCLContext(const NCCLContext&) = delete;
   NCCLContext& operator=(NCCLContext other) = delete;
 
-  void Initialize(const int rank, const int size,
-                  const int local_rank);  // only initial nccl_comm etc.
+  void Initialize(const int rank, const int size, const int local_rank,
+                  const int local_size, const MPI_Comm& world_comm,
+                  const MPI_Comm& local_comm);  // only initial nccl_comm etc.
   void Finalize();  // nccl_comm, peer, window will all be cleaned.
 #if NCCL_MINOR < 7
   void CleanPeerCommunicators();
@@ -67,8 +68,8 @@ class NCCLContext {
   cudaError_t GetCudaEvent(cudaEvent_t* event);
   cudaError_t ReleaseCudaEvent(cudaEvent_t event);
 
-  // TODO(ybc) Create intra-comm to allow the ops lik in-node allreduce.
   ncclComm_t nccl_comm;  // Store a global nccl comm.
+  ncclComm_t nccl_local_comm;  // Store a local nccl comm.
   cudaStream_t stream;
 
   // We reuse CUDA events as it appears that their creation carries non-zero cost.
@@ -186,6 +187,9 @@ class NCCLController {
                                          std::vector<TensorTableEntry>& entries,
                                          const int num_recv_neighbors,
                                          const int64_t fused_data_size);
+
+  void MemcpyOutFusionBufferForInputs(const void* fused_input_data,
+                                      std::vector<TensorTableEntry>& entries);
 
   void MemcpyEntryInFusionBuffer(const TensorTableEntry& e,
                                  void* buffer_data_at_offset);

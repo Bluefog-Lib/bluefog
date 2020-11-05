@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 
 project = 'Bluefog'
-copyright = '2020, Bicheng Ying'
+copyright = '2020, BlueFog Team'
 author = 'Bicheng Ying'
 master_doc = 'index'
 
@@ -36,6 +36,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'matplotlib.sphinxext.plot_directive',
+    'autodocsumm',
 ]
 
 # Include the example source for plots in API docs

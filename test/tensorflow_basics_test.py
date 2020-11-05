@@ -26,7 +26,7 @@ import tensorflow as tf
 
 from common import mpi_env_rank_and_size
 import bluefog.tensorflow as bf
-from bluefog.common.topology_util import PowerGraph, RingGraph
+from bluefog.common.topology_util import ExponentialGraph, RingGraph
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -67,17 +67,17 @@ class BasicsTests(tf.test.TestCase):
         elif size == 1:
             expected_topology = nx.DiGraph(np.array([[1.0]]))
         else:
-            expected_topology = PowerGraph(size)
+            expected_topology = ExponentialGraph(size)
         bf.init()
         topology = bf.load_topology()
         assert isinstance(topology, nx.DiGraph)
         np.testing.assert_array_equal(
             nx.to_numpy_array(expected_topology), nx.to_numpy_array(topology))
 
-    def test_in_out_neighbors_power2(self):
+    def test_in_out_neighbors_expo2(self):
         rank, size = mpi_env_rank_and_size()
         bf.init()
-        bf.set_topology(PowerGraph(size))
+        bf.set_topology(ExponentialGraph(size))
         in_neighobrs = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 

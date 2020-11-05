@@ -36,6 +36,7 @@ using ::bluefog::common::bluefog_load_topology_weights;
 using ::bluefog::common::bluefog_neighbor_size;
 using ::bluefog::common::bluefog_rank;
 using ::bluefog::common::bluefog_size;
+using ::bluefog::common::bluefog_local_size;
 using ::bluefog::common::with_device;
 using ::bluefog::common::GetBluefogTimeline;
 using ::bluefog::common::Status;
@@ -98,7 +99,7 @@ std::function<std::function<void(const Status&)>(std::function<void()>)>
 }
 
 int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
-                const std::string& name) {
+                bool is_hierarchical_local, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
@@ -126,17 +127,21 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_tensor, bf_context, ready_event, op_name, CPU_DEVICE_ID,
-        callback_wrapper([average, output, cpu_buffer, device]() mutable {
-            with_device device_guard(device);
-            output.copy_(cpu_buffer);
+        bf_tensor, bf_tensor, bf_context, ready_event, is_hierarchical_local,
+        op_name, CPU_DEVICE_ID,
+        callback_wrapper([average, output, is_hierarchical_local, cpu_buffer,
+                          device]() mutable {
+          with_device device_guard(device);
+          output.copy_(cpu_buffer);
 
-            // Will execute in the `device` context.
-            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-            if (average && bluefog_size() > 1) {
-              output_buffer.div_(bluefog_size());
-            }
-            MaybeCopyBufferBack(output, output_buffer);
+          // Will execute in the `device` context.
+          ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+          int size =
+              is_hierarchical_local ? bluefog_local_size() : bluefog_size();
+          if (average && size > 1) {
+            output_buffer.div_(bluefog_size());
+          }
+          MaybeCopyBufferBack(output, output_buffer);
         }));
     ThrowIfError(enqueue_result);
   } else {
@@ -146,15 +151,18 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, op_name, device,
-        callback_wrapper([average, output]() mutable {
+        bf_tensor, bf_output, bf_context, ready_event, is_hierarchical_local,
+        op_name, device,
+        callback_wrapper([average, output, is_hierarchical_local]() mutable {
           // Will execute in the `device` context.
           ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-          if (average && bluefog_size() > 1) {
-            output_buffer.div_(bluefog_size());
+          int size =
+              is_hierarchical_local ? bluefog_local_size() : bluefog_size();
+          if (average && size > 1) {
+            output_buffer.div_(size);
           }
           MaybeCopyBufferBack(output, output_buffer);
-          }));
+        }));
     ThrowIfError(enqueue_result);
   }
   return handle;
@@ -306,7 +314,7 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                         double self_weight, const std::unordered_map<int, double>& neighbor_weights,
                         const std::vector<int>& send_neighbors, bool enable_topo_check,
-                        bool avg_computation, const std::string& name) {
+                        bool avg_computation, bool is_hierarchical, const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
@@ -338,11 +346,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
     auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
     auto ready_event = RecordReadyEvent(device);
-    auto enqueue_result = EnqueueTensorNeighborAllreduce(            
-        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        enable_topo_check, op_name, CPU_DEVICE_ID, callback_wrapper([self_weight, neighbor_weights,
-        avg_computation, cpu_output, tensor, recv_neighbors, send_neighbors, output, device]()
-        mutable {
+    auto enqueue_result = EnqueueTensorNeighborAllreduce(
+        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors,
+        bf_send_neighbors, is_hierarchical, enable_topo_check, op_name,
+        CPU_DEVICE_ID,
+        callback_wrapper([self_weight, neighbor_weights, avg_computation,
+                          cpu_output, tensor, recv_neighbors, send_neighbors,
+                          is_hierarchical, output, device]() mutable {
           with_device device_guard(device);
           output.copy_(cpu_output);
           int recv_size = bluefog_neighbor_size();
@@ -381,8 +391,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
                 int recv_rank;
-                if(send_neighbors.empty()) recv_rank = *(sources_ptr+i);
-                else recv_rank = recv_neighbors[i];
+                if(send_neighbors.empty())
+                  recv_rank = *(sources_ptr + i);
+                else
+                  recv_rank = recv_neighbors[i];
                 auto it = neighbor_weights.find(recv_rank);
                 if (it != neighbor_weights.end()) {
                   weight = it->second;
@@ -398,6 +410,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size());
+              }
             } else {
               int neighbor_size = send_neighbors.empty()
                                       ? bluefog_neighbor_size()
@@ -412,7 +428,12 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(neighbor_size + 1);
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size() * (neighbor_size + 1));
+              } else {
+                output_buffer.div_(neighbor_size + 1);
+              }
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
@@ -429,11 +450,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors, bf_send_neighbors,
-        enable_topo_check, op_name, device, callback_wrapper([self_weight, neighbor_weights,
-        avg_computation, recv_neighbors, send_neighbors, tensor, output] () mutable {
+        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors,
+        bf_send_neighbors, is_hierarchical, enable_topo_check, op_name, device,
+        callback_wrapper([self_weight, neighbor_weights, avg_computation,
+                          recv_neighbors, send_neighbors, is_hierarchical,
+                          tensor, output]() mutable {
           int recv_size = bluefog_neighbor_size();
-          if(!send_neighbors.empty()) recv_size = recv_neighbors.size();
+          if (!send_neighbors.empty()) recv_size = recv_neighbors.size();
           if (recv_size > 0) {
             ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
             ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
@@ -450,10 +473,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               int outdegree = 0;
               int* sources_ptr = nullptr;
               int* destinations_ptr = nullptr;
-              bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                    destinations_ptr);
               auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              if (!send_neighbors.empty()) indgree = recv_neighbors.size();
+              if (send_neighbors.empty()) {
+                bluefog_load_topology(&indgree, sources_ptr, &outdegree,
+                                      destinations_ptr);
+              } else {
+                indgree = recv_neighbors.size();
+              }
               for (int i = 0; i < indgree; i++) {
                 double weight = 0.0;
                 int recv_rank;
@@ -474,6 +500,10 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               }
               output_buffer.resize_(shape_vector);
               output_buffer.add_(tensor_buffer.mul(self_weight));
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size());
+              }
             } else {
               int neighbor_size = send_neighbors.empty()
                                       ? bluefog_neighbor_size()
@@ -488,7 +518,12 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
               output_buffer.resize_(shape_vector);
               // Include self data as well.
               output_buffer.add_(tensor_buffer);
-              output_buffer.div_(neighbor_size + 1);
+              if (is_hierarchical){
+                // Because there is ncclAllreduce just take sum.
+                output_buffer.div_(bluefog_local_size() * (neighbor_size + 1));
+              } else {
+                output_buffer.div_(neighbor_size + 1);
+              }
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);

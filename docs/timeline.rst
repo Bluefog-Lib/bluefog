@@ -36,7 +36,7 @@ Example I: Logistic regression with neighbor_allreduce
 ------------------------------------------------------
 In the first example, we show the timeline when running decentralized SGD for 
 logistic regression, see the figure below. In this example, each rank is connected
-via an undirected power-2 topology. We exploit the 
+via an undirected exponential-2 topology. We exploit the 
 primitive ``neighbor_allreduce`` to perform the neighbor averaging.
 
 .. image:: ./_static/bf_timeline_example1a.png

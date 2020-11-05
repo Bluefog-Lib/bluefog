@@ -79,7 +79,7 @@ def _allreduce_function_factory(tensor):
     return 'bluefog_torch_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _allreduce_nonblocking(tensor, output, average, name):
+def _allreduce_nonblocking(tensor, output, average, is_hierarchical_local, name):
     function = _check_function(_allreduce_function_factory, tensor)
     if average:
         assert isinstance(tensor, (torch.HalfTensor, torch.FloatTensor, torch.DoubleTensor,
@@ -87,14 +87,14 @@ def _allreduce_nonblocking(tensor, output, average, name):
                                    torch.cuda.HalfTensor)), \
             "If average is set in allreduce, only float or double tensor is allowed."
 
-    handle = getattr(mpi_lib, function)(tensor, output, average,
+    handle = getattr(mpi_lib, function)(tensor, output, average, is_hierarchical_local,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
 def allreduce(tensor: torch.Tensor, average: bool = True,
-              name: Optional[str] = None) -> torch.Tensor:
+              is_hierarchical_local=False, name: Optional[str] = None) -> torch.Tensor:
     """
     A function that performs averaging or summation of the input tensor over all the
     Bluefog processes. The input tensor is not modified.
@@ -108,18 +108,20 @@ def allreduce(tensor: torch.Tensor, average: bool = True,
         tensor: A tensor to average and sum.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
         name: A name of the reduction operation.
 
     Returns:
         A tensor of the same shape and type as `tensor`, averaged or summed across all
         processes.
     """
-    handle = allreduce_nonblocking(tensor, average, name)
+    handle = allreduce_nonblocking(tensor, average, is_hierarchical_local, name)
     return synchronize(handle)
 
 
 def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
-                          name: Optional[str] = None) -> int:
+                          is_hierarchical_local=False, name: Optional[str] = None) -> int:
     """
     A function that performs nonblocking averaging or summation of the input tensor
     over all the Bluefog processes. The input tensor is not modified.
@@ -133,6 +135,8 @@ def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
         tensor: A tensor to average and sum.
         average: A flag indicating whether to compute average or summation,
                  defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
         name: A name of the reduction operation.
 
     Returns:
@@ -140,7 +144,60 @@ def allreduce_nonblocking(tensor: torch.Tensor, average: bool = True,
         `synchronize()`.
     """
     output = tensor.new(tensor.shape)
-    return _allreduce_nonblocking(tensor, output, average, name)
+    return _allreduce_nonblocking(tensor, output, average, is_hierarchical_local, name)
+
+
+def allreduce_(tensor: torch.Tensor, average: bool = True,
+               is_hierarchical_local=False, name: Optional[str] = None) -> torch.Tensor:
+    """
+    A function that performs averaging or summation of the input tensor over all the
+    Bluefog processes. The operation is performed in-place.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Arguments:
+        tensor: A tensor to average and sum.
+        average: A flag indicating whether to compute average or summation,
+                 defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
+        name: A name of the reduction operation.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`, averaged or summed across all
+        processes.
+    """
+    handle = allreduce_nonblocking_(tensor, average, is_hierarchical_local, name)
+    return synchronize(handle)
+
+
+def allreduce_nonblocking_(tensor: torch.Tensor, average: bool = True,
+                           is_hierarchical_local=False, name: Optional[str] = None) -> int:
+    """
+    A function that performs nonblocking averaging or summation of the input tensor
+    over all the Bluefog processes. The operation is performed in-place.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Arguments:
+        tensor: A tensor to average and sum.
+        average: A flag indicating whether to compute average or summation,
+                 defaults to average.
+        is_hierarchical_local: If set, allreduce is executed within one machine instead of
+                global allreduce.
+        name: A name of the reduction operation.
+
+    Returns:
+        A handle to the allreduce operation that can be used with `poll()` or
+        `synchronize()`.
+    """
+    return _allreduce_nonblocking(tensor, tensor, average, is_hierarchical_local, name)
 
 
 def _broadcast_function_factory(tensor):
@@ -411,10 +468,10 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
-
+    is_hierarchical = False
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, enable_topo_check, avg_computation,
-                                        name.encode() if name is not None else "")
+                                        is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
@@ -437,7 +494,7 @@ def neighbor_allreduce(tensor: torch.Tensor,
     are ready to send and receive the tensor.
 
     Arguments:
-        tensor: A tensor to weighted average.
+        tensor: A tensor to execute weighted average with neighbors.
         self_weight: The weight for self node, used with neighbor_weights.
         neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
@@ -486,7 +543,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     are ready to send and receive the tensor.
 
     Arguments:
-        tensor: A tensor to neighbor_allreduce.
+        tensor: A tensor to execute weighted average with neighbors.
         self_weight: The weight for self node, used with neighbor_weights.
         neighbor_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
@@ -518,9 +575,163 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     else:
         first_dim = tensor.shape[0] * len(neighbor_weights)
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
-    output = tensor.new(new_shape) # Pre-allocate the memory for the output.
+    output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
-                                           send_neighbors, enable_topo_check, name)
+                                           send_neighbors, enable_topo_check, name=name)
+
+
+def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
+                                    self_weight: float,
+                                    neighbor_machine_weights: Dict[int, float],
+                                    send_neighbor_machines: List[int],
+                                    enable_topo_check: bool = False,
+                                    name: Optional[str] = None) -> torch.Tensor:
+    """
+    A function that performs weighted averaging of the input tensor over the negihbor machines and
+    itself in the Bluefog processes. It is similar to neighbor_allreduce. But each machine runs
+    allreduce internal first to form a super node then executes the neighbor allreduce at machine
+    level. The default behavior is (uniformly) average.
+
+    The input tensor is not modified.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Warning: This function should be called only under homogenerous environment, all machines have
+    same number of Bluefog processes -- bf.local_size().
+
+    Arguments:
+        tensor: A tensor to execute weighted average with neighbor machines.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_machine_weights: The weights for in-neighbor nodes, used with self weight.
+            The data structure of weights should be {machine id : weight}.  All processes under
+            same machine should specifiy the same weights dictionary.
+        send_neighbor_machines: The list of neighbor machines to be sent to. All processes under
+            same machine should specifiy the same machine id.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
+        name: A name of the reduction operation.
+
+    Returns:
+        A tensor of the same shape and type as `tensor`,  across all processes.
+    """
+    # TODO(hhb) Implement the logics for topo check for hierarchical_neighbor_allreduce.
+
+    # TODO(ybc) add check for self_weight and neighbor_machine_weights.
+    if (self_weight is None and neighbor_machine_weights is not None) or \
+       (self_weight is not None and send_neighbor_machines is None):
+        raise ValueError("Arguments self_weight and neighbor_machine_weights have to "
+                         "be presented at the same time")
+    handle = hierarchical_neighbor_allreduce_nonblocking(
+        tensor, self_weight, neighbor_machine_weights, send_neighbor_machines,
+        enable_topo_check, name)
+    return synchronize(handle)
+
+
+def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
+                                                self_weight: float,
+                                                neighbor_machine_weights: Dict[int, float],
+                                                send_neighbor_machines: List[int],
+                                                enable_topo_check: bool = False,
+                                                name: Optional[str] = None) -> int:
+    """
+    A function that nonblockingly performs weighted averaging of the input tensor over the negihbor
+    machines and itself in the Bluefog processes. It is similar to neighbor_allreduce. But
+    each machine runs allreduce internal first to form a super node then executes
+    the neighbor allreduce at machine level. The default behavior is (uniformly) average.
+
+    The input tensor is not modified.
+
+    The reduction operation is keyed by the name. If name is not provided, an incremented
+    auto-generated name is used. The tensor type and shape must be the same on all
+    Bluefog processes for a given name. The reduction will not start until all processes
+    are ready to send and receive the tensor.
+
+    Warning: This function should be called only under homogenerous environment, all machines have
+    same number of Bluefog processes -- bf.local_size().
+
+    Arguments:
+        tensor: A tensor to execute weighted average with neighbor machines.
+        self_weight: The weight for self node, used with neighbor_weights.
+        neighbor_machine_weights: The weights for in-neighbor nodes, used with self weight.
+            The data structure of weights should be {machine id : weight}.  All processes under
+            same machine should specifiy the same weights dictionary.
+        send_neighbor_machines: The list of neighbor machines to be sent to. All processes under
+            same machine should specifiy the same machine id.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
+        name: A name of the reduction operation.
+
+    Returns:
+        A handle to the hierarchical_neighbor_allreduce operation that can be used with `poll()` or
+        `synchronize()`.
+    """
+    if (self_weight is None or neighbor_machine_weights is None):
+        raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
+    if (self_weight is None and neighbor_machine_weights is not None) or \
+       (self_weight is not None and neighbor_machine_weights is None):
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+                         "the same time")
+
+    first_dim = tensor.shape[0] * len(neighbor_machine_weights)
+    new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
+    output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
+
+    return _hierarchical_neighbor_allreduce_nonblocking(
+        tensor, output, self_weight, neighbor_machine_weights,
+        send_neighbor_machines, enable_topo_check, name=name)
+
+
+def _hierarchical_neighbor_allreduce_nonblocking(
+        tensor, output, self_weight, neighbor_machine_weights,
+        send_neighbor_machines, enable_topo_check, name):
+    assert is_homogeneous, \
+        "hierarchical_neighbor_allreduce should be used under homogeneous environment only"
+    assert local_size() > 1, "If local size is 1, you should use neighbor allreduce directly."
+    function = _check_function(_neighbor_allreduce_function_factory, tensor)
+    if self_weight is not None and neighbor_machine_weights is not None:
+        if not isinstance(neighbor_machine_weights, dict):
+            raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
+                             "(in-)neighbor rank to the weights.")
+        if not isinstance(self_weight, float):
+            raise ValueError(
+                "Argument self_weight has to be a float for self rank.")
+        uniform_weights = 1.0/(len(neighbor_machine_weights)+1)
+        avg_computation = False
+        if abs(self_weight - uniform_weights) > 1e-6:
+            avg_computation = True
+        for n_weights in neighbor_machine_weights.values():
+            if abs(n_weights - uniform_weights) > 1e-6:
+                avg_computation = True
+                break
+    else:
+        raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
+
+    if not send_neighbor_machines:
+        raise ValueError("Argument send_neighbor_machines has to be presented and non-empty.")
+
+    machine_size = size() // local_size()
+    # Translate machine id into rank id.
+    node_per_machine = local_size()
+    neighbor_weights = {}
+    for (m, weights) in neighbor_machine_weights.items():
+        if m >= machine_size:
+            raise ValueError(
+                f"machine id is larger than number of machine we detected ({node_per_machine})."
+                "Note it is 0-based index.")
+        neighbor_weights[node_per_machine*m] = weights
+    send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
+    tensor_buffer = tensor.detach().clone()
+    is_hierarchical = True
+    handle = getattr(mpi_lib, function)(tensor_buffer, output, self_weight, neighbor_weights,
+                                        send_neighbors, enable_topo_check, avg_computation,
+                                        is_hierarchical, name.encode() if name is not None else "")
+    _handle_map[handle] = (tensor_buffer, output)
+    return handle
 
 
 def _pair_gossip_nonblocking_function_factory(tensor):
@@ -709,6 +920,7 @@ def win_update_then_collect(name: str, require_mutex: bool = True) -> torch.Tens
     """ A utility function to sync the neighbor buffers then accumulate all
     neighbor buffers' tensors into self tensor and clear the buffer.
     It is equivalent to
+
     >>> win_update(name, self_weight=1.0, neighbor_weights={neighbor: 1.0}, reset=True,
                    require_mutex=require_mutex)
 

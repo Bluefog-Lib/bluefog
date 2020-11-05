@@ -36,9 +36,9 @@ parser.add_argument(
     default='exact_diffusion'
 )
 parser.add_argument(
-    '--virtual-topology', type=str, default="power2",
+    '--virtual-topology', type=str, default="expo2",
     help='The underlying virtual topology. Supporting options are ' +
-                    '[power2(Default), ring, mesh, star].')
+    '[expo2(Default), ring, mesh, star].')
 
 parser.add_argument(
     '--computation-mode', type=str, default="normal",
@@ -75,7 +75,7 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 bf.init()
 
 if args.cuda:
-    torch.cuda.set_device(bf.local_rank() % torch.cuda.device_count())
+    torch.cuda.set_device(bf.local_rank())
     cudnn.benchmark = True
 
 def logistic_loss_step(x_, rho, X, y, tensor_name, calculate_by_hand=True):
@@ -101,7 +101,7 @@ def logistic_loss_step(x_, rho, X, y, tensor_name, calculate_by_hand=True):
             loss_.backward()
         return
 
-if args.virtual_topology == "power2":
+if args.virtual_topology == "expo2":
     pass
 elif args.virtual_topology == "ring":
         bf.set_topology(topology_util.RingGraph(bf.size(), connect_style=0))
@@ -112,7 +112,7 @@ elif args.virtual_topology == "star":
     bf.set_topology(topology_util.StarGraph(bf.size()))
 else:
     raise ValueError("Unknown args.virtual_topology, supporting options are " +
-                        "[power2(Default), ring, mesh, star].")
+                     "[expo2(Default), ring, mesh, star].")
 
 # Set up fake data
 # Generate data for logistic regression (synthesized data)

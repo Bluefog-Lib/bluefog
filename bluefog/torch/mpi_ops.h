@@ -31,7 +31,8 @@ namespace torch {
 
 #define ALLREDUCE_H(torch_Tensor, THTensor)                                    \
   extern "C" int bluefog_torch_allreduce_nonblocking_##torch_Tensor(           \
-      THTensor* tensor, THTensor* output, int average, char* name);
+      THTensor* tensor, THTensor* output, int average,                         \
+      bool is_hierarchical_local, char* name);
 
 ALLREDUCE_H(torch_IntTensor, THIntTensor)
 ALLREDUCE_H(torch_LongTensor, THLongTensor)
@@ -115,7 +116,7 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
       THTensor* tensor, THTensor* output, double self_weight,                    \
       const std::unordered_map<int, double>& neighbor_weights,                   \
       const std::vector<int>& send_neighbors, bool enable_topo_check,            \
-      bool avg_computation, char* name);
+      bool avg_computation, bool is_hierarchical, char* name);
 
 NEIGHBOR_ALLREDUCE_H(torch_HalfTensor, THHalfTensor)
 NEIGHBOR_ALLREDUCE_H(torch_FloatTensor, THFloatTensor)
