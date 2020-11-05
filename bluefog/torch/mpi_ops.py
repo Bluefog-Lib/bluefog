@@ -728,9 +728,12 @@ def _hierarchical_neighbor_allreduce_nonblocking(
     send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
     tensor_buffer = tensor.detach().clone()
     is_hierarchical = True
+    #TODO(ybc) support static machine topology case
+    dynamic_neighbors_enabled = True
     handle = getattr(mpi_lib, function)(tensor_buffer, output, self_weight, neighbor_weights,
-                                        send_neighbors, enable_topo_check, avg_computation,
-                                        is_hierarchical, name.encode() if name is not None else "")
+                                        send_neighbors, dynamic_neighbors_enabled, enable_topo_check,
+                                        avg_computation, is_hierarchical,
+                                        name.encode() if name is not None else "")
     _handle_map[handle] = (tensor_buffer, output)
     return handle
 
