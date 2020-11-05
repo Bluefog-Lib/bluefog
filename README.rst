@@ -30,27 +30,27 @@ understand more details about the BlueFog benchmark, checkout our performance pa
 
 Overview
 --------
-BlueFog is built with *decentralized optimization* algorithms. In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual and probably dynamic network topology (that can be in any shape) to achieve most communication efficiency. For each iteration, a computing agent will update its model with information received from its *direct* neighbors defined by the virtual topology. No global average is required in decentralized training algorithms. In summary, the training mechanism at agent k can be described as follows
+BlueFog is built with *decentralized optimization* algorithms. This is fundamentally different from other popular distributed training frameworks, such as DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc. 
+
+In each communication stage, neither the typical star-shaped parameter-server toplogy, nor the pipelined ring-allreduce topology is used. Instead, BlueFog will exploit a virtual and probably dynamic network topology (that can be in any shape) to achieve most communication efficiency. For each iteration, a computing agent will update its model with information received from its *direct* neighbors defined by the virtual topology. The training mechanism at agent k can be described as follows
 
 .. math::
 
      param_{k} = LOCAL_AVG(param_{j} for j in Nb_{k}) - lr*grad_{k} as algorithm keeps iterating
 
-where ``Nb_{k}`` denotes all direct neighbors of agent k, and local average is taken over this neighborhood set. With the above training update, it is observed all communications only occur over the predefied virtual topolgy and no global communication is required. This is fundamentally different from other popular distributed training frameworks, such as DistributedDataParallel provided by PyTorch, Horovod, BytePS, etc.
+where ``Nb_{k}`` denotes all direct neighbors of agent k, and local average is taken over this neighborhood set. With the above training update, it is observed all communications only occur over the predefied virtual topolgy and no global communication is required. This is why the algorithms is named *decentralized*. 
+Decentralized training algorithms are proved in literature to converge to the same solution as their standard centralized counterparts. 
 
-
-where the local average is defined based on the connection in the virtual topology. We support both **static** topology
-and **dynamic** topology usages. Among most topologies, we find the dynamic Exponential-2 graph can achieve the best performance
-if the number of processes is the power of 2, such as 4, 32, 128 processes. Exponential-2 graph is defined in the way that each process only 
-communicates with the neighbors which are  2<sup>0</sup>, 2<sup>1</sup>, ..., 2<sup>t</sup> away. **Dynamic** toplogy means all processes select
+The topology decides the communication efficiency. BlueFog supports both **static** topology and **dynamic** topology usages. After tremendous trials, the dynamic Exponential-2 graph is observed to achieve the best performance
+if the number of agents is the power of 2, such as 4, 32, 128 agents. In Exponential-2 graph, each agent will 
+communicates with the neighbors that are  2<sup>0</sup>, 2<sup>1</sup>, ..., 2<sup>t</sup> hops away. **Dynamic** toplogy means all processes select
 one neighbor only in one iteration and select next neighbor in next iteration as illustrated in the following figure:
 
 .. raw:: html
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97928035-04654400-1d1b-11eb-91d2-2da890b4522e.png" alt="one-peer-exp2" width="650"/></p>
 
-Under this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which
-is better than what ring-allreduce promises. As for loss and accuracy guarantee, please check out our theoratical paper.
+In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what ring-allreduce promises. As for loss and accuracy guarantee, please check out our theoratical paper.
 
 Quick Start
 -----------
