@@ -32,13 +32,14 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
     
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Performance" href="performance.html" />
+    <link rel="next" title="Bluefog Timeline" href="timeline.html" />
     <link rel="prev" title="Bluefog Docker Usage" href="docker.html" /> 
 </head>
 
@@ -100,6 +101,8 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="neighbor_average.html">Static and Dynamic Topology Neighbor Averaging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Environment Variable</a><ul>
@@ -108,8 +111,6 @@
 <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -196,6 +197,14 @@
 </div>
 <div class="section" id="performance">
 <h2>Performance<a class="headerlink" href="#performance" title="Permalink to this headline">¶</a></h2>
+<p>Our implementation is based upon the architecture of Horovod. Hence, we also have the tensor fusion functionality, which
+batches small allreduce/neighbor_allreduce operations into one to improve the performance. Cycle time is anthor tuning parameter
+to determine within the certain period of time, the ready tensor will be fused into one if it doesnot exceed the threshold of fusion.</p>
+<ul class="simple">
+<li><p>BLUEFOG_FUSION_THRESHOLD</p></li>
+<li><p>BLUEFOG_CYCLE_TIME</p></li>
+</ul>
+<p>The fusion threshold is based on the Byte size and cycle time is based on the milliseconds.</p>
 <p><strong>Timeline</strong>:</p>
 <p>You can set <cite>BLUEFOG_TIMELINE</cite> with some filename to turn on the timeline. See our timeline document for more details.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span> <span class="nv">BLUEFOG_TIMELINE</span><span class="o">=</span>/path/filename
@@ -238,7 +247,7 @@ define this number as the maximum size of win_ops can send.</p>
 <p>When the NCCL implementation is used, the callback functions are executed through
 a thread pool. The size of thread pool can be controlled by following:</p>
 <ul class="simple">
-<li><p>BLUEFOG_NUM_FINALIZER_THREADS (Default: 50)</p></li>
+<li><p>BLUEFOG_NUM_FINALIZER_THREADS (Default: 1)</p></li>
 </ul>
 </div>
 <div class="section" id="installation">
@@ -275,7 +284,7 @@ NCCL support. The other locaiton variables is similar to CUDA ones.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="performance.html" class="btn btn-neutral float-right" title="Performance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="timeline.html" class="btn btn-neutral float-right" title="Bluefog Timeline" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
         <a href="docker.html" class="btn btn-neutral float-left" title="Bluefog Docker Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
@@ -288,7 +297,7 @@ NCCL support. The other locaiton variables is similar to CUDA ones.</p>
   <div role="contentinfo">
     <p>
         
-        &copy; Copyright 2020, Bicheng Ying
+        &copy; Copyright 2020, BlueFog Team
 
     </p>
   </div>

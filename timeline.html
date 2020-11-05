@@ -32,6 +32,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -39,7 +40,7 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="The Spectrum of Distributed Machine Learning Algorithm" href="alg_spectrum.html" />
-    <link rel="prev" title="Bluefog Rationale" href="rationale.html" /> 
+    <link rel="prev" title="Bluefog Environment Variables" href="env_variable.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -100,11 +101,11 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="neighbor_average.html">Static and Dynamic Topology Neighbor Averaging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="env_variable.html">Bluefog Environment Variable</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Timeline</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example-i-logistic-regression-with-neighbor-allreduce">Example I: Logistic regression with neighbor_allreduce</a></li>
@@ -213,7 +214,7 @@ is not set, the timeline function will be deactivated by default.</p>
 <h2>Example I: Logistic regression with neighbor_allreduce<a class="headerlink" href="#example-i-logistic-regression-with-neighbor-allreduce" title="Permalink to this headline">¶</a></h2>
 <p>In the first example, we show the timeline when running decentralized SGD for
 logistic regression, see the figure below. In this example, each rank is connected
-via an undirected power-2 topology. We exploit the
+via an undirected exponential-2 topology. We exploit the
 primitive <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code> to perform the neighbor averaging.</p>
 <a class="reference internal image-reference" href="_images/bf_timeline_example1a.png"><img alt="_images/bf_timeline_example1a.png" class="align-center" src="_images/bf_timeline_example1a.png" style="width: 800px;" /></a>
 <p>There are two active threads in the timeline: thread 1 that is mainly for gradient
@@ -277,7 +278,7 @@ layer (i.e., pid 61).</p>
         <a href="alg_spectrum.html" class="btn btn-neutral float-right" title="The Spectrum of Distributed Machine Learning Algorithm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="rationale.html" class="btn btn-neutral float-left" title="Bluefog Rationale" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="env_variable.html" class="btn btn-neutral float-left" title="Bluefog Environment Variables" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
@@ -287,7 +288,7 @@ layer (i.e., pid 61).</p>
   <div role="contentinfo">
     <p>
         
-        &copy; Copyright 2020, Bicheng Ying
+        &copy; Copyright 2020, BlueFog Team
 
     </p>
   </div>

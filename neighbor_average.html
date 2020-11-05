@@ -1,0 +1,321 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Static and Dynamic Topology Neighbor Averaging &mdash; Bluefog  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Running Bluefog Through bfrun" href="running.html" />
+    <link rel="prev" title="Performance" href="performance.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> Bluefog
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.2.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">INSTALLATION</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installing Bluefog</a></li>
+</ul>
+<p class="caption"><span class="caption-text">API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="torch_api.html">Bluefog Torch API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="topo_api.html">Bluefog Topology API</a></li>
+</ul>
+<p class="caption"><span class="caption-text">More Information</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Performance</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Static and Dynamic Topology Neighbor Averaging</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#bluefog-code-for-static-and-dynamic-topology">BlueFog Code for Static and Dynamic Topology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#basic-theorem">Basic Theorem</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="env_variable.html">Bluefog Environment Variable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="devel_guide.html">Development Guide</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Bluefog</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Static and Dynamic Topology Neighbor Averaging</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/neighbor_average.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="static-and-dynamic-topology-neighbor-averaging">
+<h1>Static and Dynamic Topology Neighbor Averaging<a class="headerlink" href="#static-and-dynamic-topology-neighbor-averaging" title="Permalink to this headline">¶</a></h1>
+<p>The most distinguishable feature of Bluefog compared with other popular distributed training frameworks, such as
+DistributedDataParallel provided by pytorch, Horovod, BytePS, etc., is that our core implementation rooted on the idea
+that we introduce the virtual topology into the multiple processes and use the neighbor_allreduce as
+basic operation instead of allreduce.</p>
+<p>The core idea is very simple: all nodes/processes are connected through a virtual topology and they
+fetch the information from their direct neighbors only, then do the average reduce operation. Although
+the concept is simple, there are lots of deep research and theorems built upon it. Here we just touch
+the most simple case to understand the basics. But let’s run some code snippet to gain some insights first:</p>
+<div class="section" id="bluefog-code-for-static-and-dynamic-topology">
+<h2>BlueFog Code for Static and Dynamic Topology<a class="headerlink" href="#bluefog-code-for-static-and-dynamic-topology" title="Permalink to this headline">¶</a></h2>
+<p>The BlueFog APIs are designed for easy use of the static and dynamic topology.
+For simple static topology usage:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+
+<span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>  <span class="c1"># Default topology is Exponential-2 graph</span>
+<span class="n">bf</span><span class="o">.</span><span class="n">set_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">()))</span>  <span class="c1"># change to ring graph.</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">()])</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># Use previous set ring graph.</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;rank </span><span class="si">{}</span><span class="s2"> has x=</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">(),</span> <span class="n">x</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>For dynamic topology case, especially dynamic Exponential 2 graph as we recommended
+for most cases, you need a little bit more code:</p>
+<a class="reference internal image-reference" href="_images/one-peer-exp2.png"><img alt="_images/one-peer-exp2.png" class="align-center" src="_images/one-peer-exp2.png" style="width: 600px;" /></a>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+
+<span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="c1"># Since Default topology is Exponential-2, the following utility function</span>
+<span class="c1"># will generate one-peer dynamic Exponential-2 topology.</span>
+<span class="n">dynamic_neighbors</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">GetDynamicSendRecvRanks</span><span class="p">(</span>
+        <span class="n">bf</span><span class="o">.</span><span class="n">load_topology</span><span class="p">(),</span> <span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">())</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="n">bf</span><span class="o">.</span><span class="n">rank</span><span class="p">()])</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">maxite</span><span class="p">):</span>
+    <span class="n">to_neighbors</span><span class="p">,</span> <span class="n">from_neighbors</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">dynamic_neighbors</span><span class="p">)</span>
+    <span class="n">avg_weight</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">from_neighbors</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span>
+        <span class="n">self_weight</span><span class="o">=</span><span class="n">avg_weight</span><span class="p">,</span>
+        <span class="n">neighbor_weights</span><span class="o">=</span><span class="p">{</span><span class="n">r</span><span class="p">:</span> <span class="n">avg_weight</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">from_neighbors</span><span class="p">},</span>
+        <span class="n">send_neighbors</span><span class="o">=</span><span class="n">to_neighbors</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Notice here we use extra argument in the <code class="docutils literal notranslate"><span class="pre">neighbor_allreduce</span></code> function to change its behavior.
+Although here we use the pre-defined utility function, you can implementation your own dynamic topology
+function easily because all information it returns is just ranks (integers).</p>
+<p>Last note is <code class="docutils literal notranslate"><span class="pre">hierarchical_neighbor_allreduce</span></code> is defined over machine topology instead of previous
+rank/processes topology. The usage is similar by just chaning rank integers into machine integers.</p>
+</div>
+<div class="section" id="basic-theorem">
+<h2>Basic Theorem<a class="headerlink" href="#basic-theorem" title="Permalink to this headline">¶</a></h2>
+<p>Formally, consider a digraph <span class="math notranslate nohighlight">\(G=(V,E)\)</span>, where <span class="math notranslate nohighlight">\(|V|=n\)</span>,
+and weight matrix <span class="math notranslate nohighlight">\(W\)</span> defined on <span class="math notranslate nohighlight">\(G\)</span>, that is, <span class="math notranslate nohighlight">\(w_{ij}\neq 0\)</span>
+only for <span class="math notranslate nohighlight">\((j,i)\in E\)</span> and <span class="math notranslate nohighlight">\(j=i\)</span>.
+Neighbor average of vector <span class="math notranslate nohighlight">\(x_1,\dots,x_n\)</span> defined over graph <span class="math notranslate nohighlight">\(G\)</span> is equivalent to the
+matrix multiplication:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}W\mathbf{x} = W
+\begin{bmatrix}
+  \text{---} &amp; x_1^T &amp; \text{---}\\
+  &amp; \cdots &amp; \\
+  \text{---} &amp; x_n^T &amp; \text{---}
+\end{bmatrix}.\end{split}\]</div>
+<p><strong>Theorem</strong>: The sequence <span class="math notranslate nohighlight">\(\mathbf{x}^{(k)} = W\mathbf{x}^{(k-1)}\)</span> converges to <span class="math notranslate nohighlight">\(\mathbf{x}^\star=\frac{1}{n}\left(x_1+\dots+x_n\right)\)</span>
+for all <span class="math notranslate nohighlight">\(\mathbf{x}\)</span> if</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(W^{(k)}\mathbf{1} = \mathbf{1}\)</span>,</p></li>
+<li><p><span class="math notranslate nohighlight">\(\mathbf{1}^T W^{(k)}=\mathbf{1}^T\)</span>,</p></li>
+<li><p><span class="math notranslate nohighlight">\(W\)</span> has eigenvalues: <span class="math notranslate nohighlight">\(\lambda_1=1 &gt; |\lambda_2| \ge \dots \ge |\lambda_n| &gt; -1\)</span>.</p></li>
+</ul>
+<p>Also, <span class="math notranslate nohighlight">\(\|\mathbf{x}^{(k)}-\mathbf{x}^\star\|_2\le \underbrace{\max(|\lambda_2|,|\lambda_n|)}_{=:\rho}\|\mathbf{x}-\mathbf{x}^\star\|_2\)</span>.
+Smaller <span class="math notranslate nohighlight">\(\rho\)</span> means faster convergence.</p>
+<p>For dynamic topology, the combination matrix should change to <span class="math notranslate nohighlight">\(W^{(k)}\)</span> and the
+convergence condition becomes more complicated but similar. You can refer our papers to see more
+theoratical guarantee.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="running.html" class="btn btn-neutral float-right" title="Running Bluefog Through bfrun" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="performance.html" class="btn btn-neutral float-left" title="Performance" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 2020, BlueFog Team
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -32,6 +32,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -106,11 +107,11 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="neighbor_average.html">Static and Dynamic Topology Neighbor Averaging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="env_variable.html">Bluefog Environment Variable</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -208,27 +209,31 @@ which needs to be built on your system. Check this <a class="reference external"
 <div class="section" id="installing-bluefog-from-pip-gpu">
 <h2>Installing Bluefog from Pip (GPU)<a class="headerlink" href="#installing-bluefog-from-pip-gpu" title="Permalink to this headline">¶</a></h2>
 <p>All steps for GPU case are the same as CPU case except for the OpenMPI installation.
-In order to get full support of GPU, you have to install <cite>CUDA&gt;=10.0</cite>
-and install pytorch and/or tensorflow with the GPU support version.
-To maximize the efficiency of GPU and MPI, our implementation assumes the
-MPI installed is GPU-aware if GPU is available. It will avoid the extra cost
-that copy and moving the data from the GPU and host memory, i.e. the address of
-GPU location can be used directly. However, if MPI built is not GPU-aware,
-there will be a segmentation fault. To do that, you can configure the open install setting
+In order to get full support of GPU, you have to install <cite>CUDA&gt;=10.1</cite>
+and install pytorch with the GPU support version.
+It is highly recommended to use NCCL instead of OpenMPI as GPU
+communication implementation. We require the <code class="docutils literal notranslate"><span class="pre">NCCL&gt;=2.7</span></code> since our implementation heavily
+relied on the new <cite>ncclSend</cite> and <cite>ncclRecv</cite> API introduced after version 2.7.
+To install Bluefog with NCCL implementation, you need to run</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BLUEFOG_WITH_NCCL</span><span class="o">=</span><span class="m">1</span> pip install --no-cache-dir bluefog
+</pre></div>
+</div>
+<p>You can also install the GPU-aware OpenMPI as GPU communication implementation.
+To do that, you can configure the open install setting
 after the download of OpenMPI:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./configure --prefix<span class="o">={</span>YOUR_OWN_PREFIX<span class="o">}</span> --with-cuda <span class="o">&amp;&amp;</span> <span class="se">\</span>
 make -j <span class="k">$(</span>nproc<span class="k">)</span> all <span class="o">&amp;&amp;</span> <span class="se">\</span>
 make install
 </pre></div>
 </div>
-<p>If you have NCCL installed in your system, it is also recommend to use NCCL instead of OpenMPI as
-communication implementation. To install Bluefog with NCCL implementation, you need to run</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BLUEFOG_WITH_NCCL</span><span class="o">=</span><span class="m">1</span> pip install --no-cache-dir bluefog
-</pre></div>
-</div>
 </div>
 <div class="section" id="installing-bluefog-from-github-directly">
 <h2>Installing Bluefog from Github Directly<a class="headerlink" href="#installing-bluefog-from-github-directly" title="Permalink to this headline">¶</a></h2>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The lastest functionality may not be able avaiable through <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">bluefog</span></code>.
+Installing from Github is better during our early development stage.</p>
+</div>
 <p>First, please check your environment as mentioned in above subsections. Then,
 clone or download the bluefog repository from <a class="reference external" href="https://github.com/ybc1991/bluefog">Github</a>. Last, just run the
 following command under the root folder of bluefog repository:</p>
@@ -276,7 +281,7 @@ For more details, check <a class="reference internal" href="docker.html#docker-u
   <div role="contentinfo">
     <p>
         
-        &copy; Copyright 2020, Bicheng Ying
+        &copy; Copyright 2020, BlueFog Team
 
     </p>
   </div>

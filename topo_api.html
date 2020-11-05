@@ -32,6 +32,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -100,11 +101,11 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="neighbor_average.html">Static and Dynamic Topology Neighbor Averaging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="env_variable.html">Bluefog Environment Variable</a></li>
-<li class="toctree-l1"><a class="reference internal" href="performance.html">Bluefog Perform Comparison</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -244,14 +245,14 @@ the adjacenty matrix is the same only.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.PowerTwoRingGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">PowerTwoRingGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.PowerTwoRingGraph" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.common.topology_util.ExponentialTwoGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">ExponentialTwoGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.ExponentialTwoGraph" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate graph topology such that each points only
-connected to a point such that the index difference is power of 2.</p>
-<p>Example: A PowerTwoRingGraph with 12 nodes:</p>
+connected to a point such that the index difference is the power of 2.</p>
+<p>Example: A ExponentialTwoGraph with 12 nodes:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">PowerTwoRingGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">ExponentialTwoGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -266,14 +267,14 @@ connected to a point such that the index difference is power of 2.</p>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.PowerGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">PowerGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">base</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">2</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.PowerGraph" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.common.topology_util.ExponentialGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">ExponentialGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">base</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">2</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.ExponentialGraph" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate graph topology such that each points only
 connected to a point such that the index difference is power of base. (Default is 2)</p>
-<p>Example: A PowerGraph with 12 nodes:</p>
+<p>Example: A ExponentialGraph with 12 nodes:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">PowerGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">ExponentialGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -283,17 +284,17 @@ connected to a point such that the index difference is power of base. (Default i
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.SymmetricPowerGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">SymmetricPowerGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">base</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">4</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.SymmetricPowerGraph" title="Permalink to this definition">¶</a></dt>
+<dt id="bluefog.common.topology_util.SymmetricExponentialGraph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">SymmetricExponentialGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">base</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">4</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.SymmetricExponentialGraph" title="Permalink to this definition">¶</a></dt>
 <dd><blockquote>
 <div><p>Generate symmeteric graph topology such that for the first half of nodes
 only connected to a point such that the index difference is power of base (Default is 4)
 and the connectivity for the second half of nodes just mirrored to the first half.</p>
 </div></blockquote>
-<p>Example: A SymmetricPowerGraph with 12 nodes</p>
+<p>Example: A SymmetricExponentialGraph with 12 nodes</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">SymmetricPowerGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">SymmetricExponentialGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -402,9 +403,9 @@ subgraph of static graph. Hence, the inner connection here is fully connected.</
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.InnerOuterExp2Graph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">InnerOuterExp2Graph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.InnerOuterExp2Graph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate Inner Ring and Outer Exponential-2 Graph Static Graph for dynamic usage.</p>
+<dt id="bluefog.common.topology_util.InnerOuterExpo2Graph">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">InnerOuterExpo2Graph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.InnerOuterExpo2Graph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate Inner Ring and Outer Exponential-2 Graph.</p>
 <p>Within one machine all inner rank/processes is fully-connected and all
 nodes with same local size across all machines forms exponential-2 graph.</p>
 <blockquote>
@@ -416,7 +417,7 @@ subgraph of static graph. Hence, the inner connection here is fully connected.</
 </div></blockquote>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">InnerOuterExp2Graph</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">InnerOuterExpo2Graph</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -457,12 +458,35 @@ subgraph of static graph. Hence, the inner connection here is fully connected.</
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.GetInnerOuterRingDynamicSendRecvRanks">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetInnerOuterRingDynamicSendRecvRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Iterator" title="bluefog.common.topology_util.Iterator">Iterator</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetInnerOuterRingDynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)</dt><dd><p>for Inner-Ring-Outer-Ring topology</p>
+<dt id="bluefog.common.topology_util.GetExp2DynamicSendRecvMachineRanks">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetExp2DynamicSendRecvMachineRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Iterator" title="bluefog.common.topology_util.Iterator">Iterator</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetExp2DynamicSendRecvMachineRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outgoing send machine id and corresponding recieving
+machine id(s) for Exponentia-2 topology.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>world_size</strong> (<em>int</em>) – the size of all nodes; world_size = num_machines * nodes_per_machine</p></li>
+<li><p><strong>local_size</strong> (<em>int</em>) – number of nodes in each machine</p></li>
+<li><p><strong>self_rank</strong> (<em>int</em>) – The self rank.</p></li>
+<li><p><strong>local_rank</strong> (<em>int</em>) – The self local rank.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields</dt>
+<dd class="field-even"><p><em>Iterator[Tuple[List[int], List[int]]]</em> – send_machine_ids, recv_machine_ids.</p>
 </dd>
 </dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This function should be used under homogeneous enviroment only, i.e. all machines have
+the same number of local processes.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.common.topology_util.GetInnerOuterRingDynamicSendRecvRanks">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetInnerOuterRingDynamicSendRecvRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Iterator" title="bluefog.common.topology_util.Iterator">Iterator</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetInnerOuterRingDynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+for Inner-Ring-Outer-Ring topology.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -486,12 +510,10 @@ subgraph of static graph. Hence, the inner connection here is fully connected.</
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.GetInnerOuterExp2DynamicSendRecvRanks">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetInnerOuterExp2DynamicSendRecvRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Iterator" title="bluefog.common.topology_util.Iterator">Iterator</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetInnerOuterExp2DynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)</dt><dd><p>for Inner-Exp2-Outer-Exp2 ring topology</p>
-</dd>
-</dl>
+<dt id="bluefog.common.topology_util.GetInnerOuterExpo2DynamicSendRecvRanks">
+<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">GetInnerOuterExpo2DynamicSendRecvRanks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">self_rank</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#bluefog.common.topology_util.Iterator" title="bluefog.common.topology_util.Iterator">Iterator</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.Tuple" title="bluefog.common.topology_util.Tuple">Tuple</a><span class="p">[</span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">, </span><a class="reference internal" href="#bluefog.common.topology_util.List" title="bluefog.common.topology_util.List">List</a><span class="p">[</span>int<span class="p">]</span><span class="p">]</span><span class="p">]</span><a class="headerlink" href="#bluefog.common.topology_util.GetInnerOuterExpo2DynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+for Inner-Exp2-Outer-Exp2 ring topology.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -507,7 +529,7 @@ subgraph of static graph. Hence, the inner connection here is fully connected.</
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">bf</span><span class="o">.</span><span class="n">local_size</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">GetInnerOuterExp2DynamicSendRecvRanks</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">GetInnerOuterExpo2DynamicSendRecvRanks</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
 <span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">gen</span><span class="p">))</span>
 </pre></div>
@@ -537,7 +559,7 @@ subgraph of static graph. Hence, the inner connection here is fully connected.</
   <div role="contentinfo">
     <p>
         
-        &copy; Copyright 2020, Bicheng Ying
+        &copy; Copyright 2020, BlueFog Team
 
     </p>
   </div>

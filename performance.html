@@ -32,14 +32,15 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
     
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Bluefog Rationale" href="rationale.html" />
-    <link rel="prev" title="Bluefog Environment Variables" href="env_variable.html" /> 
+    <link rel="next" title="Static and Dynamic Topology Neighbor Averaging" href="neighbor_average.html" />
+    <link rel="prev" title="Bluefog Operations Explanation" href="bluefog_ops.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -100,11 +101,16 @@
 <p class="caption"><span class="caption-text">More Information</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="bluefog_ops.html">Bluefog Ops Explanation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Performance</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#throughput-benchmark">ThroughPut Benchmark</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#accuracy-and-loss">Accuracy and Loss</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tricks-of-boosting-accuracy">Tricks of Boosting Accuracy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="neighbor_average.html">Static and Dynamic Topology Neighbor Averaging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="running.html">Lauching Application Through bfrun</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Bluefog Docker Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="env_variable.html">Bluefog Environment Variable</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Bluefog Perform Comparison</a></li>
-<li class="toctree-l1"><a class="reference internal" href="rationale.html">Bluefog Rationale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timeline.html">Bluefog Timeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alg_spectrum.html">Spectrum of Machine Learning Algorithm</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code_structure.html">Codebase Structure</a></li>
@@ -176,7 +182,61 @@
             
   <div class="section" id="performance">
 <h1>Performance<a class="headerlink" href="#performance" title="Permalink to this headline">¶</a></h1>
-<p>To be added.</p>
+<div class="section" id="throughput-benchmark">
+<h2>ThroughPut Benchmark<a class="headerlink" href="#throughput-benchmark" title="Permalink to this headline">¶</a></h2>
+<p>All of our benchmarks were run on the AWS. We use p3.16xlarge as basic machine.
+Each machine has 8 V100 GPUs (64GB memory) with NVLink-enabled and inter-connected communication speed is 25Gbps.
+For more details of machine instance, you can find it <a class="reference external" href="https://aws.amazon.com/ec2/instance-types/p3/">here</a>.</p>
+<p>To reproduce the benchmarks, run following command <a class="footnote-reference brackets" href="#id2" id="id1">1</a>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ bfrun -np <span class="m">16</span> -H server1:4,server2:4,server3:4,server4:4 <span class="se">\</span>
+    python examples/pytorch_benchmark.py --batch-size <span class="m">64</span> <span class="se">\</span>
+        --dist-optimizer<span class="o">=</span>neighbor_allreduce --virtual-topology InnerOuterExp2
+</pre></div>
+</div>
+<p>At the end of run, you will see the total number of images processed per second like:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>Total img/sec on <span class="m">16</span> GPU<span class="o">(</span>s<span class="o">)</span>: <span class="m">4310</span>.6 +- <span class="m">146</span>.9
+</pre></div>
+</div>
+<p>We also provide another distributed optimizer <cite>DistributedHierarchicalNeighborAllreduce</cite>, which is similar
+as neighbor_allreduce one but within each machine execute local allreduce first to form a super node. This
+optimizer may produce better scaling in terms of loss and accuracy.  Read <a class="reference internal" href="bluefog_ops.html#ops-explanation"><span class="std std-ref">Bluefog Operations Explanation</span></a> page to checkout
+the details of the underlying communication operation.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ bfrun -np <span class="m">16</span> -H server1:4,server2:4,server3:4,server4:4 <span class="se">\</span>
+    python examples/pytorch_benchmark.py --batch-size <span class="m">64</span> <span class="se">\</span>
+        --dist-optimizer<span class="o">=</span>hierarchical_neighbor_allreduce
+</pre></div>
+</div>
+<p>We also provided the option of set dist-optimizer as horovod for easy comparison. Above three dist-optimizers produce following
+benchmarks:</p>
+<a class="reference internal image-reference" href="_images/bf_full_benchmark1.png"><img alt="_images/bf_full_benchmark1.png" class="align-center" src="_images/bf_full_benchmark1.png" style="width: 600px;" /></a>
+<p>where N_AR represents the neighbor allreduce optimizer and H_N_AR represents the hierarchical_neighbor_allreduce and the black
+box represents the idea of linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod is around 78%
+sacling efficiency under a batch size of 64.</p>
+<p>For more communication intensive case with a batch size of 32,
+the scaling efficiency between Bluefog and Horovod becomes even larger.</p>
+<a class="reference internal image-reference" href="_images/bf_full_benchmark2.png"><img alt="_images/bf_full_benchmark2.png" class="align-center" src="_images/bf_full_benchmark2.png" style="width: 600px;" /></a>
+</div>
+<div class="section" id="accuracy-and-loss">
+<h2>Accuracy and Loss<a class="headerlink" href="#accuracy-and-loss" title="Permalink to this headline">¶</a></h2>
+<p>TO BE ADDED</p>
+</div>
+<div class="section" id="tricks-of-boosting-accuracy">
+<h2>Tricks of Boosting Accuracy<a class="headerlink" href="#tricks-of-boosting-accuracy" title="Permalink to this headline">¶</a></h2>
+<p>Just like the tricks decaying of lr over time used in the large batch size training for ImageNet, there are several small tricks of
+using Bluefog as well, including</p>
+<ul class="simple">
+<li><p>Smaller Warmup LR</p></li>
+<li><p>Periodical Global Average</p></li>
+<li><p>ATC (adapt-then-combine) VS DGD(distributed-gradient-descent) style (Do the neighbor allreduce after VS in parallel with gradient computation)</p></li>
+<li><p>Faster learning rate decaying like decaying every 25 epoches instead of 30 epoches for ImageNet + ResNet Training</p></li>
+</ul>
+<p>TO BE ADDED</p>
+<dl class="footnote brackets">
+<dt class="label" id="id2"><span class="brackets"><a class="fn-backref" href="#id1">1</a></span></dt>
+<dd><p>We recommended using aws-ParallelCluster as cluster manager combined with our docker images to run BlueFog on AWS.</p>
+</dd>
+</dl>
+</div>
 </div>
 
 
@@ -187,10 +247,10 @@
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="rationale.html" class="btn btn-neutral float-right" title="Bluefog Rationale" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="neighbor_average.html" class="btn btn-neutral float-right" title="Static and Dynamic Topology Neighbor Averaging" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="env_variable.html" class="btn btn-neutral float-left" title="Bluefog Environment Variables" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="bluefog_ops.html" class="btn btn-neutral float-left" title="Bluefog Operations Explanation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
@@ -200,7 +260,7 @@
   <div role="contentinfo">
     <p>
         
-        &copy; Copyright 2020, Bicheng Ying
+        &copy; Copyright 2020, BlueFog Team
 
     </p>
   </div>
