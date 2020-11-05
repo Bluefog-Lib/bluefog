@@ -934,7 +934,8 @@ The data structure of weights should be {rank : weight} and rank has to belong t
 <li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
 the current node sends to all of its (out-)neighbors. If having values, assume only
 part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-partial neighbors listed in this variable.</p></li>
+partial neighbors listed in this variable in a dynamic graph, and <cite>self_weight</cite> and
+<cite>neighbor_weights</cite> must be present.</p></li>
 <li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
 sending and recieving neighbors match with each other. Disabling this check can boost
 the performance.</p></li>
@@ -972,7 +973,8 @@ The data structure of weights should be {rank : weight} and rank has to belong t
 <li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
 the current node sends to all of its (out-)neighbors. If having values, assume only
 part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-partial neighbors listed in this variable.</p></li>
+partial neighbors listed in this variable in a dynamic graph, and <cite>self_weight</cite> and
+<cite>neighbor_weights</cite> must be present.</p></li>
 <li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
 sending and recieving neighbors match with each other. Disabling this check can boost
 the performance.</p></li>
