@@ -505,7 +505,7 @@ def GetInnerOuterRingDynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert nodes_per_machine > 2, "We do not support the case nodes per machine <= 2 yet."
+    assert nodes_per_machine > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
 
     index = 0
     while True:
@@ -526,9 +526,9 @@ def GetInnerOuterRingDynamicSendRecvRanks(
 
         else:
             if nodes_per_machine == 2:
-                # Do not send. But our neighbor_allreduce haven't supported this yet.
-                raise ValueError(
-                    "Unfortunately, nodes_per_machine is 2 case is not supported yet.")
+                yield [], []
+                index += 1
+                continue
             else:
                 # find send_rank
                 target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
@@ -576,7 +576,7 @@ def GetInnerOuterExpo2DynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert nodes_per_machine > 2, "We do not support the case nodes per machine <= 2 yet."
+    assert nodes_per_machine > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
     exp_2_out_size = int(np.log2(num_machines-1))
     exp_2_in_size = int(np.log2(nodes_per_machine-2))  # -2 because we need to remove outgoing node
 
@@ -607,9 +607,9 @@ def GetInnerOuterExpo2DynamicSendRecvRanks(
 
         else:
             if nodes_per_machine == 2:
-                # Do not send. But our neighbor_allreduce haven't supported this yet.
-                raise ValueError(
-                    "Unfortunately, nodes_per_machine is 2 case is not supported yet.")
+                yield [], []
+                index += 1
+                continue
             else:
                 # Distance from self to out-rank:
                 dist_to_out = (local_rank_to_go_outside_id -

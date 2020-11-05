@@ -29,7 +29,7 @@ parser.add_argument('--local-size', type=int, default=4,
                     help='number of nodes per machine')
 parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
-                    '[expo2(Default), ring, mesh, star, InnerOuterRing].')
+                    '[expo2(Default), ring, mesh, star, InnerOuterExpo2].')
 parser.add_argument('--asynchronous-mode', action='store_true', default=False,
                     help='Use one-sided ops to run asynchronous push sum algorithm')
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -71,8 +71,8 @@ elif args.virtual_topology == "mesh":
         bf.size(), connect_style=0), is_weighted=True)
 elif args.virtual_topology == "star":
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
-elif args.virtual_topology == "InnerOuterRing":
-    bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=args.local_size))
+elif args.virtual_topology == "InnerOuterExpo2":
+    bf.set_topology(topology_util.InnerOuterExpo2Graph(bf.size(), local_size=args.local_size))
 elif args.virtual_topology == "full":
     bf.set_topology(topology_util.FullyConnectedGraph(bf.size()))
 else:
@@ -89,7 +89,7 @@ if not args.asynchronous_mode:
 
     if args.enable_dynamic_topology:
         if args.virtual_topology == "InnerOuterRing":
-            dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
+            dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
                 bf.size(), local_size=args.local_size, self_rank=bf.rank())
         else:
             dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
