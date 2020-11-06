@@ -15,7 +15,7 @@ To reproduce the benchmarks, run following command [#]_:
 
     $ bfrun -np 16 -H server1:4,server2:4,server3:4,server4:4 \
         python examples/pytorch_benchmark.py --batch-size 64 \
-            --dist-optimizer=neighbor_allreduce --virtual-topology InnerOuterExp2
+            --dist-optimizer=neighbor_allreduce
 
 At the end of run, you will see the total number of images processed per second like:
 
@@ -42,8 +42,8 @@ benchmarks:
    :align: center
 
 where N\_AR represents the neighbor allreduce optimizer and H\_N\_AR represents the hierarchical_neighbor_allreduce and the black 
-box represents the idea of linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod is around 78%
-sacling efficiency under a batch size of 64. 
+box represents the idea of linear scaling. We can see Bluefog can achieve over 95% scaling efficiency while Horovod is around 66%
+sacling efficiency under a batch size of 64 on 128 GPUs. 
 
 For more communication intensive case with a batch size of 32, 
 the scaling efficiency between Bluefog and Horovod becomes even larger.
