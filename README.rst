@@ -129,6 +129,7 @@ illustrates how to run a simple consensus algorithm through bluefog.
 
 Checkout our `API explanation page <https://bluefog-lib.github.io/bluefog/bluefog_ops.html>`_ to see all supported *synchronous* and *asynchronous* features.
 
+The Bluefog source code was based off `Horovod <https://github.com/horovod/horovod>`_ repository. Hence, BlueFog shared lots of common features from Horovod such as `timeline <https://bluefog-lib.github.io/bluefog/timeline.html>`_, tensor-fusion, etc. Here, we want to express our gratitude to the Horovod team. 
 
 Citation
 --------
