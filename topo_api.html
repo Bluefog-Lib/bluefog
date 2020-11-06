@@ -175,9 +175,46 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="module-bluefog.common.topology_util">
-<span id="topology-related-utility-functions"></span><h1>Topology Related Utility Functions<a class="headerlink" href="#module-bluefog.common.topology_util" title="Permalink to this headline">¶</a></h1>
-<dl class="py data">
+  <div class="section" id="topology-related-utility-functions">
+<h1>Topology Related Utility Functions<a class="headerlink" href="#topology-related-utility-functions" title="Permalink to this headline">¶</a></h1>
+<p>We provide several popular static and dynamic topologies.</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Static Topology</dt><dd><ul>
+<li><p>ExponentialGraph, ExponentialTwoGraph</p></li>
+<li><p>SymmetricExponentialGraph</p></li>
+<li><p>MeshGrid2DGraph</p></li>
+<li><p>StarGraph, RingGraph</p></li>
+<li><p>FullyConnectedGraph</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Dynamic Topology</dt><dd><ul>
+<li><p>GetDynamicSendRecvRanks</p></li>
+<li><p>GetExp2DynamicSendRecvMachineRanks</p></li>
+<li><p>GetInnerOuterRingDynamicSendRecvRanks</p></li>
+<li><p>GetInnerOuterExpo2DynamicSendRecvRanks</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Utility Function</dt><dd><ul>
+<li><p>IsRegularGraph</p></li>
+<li><p>IsTopologyEquivalent</p></li>
+<li><p>GetSendWeights, GetRecvWeights</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>You can also write your own topology strategy as long as your static topology function returns
+a <a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/digraph.html">networkx.DiGraph</a>
+object and dynamic topology function (generator more accurately) yields
+a list of send neighbor and receive neighbor ranks in each call.</p>
+<span class="target" id="module-bluefog.common.topology_util"></span><dl class="py data">
 <dt id="bluefog.common.topology_util.List">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">List</code><a class="headerlink" href="#bluefog.common.topology_util.List" title="Permalink to this definition">¶</a></dt>
 <dd><p>The central part of internal API.</p>
