@@ -381,52 +381,6 @@ For example, a FullyConnectedGraph with 16 nodes:</p>
 </dd></dl>
 
 <dl class="py function">
-<dt id="bluefog.common.topology_util.InnerOuterRingGraph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">InnerOuterRingGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.InnerOuterRingGraph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate Inner Ring and Outer Ring (Unilateral) Static Graph for dynamic usage.</p>
-<p>Within one machine all inner rank/processes is fully connected and all
-nodes with same local size across all machines is connected through another ring.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Currently, our implementation has requirement that dyanmic graph has to be the
-subgraph of static graph. Hence, the inner connection here is fully connected.</p>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">InnerOuterRingGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="figure align-default">
-<img alt="_images/topo_api-8.png" src="_images/topo_api-8.png" />
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt id="bluefog.common.topology_util.InnerOuterExpo2Graph">
-<code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">InnerOuterExpo2Graph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">world_size</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">local_size</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.common.topology_util.InnerOuterExpo2Graph" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate Inner Ring and Outer Exponential-2 Graph.</p>
-<p>Within one machine all inner rank/processes is fully-connected and all
-nodes with same local size across all machines forms exponential-2 graph.</p>
-<blockquote>
-<div><div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Currently, our implementation has requirement that dyanmic graph has to be the
-subgraph of static graph. Hence, the inner connection here is fully connected.</p>
-</div>
-</div></blockquote>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">InnerOuterExpo2Graph</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="figure align-default">
-<img alt="_images/topo_api-9.png" src="_images/topo_api-9.png" />
-</div>
-</dd></dl>
-
-<dl class="py function">
 <dt id="bluefog.common.topology_util.IsRegularGraph">
 <code class="sig-prename descclassname">bluefog.common.topology_util.</code><code class="sig-name descname">IsRegularGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topo</span><span class="p">:</span> <span class="n">networkx.classes.digraph.DiGraph</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.common.topology_util.IsRegularGraph" title="Permalink to this definition">¶</a></dt>
 <dd><p>Dtermine a graph is regular or not, i.e. all nodes have the same degree.</p>
