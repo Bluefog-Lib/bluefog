@@ -1065,15 +1065,12 @@ the performance.</p></li>
 <dl class="py function">
 <dt id="bluefog.torch.poll">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">poll</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">handle</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.poll" title="Permalink to this definition">¶</a></dt>
-<dd><p>Polls an allreduce, allgather or broadcast handle to determine whether underlying
-nonblocking operation has completed. After <cite>poll()</cite> returns <cite>True</cite>, <cite>synchronize()</cite>
+<dd><p>Polls an allreduce, neighbor_allreduce, etc operation handle to determine whether underlying
+nonblocking operation has completed. After <cite>poll()</cite> returns <cite>True</cite>, <cite>wait()</cite>
 will return without blocking.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>handle</strong> – A handle returned by an allreduce, allgather, broadcast, neighbor_allgather,</p></li>
-<li><p><strong>neighbro_allreduce nonblocking operation.</strong> (<em>and</em>) – </p></li>
-</ul>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>A flag indicating whether the operation has completed.</p>
@@ -1084,12 +1081,31 @@ will return without blocking.</p>
 <dl class="py function">
 <dt id="bluefog.torch.synchronize">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">synchronize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">handle</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.synchronize" title="Permalink to this definition">¶</a></dt>
-<dd><p>Synchronizes an nonblocking allreduce, allgather or broadcast operation until
-it’s completed. Returns the result of the operation.</p>
+<dd><p>Wait an allreduce, neighbor_allreduce, etc operation until
+it’s completed. Returns the result of the operation.
+It is the same function as <cite>wait()</cite>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, allgather or broadcast nonblocking
-operation.</p>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>An output tensor of the operation.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.wait">
+<code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">wait</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">handle</span><span class="p">:</span> <span class="n">int</span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#bluefog.torch.wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait an allreduce, neighbor_allreduce, etc operation until
+it’s completed. Returns the result of the operation.
+It is just alias of <cite>synchronize()</cite> function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>An output tensor of the operation.</p>
