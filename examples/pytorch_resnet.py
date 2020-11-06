@@ -103,7 +103,8 @@ torch.manual_seed(args.seed)
 if args.cuda:
     print("using cuda.")
     # Bluefog: pin GPU to local rank.
-    torch.cuda.set_device(bf.local_rank())
+    device_id = bf.local_rank() if bf.nccl_built() else bf.local_rank() % torch.cuda.device_count()
+    torch.cuda.set_device(device_id)
     torch.cuda.manual_seed(args.seed)
 else:
     print("using cpu")

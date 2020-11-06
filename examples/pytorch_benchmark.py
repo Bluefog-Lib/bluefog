@@ -69,7 +69,8 @@ if args.dist_optimizer == 'horovod':
 bf.init()
 
 if args.cuda:
-    torch.cuda.set_device(bf.local_rank())
+    device_id = bf.local_rank() if bf.nccl_built() else bf.local_rank() % torch.cuda.device_count()
+    torch.cuda.set_device(device_id)
     cudnn.benchmark = True
 
 # Set up standard model.
