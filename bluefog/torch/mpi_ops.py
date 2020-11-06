@@ -1106,8 +1106,8 @@ def win_get_nonblocking(name: str, src_weights: Optional[Dict[int, float]] = Non
             acquired.
 
     Returns:
-        A handle to the win_get operation that can be used with `poll()` or
-        `synchronize()`.
+        A handle to the win_get operation that can be used with `win_poll()` or
+        `win_wait()`.
     """
     function = "bluefog_torch_win_get"
     src_weights = ({rank: 1.0 for rank in in_neighbor_ranks()}

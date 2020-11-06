@@ -150,7 +150,7 @@ class BlueFogBasics(object):
         return self._is_topo_weighted
 
     def load_topology(self) -> networkx.DiGraph:
-        """A funnction that return the virtual topology MPI used.
+        """A funnction that returns the virtual topology MPI used.
 
         Returns:
             topology: networkx.DiGraph.
@@ -187,7 +187,7 @@ class BlueFogBasics(object):
 
     def set_topology(self, topology: Optional[networkx.DiGraph] = None,
                      is_weighted: bool = False) -> bool:
-        """A funnction that set the virtual topology MPI used.
+        """A funnction that sets the virtual topology MPI used.
 
         Args:
           Topo: A networkx.DiGraph object to decide the topology. If not provided
