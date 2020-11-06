@@ -54,8 +54,10 @@ class WinOpsTests(unittest.TestCase):
     @staticmethod
     def cast_and_place(tensor, dtype):
         if dtype.is_cuda:
-            device_id = bf.local_rank() % torch.cuda.device_count()
-            return tensor.cuda(device_id).type(dtype)
+            if bf.local_size() > torch.cuda.device_count():
+                raise EnvironmentError(
+                    "Cannot run number of processes in one machine are more than device count")
+            return tensor.cuda(bf.local_rank()).type(dtype)
         return tensor.type(dtype)
 
     def test_win_create_and_sync_and_free(self):

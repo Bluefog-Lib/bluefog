@@ -422,8 +422,8 @@ def GetInnerOuterRingDynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert local_size > 2, "Do no support the case where nodes_per_machine is equal or less than 2 " \
-        "Consider use hierarchical_neighbor_allreduce or simple GetDynamicSendRecvRanks instead."
+    assert local_size > 2, "Do no support the case where nodes_per_machine is equal or " \
+        "less than 2. Consider use hierarchical_neighbor_allreduce or GetDynamicSendRecvRanks."
 
     index = 0
     while True:
@@ -489,8 +489,8 @@ def GetInnerOuterExpo2DynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert local_size > 2, "Do no support the case where nodes_per_machine is equal or less than 2 " \
-        "Consider use hierarchical_neighbor_allreduce or simple GetDynamicSendRecvRanks instead."
+    assert local_size > 2, "Do no support the case where nodes_per_machine is equal or " \
+        "less than 2. Consider use hierarchical_neighbor_allreduce or GetDynamicSendRecvRanks."
 
     exp_2_out_size = int(np.log2(num_machines-1))
     if nodes_per_machine == 2:

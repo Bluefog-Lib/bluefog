@@ -82,7 +82,8 @@ parser.add_argument(
 parser.add_argument("--seed", type=int, default=42, help="random seed")
 parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are [win_put, ' +
-                    'neighbor_allreduce, allreduce, hierarchical_neighbor_allreduce, horovod]')
+                    'neighbor_allreduce, hierarchical_neighbor_allreduce, allreduce, ' +
+                    'gradient_allreduce, horovod]')
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))

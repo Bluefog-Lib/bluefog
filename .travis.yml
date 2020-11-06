@@ -58,6 +58,7 @@ deploy:
     local_dir: docs/_build/html/
     on:
         branch: master
+        condition: $MPI = openmpi
 
 notifications:
     email:

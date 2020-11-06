@@ -51,11 +51,7 @@ parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training")
 parser.add_argument('--dist-optimizer', type=str, default='win_put',
                     help='The type of distributed optimizer. Supporting options are ' +
-                    '[win_put, neighbor_allreduce, allreduce, horovod]')
-parser.add_argument("--average-test-result", action="store_true",
-                    default=False,
-                    help=("Allreduce called to average test result. Warning this will " +
-                          "force the algorithm to sync every end of epoch."))
+                    '[neighbor_allreduce, hierarchical_neighbor_allreduce, allreduce, horovod]')
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
@@ -114,11 +110,10 @@ test_dataset = datasets.MNIST(
     ),
 )
 test_sampler = None
-if args.average_test_result:
-    # Bluefog: use DistributedSampler to partition the test data.
-    test_sampler = torch.utils.data.distributed.DistributedSampler(
-        test_dataset, num_replicas=bf.size(), rank=bf.rank()
-    )
+# Bluefog: use DistributedSampler to partition the test data.
+test_sampler = torch.utils.data.distributed.DistributedSampler(
+    test_dataset, num_replicas=bf.size(), rank=bf.rank()
+)
 test_loader = torch.utils.data.DataLoader(
     test_dataset, batch_size=args.test_batch_size, sampler=test_sampler, **kwargs
 )
@@ -292,9 +287,8 @@ def test(record):
     test_accuracy /= len(test_sampler) if test_sampler else len(test_dataset)
 
     # Bluefog: average metric values across workers.
-    if args.average_test_result:
-        test_loss = metric_average(test_loss, "avg_loss")
-        test_accuracy = metric_average(test_accuracy, "avg_accuracy")
+    test_loss = metric_average(test_loss, "avg_loss")
+    test_accuracy = metric_average(test_accuracy, "avg_accuracy")
 
     # Bluefog: print output only on first rank.
     if bf.rank() == 0:
