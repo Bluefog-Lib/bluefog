@@ -29,7 +29,7 @@ Below are the charts representing the performance of BlueFog that was done on Re
 
 
 In the figures, the black box represents the ideal linear scaling. It is observed that Bluefog can achieve over 95% scaling efficiency while Horovod reaches around 66% sacling efficiency with batch size 64 on 128 GPUs. For the communicationally intensive scenario with batch size 32, the scaling efficiency gap between Bluefog and Horovod becomes even larger. To 
-understand more details about the BlueFog benchmark, checkout our performance page.
+understand more details about the BlueFog benchmark, checkout our `performance page <https://bluefog-lib.github.io/bluefog/performance.html>`_.
 
 Overview
 --------
@@ -54,7 +54,7 @@ one neighbor only in one iteration and select next neighbor in next iteration as
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97928035-04654400-1d1b-11eb-91d2-2da890b4522e.png" alt="one-peer-exp2" width="650"/></p>
 
-In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what parameter server or ring-allreduce promises. As for loss and accuracy guarantees, please check out our theoratical paper.
+In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what parameter server or ring-allreduce promises. As for loss and accuracy guarantees, please check out our theoratical paper. [Will add a full tutorial soon].
 
 
 Quick Start
@@ -109,8 +109,8 @@ more code:
         loss.backward()
         optimizer.step()
 
-Check our BlueFog Distributed Optimizer Guide to understand how our distributed optimizer 
-works and which distributed optimizer fits your requirement best.
+Check our BlueFog `dynamic topology neighbor averaging <https://bluefog-lib.github.io/bluefog/neighbor_average.html>`_
+page to see more on how to control and use topology.
 
 We also provide lots of low-level functions, which you can use those as building
 blocks to construct your own distributed training algorithm. The following example
@@ -127,7 +127,7 @@ illustrates how to run a simple consensus algorithm through bluefog.
       x = bf.neighbor_allreduce(x)
    print(f"{bf.rank()}: Average value of all ranks is {x}")
 
-Checkout our API explanation page to see all supported *synchronous* and *asynchronous* features.
+Checkout our `API explanation page <https://bluefog-lib.github.io/bluefog/bluefog_ops.html>`_ to see all supported *synchronous* and *asynchronous* features.
 
 
 Citation
