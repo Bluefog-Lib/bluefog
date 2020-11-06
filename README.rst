@@ -63,7 +63,7 @@ Quick Start
 First, make sure your environment is with ``python>=3.7`` and ``openmpi >= 4.0``.
 Then, install Bluefog with: ``pip install --no-cache-dir bluefog`` or
 ``BLUEFOG_WITH_NCCL=1 pip install bluefog`` if NCCL is supported (``NCCL>=2.7``). Check
-the ``install_bluefog`` page if you need more information or other install options.
+the `install_bluefog <https://bluefog-lib.github.io/bluefog/install.html>`_ page if you need more information or other install options.
 
 We provide high-level wrapper for torch optimizer. You just need to modify
 the existing script to distributed implementation is wrapping the optimizer
@@ -110,7 +110,8 @@ more code:
         optimizer.step()
 
 Check our BlueFog `dynamic topology neighbor averaging <https://bluefog-lib.github.io/bluefog/neighbor_average.html>`_
-page to see more on how to control and use topology.
+page to see more on how to control and use topology. See BlueFog `examples`_ folder for full code.
+
 
 We also provide lots of low-level functions, which you can use those as building
 blocks to construct your own distributed training algorithm. The following example
@@ -136,3 +137,4 @@ Citation
 *BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, Bluefog Team, To be Appeared in 2020
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
+.. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
