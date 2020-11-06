@@ -822,13 +822,12 @@ def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight:
 
 def poll(handle: int) -> bool:
     """
-    Polls an allreduce, allgather or broadcast handle to determine whether underlying
-    nonblocking operation has completed. After `poll()` returns `True`, `synchronize()`
+    Polls an allreduce, neighbor_allreduce, etc operation handle to determine whether underlying
+    nonblocking operation has completed. After `poll()` returns `True`, `wait()`
     will return without blocking.
 
     Arguments:
-        handle: A handle returned by an allreduce, allgather, broadcast, neighbor_allgather,
-        and neighbro_allreduce nonblocking operation.
+        handle: A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.
 
     Returns:
         A flag indicating whether the operation has completed.
@@ -838,12 +837,12 @@ def poll(handle: int) -> bool:
 
 def synchronize(handle: int) -> torch.Tensor:
     """
-    Synchronizes an nonblocking allreduce, allgather or broadcast operation until
+    Wait an allreduce, neighbor_allreduce, etc operation until
     it's completed. Returns the result of the operation.
+    It is the same function as `wait()`.
 
     Args:
-        handle: A handle returned by an allreduce, allgather or broadcast nonblocking
-                operation.
+        handle: A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.
 
     Returns:
         torch.Tensor: An output tensor of the operation.
@@ -853,6 +852,21 @@ def synchronize(handle: int) -> torch.Tensor:
     mpi_lib.bluefog_torch_wait_and_clear(handle)
     _, output = _handle_map.pop(handle)
     return output
+
+
+def wait(handle: int) -> torch.Tensor:
+    """
+    Wait an allreduce, neighbor_allreduce, etc operation until
+    it's completed. Returns the result of the operation.
+    It is just alias of `synchronize()` function.
+
+    Args:
+        handle: A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.
+
+    Returns:
+        torch.Tensor: An output tensor of the operation.
+    """
+    return synchronize(handle)
 
 
 def barrier():

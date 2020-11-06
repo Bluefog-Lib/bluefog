@@ -48,7 +48,7 @@ from bluefog.torch.mpi_ops import neighbor_allgather, neighbor_allgather_nonbloc
 from bluefog.torch.mpi_ops import neighbor_allreduce, neighbor_allreduce_nonblocking
 from bluefog.torch.mpi_ops import hierarchical_neighbor_allreduce
 from bluefog.torch.mpi_ops import hierarchical_neighbor_allreduce_nonblocking
-from bluefog.torch.mpi_ops import poll, synchronize, barrier
+from bluefog.torch.mpi_ops import poll, synchronize, wait, barrier
 
 from bluefog.torch.mpi_ops import win_create, win_free
 from bluefog.torch.mpi_ops import win_update, win_update_then_collect
