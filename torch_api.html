@@ -507,7 +507,7 @@ on a node, their local ranks will be zero through six, inclusive.</p>
 <dl class="py function">
 <dt id="bluefog.torch.load_topology">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">load_topology</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; networkx.classes.digraph.DiGraph<a class="headerlink" href="#bluefog.torch.load_topology" title="Permalink to this definition">¶</a></dt>
-<dd><p>A funnction that return the virtual topology MPI used.</p>
+<dd><p>A funnction that returns the virtual topology MPI used.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>networkx.DiGraph.</p>
@@ -521,7 +521,7 @@ on a node, their local ranks will be zero through six, inclusive.</p>
 <dl class="py function">
 <dt id="bluefog.torch.set_topology">
 <code class="sig-prename descclassname">bluefog.torch.</code><code class="sig-name descname">set_topology</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">topology</span><span class="p">:</span> <span class="n">Optional<span class="p">[</span>networkx.classes.digraph.DiGraph<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">is_weighted</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#bluefog.torch.set_topology" title="Permalink to this definition">¶</a></dt>
-<dd><p>A funnction that set the virtual topology MPI used.</p>
+<dd><p>A funnction that sets the virtual topology MPI used.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -1297,8 +1297,8 @@ acquired.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>A handle to the win_get operation that can be used with <cite>poll()</cite> or
-<cite>synchronize()</cite>.</p>
+<dd class="field-even"><p>A handle to the win_get operation that can be used with <cite>win_poll()</cite> or
+<cite>win_wait()</cite>.</p>
 </dd>
 </dl>
 </dd></dl>
