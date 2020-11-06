@@ -303,89 +303,6 @@ def FullyConnectedGraph(size: int) -> nx.DiGraph:
     return G
 
 
-def InnerOuterRingGraph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate Inner Ring and Outer Ring (Unilateral) Static Graph for dynamic usage.
-
-    Within one machine all inner rank/processes is fully connected and all
-    nodes with same local size across all machines is connected through another ring.
-
-    .. note::
-        Currently, our implementation has requirement that dyanmic graph has to be the
-        subgraph of static graph. Hence, the inner connection here is fully connected.
-
-    .. plot::
-
-        >>> import networkx as nx
-        >>> from bluefog.common import topology_util
-        >>> G = topology_util.InnerOuterRingGraph(12, 3)
-        >>> nx.draw_circular(G)
-    """
-    # TODO(hhb) remove this statis topology requirement.
-    total_nodes = world_size
-    num_machines = world_size // local_size
-    nodes_per_machine = local_size
-    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-
-    topo = np.zeros([total_nodes, total_nodes])
-
-    for i in range(total_nodes):
-        for j in range(total_nodes):
-            machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
-            machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
-            if machine_i == machine_j:
-                topo[i, j] = 1
-            elif ((machine_i + 1) % num_machines) == machine_j:
-                topo[i, j] = 1 if local_rank_i == local_rank_j else 0
-            else:
-                topo[i, j] = 0
-
-    topo = topo / topo.sum(axis=1)
-    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
-    return G
-
-
-def InnerOuterExpo2Graph(world_size: int, local_size: int) -> nx.DiGraph:
-    """Generate Inner Ring and Outer Exponential-2 Graph.
-
-    Within one machine all inner rank/processes is fully-connected and all
-    nodes with same local size across all machines forms exponential-2 graph.
-
-     .. note::
-        Currently, our implementation has requirement that dyanmic graph has to be the
-        subgraph of static graph. Hence, the inner connection here is fully connected.
-
-    .. plot::
-
-        >>> import networkx as nx
-        >>> from bluefog.common import topology_util
-        >>> G = topology_util.InnerOuterExpo2Graph(12, 3)
-        >>> nx.draw_circular(G)
-    """
-    # TODO(hhb) remove this statis topology requirement.
-    total_nodes = world_size
-    num_machines = world_size // local_size
-    nodes_per_machine = local_size
-    assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-
-    topo = np.zeros([total_nodes, total_nodes])
-
-    for i in range(total_nodes):
-        for j in range(total_nodes):
-            machine_i, local_rank_i = i // nodes_per_machine, i % nodes_per_machine
-            machine_j, local_rank_j = j // nodes_per_machine, j % nodes_per_machine
-            machine_dist = (machine_j - machine_i) % num_machines
-            if machine_i == machine_j:
-                topo[i, j] = 1
-            elif isPowerOf(machine_dist, 2):
-                topo[i, j] = 1 if local_rank_i == local_rank_j else 0
-            else:
-                topo[i, j] = 0
-
-    topo = topo / topo.sum(axis=1)
-    G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
-    return G
-
-
 def IsRegularGraph(topo: nx.DiGraph) -> bool:
     """Dtermine a graph is regular or not, i.e. all nodes have the same degree."""
     degree = topo.degree(0)
@@ -505,7 +422,8 @@ def GetInnerOuterRingDynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert local_size > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
+    assert local_size > 2, "Do no support the case where nodes_per_machine is equal or less than 2 " \
+        "Consider use hierarchical_neighbor_allreduce or simple GetDynamicSendRecvRanks instead."
 
     index = 0
     while True:
@@ -525,26 +443,21 @@ def GetInnerOuterRingDynamicSendRecvRanks(
             recv_rank = source_rank_id
 
         else:
-            if nodes_per_machine == 2:
-                yield [], []
-                index += 1
-                continue
-            else:
-                # find send_rank
-                target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
-                if target_local_rank_id == local_rank_to_go_outside_id:
-                    target_local_rank_id = (
-                        target_local_rank_id + 1) % nodes_per_machine
-                target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
-                send_rank = target_rank_id
+            # find send_rank
+            target_local_rank_id = (local_rank_id + 1) % nodes_per_machine
+            if target_local_rank_id == local_rank_to_go_outside_id:
+                target_local_rank_id = (
+                    target_local_rank_id + 1) % nodes_per_machine
+            target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
+            send_rank = target_rank_id
 
-                # find recv_rank
-                source_local_rank_id = (local_rank_id - 1) % nodes_per_machine
-                if source_local_rank_id == local_rank_to_go_outside_id:
-                    source_local_rank_id = (
-                        source_local_rank_id - 1) % nodes_per_machine
-                source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
-                recv_rank = source_rank_id
+            # find recv_rank
+            source_local_rank_id = (local_rank_id - 1) % nodes_per_machine
+            if source_local_rank_id == local_rank_to_go_outside_id:
+                source_local_rank_id = (
+                    source_local_rank_id - 1) % nodes_per_machine
+            source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
+            recv_rank = source_rank_id
 
         yield [send_rank], [recv_rank]
         index += 1
@@ -576,7 +489,9 @@ def GetInnerOuterExpo2DynamicSendRecvRanks(
     num_machines = world_size//local_size
     nodes_per_machine = local_size
     assert world_size % local_size == 0, "It should be used under homogeneous environment only."
-    assert local_size > 1, "Use GetDynamicSendRecvRanks for Expo2 in 1 node per machine case."
+    assert local_size > 2, "Do no support the case where nodes_per_machine is equal or less than 2 " \
+        "Consider use hierarchical_neighbor_allreduce or simple GetDynamicSendRecvRanks instead."
+
     exp_2_out_size = int(np.log2(num_machines-1))
     if nodes_per_machine == 2:
         exp_2_in_size = 0
@@ -610,35 +525,30 @@ def GetInnerOuterExpo2DynamicSendRecvRanks(
             recv_rank = source_rank_id
 
         else:
-            if nodes_per_machine == 2:
-                yield [], []
-                index += 1
-                continue
-            else:
-                # Distance from self to out-rank:
-                dist_to_out = (local_rank_to_go_outside_id -
-                               local_rank_id) % nodes_per_machine
-                next_inner_dist = 2**(index % (exp_2_in_size + 1))
-                if next_inner_dist >= dist_to_out:
-                    next_inner_dist += 1
+            # Distance from self to out-rank:
+            dist_to_out = (local_rank_to_go_outside_id -
+                            local_rank_id) % nodes_per_machine
+            next_inner_dist = 2**(index % (exp_2_in_size + 1))
+            if next_inner_dist >= dist_to_out:
+                next_inner_dist += 1
 
-                # find send_rank
-                target_local_rank_id = (local_rank_id +
-                                        next_inner_dist) % nodes_per_machine
-                target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
-                send_rank = target_rank_id
+            # find send_rank
+            target_local_rank_id = (local_rank_id +
+                                    next_inner_dist) % nodes_per_machine
+            target_rank_id = target_local_rank_id + machine_id * nodes_per_machine
+            send_rank = target_rank_id
 
-                reverse_inner_dist = 2**(index % (exp_2_in_size + 1))
-                reverse_dist_to_out = (
-                    local_rank_id - local_rank_to_go_outside_id) % nodes_per_machine
-                if reverse_inner_dist >= reverse_dist_to_out:
-                    reverse_inner_dist += 1
+            reverse_inner_dist = 2**(index % (exp_2_in_size + 1))
+            reverse_dist_to_out = (
+                local_rank_id - local_rank_to_go_outside_id) % nodes_per_machine
+            if reverse_inner_dist >= reverse_dist_to_out:
+                reverse_inner_dist += 1
 
-                # find recv_rank
-                source_local_rank_id = (local_rank_id -
-                                        reverse_inner_dist) % nodes_per_machine
-                source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
-                recv_rank = source_rank_id
+            # find recv_rank
+            source_local_rank_id = (local_rank_id -
+                                    reverse_inner_dist) % nodes_per_machine
+            source_rank_id = source_local_rank_id + machine_id * nodes_per_machine
+            recv_rank = source_rank_id
 
         yield [send_rank], [recv_rank]
         index += 1

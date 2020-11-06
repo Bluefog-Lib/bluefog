@@ -25,8 +25,6 @@ parser.add_argument('--data-size', type=int, default=100000,
                     help='the size of data.')
 parser.add_argument('--max-iters', type=int, default=200,
                     help='maximum iterations')
-parser.add_argument('--local-size', type=int, default=4,
-                    help='number of nodes per machine')
 parser.add_argument('--virtual-topology', type=str, default="expo2",
                     help='The underlying virtual topology. Supporting options are ' +
                     '[expo2(Default), ring, mesh, star, InnerOuterExpo2].')
@@ -71,8 +69,6 @@ elif args.virtual_topology == "mesh":
         bf.size(), connect_style=0), is_weighted=True)
 elif args.virtual_topology == "star":
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
-elif args.virtual_topology == "InnerOuterExpo2":
-    bf.set_topology(topology_util.InnerOuterExpo2Graph(bf.size(), local_size=args.local_size))
 elif args.virtual_topology == "full":
     bf.set_topology(topology_util.FullyConnectedGraph(bf.size()))
 else:
@@ -88,9 +84,9 @@ if not args.asynchronous_mode:
     send_neighbors = None
 
     if args.enable_dynamic_topology:
-        if args.virtual_topology == "InnerOuterRing":
+        if args.virtual_topology == "InnerOuterExpo2":
             dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
-                bf.size(), local_size=args.local_size, self_rank=bf.rank())
+                bf.size(), local_size=bf.local_size(), self_rank=bf.rank())
         else:
             dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
                 bf.load_topology(), bf.rank())
