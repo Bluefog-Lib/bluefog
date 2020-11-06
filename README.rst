@@ -25,10 +25,10 @@ Below are the charts representing the performance of BlueFog that was done on Re
 
 .. raw:: html
 
-    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97819514-cf46ec00-1c5d-11eb-933e-459783d974a6.png" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/97819502-c6eeb100-1c5d-11eb-9930-065cdd48818d.png" alt="Benchmark 2" width="400"/></p>
+    <p align="center"><img src="https://user-images.githubusercontent.com/16711681/98312517-c704ee80-1f86-11eb-9820-d286dc7fdf8f.jpg" alt="Benchmark 1" width="400"/><img src="https://user-images.githubusercontent.com/16711681/98312497-b9e7ff80-1f86-11eb-915f-168e7681f651.jpg" alt="Benchmark 2" width="400"/></p>
 
 
-In the figures, the black box represents the ideal linear scaling. It is observed that Bluefog can achieve over 95% scaling efficiency while Horovod reaches around 78% sacling efficiency with batch size 64. For the communicationally intensive scenario with batch size 32, the scaling efficiency gap between Bluefog and Horovod becomes even larger. To 
+In the figures, the black box represents the ideal linear scaling. It is observed that Bluefog can achieve over 95% scaling efficiency while Horovod reaches around 66% sacling efficiency with batch size 64 on 128 GPUs. For the communicationally intensive scenario with batch size 32, the scaling efficiency gap between Bluefog and Horovod becomes even larger. To 
 understand more details about the BlueFog benchmark, checkout our performance page.
 
 Overview
