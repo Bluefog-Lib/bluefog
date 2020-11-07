@@ -24,6 +24,12 @@ After you think the environment is all set, just run following command to instal
 
 .. Note::
 
+    We haven't fully tested our compatiblity with hisotrical torch versions.
+    It is guaranteed at least for ``torch==1.4.0`` and ``torchvision==0.5.0`` case.
+    Remember if the torch version is changed, you have to re-install bluefog completely.
+
+.. Note::
+
     If ``--no-cache-dir`` is not present, you may receive the error information like
     ``Failed building wheel for bluefog``, which won't fail the installation though.
     The reason is Bluefog is a library with C-extention,
@@ -80,13 +86,13 @@ For more details, check :ref:`Docker Usage` page.
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:gpu
+    sudo docker pull bluefoglib/bluefog:gpu-0.2.2
 
 2. Download docker image with only CPU support:
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:cpu
+    sudo docker pull bluefoglib/bluefog:cpu-0.2.2
 
 .. _conda: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 .. _download link: https://www.open-mpi.org/software/ompi/v4.0/
