@@ -200,6 +200,12 @@ After you think the environment is all set, just run following command to instal
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
+<p>We haven’t fully tested our compatiblity with hisotrical torch versions.
+It is guaranteed at least for <code class="docutils literal notranslate"><span class="pre">torch==1.4.0</span></code> and <code class="docutils literal notranslate"><span class="pre">torchvision==0.5.0</span></code> case.
+Remember if the torch version is changed, you have to re-install bluefog completely.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">--no-cache-dir</span></code> is not present, you may receive the error information like
 <code class="docutils literal notranslate"><span class="pre">Failed</span> <span class="pre">building</span> <span class="pre">wheel</span> <span class="pre">for</span> <span class="pre">bluefog</span></code>, which won’t fail the installation though.
 The reason is Bluefog is a library with C-extention,
@@ -248,13 +254,13 @@ For more details, check <a class="reference internal" href="docker.html#docker-u
 <ol class="arabic simple">
 <li><p>Download docker image with CUDA support:</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:gpu
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:gpu-0.2.2
 </pre></div>
 </div>
 <ol class="arabic simple" start="2">
 <li><p>Download docker image with only CPU support:</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:cpu
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:cpu-0.2.2
 </pre></div>
 </div>
 </div>

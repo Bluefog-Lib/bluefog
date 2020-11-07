@@ -204,13 +204,13 @@ For the dockerfiles for development, the readers can check the Github Wiki for m
 <ol class="arabic simple">
 <li><p>Download docker image with CUDA support:</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:gpu-0.2.1
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:gpu-0.2.2
 </pre></div>
 </div>
 <ol class="arabic simple" start="2">
 <li><p>Download docker image with only CPU support:</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:cpu-0.2.1
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker pull bluefoglib/bluefog:cpu-0.2.2
 </pre></div>
 </div>
 </div>
@@ -238,7 +238,7 @@ if you download the docker image from <a class="reference external" href="https:
 <ol class="arabic simple">
 <li><p>Run docker container with CUDA support:</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --network<span class="o">=</span>host -v /mnt/share/ssh:/root/.ssh bluefog_gpu:latest
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --shm-size<span class="o">=</span>64g --network<span class="o">=</span>host -v /mnt/share/ssh:/root/.ssh bluefog_gpu:latest
 </pre></div>
 </div>
 <ol class="arabic simple" start="2">
@@ -289,7 +289,7 @@ and <a class="reference external" href="https://nvidia.github.io/nvidia-containe
 <ol class="arabic simple" start="2">
 <li><p>Examples in docker container</p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> python examples/pytorch_average_consensus.py
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bfrun -np <span class="m">4</span> python examples/pytorch_mnist.py
 </pre></div>
 </div>
 </div>
