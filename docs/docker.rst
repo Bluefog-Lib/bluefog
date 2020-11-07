@@ -23,13 +23,13 @@ Downloading Docker Image From Docker Hub
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:gpu-0.2.1
+    sudo docker pull bluefoglib/bluefog:gpu-0.2.2
 
 2. Download docker image with only CPU support:
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:cpu-0.2.1
+    sudo docker pull bluefoglib/bluefog:cpu-0.2.2
 
 Building Your Own Docker Image
 ##############################
@@ -57,7 +57,7 @@ if you download the docker image from `Docker Hub <https://hub.docker.com/r/blue
 
 .. code-block:: bash
 
-    sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --network=host -v /mnt/share/ssh:/root/.ssh bluefog_gpu:latest
+    sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --shm-size=64g --network=host -v /mnt/share/ssh:/root/.ssh bluefog_gpu:latest
 
 2. Run docker container with only CPU support:
 
@@ -114,4 +114,4 @@ The docker images have already included a few examples for the Bluefog library a
 
 .. code-block:: bash
 
-    bfrun -np 4 python examples/pytorch_average_consensus.py
+    bfrun -np 4 python examples/pytorch_mnist.py
