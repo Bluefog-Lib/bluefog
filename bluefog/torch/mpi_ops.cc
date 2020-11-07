@@ -404,12 +404,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                   output_reduced.mul_(weight);
                 } else {
                   output_reduced.add_(
-                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim)
-                          .mul_(weight));
+                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim), weight);
                 }
               }
               output_buffer.resize_(shape_vector);
-              output_buffer.add_(tensor_buffer.mul(self_weight));
+              output_buffer.add_(tensor_buffer, self_weight);
               if (is_hierarchical){
                 // Because there is ncclAllreduce just take sum.
                 output_buffer.div_(bluefog_local_size());
@@ -495,12 +494,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                   output_reduced.mul_(weight);
                 } else {
                   output_reduced.add_(
-                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim)
-                          .mul_(weight));
+                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim), weight);
                 }
               }
               output_buffer.resize_(shape_vector);
-              output_buffer.add_(tensor_buffer.mul(self_weight));
+              output_buffer.add_(tensor_buffer, self_weight);
               if (is_hierarchical){
                 // Because there is ncclAllreduce just take sum.
                 output_buffer.div_(bluefog_local_size());
@@ -576,7 +574,7 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
             output_buffer.add_(tensor_buffer).div_(2);
           } else {
             output_buffer.mul_(pair_weight)
-                .add_(tensor_buffer.mul(self_weight));
+                .add_(tensor_buffer, self_weight);
           }
           MaybeCopyBufferBack(output, output_buffer);
         }));
@@ -597,7 +595,7 @@ int DoPairGossip(::torch::Tensor tensor, ::torch::Tensor output,
             output_buffer.add_(tensor_buffer).div_(2);
           } else {
             output_buffer.mul_(pair_weight)
-                .add_(tensor_buffer.mul(self_weight));
+                .add_(tensor_buffer, self_weight);
           }
           MaybeCopyBufferBack(output, output_buffer);
         }));
