@@ -23,10 +23,13 @@ import os
 import torch
 from bluefog.common.util import check_extension
 from bluefog.torch.optimizers import (
+    CommunicationType,
     DistributedGradientAllreduceOptimizer,
     DistributedAllreduceOptimizer,
     DistributedNeighborAllreduceOptimizer,
     DistributedHierarchicalNeighborAllreduceOptimizer,
+    DistributedAdaptThenCombineOptimizer,
+    DistributedCombineWithAdaptOptimizer,
     DistributedWinPutOptimizer)
 
 check_extension('bluefog.torch', __file__, 'mpi_lib')

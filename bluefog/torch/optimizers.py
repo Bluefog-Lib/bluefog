@@ -15,12 +15,20 @@
 # ==============================================================================
 
 from contextlib import contextmanager
+from enum import Enum
 import itertools
+import math
 import os
 import warnings
 
 import torch
 import bluefog.torch as bf
+
+class CommunicationType(Enum):
+    neighbor_allreduce = "neighbor.allreduce"
+    hierarchical_neighbor_allreduce = "hierarchical.neighbor.allreduce"
+    allreduce = "allreduce"
+    empty = "empty"
 
 #pylint: disable=unused-argument
 def _named_leaf_module(module, parent_name=None):
@@ -267,6 +275,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
             )
         return super(self.__class__, self).zero_grad()
 
+
 class _DistributedReduceOptimizer(torch.optim.Optimizer):
     """ A distributed optimizer wrapper over torch optimizer.
 
@@ -291,7 +300,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         w_{i+1, k} = Neighbor_Average( w_{i, k} - lr * local_grad(w_{i, k}) )
     """
 
-    def __init__(self, params, model, reduce_type, num_steps_per_communication=1):
+    def __init__(self, params, model, communication_type, num_steps_per_communication=1):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
@@ -312,16 +321,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles = []
         self._use_timeline = False
         self._num_steps_per_communication = num_steps_per_communication
-        self._reduce_type_str = reduce_type
-        # _reduce_method: 0 for allreduce, and 1 for neighbor_allreduce
-        if self._reduce_type_str == "allreduce":
-            self._reduce_method = 0
-        elif self._reduce_type_str == "neighbor.allreduce":
-            self._reduce_method = 1
-        elif self._reduce_type_str == "hierarchical.neighbor.allreduce":
-            self._reduce_method = 2
-        else:
-            raise ValueError("Unknown reduce type for internal class _DistributedReduceOptimizer")
+        assert isinstance(communication_type, CommunicationType)
+        self._communication_type = communication_type
 
         self._reduce_delay = {v: self._num_steps_per_communication
                               for _, v in sorted(named_parameters)}
@@ -354,17 +355,16 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                             "accumulate gradients locally.")
                     self._reduce_delay[p] -= 1
                     if self._reduce_delay[p] == 0:
-                        if self._reduce_method == 0:
+                        if self._communication_type == CommunicationType.allreduce:
                             handle = self._allreduce_data_async(p)
-                        elif self._reduce_method == 1:
+                        elif self._communication_type == CommunicationType.neighbor_allreduce:
                             handle = self._neighbor_allreduce_data_async(p)
-                        elif self._reduce_method == 2:
+                        elif self._communication_type == CommunicationType.hierarchical_neighbor_allreduce:
                             handle = self._hierarchical_neighbor_allreduce_data_async(p)
-                        elif self._reduce_method == -1:
+                        elif self._communication_type == CommunicationType.empty:
                             handle = None
                         else:
-                            raise ValueError(
-                                "Unknown reduce method. Do not change _reduce_method manually.")
+                            raise ValueError("Unsuppported CommunicationType encountered.")
                         self._handles[p] = handle
         return hook
 
@@ -392,7 +392,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
     def turn_on_timeline(self):
         handles = _register_timeline(
-            self, self._models, self._parameter_names, self._reduce_type_str)
+            self, self._models, self._parameter_names, self._communication_type.name)
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
@@ -402,17 +402,14 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles.clear()
         self._use_timeline = False
 
-    def use_allreduce_in_communication(self):
-        self._reduce_method = 0
+    @property
+    def communication_type(self):
+        return self._communication_type
 
-    def use_neighbor_allreduce_in_communication(self):
-        self._reduce_method = 1
-
-    def use_hierarchical_neighbor_allreduce_in_communication(self):
-        self._reduce_method = 2
-
-    def use_empty_function_in_communication(self):
-        self._reduce_method = -1
+    @communication_type.setter
+    def communication_type(self, value):
+        assert isinstance(value, CommunicationType)
+        self._communication_type = value
 
     def synchronize(self):
         with torch.no_grad():
@@ -460,6 +457,242 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
             self.synchronize()
         self._synchronized = False
         return super(self.__class__, self).step(closure)
+
+
+class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
+    def __init__(self, params, model, communication_type, num_steps_per_communication=1):
+        super(self.__class__, self).__init__(params)
+
+        named_parameters, models = _check_named_parameters(self, model)
+        # knobs for neighbor communication behavior
+        self.self_weight = None
+        self.neighbor_weights = None
+        self.send_neighbors = None
+        self.neighbor_machine_weights = None
+        self.send_neighbor_machines = None
+        self.enable_topo_check = False
+
+        self._models = models
+        self._parameter_names = {v: k for k, v in sorted(named_parameters)}
+        self._handles = {}
+        self._requires_update = set()
+        self._synchronized = False
+        self._should_synchronize = True
+        self._timeline_hook_handles = []
+        self._use_timeline = False
+        self._num_steps_per_communication = num_steps_per_communication
+        assert isinstance(communication_type, CommunicationType)
+        self._communication_type = communication_type
+
+        if isinstance(self, torch.optim.SGD):
+            self._step_func = self._sgd_step
+        elif isinstance(self, torch.optim.Adam):
+            self._step_func = self._adam_step
+        else:
+            self._step_func = None  # Need user to register their own step function.
+
+        self._step = 0
+        self._reduce_delay = {v: self._num_steps_per_communication
+                              for _, v in sorted(named_parameters)}
+        if os.getenv('BLUEFOG_TIMELINE'):
+            self.turn_on_timeline()
+        if bf.size() > 1:
+            self._register_hooks()
+
+    @property
+    def communication_type(self):
+        return self._communication_type
+
+    @communication_type.setter
+    def communication_type(self, value):
+        assert isinstance(value, CommunicationType)
+        self._communication_type = value
+
+    def register_step_function(self, step_func):
+        """Register the step function.
+
+        Args:
+            func: The signature should be func(parameter, gradient, parameter_group) -> None
+                Note, it has to be paramter-wise and parameter_group is the one you can
+                get as the standard torch.optimizer provided, which can store the auxuilary
+                information like learning_rate, weight_decay, etc.
+        """
+        self._step_func = step_func
+
+    def _register_hooks(self):
+        for param_group in self.param_groups:
+            for p in param_group["params"]:
+                if p.requires_grad:
+                    # Because we modify the parameter instead of gradient
+                    # We can safely trigger the hook after the gradient
+                    # is computed.
+                    self._requires_update.add(p)
+                    p.register_hook(self._make_hook(p, param_group))
+
+    def _make_hook(self, p, param_group):
+        def hook(grad):
+            # run the step first:
+            if self._step_func is None:
+                raise ValueError(
+                    "We don't have default implementation for the optimizer you provided. "
+                    "Currently, we only supports SGD and Adam optimizer. However, you can "
+                    "Register you own step to this class. The signature should be parameter-wise "
+                    "step func:\n func(parameter, gradient, parameter_group) -> None\n")
+            self._step_func(p, grad, param_group)
+
+            if self._reduce_delay[p] <= 0:
+                raise AssertionError(
+                    "Unexpected behavior: forward computation were computed "
+                    "more than num_steps_per_communication times before call "
+                    "to step(). Adjust num_steps_per_communication to "
+                    "accumulate gradients locally.")
+            self._reduce_delay[p] -= 1
+            if self._reduce_delay[p] == 0:
+                if self._communication_type == CommunicationType.allreduce:
+                    handle = self._allreduce_data_async(p)
+                elif self._communication_type == CommunicationType.neighbor_allreduce:
+                    handle = self._neighbor_allreduce_data_async(p)
+                elif self._communication_type == CommunicationType.hierarchical_neighbor_allreduce:
+                    handle = self._hierarchical_neighbor_allreduce_data_async(p)
+                elif self._communication_type == CommunicationType.empty:
+                    handle = None
+                else:
+                    raise ValueError("Unsuppported CommunicationType encountered.")
+                self._handles[p] = handle
+
+        return hook
+
+    def _sgd_step(self, p, grad, param_group):
+        """Parameter-wise of torch.optim.SGD.step."""
+        weight_decay = param_group['weight_decay']
+        momentum = param_group['momentum']
+        dampening = param_group['dampening']
+        nesterov = param_group['nesterov']
+        lr = param_group['lr']
+        if p.grad is None:
+            return
+        d_p = grad.data
+        if weight_decay != 0:
+            d_p.add_(weight_decay, p.data)
+        if momentum != 0:
+            param_state = self.state[p]
+            if 'momentum_buffer' not in param_state:
+                buf = param_state['momentum_buffer'] = torch.clone(d_p).detach()
+            else:
+                buf = param_state['momentum_buffer']
+                buf.mul_(momentum).add_(1 - dampening, d_p)
+            if nesterov:
+                d_p = d_p.add(momentum, buf)
+            else:
+                d_p = buf
+
+        p.data.add_(-lr, d_p)
+
+    def _adam_step(self, p, grad, param_group):
+        """Parameter-wise of torch.optim.Adam.step."""
+        if grad.is_sparse:
+            raise RuntimeError(
+                'Adam does not support sparse gradients, please consider SparseAdam instead')
+        amsgrad = param_group['amsgrad']
+        state = self.state[p]
+
+        # State initialization
+        if not state:
+            state['step'] = 0
+            # Exponential moving average of gradient values
+            state['exp_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            # Exponential moving average of squared gradient values
+            state['exp_avg_sq'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            if amsgrad:
+                # Maintains max of all exp. moving avg. of sq. grad. values
+                state['max_exp_avg_sq'] = torch.zeros_like(
+                    p.data, memory_format=torch.preserve_format)
+
+        exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+        if amsgrad:
+            max_exp_avg_sq = state['max_exp_avg_sq']
+        beta1, beta2 = param_group['betas']
+
+        state['step'] += 1
+        bias_correction1 = 1 - beta1 ** state['step']
+        bias_correction2 = 1 - beta2 ** state['step']
+
+        if param_group['weight_decay'] != 0:
+            grad.add_(param_group['weight_decay'], p.data)
+
+        # Decay the first and second moment running average coefficient
+        exp_avg.mul_(beta1).add_(1 - beta1, grad)
+        exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+        if amsgrad:
+            # Maintains the maximum of all 2nd moment running avg. till now
+            torch.max(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
+            # Use the max. for normalizing running avg. of gradient
+            denom = (max_exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(param_group['eps'])
+        else:
+            denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(param_group['eps'])
+
+        step_size = param_group['lr'] / bias_correction1
+        p.data.addcdiv_(-step_size, exp_avg, denom)
+
+    def _neighbor_allreduce_data_async(self, p):
+        name = self._parameter_names.get(p)
+        handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
+                                                   neighbor_weights=self.neighbor_weights,
+                                                   send_neighbors=self.send_neighbors,
+                                                   enable_topo_check=self.enable_topo_check)
+        return handle
+
+    def _hierarchical_neighbor_allreduce_data_async(self, p):
+        name = self._parameter_names.get(p)
+        handle = bf.hierarchical_neighbor_allreduce_nonblocking(
+            p.data, name=name, self_weight=self.self_weight,
+            neighbor_machine_weights=self.neighbor_machine_weights,
+            send_neighbor_machines=self.send_neighbor_machines,
+            enable_topo_check=self.enable_topo_check)
+        return handle
+
+    def _allreduce_data_async(self, p):
+        name = self._parameter_names.get(p)
+        handle = bf.allreduce_nonblocking(p.data, average=True, name=name)
+        return handle
+
+    def turn_on_timeline(self):
+        handles = _register_timeline(
+            self, self._models, self._parameter_names, self._communication_type.name)
+        self._timeline_hook_handles.extend(handles)
+        self._use_timeline = True
+
+    def turn_off_timeline(self):
+        for hook in self._timeline_hook_handles:
+            hook.remove()
+        self._timeline_hook_handles.clear()
+        self._use_timeline = False
+
+    def synchronize(self):
+        with torch.no_grad():
+            for p, handle in self._handles.items():
+                if handle is not None:
+                    output = bf.synchronize(handle)
+                    p.set_(output)
+                self._reduce_delay[p] = self._num_steps_per_communication
+        self._handles.clear()
+
+        self._synchronized = True
+
+    def step(self, closure=None):
+         # Step 0 is called for parameter initialization after parameter broadcast
+        if bf.size() > 1 and self._step > 0:
+            loss = None
+            if closure is not None:
+                loss = closure()
+            self.synchronize()
+            self._synchronized = False
+            return loss
+        else:
+            # Optimizer.step() will be triggered when user calls byteps.broadcast_optimizer_sate()
+            super(self.__class__, self).step(closure)
+            self._step += 1
+            self.synchronize()
 
 
 class _DistributedWinOptimizer(torch.optim.Optimizer):
@@ -937,7 +1170,8 @@ def DistributedAllreduceOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedReduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, "allreduce", num_steps_per_communication)
+    return cls(optimizer.param_groups, model,
+               CommunicationType.allreduce, num_steps_per_communication)
 
 
 def DistributedNeighborAllreduceOptimizer(optimizer, model,
@@ -965,7 +1199,8 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedReduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, "neighbor.allreduce", num_steps_per_communication)
+    return cls(optimizer.param_groups, model, CommunicationType.neighbor_allreduce,
+               num_steps_per_communication)
 
 
 def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
@@ -1019,7 +1254,7 @@ def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedReduceOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, "hierarchical.neighbor.allreduce",
+    return cls(optimizer.param_groups, model, CommunicationType.hierarchical_neighbor_allreduce,
                num_steps_per_communication)
 
 
@@ -1071,3 +1306,25 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
         dict(_DistributedOptimizer.__dict__),
     )
     return cls(optimizer.param_groups, model, backward_passes_per_step)
+
+
+def DistributedAdaptThenCombineOptimizer(optimizer, model,
+                                         communication_type=CommunicationType.neighbor_allreduce,
+                                         num_steps_per_communication=1):
+    cls = type(
+        optimizer.__class__.__name__,
+        (optimizer.__class__,),
+        dict(_DistributedAdaptThenCombineOptimizer.__dict__),
+    )
+    return cls(optimizer.param_groups, model, communication_type, num_steps_per_communication)
+
+
+def DistributedCombineWithAdaptOptimizer(optimizer, model,
+                                         communication_type=CommunicationType.neighbor_allreduce,
+                                         num_steps_per_communication=1):
+    cls = type(
+        optimizer.__class__.__name__,
+        (optimizer.__class__,),
+        dict(_DistributedReduceOptimizer.__dict__),
+    )
+    return cls(optimizer.param_groups, model, communication_type, num_steps_per_communication)
