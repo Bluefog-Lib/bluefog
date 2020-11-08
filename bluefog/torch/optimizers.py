@@ -491,7 +491,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         else:
             self._step_func = None  # Need user to register their own step function.
 
-        self._step = 0
+        self._is_first_step = True
         self._reduce_delay = {v: self._num_steps_per_communication
                               for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
@@ -512,10 +512,10 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         """Register the step function.
 
         Args:
-            func: The signature should be func(parameter, gradient, parameter_group) -> None
-                Note, it has to be paramter-wise and parameter_group is the one you can
-                get as the standard torch.optimizer provided, which can store the auxuilary
-                information like learning_rate, weight_decay, etc.
+            func: The signature should be func(parameter, gradient, parameter_group) -> None.
+                Note, it has to be paramter-wise and parameter_group is the one that the
+                standard torch.optimizer provided, which can store the auxuilary information
+                or state of optimizer like learning_rate, weight_decay, etc.
         """
         self._step_func = step_func
 
@@ -681,7 +681,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
          # Step 0 is called for parameter initialization after parameter broadcast
-        if bf.size() > 1 and self._step > 0:
+        if bf.size() > 1 and not self._is_first_step:
             loss = None
             if closure is not None:
                 loss = closure()
@@ -691,7 +691,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         else:
             # Optimizer.step() will be triggered when user calls byteps.broadcast_optimizer_sate()
             super(self.__class__, self).step(closure)
-            self._step += 1
+            self._is_first_step = False
             self.synchronize()
 
 
@@ -1131,38 +1131,13 @@ def DistributedAllreduceOptimizer(optimizer, model,
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
     The communication for allreduce is applied on the parameters when forward propagation happens.
 
-    Arguments:
-        optimizer: Optimizer to use for computing gradients and applying updates.
-        model: The model or a list of models you want to train with.
-        num_steps_per_communication: Number of expected model forward function calls before each
-                                     communication. This allows local model parameter updates
-                                     per num_steps_per_communication before reducing them over
-                                     distributed computation resources.
-
-    Example for two scenarios to use num_steps_per_communication.
-        Scenario 1) Local accumulation of gradient without update model.
-                    (Used in large batch size or large model cases)
-
-        >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model,
-                                                   num_steps_per_communication=J)
-        >>> opt.zero_grad()
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     loss.backward()
-        >>> opt.step()  # Allreducing happens here
-
-        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
-
-        >>> opt = bf.DistributedAllreduceOptimizer(optimizer, model,
-                                                   num_steps_per_communication=J)
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     opt.zero_grad()
-        >>>     loss.backward()
-        >>>     opt.step()  # Allreducing happens at the last iteration
+    .. warning::
+        This API will be deprecated in v0.3.0. Use ``DistributedCombineWithAdaptOptimizer`` instead.
     """
+    warnings.warn(
+        "This API will be deprecated in next version. Please use new equivalent API:\n "
+        "  DistributedCombineWithAdaptOptimizer(opt, model, bf.CommunicationType.allreduce)",
+        PendingDeprecationWarning)
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with allreduce implementation.
     cls = type(
@@ -1180,18 +1155,14 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
     An distributed optimizer that wraps another torch.optim.Optimizer through
     neighbor_allreduce ops over parameters.
 
-    Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
-    `send_neighbors` to control the behavior of neighbor allreduce. Changing the values
-    of these knobs to achieve dynamic topologies.
-
-    Arguments:
-        optimizer: Optimizer to use for computing gradients and applying updates.
-        model: The model or a list of models you want to train with.
-        num_steps_per_communication: Number of expected model forward function calls before each
-                                     communication. This allows local model parameter updates
-                                     per num_steps_per_communication before reducing them over
-                                     distributed computation resources.
+    .. warning::
+        This API will be deprecated in v0.3.0. Use ``DistributedCombineWithAdaptOptimizer`` instead.
     """
+    warnings.warn(
+        "This API will be deprecated in next version. Please use new equivalent API:\n "
+        "  DistributedCombineWithAdaptOptimizer(\n"
+        "      opt, model, bf.CommunicationType.neighbor_allreduce)",
+        PendingDeprecationWarning)
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with neighbor_allreduce implementation.
     cls = type(
@@ -1209,46 +1180,14 @@ def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
     An distributed optimizer that wraps another torch.optim.Optimizer through
     hierarchical_neighbor_allreduce ops over parameters.
 
-    Returned optimizer has three extra parameters `self_weight`, `neighbor_machine_weights` and
-    `send_neighbor_machines` to control the behavior of hierarchical neighbor allreduce. Changing
-    the values of these knobs to achieve dynamic topologies.
-
-    Arguments:
-        optimizer: Optimizer to use for computing gradients and applying updates.
-        model: The model or a list of models you want to train with.
-        num_steps_per_communication: Number of expected model forward function calls before each
-                                     communication. This allows local model parameter updates
-                                     per num_steps_per_communication before reducing them over
-                                     distributed computation resources.
-
-    Warning:
-        The processes within the same machine should provide the same `neighbor_machine_weights` and
-        `send_neighbor_machines` to avoid unexpected behavior.
-
-    Example for two scenarios to use num_steps_per_communication:
-        Scenario 1) Local accumulation of gradient without update model.
-                    (Used in large batch size or large model cases)
-
-        >>> opt = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
-                        optimizer, model, num_steps_per_communication=J)
-        >>> opt.zero_grad()
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     loss.backward()
-        >>> opt.step()  # Neighbor allreducing happens here
-
-        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
-
-        >>> opt = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
-                        optimizer, model, num_steps_per_communication=J)
-        >>> for j in range(J):
-        >>>     output = model(data_batch_i)
-        >>>     loss = ...
-        >>>     opt.zero_grad()
-        >>>     loss.backward()
-        >>>     opt.step()  # Neighbor allreducing happens at the last iteration
+    .. warning::
+        This API will be deprecated in v0.3.0. Use ``DistributedCombineWithAdaptOptimizer`` instead.
     """
+    warnings.warn(
+        "This API will be deprecated in next version. Please use new equivalent API:\n "
+        "  DistributedCombineWithAdaptOptimizer(\n"
+        "      opt, model, bf.CommunicationType.hierarchical_neighbor_allreduce)",
+        PendingDeprecationWarning)
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
@@ -1311,6 +1250,64 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
 def DistributedAdaptThenCombineOptimizer(optimizer, model,
                                          communication_type=CommunicationType.neighbor_allreduce,
                                          num_steps_per_communication=1):
+    """
+    An distributed optimizer that wraps another torch.optim.Optimizer.
+    The communication is applied on the parameters when backward propagation triggered and
+    run the communication after parameter updated with gradient.
+
+    In order to maximize the overlapping between communication and computation, we override
+    the step() function. Hence, if you don't use the standard optimizer like SGD, you need
+    to register your own step function to the returned optimizer through \n
+
+    >>> opt.register_step_function(step_func)
+
+    where the signature should be func(parameter, gradient, parameter_group) -> None.
+    Note, it has to be paramter-wise and parameter_group is the one that the standard
+    torch.optimizer provided, which can store the auxuilary information or state of
+    optimizer like learning_rate, weight_decay, etc.
+
+    Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
+    `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
+    the behavior of (hierarchical) neighbor allreduce. Changing the values
+    of these knobs to achieve dynamic topologies.
+
+    Args:
+        Optimizer to use for computing gradients and applying updates.
+        model: The model or a list of models you want to train with.
+        communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
+            hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
+        num_steps_per_communication: Number of expected backward function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
+
+    Example for two scenarios to use num_steps_per_communication:
+
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+
+        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>>          communication_type=CommunicationType.neighbor_allreduce,
+        >>>          num_steps_per_communication=J)
+        >>> opt.zero_grad()
+        >>> for j in range(J):
+        >>>     output = model(data_batch_i)
+        >>>     loss = ...
+        >>>     loss.backward()
+        >>> opt.step()  # Allreducing happens here
+
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+
+        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>>          communication_type=CommunicationType.neighbor_allreduce,
+        >>>          num_steps_per_communication=J)
+        >>> for j in range(J):
+        >>>     output = model(data_batch_i)
+        >>>     loss = ...
+        >>>     opt.zero_grad()
+        >>>     loss.backward()
+        >>>     opt.step()  # Allreducing happens at the last iteration
+    """
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
@@ -1322,6 +1319,53 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 def DistributedCombineWithAdaptOptimizer(optimizer, model,
                                          communication_type=CommunicationType.neighbor_allreduce,
                                          num_steps_per_communication=1):
+    """
+    An distributed optimizer that wraps another torch.optim.Optimizer.
+    The communication is applied on the parameters when forward propagation triggered. Hence,
+    communication is overlapped with both forward and backward phase.
+
+    Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
+    `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
+    the behavior of (hierarchical) neighbor allreduce. Changing the values
+    of these knobs to achieve dynamic topologies.
+
+    Args:
+        Optimizer to use for computing gradients and applying updates.
+        model: The model or a list of models you want to train with.
+        communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
+            hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
+        num_steps_per_communication: Number of expected backward function calls before each
+                                     communication. This allows local model parameter updates
+                                     per num_steps_per_communication before reducing them over
+                                     distributed computation resources.
+
+    Example for two scenarios to use num_steps_per_communication:
+
+        Scenario 1) Local accumulation of gradient without update model.
+                    (Used in large batch size or large model cases)
+
+        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>>          communication_type=CommunicationType.neighbor_allreduce,
+        >>>          num_steps_per_communication=J)
+        >>> opt.zero_grad()
+        >>> for j in range(J):
+        >>>     output = model(data_batch_i)
+        >>>     loss = ...
+        >>>     loss.backward()
+        >>> opt.step()  # Allreducing happens here
+
+        Scenario 2) Local updating the model. (Used in case that decreasing the communication).
+
+        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>>          communication_type=CommunicationType.neighbor_allreduce,
+        >>>          num_steps_per_communication=J)
+        >>> for j in range(J):
+        >>>     output = model(data_batch_i)
+        >>>     loss = ...
+        >>>     opt.zero_grad()
+        >>>     loss.backward()
+        >>>     opt.step()  # Allreducing happens at the last iteration
+    """
     cls = type(
         optimizer.__class__.__name__,
         (optimizer.__class__,),
