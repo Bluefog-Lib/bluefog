@@ -488,6 +488,12 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             self._step_func = self._sgd_step
         elif isinstance(self, torch.optim.Adam):
             self._step_func = self._adam_step
+        elif isinstance(self, torch.optim.RMSprop):
+            self._step_func = self._rmsprop_step
+        elif isinstance(self, torch.optim.Adagrad):
+            self._step_func = self._adagrad_step
+        elif isinstance(self, torch.optim.Adadelta):
+            self._step_func = self._adadelta_step
         else:
             self._step_func = None  # Need user to register their own step function.
 
@@ -535,10 +541,10 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             if self._step_func is None:
                 raise ValueError(
                     "We don't have default implementation for the optimizer you provided. "
-                    "Currently, we only supports SGD and Adam optimizer. However, you can "
-                    "Register you own step to this class. The signature should be parameter-wise "
-                    "step func:\n func(parameter, gradient, parameter_group) -> None\n")
-            self._step_func(p, grad, param_group)
+                    "However, you can register you own step to this class. The signature "
+                    "should be parameter-wise tep func:\n"
+                    "   func(parameter, gradient, parameter_group) -> None\n")
+            self._step_func(p, grad.data, param_group)
 
             if self._reduce_delay[p] <= 0:
                 raise AssertionError(
@@ -571,7 +577,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         lr = param_group['lr']
         if p.grad is None:
             return
-        d_p = grad.data
+        d_p = grad
         if weight_decay != 0:
             d_p.add_(weight_decay, p.data)
         if momentum != 0:
@@ -633,6 +639,100 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
         step_size = param_group['lr'] / bias_correction1
         p.data.addcdiv_(-step_size, exp_avg, denom)
+
+    def _rmsprop_step(self, p, grad, param_group):
+        if grad.is_sparse:
+            raise RuntimeError('RMSprop does not support sparse gradients')
+        state = self.state[p]
+
+        # State initialization
+        if not state:
+            state['step'] = 0
+            state['square_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            if param_group['momentum'] > 0:
+                state['momentum_buffer'] = torch.zeros_like(
+                    p.data, memory_format=torch.preserve_format)
+            if param_group['centered']:
+                state['grad_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+
+        square_avg = state['square_avg']
+        alpha = param_group['alpha']
+
+        state['step'] += 1
+        if param_group['weight_decay'] != 0:
+            grad = grad.add(param_group['weight_decay'], p.data)
+
+        square_avg.mul_(alpha).addcmul_(1 - alpha, grad, grad)
+
+        if param_group['centered']:
+            grad_avg = state['grad_avg']
+            grad_avg.mul_(alpha).add_(1 - alpha, grad)
+            avg = square_avg.addcmul(-1, grad_avg, grad_avg).sqrt_().add_(param_group['eps'])
+        else:
+            avg = square_avg.sqrt().add_(param_group['eps'])
+
+        if param_group['momentum'] > 0:
+            buf = state['momentum_buffer']
+            buf.mul_(param_group['momentum']).addcdiv_(grad, avg)
+            p.data.add_(-param_group['lr'], buf)
+        else:
+            p.data.addcdiv_(-param_group['lr'], grad, avg)
+
+    def _adagrad_step(self, p, grad, param_group):
+        state = self.state[p]
+        state['step'] += 1
+
+        if param_group['weight_decay'] != 0:
+            if grad.is_sparse:
+                raise RuntimeError("weight_decay option is not compatible with sparse gradients")
+            grad = grad.add(param_group['weight_decay'], p.data)
+
+        clr = param_group['lr'] / (1 + (state['step'] - 1) * param_group['lr_decay'])
+
+        if grad.is_sparse:
+            grad = grad.coalesce()  # the update is non-linear so indices must be unique
+            grad_indices = grad._indices()
+            grad_values = grad._values()
+            size = grad.size()
+
+            def make_sparse(values):
+                constructor = grad.new
+                if grad_indices.dim() == 0 or values.dim() == 0:
+                    return constructor().resize_as_(grad)
+                return constructor(grad_indices, values, size)
+            state['sum'].add_(make_sparse(grad_values.pow(2)))
+            std = state['sum'].sparse_mask(grad)
+            std_values = std._values().sqrt_().add_(param_group['eps'])
+            p.data.add_(-clr, make_sparse(grad_values / std_values))
+        else:
+            state['sum'].addcmul_(1, grad, grad)
+            std = state['sum'].sqrt().add_(param_group['eps'])
+            p.data.addcdiv_(-clr, grad, std)
+
+    def _adadelta_step(self, p, grad, param_group):
+        if grad.is_sparse:
+            raise RuntimeError('Adadelta does not support sparse gradients')
+        state = self.state[p]
+
+        # State initialization
+        if len(state) == 0:
+            state['step'] = 0
+            state['square_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            state['acc_delta'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+
+        square_avg, acc_delta = state['square_avg'], state['acc_delta']
+        rho, eps = param_group['rho'], param_group['eps']
+
+        state['step'] += 1
+
+        if param_group['weight_decay'] != 0:
+            grad = grad.add(param_group['weight_decay'], p.data)
+
+        square_avg.mul_(rho).addcmul_(1 - rho, grad, grad)
+        std = square_avg.add(eps).sqrt_()
+        delta = acc_delta.add(eps).sqrt_().div_(std).mul_(grad)
+        p.data.add_(-param_group['lr'], delta)
+        acc_delta.mul_(rho).addcmul_(1 - rho, delta, delta)
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)

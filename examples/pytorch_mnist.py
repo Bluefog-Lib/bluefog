@@ -44,12 +44,12 @@ parser.add_argument(
 parser.add_argument("--epochs", type=int, default=10, metavar="N",
                     help="number of epochs to train (default: 10)")
 parser.add_argument(
-    "--lr", type=float, default=0.01, metavar="LR", help="learning rate (default: 0.01)")
+    "--lr", type=float, default=0.001, metavar="LR", help="learning rate (default: 0.001)")
 parser.add_argument("--momentum", type=float, default=0.5,
                     metavar="M", help="SGD momentum (default: 0.5)")
 parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training")
-parser.add_argument('--dist-optimizer', type=str, default='win_put',
+parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are ' +
                     '[neighbor_allreduce, hierarchical_neighbor_allreduce, allreduce, horovod]')
 parser.add_argument('--disable-dynamic-topology', action='store_true',
@@ -149,9 +149,7 @@ if args.cuda:
     model.cuda()
 
 # Bluefog: scale learning rate by the number of GPUs.
-optimizer = optim.SGD(
-    model.parameters(), lr=args.lr * bf.size(), momentum=args.momentum
-)
+optimizer = optim.Adam(model.parameters(), lr=args.lr * bf.size())
 
 # Bluefog: broadcast parameters & optimizer state.
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
