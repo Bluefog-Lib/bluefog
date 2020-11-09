@@ -59,6 +59,7 @@ deploy:
     on:
         branch: master
         condition: $MPI = openmpi
+        tags: true
 
 notifications:
     email:
