@@ -54,7 +54,7 @@ one neighbor only in one iteration and select next neighbor in next iteration as
 
     <p align="center"><img src="https://user-images.githubusercontent.com/16711681/97928035-04654400-1d1b-11eb-91d2-2da890b4522e.png" alt="one-peer-exp2" width="650"/></p>
 
-In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what parameter server or ring-allreduce promises. As for loss and accuracy guarantees, please check out our theoratical paper. [Will add a full tutorial soon].
+In this scenario, the communcation cost for each iteration is only one unit delay, one standard parameter size to transmit and no communication conflict happens, which is better than what parameter server or ring-allreduce promises. As for loss and accuracy guarantees, please check out our theoratical paper and our `slides <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_ preseneted on MLA'20. [A full tutorial will be added in future].
 
 
 Quick Start
