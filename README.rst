@@ -132,9 +132,11 @@ Checkout our `API explanation page <https://bluefog-lib.github.io/bluefog/bluefo
 
 The Bluefog source code was based off `Horovod <https://github.com/horovod/horovod>`_ repository. Hence, BlueFog shared lots of common features from Horovod such as `timeline <https://bluefog-lib.github.io/bluefog/timeline.html>`_, tensor-fusion, etc. Here, we want to express our gratitude to the Horovod team. 
 
-Citation
+Materials
 --------
-*BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, Bluefog Team, To be Appeared in 2020
+*BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, BlueFog Team, To Appear in 2020
+
+*Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA'20, `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
