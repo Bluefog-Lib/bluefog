@@ -134,9 +134,10 @@ The Bluefog source code was based off `Horovod <https://github.com/horovod/horov
 
 Materials
 --------
+*Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA, 2020 `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
+
 *BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, BlueFog Team, To Appear in 2020
 
-*Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA'20, `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
