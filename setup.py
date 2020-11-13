@@ -16,6 +16,7 @@
 
 import copy
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -377,6 +378,22 @@ def build_tf_extension(build_ext, global_options):
 
     build_ext.build_extension(bluefog_tensorflow_mpi_lib)
 
+def parse_version(version_str):
+    if "dev" in version_str:
+        return 9999999999
+    m = re.match('^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?', version_str)
+    if m is None:
+        return None
+
+    # turn version string to long integer
+    version = int(m.group(1)) * 10 ** 9
+    if m.group(2) is not None:
+        version += int(m.group(2)) * 10 ** 6
+    if m.group(3) is not None:
+        version += int(m.group(3)) * 10 ** 3
+    if m.group(4) is not None:
+        version += int(m.group(4))
+    return version
 
 def dummy_import_torch():
     try:
@@ -395,6 +412,13 @@ def check_torch_version():
     except ImportError:
         raise DistutilsPlatformError(
             'import torch failed, is it installed?\n\n%s' % traceback.format_exc())
+    # parse version
+    version = parse_version(torch.__version__)
+    if version is None:
+        raise DistutilsPlatformError(
+            'Unable to determine PyTorch version from the version string \'{}\''.format(
+                torch.__version__))
+    return version
 
 
 def is_torch_cuda(build_ext, include_dirs, extra_compile_args):
@@ -414,7 +438,7 @@ def is_torch_cuda(build_ext, include_dirs, extra_compile_args):
         return False
 
 
-def build_torch_extension(build_ext, global_options):
+def build_torch_extension(build_ext, global_options, torch_version):
     # Backup the options, preventing other plugins access libs that
     # compiled with compiler of this plugin
     options = copy.deepcopy(global_options)
@@ -449,6 +473,9 @@ def build_torch_extension(build_ext, global_options):
 
     updated_macros = set_macro(
         updated_macros, 'HAVE_NCCL', str(int(have_nccl)))
+    
+    updated_macros = set_macro(
+        updated_macros, 'TORCH_VERSION', str(torch_version))
 
     # Always set _GLIBCXX_USE_CXX11_ABI, since PyTorch can only detect whether it was set to 1.
     import torch
@@ -515,8 +542,8 @@ class custom_build_ext(_build_ext):
 
         if not os.environ.get('BLUEFOG_WITHOUT_PYTORCH'):
             try:
-                check_torch_version()
-                build_torch_extension(self, options)
+                torch_version = check_torch_version()
+                build_torch_extension(self, options, torch_version)
                 built_plugins.append(True)
                 print('INFO: PyTorch extension is built successfully.')
             except:  # pylint: disable=bare-except

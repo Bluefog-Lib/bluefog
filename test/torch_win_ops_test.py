@@ -340,7 +340,8 @@ class WinOpsTests(unittest.TestCase):
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([DIM_SIZE] * dim)).fill_(1).mul_(rank)
-            base_tensor = torch.arange(DIM_SIZE**dim).view_as(tensor)/1000
+            base_tensor = torch.arange(
+                DIM_SIZE**dim, dtype=torch.float32).view_as(tensor).div(1000)
             tensor = self.cast_and_place(tensor, dtype)
             base_tensor = self.cast_and_place(base_tensor, dtype)
             tensor = tensor + base_tensor
@@ -461,7 +462,8 @@ class WinOpsTests(unittest.TestCase):
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([DIM_SIZE] * dim)).fill_(1).mul_(rank)
-            base_tensor = torch.arange(DIM_SIZE**dim).view_as(tensor)/1000
+            base_tensor = torch.arange(
+                DIM_SIZE**dim, dtype=torch.float32).view_as(tensor).div(1000)
             tensor = self.cast_and_place(tensor, dtype)
             base_tensor = self.cast_and_place(base_tensor, dtype)
             tensor = tensor + base_tensor
@@ -627,7 +629,8 @@ class WinOpsTests(unittest.TestCase):
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
             tensor = torch.FloatTensor(*([DIM_SIZE] * dim)).fill_(1).mul_(rank)
-            base_tensor = torch.arange(DIM_SIZE**dim).view_as(tensor)/1000
+            base_tensor = torch.arange(
+                DIM_SIZE**dim, dtype=torch.float32).view_as(tensor).div(1000)
             tensor = self.cast_and_place(tensor, dtype)
             base_tensor = self.cast_and_place(base_tensor, dtype)
             tensor = tensor + base_tensor

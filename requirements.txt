@@ -2,6 +2,8 @@ cloudpickle
 networkx>=2.0
 psutil
 pytest>=5.0
+torch>=1.4.0
+torchvision>=0.5.0
 six
 tensorboardX>=1.5
 tqdm>=4.0
