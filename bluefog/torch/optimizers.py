@@ -529,9 +529,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         for param_group in self.param_groups:
             for p in param_group["params"]:
                 if p.requires_grad:
-                    # Because we modify the parameter instead of gradient
-                    # We can safely trigger the hook after the gradient
-                    # is computed.
+                    p.grad = p.data.new(p.size()).zero_()
                     self._requires_update.add(p)
                     p.register_hook(self._make_hook(p, param_group))
 
@@ -575,24 +573,21 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         dampening = param_group['dampening']
         nesterov = param_group['nesterov']
         lr = param_group['lr']
-        if p.grad is None:
-            return
         d_p = grad
         if weight_decay != 0:
-            d_p.add_(weight_decay, p.data)
+            d_p.add_(p.data, alpha=weight_decay)
         if momentum != 0:
             param_state = self.state[p]
             if 'momentum_buffer' not in param_state:
                 buf = param_state['momentum_buffer'] = torch.clone(d_p).detach()
             else:
                 buf = param_state['momentum_buffer']
-                buf.mul_(momentum).add_(1 - dampening, d_p)
+                buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
             if nesterov:
-                d_p = d_p.add(momentum, buf)
+                d_p = d_p.add(buf, alpha=momentum)
             else:
                 d_p = buf
-
-        p.data.add_(-lr, d_p)
+        p.data.add_(d_p, alpha=-lr)
 
     def _adam_step(self, p, grad, param_group):
         """Parameter-wise of torch.optim.Adam.step."""
@@ -624,10 +619,10 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         bias_correction2 = 1 - beta2 ** state['step']
 
         if param_group['weight_decay'] != 0:
-            grad.add_(param_group['weight_decay'], p.data)
+            grad.add_(p.data, alpha=param_group['weight_decay'])
 
         # Decay the first and second moment running average coefficient
-        exp_avg.mul_(beta1).add_(1 - beta1, grad)
+        exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
         exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
         if amsgrad:
             # Maintains the maximum of all 2nd moment running avg. till now
@@ -660,23 +655,23 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
         state['step'] += 1
         if param_group['weight_decay'] != 0:
-            grad = grad.add(param_group['weight_decay'], p.data)
+            grad = grad.add(p.data, alpha=param_group['weight_decay'])
 
-        square_avg.mul_(alpha).addcmul_(1 - alpha, grad, grad)
+        square_avg.mul_(alpha).addcmul_(grad, grad, value=1 - alpha)
 
         if param_group['centered']:
             grad_avg = state['grad_avg']
-            grad_avg.mul_(alpha).add_(1 - alpha, grad)
-            avg = square_avg.addcmul(-1, grad_avg, grad_avg).sqrt_().add_(param_group['eps'])
+            grad_avg.mul_(alpha).add_(grad, alpha=1 - alpha)
+            avg = square_avg.addcmul(grad_avg, grad_avg, value=-1).sqrt_().add_(param_group['eps'])
         else:
             avg = square_avg.sqrt().add_(param_group['eps'])
 
         if param_group['momentum'] > 0:
             buf = state['momentum_buffer']
             buf.mul_(param_group['momentum']).addcdiv_(grad, avg)
-            p.data.add_(-param_group['lr'], buf)
+            p.data.add_(buf, alpha=-param_group['lr'])
         else:
-            p.data.addcdiv_(-param_group['lr'], grad, avg)
+            p.data.addcdiv_(grad, avg, alpha=-param_group['lr'])
 
     def _adagrad_step(self, p, grad, param_group):
         state = self.state[p]
@@ -685,7 +680,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         if param_group['weight_decay'] != 0:
             if grad.is_sparse:
                 raise RuntimeError("weight_decay option is not compatible with sparse gradients")
-            grad = grad.add(param_group['weight_decay'], p.data)
+            grad = grad.add(p.data, alpha=param_group['weight_decay'])
 
         clr = param_group['lr'] / (1 + (state['step'] - 1) * param_group['lr_decay'])
 
@@ -703,11 +698,11 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             state['sum'].add_(make_sparse(grad_values.pow(2)))
             std = state['sum'].sparse_mask(grad)
             std_values = std._values().sqrt_().add_(param_group['eps'])
-            p.data.add_(-clr, make_sparse(grad_values / std_values))
+            p.data.add_(make_sparse(grad_values / std_values), alpha=-clr)
         else:
             state['sum'].addcmul_(1, grad, grad)
             std = state['sum'].sqrt().add_(param_group['eps'])
-            p.data.addcdiv_(-clr, grad, std)
+            p.data.addcdiv_(grad, std, value=-clr)
 
     def _adadelta_step(self, p, grad, param_group):
         if grad.is_sparse:
@@ -726,13 +721,13 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         state['step'] += 1
 
         if param_group['weight_decay'] != 0:
-            grad = grad.add(param_group['weight_decay'], p.data)
+            grad = grad.add(p.data, alpha=param_group['weight_decay'])
 
-        square_avg.mul_(rho).addcmul_(1 - rho, grad, grad)
+        square_avg.mul_(rho).addcmul_(grad, grad, value=1 - rho)
         std = square_avg.add(eps).sqrt_()
         delta = acc_delta.add(eps).sqrt_().div_(std).mul_(grad)
-        p.data.add_(-param_group['lr'], delta)
-        acc_delta.mul_(rho).addcmul_(1 - rho, delta, delta)
+        p.data.add_(delta, alpha=-param_group['lr'])
+        acc_delta.mul_(rho).addcmul_(delta, delta, value=1 - rho)
 
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
@@ -789,7 +784,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             self._synchronized = False
             return loss
         else:
-            # Optimizer.step() will be triggered when user calls byteps.broadcast_optimizer_sate()
+            # Optimizer.step() will be triggered when user calls broadcast_optimizer_state()
             super(self.__class__, self).step(closure)
             self._is_first_step = False
             self.synchronize()
