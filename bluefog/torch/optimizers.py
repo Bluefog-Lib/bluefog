@@ -497,7 +497,6 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         else:
             self._step_func = None  # Need user to register their own step function.
 
-        self._is_first_step = True
         self._reduce_delay = {v: self._num_steps_per_communication
                               for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
@@ -776,7 +775,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
          # Step 0 is called for parameter initialization after parameter broadcast
-        if bf.size() > 1 and not self._is_first_step:
+        if bf.size() > 1 and self._handles:
             loss = None
             if closure is not None:
                 loss = closure()
@@ -784,10 +783,17 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             self._synchronized = False
             return loss
         else:
-            # Optimizer.step() will be triggered when user calls broadcast_optimizer_state()
+            # Optimizer.step() might be triggered when user calls broadcast_optimizer_state()
             super(self.__class__, self).step(closure)
-            self._is_first_step = False
-            self.synchronize()
+
+    def zero_grad(self):
+        if self._handles:
+            raise AssertionError(
+                "optimizer.zero_grad() was called after loss.backward() "
+                "but before optimizer.step() or optimizer.synchronize(). "
+                "This is prohibited as it can cause a race condition."
+            )
+        return super(self.__class__, self).zero_grad()
 
 
 class _DistributedWinOptimizer(torch.optim.Optimizer):
