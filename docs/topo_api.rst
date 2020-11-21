@@ -11,7 +11,7 @@ We provide several popular static and dynamic topologies.
     * FullyConnectedGraph
 
 * Dynamic Topology
-    * GetDynamicSendRecvRanks
+    * GetDynamicOnePeerSendRecvRanks
     * GetExp2DynamicSendRecvMachineRanks
     * GetInnerOuterRingDynamicSendRecvRanks
     * GetInnerOuterExpo2DynamicSendRecvRanks

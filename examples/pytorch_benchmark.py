@@ -164,7 +164,7 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
                 local_size=bf.local_size(),
                 self_rank=bf.rank())
         else:
-            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicOnePeerSendRecvRanks(
                 bf.load_topology(), bf.rank())
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
         # This optimizer can use following dynamic topo only so far.
@@ -175,7 +175,7 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
             local_rank=bf.local_rank()
         )
     else:
-        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicOnePeerSendRecvRanks(
             bf.load_topology(), bf.rank())
 
 
