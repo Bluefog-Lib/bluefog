@@ -208,7 +208,7 @@ optimizer = optim.SGD(
 if args.dist_optimizer != 'horovod':
     base_dist_optimizer = (
         bf.DistributedAdaptThenCombineOptimizer if args.atc_style else
-        bf.DistributedCombineWithAdaptOptimizer)
+        bf.DistributedAdaptWithCombineOptimizer)
 if args.dist_optimizer == 'win_put':
     optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
 elif args.dist_optimizer == 'allreduce':

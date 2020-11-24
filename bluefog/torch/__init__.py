@@ -25,7 +25,7 @@ from bluefog.common.util import check_extension
 from bluefog.torch.optimizers import (
     CommunicationType,
     DistributedAdaptThenCombineOptimizer,
-    DistributedCombineWithAdaptOptimizer,
+    DistributedAdaptWithCombineOptimizer,
     DistributedGradientAllreduceOptimizer,
     DistributedWinPutOptimizer,
     DistributedAllreduceOptimizer,

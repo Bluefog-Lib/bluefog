@@ -1233,11 +1233,11 @@ def DistributedAllreduceOptimizer(optimizer, model,
     The communication for allreduce is applied on the parameters when forward propagation happens.
 
     .. warning::
-        This API will be deprecated in v0.3.0. Use ``DistributedCombineWithAdaptOptimizer`` instead.
+        This API will be deprecated in v0.3.0. Use ``DistributedAdaptWithCombineOptimizer`` instead.
     """
     warnings.warn(
         "This API will be deprecated in next version. Please use new equivalent API:\n "
-        "  DistributedCombineWithAdaptOptimizer(opt, model, bf.CommunicationType.allreduce)",
+        "  DistributedAdaptWithCombineOptimizer(opt, model, bf.CommunicationType.allreduce)",
         PendingDeprecationWarning)
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with allreduce implementation.
@@ -1257,11 +1257,11 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
     neighbor_allreduce ops over parameters.
 
     .. warning::
-        This API will be deprecated in v0.3.0. Use ``DistributedCombineWithAdaptOptimizer`` instead.
+        This API will be deprecated in v0.3.0. Use ``DistributedAdaptWithCombineOptimizer`` instead.
     """
     warnings.warn(
         "This API will be deprecated in next version. Please use new equivalent API:\n "
-        "  DistributedCombineWithAdaptOptimizer(\n"
+        "  DistributedAdaptWithCombineOptimizer(\n"
         "      opt, model, bf.CommunicationType.neighbor_allreduce)",
         PendingDeprecationWarning)
     # We dynamically create a new class that inherits from the optimizer that was passed in.
@@ -1282,11 +1282,11 @@ def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
     hierarchical_neighbor_allreduce ops over parameters.
 
     .. warning::
-        This API will be deprecated in v0.3.0. Use ``DistributedCombineWithAdaptOptimizer`` instead.
+        This API will be deprecated in v0.3.0. Use ``DistributedAdaptWithCombineOptimizer`` instead.
     """
     warnings.warn(
         "This API will be deprecated in next version. Please use new equivalent API:\n "
-        "  DistributedCombineWithAdaptOptimizer(\n"
+        "  DistributedAdaptWithCombineOptimizer(\n"
         "      opt, model, bf.CommunicationType.hierarchical_neighbor_allreduce)",
         PendingDeprecationWarning)
     cls = type(
@@ -1387,7 +1387,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         Scenario 1) Local accumulation of gradient without update model.
                     (Used in large batch size or large model cases)
 
-        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
         >>>          num_steps_per_communication=J)
         >>> opt.zero_grad()
@@ -1399,7 +1399,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         Scenario 2) Local updating the model. (Used in case that decreasing the communication).
 
-        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
         >>>          num_steps_per_communication=J)
         >>> for j in range(J):
@@ -1417,7 +1417,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
     return cls(optimizer.param_groups, model, communication_type, num_steps_per_communication)
 
 
-def DistributedCombineWithAdaptOptimizer(optimizer, model,
+def DistributedAdaptWithCombineOptimizer(optimizer, model,
                                          communication_type=CommunicationType.neighbor_allreduce,
                                          num_steps_per_communication=1):
     """
@@ -1445,7 +1445,7 @@ def DistributedCombineWithAdaptOptimizer(optimizer, model,
         Scenario 1) Local accumulation of gradient without update model.
                     (Used in large batch size or large model cases)
 
-        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
         >>>          num_steps_per_communication=J)
         >>> opt.zero_grad()
@@ -1457,7 +1457,7 @@ def DistributedCombineWithAdaptOptimizer(optimizer, model,
 
         Scenario 2) Local updating the model. (Used in case that decreasing the communication).
 
-        >>> opt = bf.DistributedCombineWithAdaptOptimizer(optimizer, model,
+        >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
         >>>          num_steps_per_communication=J)
         >>> for j in range(J):
