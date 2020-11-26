@@ -589,9 +589,9 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
 
 
 def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
-                                    self_weight: float,
-                                    neighbor_machine_weights: Dict[int, float],
-                                    send_neighbor_machines: List[int],
+                                    self_weight: float = None,
+                                    neighbor_machine_weights: Dict[int, float] = None,
+                                    send_neighbor_machines: List[int] = None,
                                     enable_topo_check: bool = False,
                                     name: Optional[str] = None) -> torch.Tensor:
     """
@@ -640,9 +640,9 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
 
 
 def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
-                                                self_weight: float,
-                                                neighbor_machine_weights: Dict[int, float],
-                                                send_neighbor_machines: List[int],
+                                                self_weight: float = None,
+                                                neighbor_machine_weights: Dict[int, float] = None,
+                                                send_neighbor_machines: List[int] = None,
                                                 enable_topo_check: bool = False,
                                                 name: Optional[str] = None) -> int:
     """
