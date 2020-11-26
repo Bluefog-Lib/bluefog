@@ -40,8 +40,10 @@ class BlueFogBasics(object):
     def __init__(self, pkg_path, *args):
         full_path = util.get_extension_full_path(pkg_path, *args)
         self._topology = None
+        self._machine_topology = None
         self._MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
         self._is_topo_weighted = False
+        self._is_machine_topo_weighted = False
         self.warn_timeline = False
 
     def init(self, topology_fn: Optional[Callable[[int], networkx.DiGraph]] = None,
@@ -67,7 +69,8 @@ class BlueFogBasics(object):
     def shutdown(self) -> None:
         """A function that shuts BlueFog down."""
         self._MPI_LIB_CTYPES.bluefog_shutdown()
-        self.topology = None
+        self._topology = None
+        self._machine_topology = None
 
     def size(self) -> int:
         """A function that returns the number of BlueFog processes.
@@ -116,6 +119,26 @@ class BlueFogBasics(object):
             raise ValueError("BlueFog has not been initialized; use bf.init().")
         return local_rank
 
+    def machine_rank(self) -> int:
+        """A function that returns the BlueFog rank of the machine.
+
+        Returns:
+            An integer scalar with the BlueFog rank of the machine.
+        """
+        # TODO(hhb) This only supports the homogenous environment now. Currently it assumes all
+        # machines share the same local_size()
+        return self.rank()//self.local_size()
+
+    def machine_size(self) -> int:
+        """A function that returns the BlueFog size of the machine.
+
+        Returns:
+            An integer scalar with the BlueFog size of the machine.
+        """
+        # TODO(hhb) This only supports the homogenous environment now. Currently it assumes all
+        # machines share the same local_size()
+        return self.size()//self.local_size()
+
     def unified_mpi_window_model_supported(self) -> bool:
         """Returns a boolean value to indicate the MPI_Win model is unified or not.
         Unfornuately, it is a collective call. We have to create a fake win to get
@@ -149,6 +172,22 @@ class BlueFogBasics(object):
         """
         return self._is_topo_weighted
 
+    def is_machine_topo_weighted(self) -> bool:
+        """A function that returns if the virtual machine topology weights are used
+
+        Returns:
+          A boolean value indicating if the machine topology weights are used.
+        """
+        return self._is_machine_topo_weighted
+
+    def load_machine_topology(self) -> networkx.DiGraph:
+        """A function that returns the virtual topology for the machine.
+
+        Returns:
+            machine_topology: networkx.DiGraph.
+        """
+        return self._machine_topology
+
     def load_topology(self) -> networkx.DiGraph:
         """A funnction that returns the virtual topology MPI used.
 
@@ -156,6 +195,21 @@ class BlueFogBasics(object):
             topology: networkx.DiGraph.
         """
         return self._topology
+
+    def in_neighbor_machine_ranks(self) -> List[int]:
+        """Return the machine ranks of all in-neighbors.
+        Notice: No matter self-loop is presented or not, self machine rank will not be included.
+
+        Returns:
+            in_neighbor_machine_ranks
+        """
+        if self._machine_topology is None:
+            return []
+        _machine_rank = self.machine_rank()
+        in_neighbor_machine_ranks = [r for r in
+                                        self._machine_topology.predecessors(self.machine_rank())
+                                        if r != _machine_rank]
+        return in_neighbor_machine_ranks
 
     def in_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all in-neighbors.
@@ -171,6 +225,21 @@ class BlueFogBasics(object):
                              if r != _rank]
         return in_neighbor_ranks
 
+    def out_neighbor_machine_ranks(self) -> List[int]:
+        """Return the machine ranks of all out-neighbors.
+        Notice: No matter self-loop is presented or not, self machine rank will not be included.
+
+        Returns:
+            out_neighbor_machine_ranks
+        """
+        if self._machine_topology is None:
+            return []
+        _machine_rank = self.machine_rank()
+        out_neighbor_machine_ranks = [r for r in
+                                        self._machine_topology.successors(self.machine_rank())
+                                        if r != _machine_rank]
+        return out_neighbor_machine_ranks
+
     def out_neighbor_ranks(self) -> List[int]:
         """Return the ranks of all out-neighbors.
         Notice: No matter self-loop is presented or not, self rank will not be included.
@@ -185,9 +254,43 @@ class BlueFogBasics(object):
                               if r != _rank]
         return out_neighbor_ranks
 
+    def set_machine_topology(self, topology: Optional[networkx.DiGraph],
+                             is_weighted: bool = False) -> bool:
+        """A function that sets the virtual machine topology.
+
+        Args:
+          Topo: A networkx.DiGraph object to decide the machine topology. It shall not be None.
+          is_weighted: If set to true, hierarchical_neighbor_allreduce will execute the
+            weighted average instead, where the weights are the value used in machine topology
+            matrix (including self weight).
+
+        Returns:
+            A boolean value that whether machine topology is set correctly or not.
+
+        Example:
+            >>> import bluefog.torch as bf
+            >>> from bluefog.common import topology_util
+            >>> bf.init()
+            >>> bf.set_machine_topology(topology_util.RingGraph(bf.size()))
+        """
+        if topology is None:
+            raise ValueError("Machine topology shall not be None.")
+
+        if not isinstance(topology, networkx.DiGraph):
+            raise TypeError("Machine topology must be a networkx.DiGraph obejct.")
+
+        if topology_util.IsTopologyEquivalent(topology, self._machine_topology):
+            if self.local_rank() == 0:
+                logger.debug("Machine topology to set is the same as old one. Skip the setting.")
+            return True
+
+        self._machine_topology = topology
+        self._is_machine_topo_weighted = is_weighted
+        return True
+
     def set_topology(self, topology: Optional[networkx.DiGraph] = None,
                      is_weighted: bool = False) -> bool:
-        """A funnction that sets the virtual topology MPI used.
+        """A function that sets the virtual topology MPI used.
 
         Args:
           Topo: A networkx.DiGraph object to decide the topology. If not provided
