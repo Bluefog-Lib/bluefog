@@ -712,13 +712,14 @@ def _hierarchical_neighbor_allreduce_nonblocking(
             raise RuntimeError("Machine topology must be set before the use of hierarchical "
                                "neighbor allreduce")
         if is_machine_topo_weighted():
-            self_weight, neighbor_weights = GetRecvWeights(topology, machine_rank())
+            self_weight, neighbor_machine_weights = GetRecvWeights(topology, machine_rank())
             avg_computation = True
         else:
             weight = 1.0/(len(in_neighbor_machine_ranks())+1)
             self_weight = weight
-            neighbor_weights = {r: weight for r in in_neighbor_machine_ranks()}
+            neighbor_machine_weights = {r: weight for r in in_neighbor_machine_ranks()}
             avg_computation = False
+        send_neighbor_machines = out_neighbor_machine_ranks()
     elif self_weight is not None and neighbor_machine_weights is not None:
         if not isinstance(neighbor_machine_weights, dict):
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
@@ -734,11 +735,11 @@ def _hierarchical_neighbor_allreduce_nonblocking(
             if abs(n_weights - uniform_weights) > 1e-6:
                 avg_computation = True
                 break
+        if not send_neighbor_machines:
+            raise ValueError("Argument send_neighbor_machines has to be presented and non-empty.")
     else:
         raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
 
-    if not send_neighbor_machines:
-        raise ValueError("Argument send_neighbor_machines has to be presented and non-empty.")
 
     machine_size = size() // local_size()
     # Translate machine id into rank id.
