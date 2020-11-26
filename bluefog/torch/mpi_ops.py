@@ -683,7 +683,10 @@ def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
 
-    first_dim = tensor.shape[0] * len(neighbor_machine_weights)
+    if send_neighbor_machines is None:
+        first_dim = tensor.shape[0] * len(in_neighbor_machine_ranks())
+    else:
+        first_dim = tensor.shape[0] * len(neighbor_machine_weights)
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
     output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
 
