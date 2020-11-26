@@ -31,11 +31,15 @@ shutdown = _basics.shutdown
 size = _basics.size
 local_size = _basics.local_size
 rank = _basics.rank
+machine_rank = _basics.machine_rank
 local_rank = _basics.local_rank
 load_topology = _basics.load_topology
+load_machine_topology = _basics.load_machine_topology
 is_topo_weighted = _basics.is_topo_weighted
+is_machine_topo_weighted = _basics.is_machine_topo_weighted
 set_topology = _basics.set_topology
 in_neighbor_ranks = _basics.in_neighbor_ranks
+in_neighbor_machine_ranks = _basics.in_neighbor_machine_ranks
 out_neighbor_ranks = _basics.out_neighbor_ranks
 mpi_threads_supported = _basics.mpi_threads_supported
 unified_mpi_window_model_supported = _basics.unified_mpi_window_model_supported
@@ -674,8 +678,6 @@ def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
         A handle to the hierarchical_neighbor_allreduce operation that can be used with `poll()` or
         `synchronize()`.
     """
-    if (self_weight is None or neighbor_machine_weights is None):
-        raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
     if (self_weight is None and neighbor_machine_weights is not None) or \
        (self_weight is not None and neighbor_machine_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
@@ -697,7 +699,21 @@ def _hierarchical_neighbor_allreduce_nonblocking(
         "hierarchical_neighbor_allreduce should be used under homogeneous environment only"
     assert local_size() > 1, "If local size is 1, you should use neighbor allreduce directly."
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
-    if self_weight is not None and neighbor_machine_weights is not None:
+    if self_weight is None and neighbor_machine_weights is None:
+        # Implying this is static machine graph.
+        topology = load_machine_topology()
+        if topology is None:
+            raise RuntimeError("Machine topology must be set before the use of hierarchical "
+                               "neighbor allreduce")
+        if is_machine_topo_weighted():
+            self_weight, neighbor_weights = GetRecvWeights(topology, machine_rank())
+            avg_computation = True
+        else:
+            weight = 1.0/(len(in_neighbor_machine_ranks())+1)
+            self_weight = weight
+            neighbor_weights = {r: weight for r in in_neighbor_machine_ranks()}
+            avg_computation = False
+    elif self_weight is not None and neighbor_machine_weights is not None:
         if not isinstance(neighbor_machine_weights, dict):
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
                              "(in-)neighbor rank to the weights.")
