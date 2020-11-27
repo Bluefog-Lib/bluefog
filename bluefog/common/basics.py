@@ -127,6 +127,7 @@ class BlueFogBasics(object):
         """
         # TODO(hhb) This only supports the homogenous environment now. Currently it assumes all
         # machines share the same local_size()
+        assert self.is_homogeneous(), "Only supports homogeneous environment now"
         return self.rank()//self.local_size()
 
     def machine_size(self) -> int:
@@ -137,6 +138,7 @@ class BlueFogBasics(object):
         """
         # TODO(hhb) This only supports the homogenous environment now. Currently it assumes all
         # machines share the same local_size()
+        assert self.is_homogeneous(), "Only supports homogeneous environment now"
         return self.size()//self.local_size()
 
     def unified_mpi_window_model_supported(self) -> bool:
@@ -278,6 +280,8 @@ class BlueFogBasics(object):
 
         if not isinstance(topology, networkx.DiGraph):
             raise TypeError("Machine topology must be a networkx.DiGraph obejct.")
+
+        assert self.is_homogeneous(), "Only supports homogeneous environment now"
 
         if topology_util.IsTopologyEquivalent(topology, self._machine_topology):
             if self.local_rank() == 0:

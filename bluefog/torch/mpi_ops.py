@@ -448,12 +448,12 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
         if is_topo_weighted():
             topology = load_topology()
             self_weight, neighbor_weights = GetRecvWeights(topology, rank())
-            avg_computation = True
+            weighted_average_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
             self_weight = weight
             neighbor_weights = {r: weight for r in in_neighbor_ranks()}
-            avg_computation = False
+            weighted_average_computation = False
     elif self_weight is not None and neighbor_weights is not None:
         if not isinstance(neighbor_weights, dict):
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
@@ -466,12 +466,12 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
         uniform_weights = 1.0/(len(neighbor_weights)+1)
-        avg_computation = False
+        weighted_average_computation = False
         if abs(self_weight - uniform_weights) > 1e-6:
-            avg_computation = True
+            weighted_average_computation = True
         for n_weights in neighbor_weights.values():
             if abs(n_weights - uniform_weights) > 1e-6:
-                avg_computation = True
+                weighted_average_computation = True
                 break
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
@@ -479,7 +479,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weight
     is_hierarchical = False
     handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
                                         send_neighbors, dynamic_neighbors_enabled,
-                                        enable_topo_check, avg_computation,
+                                        enable_topo_check, weighted_average_computation,
                                         is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
@@ -705,7 +705,7 @@ def _hierarchical_neighbor_allreduce_nonblocking(
         "hierarchical_neighbor_allreduce should be used under homogeneous environment only"
     assert local_size() > 1, "If local size is 1, you should use neighbor allreduce directly."
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
-    if self_weight is None and neighbor_machine_weights is None:
+    if self_weight is None and neighbor_machine_weights is None and send_neighbor_machines is None:
         # Implying this is static machine graph.
         topology = load_machine_topology()
         if topology is None:
@@ -713,12 +713,12 @@ def _hierarchical_neighbor_allreduce_nonblocking(
                                "neighbor allreduce")
         if is_machine_topo_weighted():
             self_weight, neighbor_machine_weights = GetRecvWeights(topology, machine_rank())
-            avg_computation = True
+            weighted_average_computation = True
         else:
             weight = 1.0/(len(in_neighbor_machine_ranks())+1)
             self_weight = weight
             neighbor_machine_weights = {r: weight for r in in_neighbor_machine_ranks()}
-            avg_computation = False
+            weighted_average_computation = False
         send_neighbor_machines = out_neighbor_machine_ranks()
     elif self_weight is not None and neighbor_machine_weights is not None:
         if not isinstance(neighbor_machine_weights, dict):
@@ -728,17 +728,18 @@ def _hierarchical_neighbor_allreduce_nonblocking(
             raise ValueError(
                 "Argument self_weight has to be a float for self rank.")
         uniform_weights = 1.0/(len(neighbor_machine_weights)+1)
-        avg_computation = False
+        weighted_average_computation = False
         if abs(self_weight - uniform_weights) > 1e-6:
-            avg_computation = True
+            weighted_average_computation = True
         for n_weights in neighbor_machine_weights.values():
             if abs(n_weights - uniform_weights) > 1e-6:
-                avg_computation = True
+                weighted_average_computation = True
                 break
         if not send_neighbor_machines:
             raise ValueError("Argument send_neighbor_machines has to be presented and non-empty.")
     else:
-        raise ValueError("Arguments self_weight and neighbor_weights cannot be empty or None.")
+        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at the "
+                         "same time.")
 
 
     machine_size = size() // local_size()
@@ -758,7 +759,7 @@ def _hierarchical_neighbor_allreduce_nonblocking(
     dynamic_neighbors_enabled = True
     handle = getattr(mpi_lib, function)(tensor_buffer, output, self_weight, neighbor_weights,
                                         send_neighbors, dynamic_neighbors_enabled, enable_topo_check,
-                                        avg_computation, is_hierarchical,
+                                        weighted_average_computation, is_hierarchical,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor_buffer, output)
     return handle
@@ -769,11 +770,11 @@ def _pair_gossip_nonblocking_function_factory(tensor):
 
 
 def _pair_gossip_nonblocking(tensor, output, target_rank, self_weight, pair_weight,
-                             avg_computation, name):
+                             weighted_average_computation, name):
     function = _check_function(
         _pair_gossip_nonblocking_function_factory, tensor)
     handle = getattr(mpi_lib, function)(tensor, output, target_rank,
-                                        self_weight, pair_weight, avg_computation,
+                                        self_weight, pair_weight, weighted_average_computation,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
@@ -833,14 +834,14 @@ def pair_gossip_nonblocking(tensor: torch.Tensor, target_rank: int, self_weight:
     if pair_weight is None and self_weight is None:
         pair_weight = 0
         self_weight = 0
-        avg_computation = True
+        weighted_average_computation = True
     elif pair_weight is not None and self_weight is not None:
-        avg_computation = False
+        weighted_average_computation = False
     else:
         raise ValueError("self_weight and pair_weight have to be set at same time.")
     output = tensor.new(tensor.shape)
     return _pair_gossip_nonblocking(tensor, output, target_rank, self_weight,
-                                    pair_weight, avg_computation, name)
+                                    pair_weight, weighted_average_computation, name)
 
 
 def poll(handle: int) -> bool:
@@ -1030,24 +1031,24 @@ def win_update(name: str,
         if not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
-        avg_computation = True
+        weighted_average_computation = True
 
     elif neighbor_weights is None and self_weight is None:
         if is_topo_weighted():
             topology = load_topology()
             self_weight, neighbor_weights = GetRecvWeights(topology, rank())
-            avg_computation = True
+            weighted_average_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
             self_weight = weight
             neighbor_weights = {r: weight for r in in_neighbor_ranks()}
-            avg_computation = False
+            weighted_average_computation = False
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
 
     if not getattr(mpi_lib, function)(tensor, name, self_weight, neighbor_weights,
-                                      reset, avg_computation, require_mutex):
+                                      reset, weighted_average_computation, require_mutex):
         raise RuntimeError("Cannot apply win_update on " + name)
     return tensor
 
