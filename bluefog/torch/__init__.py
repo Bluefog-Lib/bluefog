@@ -37,8 +37,11 @@ check_extension('bluefog.torch', __file__, 'mpi_lib')
 
 from bluefog.torch.mpi_ops import init, shutdown
 from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
+from bluefog.torch.mpi_ops import machine_size, machine_rank
 from bluefog.torch.mpi_ops import load_topology, set_topology
+from bluefog.torch.mpi_ops import load_machine_topology, set_machine_topology
 from bluefog.torch.mpi_ops import in_neighbor_ranks, out_neighbor_ranks
+from bluefog.torch.mpi_ops import in_neighbor_machine_ranks, out_neighbor_machine_ranks
 from bluefog.torch.mpi_ops import mpi_threads_supported
 from bluefog.torch.mpi_ops import unified_mpi_window_model_supported
 from bluefog.torch.mpi_ops import nccl_built, is_homogeneous
