@@ -314,6 +314,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
         self._models = models
         self._parameter_names = {v: k for k, v in sorted(named_parameters)}
+        self._name_parameters = {k: v for k, v in sorted(named_parameters)}
         self._handles = {}
         self._requires_update = set()
         self._synchronized = False
@@ -342,6 +343,9 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         def hook(module, *unused):
             for name, p in module.named_parameters():
                 if not module.training:
+                    continue
+                if self._name_parameters.get(parent_name+'.'+name, None) is None:
+                    # Some case like encoder-decode, which shared the same weights.
                     continue
                 if self._use_timeline:
                     # End forward computation timeline
@@ -392,7 +396,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
     def turn_on_timeline(self):
         handles = _register_timeline(
-            self, self._models, self._parameter_names, self._communication_type.name)
+            self, self._models, self._parameter_names, self._communication_type.value)
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
@@ -752,7 +756,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
     def turn_on_timeline(self):
         handles = _register_timeline(
-            self, self._models, self._parameter_names, self._communication_type.name)
+            self, self._models, self._parameter_names, self._communication_type.value)
         self._timeline_hook_handles.extend(handles)
         self._use_timeline = True
 
