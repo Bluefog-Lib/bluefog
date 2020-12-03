@@ -73,6 +73,8 @@ elif args.virtual_topology == "star":
     bf.set_topology(topology_util.StarGraph(bf.size()), is_weighted=True)
 elif args.virtual_topology == "InnerOuterRing":
     bf.set_topology(topology_util.InnerOuterRingGraph(bf.size(), local_size=args.local_size))
+elif args.virtual_topology == "InnerOuterExp2":
+    bf.set_topology(topology_util.InnerOuterExp2Graph(bf.size(), local_size=args.local_size))
 elif args.virtual_topology == "full":
     bf.set_topology(topology_util.FullyConnectedGraph(bf.size()))
 else:
@@ -91,13 +93,19 @@ if not args.asynchronous_mode:
         if args.virtual_topology == "InnerOuterRing":
             dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterRingDynamicSendRecvRanks(
                 bf.size(), local_size=args.local_size, self_rank=bf.rank())
+        elif args.virtual_topology == "InnerOuterExp2":
+            print('Enter Dynamic InnerOuterExp2\n')
+            dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExp2DynamicSendRecvRanks(
+                bf.size(), local_size=args.local_size, self_rank=bf.rank())
         else:
             dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
                 bf.load_topology(), bf.rank())
 
     for ite in range(args.max_iters):
         if args.enable_dynamic_topology:
+            print('Line 106\n')
             send_neighbors, recv_neighbors = next(dynamic_neighbor_allreduce_gen)
+            # print('ite:{}, rank:{}, send_neighbors:{}, recv_neighbors:{}'.format(ite, bf.rank(), send_neighbors, recv_neighbors))
             neighbor_weights = {
                 r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
             self_weight = 1 / (len(recv_neighbors) + 1)
