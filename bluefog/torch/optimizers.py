@@ -16,6 +16,7 @@
 
 from contextlib import contextmanager
 from enum import Enum
+import functools
 import itertools
 import math
 import os
@@ -521,12 +522,15 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         """Register the step function.
 
         Args:
-            func: The signature should be func(parameter, gradient, parameter_group) -> None.
+            step_func: The signature should be:
+                   func(self, parameter, gradient, parameter_group) -> None
+                Where self refer to the instance of this distributed optimizer. A common
+                usage is to get the stat of parameter through self.state[p].
                 Note, it has to be paramter-wise and parameter_group is the one that the
                 standard torch.optimizer provided, which can store the auxuilary information
                 or state of optimizer like learning_rate, weight_decay, etc.
         """
-        self._step_func = step_func
+        self._step_func = functools.partial(step_func, self)
 
     def _register_hooks(self):
         for param_group in self.param_groups:
@@ -601,16 +605,15 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         state = self.state[p]
 
         # State initialization
-        if not state:
+        if len(state) == 0:
             state['step'] = 0
             # Exponential moving average of gradient values
-            state['exp_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            state['exp_avg'] = torch.zeros_like(p.data)
             # Exponential moving average of squared gradient values
-            state['exp_avg_sq'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            state['exp_avg_sq'] = torch.zeros_like(p.data)
             if amsgrad:
                 # Maintains max of all exp. moving avg. of sq. grad. values
-                state['max_exp_avg_sq'] = torch.zeros_like(
-                    p.data, memory_format=torch.preserve_format)
+                state['max_exp_avg_sq'] = torch.zeros_like(p.data)
 
         exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
         if amsgrad:
@@ -644,14 +647,13 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         state = self.state[p]
 
         # State initialization
-        if not state:
+        if len(state) == 0:
             state['step'] = 0
-            state['square_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            state['square_avg'] = torch.zeros_like(p.data)
             if param_group['momentum'] > 0:
-                state['momentum_buffer'] = torch.zeros_like(
-                    p.data, memory_format=torch.preserve_format)
+                state['momentum_buffer'] = torch.zeros_like(p.data)
             if param_group['centered']:
-                state['grad_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+                state['grad_avg'] = torch.zeros_like(p.data)
 
         square_avg = state['square_avg']
         alpha = param_group['alpha']
@@ -715,8 +717,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         # State initialization
         if len(state) == 0:
             state['step'] = 0
-            state['square_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
-            state['acc_delta'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)
+            state['square_avg'] = torch.zeros_like(p.data)
+            state['acc_delta'] = torch.zeros_like(p.data)
 
         square_avg, acc_delta = state['square_avg'], state['acc_delta']
         rho, eps = param_group['rho'], param_group['eps']
@@ -784,6 +786,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             if closure is not None:
                 loss = closure()
             self.synchronize()
+            # TODO(ybc) Figure out a better and more robust way to do sync in ATC.
+            # Note, tere self. _synchronized just turns from true to false immediately.
             self._synchronized = False
             return loss
         else:
@@ -1237,7 +1241,8 @@ def DistributedAllreduceOptimizer(optimizer, model,
     The communication for allreduce is applied on the parameters when forward propagation happens.
 
     .. warning::
-        This API will be deprecated in v0.3.0. Use ``DistributedAdaptWithCombineOptimizer`` instead.
+        This API will be deprecated in the future.
+        Use ``DistributedAdaptWithCombineOptimizer`` instead.
     """
     warnings.warn(
         "This API will be deprecated in next version. Please use new equivalent API:\n "
@@ -1261,7 +1266,8 @@ def DistributedNeighborAllreduceOptimizer(optimizer, model,
     neighbor_allreduce ops over parameters.
 
     .. warning::
-        This API will be deprecated in v0.3.0. Use ``DistributedAdaptWithCombineOptimizer`` instead.
+        This API will be deprecated in the future.
+        Use ``DistributedAdaptWithCombineOptimizer`` instead.
     """
     warnings.warn(
         "This API will be deprecated in next version. Please use new equivalent API:\n "
@@ -1286,7 +1292,8 @@ def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
     hierarchical_neighbor_allreduce ops over parameters.
 
     .. warning::
-        This API will be deprecated in v0.3.0. Use ``DistributedAdaptWithCombineOptimizer`` instead.
+        This API will be deprecated in the future.
+        Use ``DistributedAdaptWithCombineOptimizer`` instead.
     """
     warnings.warn(
         "This API will be deprecated in next version. Please use new equivalent API:\n "
@@ -1361,26 +1368,28 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
     run the communication after parameter updated with gradient.
 
     In order to maximize the overlapping between communication and computation, we override
-    the step() function. Hence, if you don't use the standard optimizer like SGD, you need
+    the step() function in standard optimizer provided by PyTorch. Currenly, we support
+    SGD, ADAM, AdaDelta, RMSProp, AdaGrad. If you don't use these, you need
     to register your own step function to the returned optimizer through \n
 
     >>> opt.register_step_function(step_func)
 
-    where the signature should be func(parameter, gradient, parameter_group) -> None.
+    where the signature should be func(self, parameter, gradient, parameter_group) -> None.
     Note, it has to be paramter-wise and parameter_group is the one that the standard
     torch.optimizer provided, which can store the auxuilary information or state of
     optimizer like learning_rate, weight_decay, etc.
 
     Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
     `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
-    the behavior of (hierarchical) neighbor allreduce. Changing the values
+    the behavior of hierarchical neighbor allreduce. Changing the values
     of these knobs to achieve dynamic topologies.
 
-    Args:
-        Optimizer to use for computing gradients and applying updates.
+    Arguments:
+        optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
         communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
             hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
+            Empty function just means no communication.
         num_steps_per_communication: Number of expected backward function calls before each
                                      communication. This allows local model parameter updates
                                      per num_steps_per_communication before reducing them over
@@ -1427,18 +1436,20 @@ def DistributedAdaptWithCombineOptimizer(optimizer, model,
     """
     An distributed optimizer that wraps another torch.optim.Optimizer.
     The communication is applied on the parameters when forward propagation triggered. Hence,
-    communication is overlapped with both forward and backward phase.
+    communication is overlapped with both forward and backward phase. Unlike AdaptThenCombine,
+    this dist-optimizer do not need to register customized step function.
 
     Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
     `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
     the behavior of (hierarchical) neighbor allreduce. Changing the values
     of these knobs to achieve dynamic topologies.
 
-    Args:
-        Optimizer to use for computing gradients and applying updates.
+    Arguments:
+        optimizer: Optimizer to use for computing gradients and applying updates.
         model: The model or a list of models you want to train with.
         communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
             hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
+            Empty function just means no communication.
         num_steps_per_communication: Number of expected backward function calls before each
                                      communication. This allows local model parameter updates
                                      per num_steps_per_communication before reducing them over
