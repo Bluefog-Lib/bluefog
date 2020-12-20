@@ -1441,7 +1441,7 @@ def DistributedAdaptWithCombineOptimizer(optimizer, model,
 
     Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
     `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
-    the behavior of (hierarchical) neighbor allreduce. Changing the values
+    the behavior of hierarchical neighbor allreduce. Changing the values
     of these knobs to achieve dynamic topologies.
 
     Arguments:
