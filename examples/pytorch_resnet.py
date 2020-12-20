@@ -84,6 +84,8 @@ parser.add_argument('--dist-optimizer', type=str, default='neighbor_allreduce',
                     help='The type of distributed optimizer. Supporting options are [win_put, ' +
                     'neighbor_allreduce, hierarchical_neighbor_allreduce, allreduce, ' +
                     'gradient_allreduce, horovod]')
+parser.add_argument('--atc-style', action='store_true', default=False,
+                    help='If True, the step of optimizer happened before communication')
 parser.add_argument('--disable-dynamic-topology', action='store_true',
                     default=False, help=('Disable each iteration to transmit one neighbor ' +
                                          'per iteration dynamically.'))
@@ -203,29 +205,33 @@ optimizer = optim.SGD(
 )
 
 # Bluefog: wrap optimizer with DistributedOptimizer.
+if args.dist_optimizer != 'horovod':
+    base_dist_optimizer = (
+        bf.DistributedAdaptThenCombineOptimizer if args.atc_style else
+        bf.DistributedAdaptWithCombineOptimizer)
 if args.dist_optimizer == 'win_put':
     optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
-elif args.dist_optimizer == 'neighbor_allreduce':
-    optimizer = optimizer = bf.DistributedNeighborAllreduceOptimizer(
-        optimizer, model=model)
 elif args.dist_optimizer == 'allreduce':
-    optimizer = optimizer = bf.DistributedAllreduceOptimizer(
-        optimizer, model=model)
-elif args.dist_optimizer == 'gradient_allreduce':
-    optimizer = optimizer = bf.DistributedGradientAllreduceOptimizer(
-        optimizer, model=model)
+    optimizer = base_dist_optimizer(
+        optimizer, model=model, communication_type=bf.CommunicationType.allreduce)
+elif args.dist_optimizer == 'neighbor_allreduce':
+    optimizer = base_dist_optimizer(
+        optimizer, model=model, communication_type=bf.CommunicationType.neighbor_allreduce)
 elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
-    optimizer = optimizer = bf.DistributedHierarchicalNeighborAllreduceOptimizer(
+    optimizer = base_dist_optimizer(
+        optimizer, model=model,
+        communication_type=bf.CommunicationType.hierarchical_neighbor_allreduce)
+elif args.dist_optimizer == 'gradient_allreduce':
+    optimizer = bf.DistributedGradientAllreduceOptimizer(
         optimizer, model=model)
 elif args.dist_optimizer == 'horovod':
-    optimizer = optimizer = bf.DistributedOptimizer(
-        optimizer, named_parameters=model.named_parameters()
-    )
+    optimizer = bf.DistributedOptimizer(
+        optimizer, named_parameters=model.named_parameters())
 else:
     raise ValueError('Unknown args.dist-optimizer type -- ' + args.dist_optimizer + '\n' +
                      'Please set the argument to be one of ' +
                      '[neighbor_allreduce, gradient_allreduce, allreduce, ' +
-                     'win_put, horovod]')
+                     'hierarchical_neighbor_allreduce, win_put, horovod]')
 
 # Bluefog: broadcast parameters & optimizer state.
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
@@ -332,7 +338,7 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
                 local_size=bf.local_size(),
                 self_rank=bf.rank())
         else:
-            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicOnePeerSendRecvRanks(
                 bf.load_topology(), bf.rank())
     elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
         # This optimizer can use following dynamic topo only so far.
@@ -343,7 +349,7 @@ if not args.disable_dynamic_topology and (args.dist_optimizer != 'horovod'):
             local_rank=bf.local_rank()
         )
     else:
-        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+        dynamic_neighbor_allreduce_gen = topology_util.GetDynamicOnePeerSendRecvRanks(
             bf.load_topology(), bf.rank())
 
 def dynamic_topology_update(epoch, batch_idx):

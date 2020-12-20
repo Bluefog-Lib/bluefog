@@ -88,7 +88,7 @@ if not args.asynchronous_mode:
             dynamic_neighbor_allreduce_gen = topology_util.GetInnerOuterExpo2DynamicSendRecvRanks(
                 bf.size(), local_size=bf.local_size(), self_rank=bf.rank())
         else:
-            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicSendRecvRanks(
+            dynamic_neighbor_allreduce_gen = topology_util.GetDynamicOnePeerSendRecvRanks(
                 bf.load_topology(), bf.rank())
 
     for ite in range(args.max_iters):
