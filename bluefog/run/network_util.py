@@ -16,6 +16,7 @@
 
 import concurrent.futures
 import io
+import re
 import socket
 
 import psutil
@@ -47,6 +48,47 @@ def execute_function_multithreaded(exec_command, args_list, max_workers=100):
             index = futures_to_index[future]
             results[index] = future.result()
     return results
+
+
+def _parse_host_files(filename):
+    """Transform the hostfile into a format of <IP address> or <host name>:<Number of GPUs>
+
+    Args:
+        filename: Should contains only <IP address> or <host name> slots=<number of GPUs>
+    Returns:
+        Comma separated string of <IP address> or <host name>:<Number of GPUs>
+    """
+    hosts = []
+    for line in open(filename):
+        line = line.rstrip()
+        hostname = line.split()[0]
+        slots = line.split('=')[1]
+        hosts.append('{name}:{slots}'.format(name=hostname, slots=slots))
+
+    return ','.join(hosts)
+
+
+def get_hosts_arg_and_hostnames(args):
+    # if hosts are not specified, either parse from hostfile, or default as
+    # localhost
+    if not args.hosts:
+        if args.hostfile:
+            args.hosts = _parse_host_files(args.hostfile)
+        else:
+            # Set hosts to localhost if not specified
+            args.hosts = 'localhost:{np}'.format(np=args.np)
+
+    all_host_names = []
+    host_list = args.hosts.split(',')
+    all_host_names = []
+    pattern = re.compile(r'^[\w.-]+:\d+$')
+    for host in host_list:
+        if not pattern.match(host.strip()):
+            raise ValueError('Invalid host input, please make sure it has '
+                             'format as : worker-0:2,worker-1:2.')
+        all_host_names.append(host.strip().split(':')[0])
+    hosts_arg = '-H {hosts}'.format(hosts=args.hosts)
+    return hosts_arg, all_host_names
 
 
 def _get_local_host_addresses():

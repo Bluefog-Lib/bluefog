@@ -63,6 +63,7 @@ NCCLContext nccl_context;
 // If set, win_ops will execute the same ops on associated p as well.
 static bool global_with_associated_p_state = false;
 static bool global_skip_negotiate_stage = false;
+static bool global_background_thread_suspend = false;
 
 const auto SUSPEND_BACKGROUND_WAITTING_DURATION = std::chrono::microseconds(10);
 
@@ -1105,6 +1106,10 @@ bool RunLoopOnce(BluefogGlobalState& state) {
     std::this_thread::sleep_for(sleep_duration);
   }
   state.last_cycle_start = std::chrono::steady_clock::now();
+  if (global_background_thread_suspend) {
+    BFLOG(ERROR) << "Suspending";
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+  }
 
   std::deque<Request> message_queue_buffer;
   state.tensor_queue.PopMessagesFromQueue(message_queue_buffer);
@@ -1145,6 +1150,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
                          should_shut_down);
   }
   // Seperate the setting topology and negotiate communnication.
+  // TODO(ybc) Use conditional variable and mutex to re-implement this.
   if (should_change_topo) {
     bluefog_global.ready_to_setting_topology = true;
     while (!bluefog_global.setting_topology_done) {
@@ -1379,6 +1385,16 @@ int bluefog_get_skip_negotiate_stage() {
   return GetSkipNegotiateStageState();
 }
 
+int bluefog_suspend() {
+  global_background_thread_suspend = true;
+  return 1;
+}
+
+int bluefog_resume() {
+  global_background_thread_suspend = false;
+  return 1;
+}
+
 }  // extern "C"
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
@@ -1413,6 +1429,9 @@ Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1445,6 +1464,9 @@ Status EnqueueTensorBroadcast(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1476,6 +1498,9 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1506,6 +1531,9 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
@@ -1551,6 +1579,9 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1588,6 +1619,9 @@ Status EnqueueTensorPairGossip(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1617,6 +1651,9 @@ Status EnqueueTensorWindowCreate(
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1637,6 +1674,9 @@ Status EnqueueTensorWindowFree(const std::string& name, int device,
 
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
@@ -1668,6 +1708,9 @@ Status EnqueueTensorWindowPut(std::shared_ptr<Tensor> tensor,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1696,6 +1739,9 @@ Status EnqueueTensorWindowAccumulate(
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1720,6 +1766,9 @@ Status EnqueueTensorWindowGet(const std::string& name,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.tensor_queue.AddToTensorQueue(e, message);
   return status;
 }
@@ -1733,6 +1782,9 @@ Status ExecuteBarrier(StatusCallback callback) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   bluefog_global.controller->Barrier(e);
   return Status::OK();
 }
@@ -1740,6 +1792,9 @@ Status ExecuteBarrier(StatusCallback callback) {
 Status WindowSync(const std::string& name, int device) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
   Vendor vendor = DetermineController(MPIOpsType::WIN_SYNC, device);
   Status status;
@@ -1766,6 +1821,9 @@ Status WindowMutexAcquire(const std::string& name,
                           bool is_sync) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
   // Because mutex is always associated with each win_create ops, it is safe to
   // use the vendor of win_create for window mutex.
@@ -1795,6 +1853,9 @@ Status WindowMutexRelease(const std::string& name,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   // Because mutex is always associated with each win_create ops, it is safe to
   // use the vendor of win_create for window mutex.
   Vendor vendor = DetermineController(MPIOpsType::WIN_CREATE, device);
@@ -1822,6 +1883,9 @@ Status GetBluefogTimeline(Timeline*& timeline) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   if (!bluefog_global.timeline_enabled) {
     return Status::Aborted("timeline is not enabled.");
   }
@@ -1833,6 +1897,9 @@ Status GetBluefogFusionBuffer(FusionBufferManager*& fusion_buffer) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   return Status::OK();
 }
 
@@ -1840,6 +1907,9 @@ Status GetBluefogFusionBuffer(FusionBufferManager*& fusion_buffer) {
 Status WindowFence(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
   Status status = bluefog_global.controller->WinFence(name);
 
@@ -1854,6 +1924,9 @@ Status WindowLock(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.controller->WinLock(name);
 
   if (!status.ok()) {
@@ -1867,6 +1940,9 @@ Status WindowUnlock(const std::string& name) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   Status status = bluefog_global.controller->WinUnlock(name);
 
   if (!status.ok()) {
@@ -1879,6 +1955,9 @@ Status WindowUnlock(const std::string& name) {
 Status GetWindowVersion(const std::string& name, std::vector<int>& versions) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
 
   Status status =
@@ -1897,6 +1976,9 @@ Status GetWinAssociatedPByNameAndRank(const std::string& name,
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
   }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
+  }
   return bluefog_global.controller->GetWinAssociatedPByNameAndRank(
       name, rank, weight);
 }
@@ -1905,6 +1987,9 @@ Status SetWinAssociatedPByNameAndRank(const std::string& name,
                                            const int rank, const double weight) {
   if (bluefog_global.shut_down) {
     return SHUT_DOWN_ERROR;
+  }
+  if (global_background_thread_suspend) {
+    return SUSPEND_ERROR;
   }
   return bluefog_global.controller->SetWinAssociatedPByNameAndRank(
       name, rank, weight);

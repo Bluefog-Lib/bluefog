@@ -55,6 +55,9 @@ timeline_context = _basics.timeline_context
 timeline_start_activity = _basics.timeline_start_activity
 timeline_end_activity = _basics.timeline_end_activity
 
+suspend = _basics.suspend
+resume = _basics.resume
+
 # Schema: handle -> input, output
 # We keep input in order to make sure it does not get garbage collected
 # before the operation is finished.

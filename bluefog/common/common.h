@@ -173,6 +173,10 @@ const Status SHUT_DOWN_ERROR = Status::UnknownError(
     "an exception, you should see the exception in the log before the first "
     "shutdown message.");
 
+const Status SUSPEND_ERROR = Status::PreconditionError(
+  "Bluefog background thread is suspended. use bf.resume() first."
+);
+
 const Status DUPLICATE_NAME_ERROR = Status::InvalidArgument(
     "Requested to collective operation like (allreduce, neighbor_allreduce) or "
     "window ops like (win_put, win_create) a tensor with the same "

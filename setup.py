@@ -588,6 +588,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bfrun = bluefog.run.run:main',
+            'ibfrun = bluefog.run.interactive_run:main'
         ],
     },
 )

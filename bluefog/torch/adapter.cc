@@ -258,7 +258,8 @@ void ThrowIfError(Status status) {
     case StatusType::OK:
       return;
     case StatusType::PRECONDITION_ERROR:
-      throw std::logic_error(status.reason());
+      // TODO: why using std::logic_error that pybind11 cannot capture the error message.
+      throw std::invalid_argument(status.reason());
     case StatusType::ABORTED:
       throw std::runtime_error(status.reason());
     case StatusType::INVALID_ARGUMENT:
