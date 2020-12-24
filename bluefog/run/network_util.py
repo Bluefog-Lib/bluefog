@@ -16,6 +16,7 @@
 
 import concurrent.futures
 import io
+import os
 import re
 import socket
 
@@ -124,6 +125,25 @@ def filter_local_addresses(all_host_names):
 
     return remote_host_names
 
+def exec_command(command):
+    exit_code = 1
+    output_msg = ""
+
+    # Try ssh 3 times
+    for _ in range(SSH_RETRIES):
+        output = io.StringIO()
+        try:
+            exit_code = safe_shell_exec.execute(command,
+                                                stdout=output,
+                                                stderr=output)
+            if exit_code == 0:
+                break
+            else:
+                output_msg = output.getvalue()
+        finally:
+            output.close()
+    return exit_code, output_msg
+
 
 def check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
     """Checks if ssh can successfully be performed to all the hosts.
@@ -137,26 +157,6 @@ def check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
     Returns:
       True if all ssh was successful into all the addresses.
     """
-
-    def exec_command(command):
-        exit_code = 1
-        output_msg = ""
-
-        # Try ssh 3 times
-        for _ in range(SSH_RETRIES):
-            output = io.StringIO()
-            try:
-                exit_code = safe_shell_exec.execute(command,
-                                                    stdout=output,
-                                                    stderr=output)
-                if exit_code == 0:
-                    break
-                else:
-                    output_msg = output.getvalue()
-            finally:
-                output.close()
-        return exit_code, output_msg
-
     if ssh_port:
         ssh_port_arg = "-p {ssh_port}".format(ssh_port=ssh_port)
     else:
@@ -165,7 +165,7 @@ def check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
     ssh_command_format = 'ssh -o StrictHostKeyChecking=no {host} {ssh_port_arg} date'
 
     args_list = [ssh_command_format.format(host=host_address,
-                                            ssh_port_arg=ssh_port_arg)
+                                           ssh_port_arg=ssh_port_arg)
                  for host_address in host_addresses]
     ssh_exit_codes = execute_function_multithreaded(exec_command,
                                                     args_list)
@@ -181,5 +181,39 @@ def check_all_hosts_ssh_successful(host_addresses, ssh_port=None):
 
             ssh_successful_to_all_hosts = False
     if not ssh_successful_to_all_hosts:
+        exit(1)
+    return True
+
+
+def scp_transmit_file(file, remote_host_names, ssh_port=None):
+    if ssh_port:
+        mkdir_command_format = "ssh -p {port} {host} 'mkdir -p {file_dir}'"
+        scp_command_format = "scp -P {port} {file} {host}:{file}"
+    else:
+        mkdir_command_format = "ssh {host} 'mkdir -p {file_dir}'"
+        scp_command_format = "scp {file} {host}:{file}"
+
+    commands = []
+    for host in remote_host_names:
+        mkdir_command = mkdir_command_format.format(host=host, port=ssh_port,
+                                                    file_dir=os.path.dirname(file))
+        scp_command = scp_command_format.format(host=host, file=file,
+                                                port=ssh_port)
+        commands.append(mkdir_command + " && " + scp_command)
+
+    scp_exit_codes = execute_function_multithreaded(exec_command,
+                                                    commands)
+
+    scp_successful_to_all_hosts = True
+    for index, ssh_status in scp_exit_codes.items():
+        exit_code, output_msg = ssh_status[0], ssh_status[1]
+        if exit_code != 0:
+            print("scp not successful for host {host}:\n{msg_output}".format(
+                host=remote_host_names[index],
+                msg_output=output_msg
+            ))
+
+            scp_successful_to_all_hosts = False
+    if not scp_successful_to_all_hosts:
         exit(1)
     return True
