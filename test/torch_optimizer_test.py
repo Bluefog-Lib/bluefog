@@ -38,7 +38,7 @@ class LinearNet(nn.Module):
         return self.fc(x)
 
 # A Simple dataset for testing.
-class TestDataset:
+class SimpleDataset:
     def __init__(self, x, y):
         self._x = x
         self._y = y
@@ -104,11 +104,11 @@ class LinearProblemBuilder:
         x = np.random.randn(num_sample, self.input_dim)
         e = np.random.randn(num_sample, self.output_dim) * self.noise_level
         y = np.matmul(x, self._A) + e
-        return TestDataset(x, y)
+        return SimpleDataset(x, y)
 
 def problem_setup():
     bf.init()
-    num_epochs = 40
+    num_epochs = 50
     batch_size = 128
     num_train_per_node = 1000
     num_test_per_node = 100
@@ -157,22 +157,63 @@ def evaluation(model, dataloader, isCUDA):
     return avg_total_loss.item()
 
 test_scenarios = []
-test_scenarios.append(pytest.param("CPU", id="CPU test"))
+test_scenarios.append(pytest.param("CPU", bf.CommunicationType.empty, False, 2,
+                                   id="AWC Empty on CPU"))
+test_scenarios.append(pytest.param("CPU", bf.CommunicationType.empty, True, 2,
+                                   id="ATC Empty on CPU"))
+test_scenarios.append(pytest.param("CPU", bf.CommunicationType.allreduce, False, 1.5,
+                                   id="AWC Allreduce on CPU"))
+test_scenarios.append(pytest.param("CPU", bf.CommunicationType.allreduce, True, 1.5,
+                                   id="ATC Allreduce on CPU"))
+test_scenarios.append(pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, False, 1.5,
+                                   id="AWC Neighbor Allreduce on CPU"))
+test_scenarios.append(pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, True, 1.5,
+                                   id="ATC Neighbor Allreduce on CPU"))
+# test_scenarios.append(pytest.param("CPU", "win.put", False,
+                                #    id="Window put on CPU"))
+test_scenarios.append(pytest.param("CPU", "gradient.allreduce", False, 1.5,
+                                   id="Gradient Allreduce on CPU"))
 if TEST_ON_GPU:
-    test_scenarios.append(pytest.param("GPU", id="GPU test"))
+    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.empty, False, 2,
+                                       id="AWC Empty on GPU"))
+    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.empty, True, 2,
+                                       id="ATC Empty on GPU"))
+    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.allreduce, False, 1.5,
+                                       id="AWC Allreduce on GPU"))
+    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.allreduce, True, 1.5,
+                                       id="ATC Allreduce on GPU"))
+    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, False, 1.5,
+                                       id="AWC Neighbor Allreduce on GPU"))
+    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, True, 1.5,
+                                       id="ATC Neighbor Allreduce on GPU"))
+    # test_scenarios.append(pytest.param("GPU", "win.put", False,
+                                    #    id="Window put on GPU"))
+    test_scenarios.append(pytest.param("GPU", "gradient.allreduce", False, 1.5,
+                                       id="Gradient Allreduce on GPU"))
 
-@pytest.mark.parametrize("device", test_scenarios)
-def test_optimizer(device):
+@pytest.mark.parametrize("device,communication_type,atc_style,allowed_error", test_scenarios)
+def test_optimizer(device, communication_type, atc_style, allowed_error):
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
     isCUDA = device=="GPU"
     if isCUDA:
+        # Bluefog: pin GPU to local rank.
+        device_id = (bf.local_rank() if bf.nccl_built() else
+                     bf.local_rank() % torch.cuda.device_count())
+        torch.cuda.set_device(device_id)
         model.cuda()
 
-    # TODO: Try different distributed optimizer
-    # GPU/CPU x Communication_type x ATC/AWC x Dynamic x J
-    optimizer = bf.DistributedNeighborAllreduceOptimizer(optimizer, model=model)
+    if isinstance(communication_type, bf.CommunicationType):
+        base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
+                               bf.DistributedAdaptWithCombineOptimizer)
+        optimizer = base_dist_optimizer(optimizer, model=model,
+                                        communication_type=communication_type)
+    elif communication_type == "win.put":
+        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
+    elif communication_type == "gradient.allreduce":
+        optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model)
+    # TODO: Dynamic topology and J
 
     # Train and test
     train_mse = []
@@ -185,7 +226,6 @@ def test_optimizer(device):
     test_mse = np.array(test_mse)
 
     # Check if the MSEs in the last three epochs are small enough
-    allowed_error = 1.5
     assert (
         train_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
