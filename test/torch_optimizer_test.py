@@ -17,11 +17,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import unittest
-import warnings
-
-import numpy as np
 import pytest
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -109,93 +106,89 @@ class LinearProblemBuilder:
         y = np.matmul(x, self._A) + e
         return TestDataset(x, y)
 
-class OptimizerTests(unittest.TestCase):
-    """
-    Tests for bluefog/torch/optimizers.py
-    """
-    def __init__(self, *args, **kwargs):
-        super(OptimizerTests, self).__init__(*args, **kwargs)
-        warnings.simplefilter("module")
+def problem_setup():
+    bf.init()
+    num_epochs = 40
+    batch_size = 128
+    num_train_per_node = 1000
+    num_test_per_node = 100
+    lr = 0.05
 
-    def setUp(self):
-        bf.init()
-        self.num_epochs = 40
-        self.batch_size = 128
-        self.num_train_per_node = 1000
-        self.num_test_per_node = 100
-        self.lr = 0.05
+    # Setup Problem
+    problem_builder = LinearProblemBuilder()
+    train_dataset = problem_builder.get_dataset(num_train_per_node)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
+    test_dataset = problem_builder.get_dataset(num_test_per_node)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
+    # Setup Model
+    model = LinearNet(problem_builder.input_dim, problem_builder.output_dim)
+    # Setup Optimizer
+    optimizer = optim.Adam(model.parameters(), lr=lr*bf.size())
+    bf.broadcast_parameters(model.state_dict(), root_rank=0)
+    bf.broadcast_optimizer_state(optimizer, root_rank=0)
+    return problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs
 
-    def _problem_setup(self):
-        # Setup Problem
-        problem_builder = LinearProblemBuilder()
-        train_dataset = problem_builder.get_dataset(self.num_train_per_node)
-        train_dataloader = DataLoader(train_dataset, batch_size=self.batch_size)
-        test_dataset = problem_builder.get_dataset(self.num_test_per_node)
-        test_dataloader = DataLoader(test_dataset, batch_size=self.batch_size)
-        # Setup Model
-        model = LinearNet(problem_builder.input_dim, problem_builder.output_dim)
-        # Setup Optimizer
-        optimizer = optim.Adam(model.parameters(), lr=self.lr*bf.size())
-        bf.broadcast_parameters(model.state_dict(), root_rank=0)
-        bf.broadcast_optimizer_state(optimizer, root_rank=0)
-        return problem_builder, train_dataloader, test_dataloader, model, optimizer
+# Standard training process
+def standard_train(model, optimizer, dataloader, isCUDA):
+    mseloss = nn.MSELoss()
+    model.train()
+    for data, target in dataloader:
+        if isCUDA:
+            data, target = data.cuda(), target.cuda()
+        y = model(data)
+        loss = mseloss(y, target)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-    # Standard training process
-    def _standard_train(self, model, optimizer, dataloader):
-        mseloss = nn.MSELoss()
-        model.train()
+def evaluation(model, dataloader, isCUDA):
+    mseloss = nn.MSELoss()
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
         for data, target in dataloader:
-            if TEST_ON_GPU:
+            if isCUDA:
                 data, target = data.cuda(), target.cuda()
             y = model(data)
             loss = mseloss(y, target)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            total_loss += loss * len(target)
+        total_loss /= len(dataloader.dataset)
+    avg_total_loss = bf.allreduce(total_loss)
+    return avg_total_loss.item()
 
-    def _evaluation(self, model, dataloader):
-        mseloss = nn.MSELoss()
-        model.eval()
-        total_loss = 0
-        with torch.no_grad():
-            for data, target in dataloader:
-                if TEST_ON_GPU:
-                    data, target = data.cuda(), target.cuda()
-                y = model(data)
-                loss = mseloss(y, target)
-                total_loss += loss * len(target)
-            total_loss /= len(dataloader.dataset)
-        avg_total_loss = bf.allreduce(total_loss)
-        return avg_total_loss.item()
+test_scenarios = []
+test_scenarios.append(pytest.param("CPU", id="CPU test"))
+if TEST_ON_GPU:
+    test_scenarios.append(pytest.param("GPU", id="GPU test"))
 
-    def test_standard_neighbor_allreduce_optimizer(self):
-        problem_builder, train_dataloader, test_dataloader, model, optimizer = self._problem_setup()
+@pytest.mark.parametrize("device", test_scenarios)
+def test_optimizer(device):
+    problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
+        problem_setup()
 
-        if TEST_ON_GPU:
-            model.cuda()
+    isCUDA = device=="GPU"
+    if isCUDA:
+        model.cuda()
 
-        # TODO: Try different distributed optimizer
-        # GPU/CPU x Communication_type x ATC/AWC x Dynamic x J
-        optimizer = bf.DistributedNeighborAllreduceOptimizer(optimizer, model=model)
+    # TODO: Try different distributed optimizer
+    # GPU/CPU x Communication_type x ATC/AWC x Dynamic x J
+    optimizer = bf.DistributedNeighborAllreduceOptimizer(optimizer, model=model)
 
-        # Train and test
-        train_mse = []
-        test_mse = []
-        for epoch in range(self.num_epochs):
-            self._standard_train(model, optimizer, train_dataloader)
-            train_mse.append(self._evaluation(model, train_dataloader))
-            test_mse.append(self._evaluation(model, test_dataloader))
-        train_mse = np.array(train_mse)
-        test_mse = np.array(test_mse)
+    # Train and test
+    train_mse = []
+    test_mse = []
+    for epoch in range(num_epochs):
+        standard_train(model, optimizer, train_dataloader, isCUDA)
+        train_mse.append(evaluation(model, train_dataloader, isCUDA))
+        test_mse.append(evaluation(model, test_dataloader, isCUDA))
+    train_mse = np.array(train_mse)
+    test_mse = np.array(test_mse)
 
-        # Check if the MSEs in the last three epochs are small enough
-        allowed_error = 1.5
-        assert (
-            train_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
-        ), "Train MSE in the last three epochs doesn't coverge."
-        assert (
-            test_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
-        ), "Train MSE in the last three epochs doesn't coverge."
-
-if __name__ == "__main__":
-    unittest.main()
+    # Check if the MSEs in the last three epochs are small enough
+    allowed_error = 1.5
+    assert (
+        train_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+    assert (
+        test_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
