@@ -157,42 +157,58 @@ def evaluation(model, dataloader, isCUDA):
     return avg_total_loss.item()
 
 test_scenarios = []
-test_scenarios.append(pytest.param("CPU", bf.CommunicationType.empty, False, 2,
-                                   id="AWC Empty on CPU"))
-test_scenarios.append(pytest.param("CPU", bf.CommunicationType.empty, True, 2,
-                                   id="ATC Empty on CPU"))
-test_scenarios.append(pytest.param("CPU", bf.CommunicationType.allreduce, False, 1.5,
-                                   id="AWC Allreduce on CPU"))
-test_scenarios.append(pytest.param("CPU", bf.CommunicationType.allreduce, True, 1.5,
-                                   id="ATC Allreduce on CPU"))
-test_scenarios.append(pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, False, 1.5,
-                                   id="AWC Neighbor Allreduce on CPU"))
-test_scenarios.append(pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, True, 1.5,
-                                   id="ATC Neighbor Allreduce on CPU"))
-# test_scenarios.append(pytest.param("CPU", "win.put", False,
-                                #    id="Window put on CPU"))
-test_scenarios.append(pytest.param("CPU", "gradient.allreduce", False, 1.5,
-                                   id="Gradient Allreduce on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
+                 id="AWC Empty on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
+                 id="ATC Empty on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": False},
+                 id="AWC Allreduce on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": True},
+                 id="ATC Allreduce on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                 id="AWC Neighbor Allreduce on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                 id="ATC Neighbor Allreduce on CPU"))
+test_scenarios.append(
+    pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
+# Currently, if turn on win_put on CPU and GPU at the same time, the pytest won't pass.
+# test_scenarios.append(
+    # pytest.param("CPU", "win.put", {}, id="Window put on CPU"))
 if TEST_ON_GPU:
-    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.empty, False, 2,
-                                       id="AWC Empty on GPU"))
-    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.empty, True, 2,
-                                       id="ATC Empty on GPU"))
-    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.allreduce, False, 1.5,
-                                       id="AWC Allreduce on GPU"))
-    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.allreduce, True, 1.5,
-                                       id="ATC Allreduce on GPU"))
-    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, False, 1.5,
-                                       id="AWC Neighbor Allreduce on GPU"))
-    test_scenarios.append(pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, True, 1.5,
-                                       id="ATC Neighbor Allreduce on GPU"))
-    # test_scenarios.append(pytest.param("GPU", "win.put", False,
-                                    #    id="Window put on GPU"))
-    test_scenarios.append(pytest.param("GPU", "gradient.allreduce", False, 1.5,
-                                       id="Gradient Allreduce on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
+                     id="AWC Empty on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
+                     id="ATC Empty on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": False},
+                     id="AWC Allreduce on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": True},
+                     id="ATC Allreduce on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                     id="AWC Neighbor Allreduce on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                     id="ATC Neighbor Allreduce on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
+    test_scenarios.append(
+        pytest.param("GPU", "win.put", {}, id="Window put on GPU"))
 
-@pytest.mark.parametrize("device,communication_type,atc_style,allowed_error", test_scenarios)
-def test_optimizer(device, communication_type, atc_style, allowed_error):
+@pytest.mark.parametrize("device,communication_type,kwargs", test_scenarios)
+def test_optimizer(device, communication_type, kwargs):
+    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
+    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
@@ -227,8 +243,8 @@ def test_optimizer(device, communication_type, atc_style, allowed_error):
 
     # Check if the MSEs in the last three epochs are small enough
     assert (
-        train_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
+        train_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
     assert (
-        test_mse[-3:].max() < allowed_error*problem_builder.noise_level**2
+        test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
