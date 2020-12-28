@@ -13,6 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 
+# Note this end-to-end only covers the BlueFog optimizers for a single machine,
+# all the hierarchical cases are not fully under test yet.
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -25,6 +28,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 import bluefog.torch as bf
+from bluefog.common import topology_util
 
 TEST_ON_GPU = torch.cuda.is_available()
 
@@ -141,6 +145,42 @@ def standard_train(model, optimizer, dataloader, isCUDA):
         loss.backward()
         optimizer.step()
 
+# Dynamic topology training process for win_put
+def dynamic_win_put_train(model, optimizer, dataloader, isCUDA, epoch):
+    mseloss = nn.MSELoss()
+    model.train()
+    for batch_idx, (data, target) in enumerate(dataloader):
+        if epoch < 3:
+            return
+        num_out_neighbors = len(bf.out_neighbor_ranks())
+        sent_neighbor = bf.out_neighbor_ranks()[batch_idx % num_out_neighbors]
+        optimizer.dst_weights = {sent_neighbor: 1.0}
+        if isCUDA:
+            data, target = data.cuda(), target.cuda()
+        y = model(data)
+        loss = mseloss(y, target)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+# Dynamic topology training process for neighbor_allreduce
+def dynamic_neighbor_allreduce_train(model, optimizer, dataloader, isCUDA, dynamic_topo_gen):
+    mseloss = nn.MSELoss()
+    model.train()
+    for data, target in dataloader:
+        send_neighbors, recv_neighbors = next(dynamic_topo_gen)
+        optimizer.send_neighbors = send_neighbors
+        optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
+        optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
+
+        if isCUDA:
+            data, target = data.cuda(), target.cuda()
+        y = model(data)
+        loss = mseloss(y, target)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
 def evaluation(model, dataloader, isCUDA):
     mseloss = nn.MSELoss()
     model.eval()
@@ -156,56 +196,59 @@ def evaluation(model, dataloader, isCUDA):
     avg_total_loss = bf.allreduce(total_loss)
     return avg_total_loss.item()
 
-test_scenarios = []
-test_scenarios.append(
+static_topo_scenarios = []
+static_topo_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
                  id="AWC Empty on CPU"))
-test_scenarios.append(
+static_topo_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
                  id="ATC Empty on CPU"))
-test_scenarios.append(
+static_topo_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": False},
                  id="AWC Allreduce on CPU"))
-test_scenarios.append(
+static_topo_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": True},
                  id="ATC Allreduce on CPU"))
-test_scenarios.append(
+static_topo_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
                  id="AWC Neighbor Allreduce on CPU"))
-test_scenarios.append(
+static_topo_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
                  id="ATC Neighbor Allreduce on CPU"))
-test_scenarios.append(
+static_topo_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
-# Currently, if turn on win_put on CPU and GPU at the same time, the pytest won't pass.
-# test_scenarios.append(
-    # pytest.param("CPU", "win.put", {}, id="Window put on CPU"))
+static_topo_scenarios.append(
+    pytest.param("CPU", "win.put", {}, id="Window put on CPU",
+                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
 if TEST_ON_GPU:
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
                      id="AWC Empty on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
                      id="ATC Empty on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": False},
                      id="AWC Allreduce on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": True},
                      id="ATC Allreduce on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
                      id="AWC Neighbor Allreduce on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
                      id="ATC Neighbor Allreduce on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
-    test_scenarios.append(
+    static_topo_scenarios.append(
         pytest.param("GPU", "win.put", {}, id="Window put on GPU"))
 
-@pytest.mark.parametrize("device,communication_type,kwargs", test_scenarios)
-def test_optimizer(device, communication_type, kwargs):
+# device can be set to "GPU" or "CPU".
+# communication_type can be selected from bf.CommunicationType, "gradient.allreduce" or "win.put".
+# kwargs is some optional parameters related to certain communication types.
+@pytest.mark.parametrize("device,communication_type,kwargs", static_topo_scenarios)
+def test_standard_optimizer(device, communication_type, kwargs):
     atc_style = kwargs["ATC"] if "ATC" in kwargs else False
     error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
 
@@ -229,13 +272,111 @@ def test_optimizer(device, communication_type, kwargs):
         optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
     elif communication_type == "gradient.allreduce":
         optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model)
-    # TODO: Dynamic topology and J
+    else:
+        raise ValueError("Communication_type under test is not expected.")
+    # TODO: J
 
     # Train and test
     train_mse = []
     test_mse = []
     for epoch in range(num_epochs):
         standard_train(model, optimizer, train_dataloader, isCUDA)
+        train_mse.append(evaluation(model, train_dataloader, isCUDA))
+        test_mse.append(evaluation(model, test_dataloader, isCUDA))
+    train_mse = np.array(train_mse)
+    test_mse = np.array(test_mse)
+
+    # Check if the MSEs in the last three epochs are small enough
+    assert (
+        train_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+    assert (
+        test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+
+dynamic_neighbor_allreduce_scenarios = []
+dynamic_neighbor_allreduce_scenarios.append(
+    pytest.param("CPU", False, {}, id="Dynamic AWC Neighbor Allreduce on CPU"))
+dynamic_neighbor_allreduce_scenarios.append(
+    pytest.param("CPU", True, {}, id="Dynamic ATC Neighbor Allreduce on CPU"))
+if TEST_ON_GPU:
+    dynamic_neighbor_allreduce_scenarios.append(
+        pytest.param("GPU", False, {}, id="Dynamic AWC Neighbor Allreduce on GPU"))
+    dynamic_neighbor_allreduce_scenarios.append(
+        pytest.param("GPU", True, {}, id="Dynamic ATC Neighbor Allreduce on GPU"))
+
+@pytest.mark.parametrize("device,atc_style,kwargs", dynamic_neighbor_allreduce_scenarios)
+def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
+    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+
+    problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
+        problem_setup()
+
+    isCUDA = device=="GPU"
+    if isCUDA:
+        # Bluefog: pin GPU to local rank.
+        device_id = (bf.local_rank() if bf.nccl_built() else
+                     bf.local_rank() % torch.cuda.device_count())
+        torch.cuda.set_device(device_id)
+        model.cuda()
+
+    base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
+                           bf.DistributedAdaptWithCombineOptimizer)
+    optimizer = base_dist_optimizer(optimizer, model=model,
+                                    communication_type=bf.CommunicationType.neighbor_allreduce)
+    
+    dynamic_topo_gen = topology_util.GetDynamicOnePeerSendRecvRanks(bf.load_topology(), bf.rank())
+
+    # Train and test
+    train_mse = []
+    test_mse = []
+    for epoch in range(num_epochs):
+        dynamic_neighbor_allreduce_train(model, optimizer, train_dataloader, isCUDA,
+                                         dynamic_topo_gen)
+        train_mse.append(evaluation(model, train_dataloader, isCUDA))
+        test_mse.append(evaluation(model, test_dataloader, isCUDA))
+    train_mse = np.array(train_mse)
+    test_mse = np.array(test_mse)
+
+    # Check if the MSEs in the last three epochs are small enough
+    assert (
+        train_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+    assert (
+        test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+
+dynamic_win_put_scenarios = []
+dynamic_win_put_scenarios.append(
+    pytest.param("CPU", {}, id="Dynamic window put on CPU",
+                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+if TEST_ON_GPU:
+    dynamic_win_put_scenarios.append(
+        pytest.param("GPU", {}, id="Dynamic window put on GPU",
+                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+
+@pytest.mark.parametrize("device,kwargs", dynamic_win_put_scenarios)
+def test_dynamic_win_put_optimizer(device, kwargs):
+    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+
+    problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
+        problem_setup()
+
+    isCUDA = device=="GPU"
+    if isCUDA:
+        # Bluefog: pin GPU to local rank.
+        device_id = (bf.local_rank() if bf.nccl_built() else
+                     bf.local_rank() % torch.cuda.device_count())
+        torch.cuda.set_device(device_id)
+        model.cuda()
+
+    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
+    
+    # Train and test
+    train_mse = []
+    test_mse = []
+    for epoch in range(num_epochs):
+        dynamic_win_put_train(model, optimizer, train_dataloader, isCUDA, epoch)
         train_mse.append(evaluation(model, train_dataloader, isCUDA))
         test_mse.append(evaluation(model, test_dataloader, isCUDA))
     train_mse = np.array(train_mse)
