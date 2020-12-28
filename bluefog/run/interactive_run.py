@@ -16,6 +16,7 @@
 import argparse
 import os
 import re
+import signal
 import shlex
 import socket
 import subprocess
@@ -36,7 +37,8 @@ def parse_args():
 
     override_args = set()
 
-    parser = argparse.ArgumentParser(description='Bluefog Interactive Python Runner')
+    parser = argparse.ArgumentParser(
+        description='Bluefog Interactive Python Runner')
 
     parser.add_argument('-v', '--version', action="store_true", dest="version",
                         help="Shows bluefog version.")
@@ -88,12 +90,14 @@ def parse_args():
 
 
 def _get_ip_file_dir(profile):
-    ip_file_dir = "~/.ipython/profile_{profile}/security".format(profile=profile)
+    ip_file_dir = "~/.ipython/profile_{profile}/security".format(
+        profile=profile)
     return os.path.expanduser(ip_file_dir)
 
 
 def _wait_engine_file_ready(profile, trial=10):
-    engine_file = os.path.join(_get_ip_file_dir(profile), "ipcontroller-engine.json")
+    engine_file = os.path.join(_get_ip_file_dir(
+        profile), "ipcontroller-engine.json")
     file_ready = False
     for _ in range(trial):
         if not os.path.exists(engine_file):
@@ -105,8 +109,10 @@ def _wait_engine_file_ready(profile, trial=10):
         raise RuntimeError("Cannot find the ipcontroller-engine.json file.")
     return engine_file
 
+
 def _wait_client_file_ready(profile, trial=10):
-    engine_file = os.path.join(_get_ip_file_dir(profile), "ipcontroller-client.json")
+    engine_file = os.path.join(_get_ip_file_dir(
+        profile), "ipcontroller-client.json")
     file_ready = False
     for _ in range(trial):
         if not os.path.exists(engine_file):
@@ -118,9 +124,30 @@ def _wait_client_file_ready(profile, trial=10):
         raise RuntimeError("Cannot find the ipcontroller-client.json file.")
     return engine_file
 
-def _get_ipcontroller_pid(profile):
-    pid = _get_ip_file_dir(profile)
 
+def _get_ipcontroller_pid(profile):
+    pid_file = os.path.join(_get_ip_file_dir(
+        profile), "..", "pid", "ipcontroller.pid")
+    if not os.path.exists(pid_file):
+        return None
+    with open(pid_file, 'r') as f:
+        try:
+            s = f.read().strip()
+            pid = int(s)
+        except:
+            return None
+    return pid
+
+def _maybe_kill_ipcontroller_process(profile):
+    pid = _get_ipcontroller_pid(profile)
+    if pid is None:
+        print("Try to kill ipcontroller process but cannot retrieve its pid. "
+              "Maybe it is already been stopped.")
+        return
+    try:
+        os.kill(pid, signal.SIGINT)
+    except:
+        pass
 
 def main():
     args = parse_args()
@@ -153,7 +180,7 @@ def main():
         raise ValueError("The last command has to be either 'start' or 'stop', but it is "
                          "{} now.".format(args.command))
     command = args.command[0]
-    # TODO(ybc) How to stop it properly? 
+    # TODO(ybc) How to stop it properly?
     # In multiple machine env, we alose need to remove engine.json and client.json file.
     ipcluster_stop_command = "ipcluster stop --profile {profile}".format(
         profile=args.profile)
@@ -177,19 +204,18 @@ def main():
                 engine_file = _wait_engine_file_ready(args.profile)
                 print(ipengine_command)
                 subprocess.run(ipengine_command, shell=True,
-                               env=env, capture_output=True)
+                               env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             except Exception as e:
                 print("Fail to launch ibfrun. Error: ", e)
-                subprocess.run(ipcluster_stop_command, shell=True, env=env)
+                _maybe_kill_ipcontroller_process(args.profile)
             exit(0)
         else:  # stop
             subprocess.run(ipcluster_stop_command, shell=True,
                            env=env, capture_output=True)
+            _maybe_kill_ipcontroller_process(args.profile)
             exit(0)
 
     # Following process assumes the users want to run over multiple machines.
-    # TODO(ybc) Add support for multiple machines.
-
     common_intfs = set()
     # 1. Check if we can ssh into all remote hosts successfully.
     assert network_util.check_all_hosts_ssh_successful(remote_host_names, args.ssh_port)
@@ -225,49 +251,52 @@ def main():
 
     ipcontroller_command = "ipcontroller --profile {profile} --ip='*'".format(
         profile=args.profile)
-    
-    # TODO(ybc) Add try and catch do to the error handling
-    if command == 'start':
-        subprocess.run('ipcluster nbextension enable --user', shell=True, env=env)
-        print(ipcontroller_command)
-        subprocess.Popen(ipcontroller_command, shell=True, env=env)
-        engine_file = _wait_engine_file_ready(args.profile)
-        client_file = _wait_client_file_ready(args.profile)
-        # Copy the engine file to all remote hosts
-        assert network_util.scp_transmit_file(engine_file, remote_host_names, args.ssh_port)
-        assert network_util.scp_transmit_file(client_file, remote_host_names, args.ssh_port)
 
-        ipengine_command = "ipengine {command} --profile {profile}".format(
-            profile=args.profile,
-            command=command
-        )
-        # TODO(ybc) Cannot carray the env variable. May encounter:
-        # ORCE-TERMINATE AT Data unpack would read past end of buffer:-26 - error grpcomm_direct.c(359)?
-        # Use mpirun to start ipengines
-        mpi_ipengine_command = (
-            'mpirun --allow-run-as-root '
-            '-np {num_proc} {hosts_arg} '
-            '-bind-to none -map-by slot '
-            '-mca pml ob1 '
-            '{ssh_port_arg} {tcp_intf_arg} '
-            '{extra_flags} {nccl_socket_intf_arg} '
-            '{command}'
-            .format(num_proc=args.np,
-                    hosts_arg=hosts_arg,
-                    ssh_port_arg=ssh_port_arg,
-                    tcp_intf_arg=tcp_intf_arg,
-                    nccl_socket_intf_arg=nccl_socket_intf_arg,
-                    extra_flags=extra_flags,
-                    env=' '.join('-x %s' % key for key in env.keys()
-                                 if env_util.is_exportable(key)),
-                    command=ipengine_command)
-        )
-        print(mpi_ipengine_command)
-        subprocess.run(mpi_ipengine_command, shell=True,
-                       env=env, capture_output=True)
+    if command == 'start':
+        try:
+            subprocess.run('ipcluster nbextension enable --user', shell=True, env=env)
+            print(ipcontroller_command)
+            subprocess.Popen(ipcontroller_command, shell=True, env=env)
+            engine_file = _wait_engine_file_ready(args.profile)
+            client_file = _wait_client_file_ready(args.profile)
+            # Copy the engine file to all remote hosts
+            assert network_util.scp_transmit_file(engine_file, remote_host_names, args.ssh_port)
+            assert network_util.scp_transmit_file(client_file, remote_host_names, args.ssh_port)
+
+            ipengine_command = "ipengine {command} --profile {profile}".format(
+                profile=args.profile,
+                command=command
+            )
+            # TODO(ybc) Cannot carray the env variable. May encounter:
+            # ORCE-TERMINATE AT Data unpack would read past end of buffer:-26 - error grpcomm_direct.c(359)?
+            # Use mpirun to start ipengines
+            mpi_ipengine_command = (
+                'mpirun --allow-run-as-root '
+                '-np {num_proc} {hosts_arg} '
+                '-bind-to none -map-by slot '
+                '-mca pml ob1 '
+                '{ssh_port_arg} {tcp_intf_arg} '
+                '{extra_flags} {nccl_socket_intf_arg} '
+                '{command}'
+                .format(num_proc=args.np,
+                        hosts_arg=hosts_arg,
+                        ssh_port_arg=ssh_port_arg,
+                        tcp_intf_arg=tcp_intf_arg,
+                        nccl_socket_intf_arg=nccl_socket_intf_arg,
+                        extra_flags=extra_flags,
+                        env=' '.join('-x %s' % key for key in env.keys()
+                                     if env_util.is_exportable(key)),
+                        command=ipengine_command)
+            )
+            subprocess.run(ipengine_command, shell=True,
+                           env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        except:
+            print("Fail to launch ibfrun. Error: ", e)
+            _maybe_kill_ipcontroller_process(args.profile)
     else:
         subprocess.run(ipcluster_stop_command, shell=True,
                        env=env, capture_output=True)
+        _maybe_kill_ipcontroller_process(args.profile)
         exit(0)
 
 
