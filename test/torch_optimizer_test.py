@@ -56,7 +56,7 @@ class SimpleDataset:
 
 # A ProblemBuilder for the linear problem with a specified input and output dimension.
 # The matrix A are randomly generated now.
-#   y = AX + e, e ~ N(0, noise_level^2)
+#   Y = XA + E, E ~ N(0, noise_level^2)
 class LinearProblemBuilder:
     def __init__(self, input_dim = 16, output_dim = 3, noise_level = 1e-5):
         self._input_dim = input_dim
@@ -69,7 +69,6 @@ class LinearProblemBuilder:
         state = np.random.get_state()
         np.random.seed(self._matrix_gen_seed)
         self._A = np.random.randn(self._input_dim, self._output_dim)
-        #self._A = np.ones((self._input_dim, self._output_dim))
         np.random.set_state(state)
 
     @property
@@ -105,10 +104,10 @@ class LinearProblemBuilder:
         self._noise_level = value
 
     def get_dataset(self, num_sample):
-        x = np.random.randn(num_sample, self.input_dim)
-        e = np.random.randn(num_sample, self.output_dim) * self.noise_level
-        y = np.matmul(x, self._A) + e
-        return SimpleDataset(x, y)
+        X = np.random.randn(num_sample, self.input_dim)
+        E = np.random.randn(num_sample, self.output_dim) * self.noise_level
+        Y = np.matmul(X, self._A) + E
+        return SimpleDataset(X, Y)
 
 # Prepare the problem  to be solved
 def problem_setup():
@@ -182,8 +181,9 @@ def dynamic_neighbor_allreduce_train(model, optimizer, dataloader, isCUDA, dynam
         loss.backward()
         optimizer.step()
 
-# Training process with mini_batch, expecting optimizer skipping communication
-def skip_communication_train(model, optimizer, dataloader, isCUDA, mini_batch_size):
+# Training process with mini_batch, expecting optimizer with a preset num_step_per_communication
+# TODO(ybc,hanbinhu): left-over data if batch_size cannot be divided by num_step_per_communication.
+def local_aggregation_train(model, optimizer, dataloader, isCUDA, mini_batch_size):
     mseloss = nn.MSELoss()
     model.train()
     for data, target in dataloader:
@@ -235,6 +235,8 @@ static_topo_scenarios.append(
                  id="ATC Neighbor Allreduce on CPU"))
 static_topo_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
+# TODO(hanbinhu): support multiple window put optimizer tests in the file. This issue may be due to
+# duplicate name registration for the MPI window.
 static_topo_scenarios.append(
     pytest.param("CPU", "win.put", {}, id="Window put on CPU",
                  marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
@@ -409,71 +411,72 @@ def test_dynamic_win_put_optimizer(device, kwargs):
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
 
-skip_communication_scenarios = []
-skip_communication_scenarios.append(
+local_aggregation_scenarios = []
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
                  id="AWC Empty on CPU"))
-skip_communication_scenarios.append(
+# TODO(ybc): Support local aggregation scenario for ATC optimizers
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
                  id="ATC Empty on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support skip communication yet")))
-skip_communication_scenarios.append(
+                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": False},
                  id="AWC Allreduce on CPU"))
-skip_communication_scenarios.append(
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": True},
                  id="ATC Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support skip communication yet")))
-skip_communication_scenarios.append(
+                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
                  id="AWC Neighbor Allreduce on CPU"))
-skip_communication_scenarios.append(
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
                  id="ATC Neighbor Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support skip communication yet")))
-skip_communication_scenarios.append(
+                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+local_aggregation_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
-skip_communication_scenarios.append(
+local_aggregation_scenarios.append(
     pytest.param("CPU", "win.put", {}, id="Window put on CPU",
                  marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
-skip_communication_scenarios.append(
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"mini_batch_size": 4},
                  id="Neighbor allreduce AWC on CPU with a mini_batch_size of 4"))
-skip_communication_scenarios.append(
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"mini_batch_size": 8},
                  id="Neighbor allreduce AWC on CPU with a mini_batch_size of 8"))
-skip_communication_scenarios.append(
+local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"mini_batch_size": 32},
                  id="Neighbor allreduce AWC on CPU with a mini_batch_size of 32"))
 if TEST_ON_GPU:
-    skip_communication_scenarios.append(
+    local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
                      id="AWC Empty on GPU"))
-    skip_communication_scenarios.append(
+    local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
                      id="ATC Empty on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support skip communication yet")))
-    skip_communication_scenarios.append(
+                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+    local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": False},
                      id="AWC Allreduce on GPU"))
-    skip_communication_scenarios.append(
+    local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": True},
                      id="ATC Allreduce on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support skip communication yet")))
-    skip_communication_scenarios.append(
+                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+    local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
                      id="AWC Neighbor Allreduce on GPU"))
-    skip_communication_scenarios.append(
+    local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
                      id="ATC Neighbor Allreduce on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support skip communication yet")))
-    skip_communication_scenarios.append(
+                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+    local_aggregation_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
-    skip_communication_scenarios.append(
+    local_aggregation_scenarios.append(
         pytest.param("GPU", "win.put", {}, id="Window put on GPU",
                      marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
-@pytest.mark.parametrize("device,communication_type,kwargs", skip_communication_scenarios)
-def test_optimizer_skip_communication(device, communication_type, kwargs):
+@pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_scenarios)
+def test_optimizer_local_aggregation(device, communication_type, kwargs):
     atc_style = kwargs["ATC"] if "ATC" in kwargs else False
     error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
     mini_batch_size = kwargs["mini_batch_size"] if "mini_batch_size" in kwargs else 16
@@ -510,7 +513,7 @@ def test_optimizer_skip_communication(device, communication_type, kwargs):
     train_mse = []
     test_mse = []
     for _ in range(num_epochs):
-        skip_communication_train(model, optimizer, train_dataloader, isCUDA, mini_batch_size)
+        local_aggregation_train(model, optimizer, train_dataloader, isCUDA, mini_batch_size)
         train_mse.append(evaluation(model, train_dataloader, isCUDA))
         test_mse.append(evaluation(model, test_dataloader, isCUDA))
     train_mse = np.array(train_mse)
