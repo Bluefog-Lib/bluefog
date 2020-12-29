@@ -120,6 +120,9 @@ def problem_setup():
 
     # Setup Problem
     problem_builder = LinearProblemBuilder()
+    assert (
+        num_train_per_node*bf.size() >= problem_builder.input_dim*problem_builder.output_dim
+    ), "The number of samples is too small making it an underdetermined system."
     train_dataset = problem_builder.get_dataset(num_train_per_node)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
     test_dataset = problem_builder.get_dataset(num_test_per_node)
