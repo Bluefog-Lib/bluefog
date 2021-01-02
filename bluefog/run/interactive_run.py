@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 import traceback
+from typing import Dict, List
 
 import psutil
 import bluefog
@@ -34,8 +35,6 @@ BLUEFOG_LOG_LEVEL = 'BLUEFOG_LOG_LEVEL'
 
 
 def parse_args():
-
-    override_args = set()
 
     parser = argparse.ArgumentParser(
         description='Bluefog Interactive Python Runner')
@@ -140,87 +139,54 @@ def _get_ipcontroller_pid(profile):
 
 
 def _maybe_kill_ipcontroller_process(profile):
+    "Try to kill the ipcontroller process through read the pid file."
+    "Return True if it found process and killed it successfully."
     pid = _get_ipcontroller_pid(profile)
     if pid is None:
         print("Try to kill ipcontroller process but cannot retrieve its pid. "
               "Maybe it is already been stopped.")
-        return
+        return False
     try:
         os.kill(pid, signal.SIGINT)
+        return True
     except:
-        pass
+        return False
 
 
-def main():
-    args = parse_args()
-
-    if args.version:
-        print(bluefog.__version__)
-        exit(0)
-
-    hosts_arg, all_host_names = network_util.get_hosts_arg_and_hostnames(args)
-    remote_host_names = network_util.filter_local_addresses(all_host_names)
-
-    if not env_util.is_open_mpi_installed():
-        raise Exception(
-            'ibfrun convenience script currently only supports Open MPI.\n\n'
-            'Choose one of:\n'
-            '1. Install Open MPI 4.0.0+ and re-install Bluefog.\n'
-            '2. Run distributed '
-            'training script using the standard way provided by your'
-            ' MPI distribution (usually mpirun, srun, or jsrun).')
-
-    if not env_util.is_ipyparallel_installed():
-        raise Exception(
-            'ibfrun is based on the ipyparallel package. Please install it in your\n'
-            'system like `pip install ipyparallel` first, then run ibfrun again.'
-        )
-
-    env = os.environ.copy()
-    env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
-    if len(args.command) != 1 or args.command[0] not in ("start", "stop"):
-        raise ValueError("The last command has to be either 'start' or 'stop', but it is "
-                         "{} now.".format(args.command))
-    command = args.command[0]
-    # TODO(ybc) How to stop it properly?
-    # In multiple machine env, we alose need to remove engine.json and client.json file.
-    ipcluster_stop_command = "ipcluster stop --profile {profile}".format(
+def local_machine_launch(args, env: Dict[str, str], command: str, ipcluster_stop_command: str):
+    ipcontroller_command = "ipcontroller --profile {profile}".format(
         profile=args.profile)
-
-    if not remote_host_names:
-        ipcontroller_command = "ipcontroller --profile {profile}".format(
-            profile=args.profile)
-        ipengine_command = (
-            "bfrun -np {np} ipengine {command} --profile {profile}".format(
-                np=args.np,
-                profile=args.profile,
-                command=command
-            )
+    ipengine_command = (
+        "bfrun -np {np} ipengine {command} --profile {profile}".format(
+            np=args.np,
+            profile=args.profile,
+            command=command
         )
-        if command == 'start':
-            try:
-                # Maybe kill the last time unfinished process.
-                _maybe_kill_ipcontroller_process(args.profile)
-                subprocess.run('ipcluster nbextension enable --user',
-                               shell=True, env=env)
-                print(ipcontroller_command)
-                subprocess.Popen(ipcontroller_command, shell=True, env=env)
-                engine_file = _wait_engine_file_ready(args.profile)
-                print(ipengine_command)
-                subprocess.run(ipengine_command, shell=True,
-                               env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            except Exception as e:
-                print("Fail to launch ibfrun. Error: ", e)
-                _maybe_kill_ipcontroller_process(args.profile)
-            exit(0)
-        else:  # stop
-            subprocess.run(ipcluster_stop_command, shell=True,
-                           env=env, capture_output=True)
-            _maybe_kill_ipcontroller_process(args.profile)
-            exit(0)
+    )
+    if command == 'start':
+        # Maybe kill the last time unfinished process.
+        if _maybe_kill_ipcontroller_process(args.profile):
+            print("Found and killed the unfinished ipcontroller process.")
+        subprocess.run('ipcluster nbextension enable --user',
+                       shell=True, env=env)
+        print(ipcontroller_command)
+        subprocess.Popen(ipcontroller_command, shell=True, env=env)
+        _wait_engine_file_ready(args.profile)
+        print(ipengine_command)
+        subprocess.run(ipengine_command, shell=True,
+                       env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    else:  # stop
+        subprocess.run(ipcluster_stop_command, shell=True,
+                       env=env, capture_output=True)
+        _maybe_kill_ipcontroller_process(args.profile)
 
-    # Following process assumes the users want to run over multiple machines.
-    common_intfs = set()
+
+def multiple_machines_launch(args, env: Dict[str, str],
+                             hosts_arg: str,
+                             all_host_names: List[str],
+                             remote_host_names: List[str], command: str,
+                             ipcluster_stop_command: str):
+    common_intfs = set()   # common network interface
     # 1. Check if we can ssh into all remote hosts successfully.
     assert network_util.check_all_hosts_ssh_successful(remote_host_names, args.ssh_port)
     if not args.nic:
@@ -257,53 +223,98 @@ def main():
         profile=args.profile)
 
     if command == 'start':
-        try:
-            # Maybe kill the last time unfinished process.
-            _maybe_kill_ipcontroller_process(args.profile)
-            subprocess.run('ipcluster nbextension enable --user', shell=True, env=env)
-            print(ipcontroller_command)
-            subprocess.Popen(ipcontroller_command, shell=True, env=env)
-            engine_file = _wait_engine_file_ready(args.profile)
-            client_file = _wait_client_file_ready(args.profile)
-            # Copy the engine file to all remote hosts
-            assert network_util.scp_transmit_file(engine_file, remote_host_names, args.ssh_port)
-            assert network_util.scp_transmit_file(client_file, remote_host_names, args.ssh_port)
+        # Maybe kill the last time unfinished process.
+        if _maybe_kill_ipcontroller_process(args.profile):
+            print("Found and killed the unfinished ipcontroller process.")
+        subprocess.run('ipcluster nbextension enable --user', shell=True, env=env)
+        print(ipcontroller_command)
+        subprocess.Popen(ipcontroller_command, shell=True, env=env)
+        engine_file = _wait_engine_file_ready(args.profile)
+        client_file = _wait_client_file_ready(args.profile)
+        # Copy the engine file to all remote hosts
+        assert network_util.scp_transmit_file(engine_file, remote_host_names, args.ssh_port)
+        assert network_util.scp_transmit_file(client_file, remote_host_names, args.ssh_port)
 
-            ipengine_command = "ipengine {command} --profile {profile}".format(
-                profile=args.profile,
-                command=command
-            )
-            # TODO(ybc) Cannot carray the env variable. May encounter:
-            # ORCE-TERMINATE AT Data unpack would read past end of buffer:-26 - error grpcomm_direct.c(359)?
-            # Use mpirun to start ipengines
-            mpi_ipengine_command = (
-                'mpirun --allow-run-as-root '
-                '-np {num_proc} {hosts_arg} '
-                '-bind-to none -map-by slot '
-                '-mca pml ob1 '
-                '{ssh_port_arg} {tcp_intf_arg} '
-                '{extra_flags} {nccl_socket_intf_arg} '
-                '{command}'
-                .format(num_proc=args.np,
-                        hosts_arg=hosts_arg,
-                        ssh_port_arg=ssh_port_arg,
-                        tcp_intf_arg=tcp_intf_arg,
-                        nccl_socket_intf_arg=nccl_socket_intf_arg,
-                        extra_flags=extra_flags,
-                        env=' '.join('-x %s' % key for key in env.keys()
-                                     if env_util.is_exportable(key)),
-                        command=ipengine_command)
-            )
-            subprocess.run(ipengine_command, shell=True,
-                           env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        except:
-            print("Fail to launch ibfrun. Error: ", e)
-            _maybe_kill_ipcontroller_process(args.profile)
+        ipengine_command = "ipengine {command} --profile {profile}".format(
+            profile=args.profile,
+            command=command
+        )
+
+        # TODO(ybc) Cannot carry the env variable. May encounter:
+        # ORCE-TERMINATE AT Data unpack would read past end of buffer:-26 - error grpcomm_direct.c(359)?
+        
+        # Use mpirun to start ipengines
+        mpi_ipengine_command = (
+            'mpirun --allow-run-as-root '
+            '-np {num_proc} {hosts_arg} '
+            '-bind-to none -map-by slot '
+            '-mca pml ob1 '
+            '{ssh_port_arg} {tcp_intf_arg} '
+            '{extra_flags} {nccl_socket_intf_arg} '
+            '{command}'
+            .format(num_proc=args.np,
+                    hosts_arg=hosts_arg,
+                    ssh_port_arg=ssh_port_arg,
+                    tcp_intf_arg=tcp_intf_arg,
+                    nccl_socket_intf_arg=nccl_socket_intf_arg,
+                    extra_flags=extra_flags,
+                    env=' '.join('-x %s' % key for key in env.keys()
+                                    if env_util.is_exportable(key)),
+                    command=ipengine_command)
+        )
+        subprocess.run(ipengine_command, shell=True,
+                        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     else:
         subprocess.run(ipcluster_stop_command, shell=True,
                        env=env, capture_output=True)
         _maybe_kill_ipcontroller_process(args.profile)
+
+
+def main():
+    args = parse_args()
+
+    if args.version:
+        print(bluefog.__version__)
         exit(0)
+
+    hosts_arg, all_host_names = network_util.get_hosts_arg_and_hostnames(args)
+    remote_host_names = network_util.filter_local_addresses(all_host_names)
+
+    if not env_util.is_open_mpi_installed():
+        raise Exception(
+            'ibfrun convenience script currently only supports Open MPI.\n'
+            'Please Install Open MPI 4.0.0+ and re-install Bluefog.')
+
+    if not env_util.is_ipyparallel_installed():
+        raise Exception(
+            'ibfrun is based on the ipyparallel package. Please install it in your\n'
+            'system like `pip install ipyparallel` first, then run ibfrun again.'
+        )
+
+    env = os.environ.copy()
+    env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
+    if len(args.command) != 1 or args.command[0] not in ("start", "stop"):
+        raise ValueError("The last command has to be either 'start' or 'stop', but it is "
+                         "{} now.".format(args.command))
+    command = args.command[0]
+
+    # TODO(ybc) How to stop it properly?
+    # In multiple machine env, we alose need to remove engine.json and client.json file.
+    ipcluster_stop_command = "ipcluster stop --profile {profile}".format(
+        profile=args.profile)
+
+    try:
+        if not remote_host_names:
+            local_machine_launch(args, env, command, ipcluster_stop_command)
+        else:
+            multiple_machines_launch(args, env, all_host_names=all_host_names,
+                                     hosts_arg=hosts_arg,
+                                     remote_host_names=remote_host_names,
+                                     command=command,
+                                     ipcluster_stop_command=ipcluster_stop_command)
+    except Exception as e:
+        print("Fail to launch ibfrun. Error: ", e)
+        _maybe_kill_ipcontroller_process(args.profile)
 
 
 if __name__ == "__main__":
