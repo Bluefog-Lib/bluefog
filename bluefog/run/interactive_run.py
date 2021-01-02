@@ -138,6 +138,7 @@ def _get_ipcontroller_pid(profile):
             return None
     return pid
 
+
 def _maybe_kill_ipcontroller_process(profile):
     pid = _get_ipcontroller_pid(profile)
     if pid is None:
@@ -148,6 +149,7 @@ def _maybe_kill_ipcontroller_process(profile):
         os.kill(pid, signal.SIGINT)
     except:
         pass
+
 
 def main():
     args = parse_args()
@@ -197,6 +199,8 @@ def main():
         )
         if command == 'start':
             try:
+                # Maybe kill the last time unfinished process.
+                _maybe_kill_ipcontroller_process(args.profile)
                 subprocess.run('ipcluster nbextension enable --user',
                                shell=True, env=env)
                 print(ipcontroller_command)
@@ -254,6 +258,8 @@ def main():
 
     if command == 'start':
         try:
+            # Maybe kill the last time unfinished process.
+            _maybe_kill_ipcontroller_process(args.profile)
             subprocess.run('ipcluster nbextension enable --user', shell=True, env=env)
             print(ipcontroller_command)
             subprocess.Popen(ipcontroller_command, shell=True, env=env)
