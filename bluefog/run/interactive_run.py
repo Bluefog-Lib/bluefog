@@ -15,17 +15,11 @@
 
 import argparse
 import os
-import re
 import signal
-import shlex
-import socket
 import subprocess
-import sys
 import time
-import traceback
 from typing import Dict, List
 
-import psutil
 import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 
@@ -42,23 +36,34 @@ def parse_args():
     parser.add_argument('-v', '--version', action="store_true", dest="version",
                         help="Shows bluefog version.")
 
-    parser.add_argument('-np', '--num-proc', action="store", dest="np",
-                        type=int, help="Total number of training processes.")
+    subparsers = parser.add_subparsers(dest="action",
+                                       help="Start or stop interactive Bluefog cluster. "
+                                       "You usually do not need to stop the cluster explicitly.")
+    parser_start = subparsers.add_parser(
+        'start', help="Start the interactive Bluefog cluster")
+    parser_stop = subparsers.add_parser(
+        'stop', help="Stop the interactive Bluefog cluster")
 
-    parser.add_argument('-p', '--ssh-port', action="store", dest="ssh_port",
-                        type=int, help="SSH port on all the hosts.")
+    parser_start.add_argument('-np', '--num-proc', action="store", dest="np", required=True,
+                              type=int, help="Total number of training processes.")
 
-    parser.add_argument('--network-interface', action='store', dest='nic',
-                        help='Specify the network interface used for communication.')
+    parser_start.add_argument('-p', '--ssh-port', action="store", dest="ssh_port",
+                              type=int, help="SSH port on all the hosts.")
 
-    parser.add_argument('--use-infiniband', action="store_true", dest="use_infiniband",
-                        help='If set, use inifiniband to communication instead of TCP.')
+    parser_start.add_argument('--network-interface', action='store', dest='nic',
+                              help='Specify the network interface used for communication.')
 
-    parser.add_argument('--ipython-profile', action="store", dest="profile",
-                        type=str, default="bluefog",
-                        help="The profile name for ipython environment.")
+    parser_start.add_argument('--use-infiniband', action="store_true", dest="use_infiniband",
+                              help='If set, use inifiniband to communication instead of TCP.')
 
-    group_hosts_parent = parser.add_argument_group('host arguments')
+    parser_start.add_argument('--ipython-profile', action="store", dest="profile",
+                              type=str, default="bluefog",
+                              help="The profile name for ipython environment.")
+    parser_stop.add_argument('--ipython-profile', action="store", dest="profile",
+                             type=str, default="bluefog",
+                             help="The profile name for ipython environment.")
+
+    group_hosts_parent = parser_start.add_argument_group('host arguments')
     group_hosts = group_hosts_parent.add_mutually_exclusive_group()
     group_hosts.add_argument('-H', '--hosts', action='store', dest='hosts',
                              help='List of host names and the number of available slots '
@@ -71,20 +76,13 @@ def parse_args():
                                   'the number of available slots. Each line of the file must be '
                                   'of the form: <hostname> slots=<slots>')
 
-    parser.add_argument('--verbose', action="store_true", dest="verbose",
-                        help="If this flag is set, extra messages will printed.")
+    parser_start.add_argument('--verbose', action="store_true", dest="verbose",
+                              help="If this flag is set, extra messages will printed.")
 
-    parser.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
-                        help='Extra mpi flages you want to pass for mpirun.')
-
-    parser.add_argument('command', nargs=argparse.REMAINDER,
-                        help="Command to be executed.")
+    parser_start.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
+                              help='Extra mpi flages you want to pass for mpirun.')
 
     parsed_args = parser.parse_args()
-
-    if not parsed_args.version and not parsed_args.np:
-        parser.error('argument -np/--num-proc is required')
-
     return parsed_args
 
 
@@ -153,42 +151,36 @@ def _maybe_kill_ipcontroller_process(profile):
         return False
 
 
-def local_machine_launch(args, env: Dict[str, str], command: str, ipcluster_stop_command: str):
+def local_machine_launch(args, env: Dict[str, str]):
     ipcontroller_command = "ipcontroller --profile {profile}".format(
         profile=args.profile)
     ipengine_command = (
-        "bfrun -np {np} ipengine {command} --profile {profile}".format(
+        "bfrun -np {np} ipengine start --profile {profile}".format(
             np=args.np,
             profile=args.profile,
-            command=command
         )
     )
-    if command == 'start':
-        # Maybe kill the last time unfinished process.
-        if _maybe_kill_ipcontroller_process(args.profile):
-            print("Found and killed the unfinished ipcontroller process.")
-        subprocess.run('ipcluster nbextension enable --user',
-                       shell=True, env=env)
-        print(ipcontroller_command)
-        subprocess.Popen(ipcontroller_command, shell=True, env=env)
-        _wait_engine_file_ready(args.profile)
-        print(ipengine_command)
-        subprocess.run(ipengine_command, shell=True,
-                       env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    else:  # stop
-        subprocess.run(ipcluster_stop_command, shell=True,
-                       env=env, capture_output=True)
-        _maybe_kill_ipcontroller_process(args.profile)
+    # Maybe kill the last time unfinished process.
+    if _maybe_kill_ipcontroller_process(args.profile):
+        print("Found and killed the unfinished ipcontroller process.")
+    subprocess.run('ipcluster nbextension enable --user',
+                   shell=True, env=env)
+    print(ipcontroller_command)
+    subprocess.Popen(ipcontroller_command, shell=True, env=env)
+    _wait_engine_file_ready(args.profile)
+    print(ipengine_command)
+    subprocess.run(ipengine_command, shell=True,
+                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
 def multiple_machines_launch(args, env: Dict[str, str],
                              hosts_arg: str,
                              all_host_names: List[str],
-                             remote_host_names: List[str], command: str,
-                             ipcluster_stop_command: str):
+                             remote_host_names: List[str]):
     common_intfs = set()   # common network interface
     # 1. Check if we can ssh into all remote hosts successfully.
-    assert network_util.check_all_hosts_ssh_successful(remote_host_names, args.ssh_port)
+    assert network_util.check_all_hosts_ssh_successful(
+        remote_host_names, args.ssh_port)
     if not args.nic:
         # 2. Find the set of common, routed interfaces on all the hosts (remote
         # and local) and specify it in the args. It is expected that the following
@@ -222,52 +214,50 @@ def multiple_machines_launch(args, env: Dict[str, str],
     ipcontroller_command = "ipcontroller --profile {profile} --ip='*'".format(
         profile=args.profile)
 
-    if command == 'start':
-        # Maybe kill the last time unfinished process.
-        if _maybe_kill_ipcontroller_process(args.profile):
-            print("Found and killed the unfinished ipcontroller process.")
-        subprocess.run('ipcluster nbextension enable --user', shell=True, env=env)
-        print(ipcontroller_command)
-        subprocess.Popen(ipcontroller_command, shell=True, env=env)
-        engine_file = _wait_engine_file_ready(args.profile)
-        client_file = _wait_client_file_ready(args.profile)
-        # Copy the engine file to all remote hosts
-        assert network_util.scp_transmit_file(engine_file, remote_host_names, args.ssh_port)
-        assert network_util.scp_transmit_file(client_file, remote_host_names, args.ssh_port)
+    # Maybe kill the last time unfinished process.
+    if _maybe_kill_ipcontroller_process(args.profile):
+        print("Found and killed the unfinished ipcontroller process.")
+    subprocess.run('ipcluster nbextension enable --user',
+                   shell=True, env=env)
+    print(ipcontroller_command)
+    subprocess.Popen(ipcontroller_command, shell=True, env=env)
+    engine_file = _wait_engine_file_ready(args.profile)
+    client_file = _wait_client_file_ready(args.profile)
+    # Copy the engine file to all remote hosts
+    assert network_util.scp_transmit_file(
+        engine_file, remote_host_names, args.ssh_port)
+    assert network_util.scp_transmit_file(
+        client_file, remote_host_names, args.ssh_port)
 
-        ipengine_command = "ipengine {command} --profile {profile}".format(
-            profile=args.profile,
-            command=command
-        )
+    ipengine_command = "ipengine start --profile {profile}".format(
+        profile=args.profile,
+    )
 
-        # TODO(ybc) Cannot carry the env variable. May encounter:
-        # ORCE-TERMINATE AT Data unpack would read past end of buffer:-26 - error grpcomm_direct.c(359)?
-        
-        # Use mpirun to start ipengines
-        mpi_ipengine_command = (
-            'mpirun --allow-run-as-root '
-            '-np {num_proc} {hosts_arg} '
-            '-bind-to none -map-by slot '
-            '-mca pml ob1 '
-            '{ssh_port_arg} {tcp_intf_arg} '
-            '{extra_flags} {nccl_socket_intf_arg} '
-            '{command}'
-            .format(num_proc=args.np,
-                    hosts_arg=hosts_arg,
-                    ssh_port_arg=ssh_port_arg,
-                    tcp_intf_arg=tcp_intf_arg,
-                    nccl_socket_intf_arg=nccl_socket_intf_arg,
-                    extra_flags=extra_flags,
-                    env=' '.join('-x %s' % key for key in env.keys()
-                                    if env_util.is_exportable(key)),
-                    command=ipengine_command)
-        )
-        subprocess.run(ipengine_command, shell=True,
-                        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    else:
-        subprocess.run(ipcluster_stop_command, shell=True,
-                       env=env, capture_output=True)
-        _maybe_kill_ipcontroller_process(args.profile)
+    # TODO(ybc) Cannot carry the env variable. May encounter:
+    # ORCE-TERMINATE AT Data unpack would read past end of buffer:-26 - error grpcomm_direct.c(359)?
+
+    # Use mpirun to start ipengines
+    mpi_ipengine_command = (
+        'mpirun --allow-run-as-root '
+        '-np {num_proc} {hosts_arg} '
+        '-bind-to none -map-by slot '
+        '-mca pml ob1 {ib_arg} '
+        '{ssh_port_arg} {tcp_intf_arg} '
+        '{extra_flags} {nccl_socket_intf_arg} '
+        '{command}'
+        .format(num_proc=args.np,
+                hosts_arg=hosts_arg,
+                ssh_port_arg=ssh_port_arg,
+                tcp_intf_arg=tcp_intf_arg,
+                ib_arg=ib_arg,
+                nccl_socket_intf_arg=nccl_socket_intf_arg,
+                extra_flags=extra_flags,
+                env=' '.join('-x %s' % key for key in env.keys()
+                             if env_util.is_exportable(key)),
+                command=ipengine_command)
+    )
+    subprocess.run(mpi_ipengine_command, shell=True,
+                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
 def main():
@@ -277,6 +267,21 @@ def main():
         print(bluefog.__version__)
         exit(0)
 
+    env = os.environ.copy()
+    env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
+
+    # action of stop
+    if args.action == "stop":
+        # TODO(ybc) How to stop it properly?
+        # In multiple machine env, we alose need to remove engine.json and client.json file.
+        ipcluster_stop_command = "ipcluster stop --profile {profile}".format(
+            profile=args.profile)
+        subprocess.run(ipcluster_stop_command, shell=True,
+                       env=env, capture_output=True)
+        _maybe_kill_ipcontroller_process(args.profile)
+        exit(0)
+
+    # action of start
     hosts_arg, all_host_names = network_util.get_hosts_arg_and_hostnames(args)
     remote_host_names = network_util.filter_local_addresses(all_host_names)
 
@@ -291,27 +296,13 @@ def main():
             'system like `pip install ipyparallel` first, then run ibfrun again.'
         )
 
-    env = os.environ.copy()
-    env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
-    if len(args.command) != 1 or args.command[0] not in ("start", "stop"):
-        raise ValueError("The last command has to be either 'start' or 'stop', but it is "
-                         "{} now.".format(args.command))
-    command = args.command[0]
-
-    # TODO(ybc) How to stop it properly?
-    # In multiple machine env, we alose need to remove engine.json and client.json file.
-    ipcluster_stop_command = "ipcluster stop --profile {profile}".format(
-        profile=args.profile)
-
     try:
         if not remote_host_names:
-            local_machine_launch(args, env, command, ipcluster_stop_command)
+            local_machine_launch(args, env)
         else:
             multiple_machines_launch(args, env, all_host_names=all_host_names,
                                      hosts_arg=hosts_arg,
-                                     remote_host_names=remote_host_names,
-                                     command=command,
-                                     ipcluster_stop_command=ipcluster_stop_command)
+                                     remote_host_names=remote_host_names)
     except Exception as e:
         print("Fail to launch ibfrun. Error: ", e)
         _maybe_kill_ipcontroller_process(args.profile)
