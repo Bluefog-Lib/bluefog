@@ -1,6 +1,7 @@
 cloudpickle
 ipyparallel
 networkx>=2.0
+notebook
 psutil
 pytest>=5.0
 six

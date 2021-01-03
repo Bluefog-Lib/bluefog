@@ -272,8 +272,8 @@ def main():
 
     # action of stop
     if args.action == "stop":
-        # TODO(ybc) How to stop it properly?
-        # In multiple machine env, we alose need to remove engine.json and client.json file.
+        # TODO(ybc) How to stop it both controller and engines properly?
+        # In multiple machine env, we also need to remove engine.json and client.json file.
         ipcluster_stop_command = "ipcluster stop --profile {profile}".format(
             profile=args.profile)
         subprocess.run(ipcluster_stop_command, shell=True,
