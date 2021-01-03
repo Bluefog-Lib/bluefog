@@ -1,9 +1,11 @@
 cloudpickle
+ipyparallel
 networkx>=2.0
+notebook
 psutil
 pytest>=5.0
-torch>=1.3.0
-torchvision>=0.4.0
 six
+torch>=1.0
+torchvision
 tensorboardX>=1.5
 tqdm>=4.0

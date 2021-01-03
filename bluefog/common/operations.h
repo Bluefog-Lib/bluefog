@@ -106,6 +106,10 @@ void bluefog_set_skip_negotiate_stage(bool value);
 
 int bluefog_get_skip_negotiate_stage();
 
+int bluefog_suspend();
+
+int bluefog_resume();
+
 }
 
 Status EnqueueTensorAllreduce(std::shared_ptr<Tensor> tensor,

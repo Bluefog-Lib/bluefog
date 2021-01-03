@@ -28,44 +28,6 @@ import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 
 
-BLUEFOG_TIMELINE = 'BLUEFOG_TIMELINE'
-BLUEFOG_LOG_LEVEL = 'BLUEFOG_LOG_LEVEL'
-
-def _is_open_mpi_installed():
-    command = 'mpirun --version'
-    try:
-        output_msg = str(subprocess.check_output(
-            shlex.split(command), universal_newlines=True))
-    except Exception:
-        print("Was not able to run %s:\n%s" % (command, output_msg),
-              file=sys.stderr)
-        print(traceback.format_exc(), file=sys.stderr)
-        return False
-
-    if 'Open MPI' not in output_msg:
-        print('Open MPI not found in output of mpirun --version.',
-              file=sys.stderr)
-        return False
-    return True
-
-
-def _parse_host_files(filename):
-    """Transform the hostfile into a format of <IP address> or <host name>:<Number of GPUs>
-
-    Args:
-        filename: Should contains only <IP address> or <host name> slots=<number of GPUs>
-    Returns:
-        Comma separated string of <IP address> or <host name>:<Number of GPUs>
-    """
-    hosts = []
-    for line in open(filename):
-        line = line.rstrip()
-        hostname = line.split()[0]
-        slots = line.split('=')[1]
-        hosts.append('{name}:{slots}'.format(name=hostname, slots=slots))
-
-    return ','.join(hosts)
-
 def make_override_action(override_args):
     class StoreOverrideAction(argparse.Action):
         def __init__(self,
@@ -156,45 +118,6 @@ def parse_args():
     return parsed_args
 
 
-def _add_arg_to_env(env, env_key, arg_value, transform_fn=None):
-    if arg_value is not None:
-        value = arg_value
-        if transform_fn:
-            value = transform_fn(value)
-        env[env_key] = str(value)
-
-def set_env_from_args(env, args):
-    # Timeline
-    if args.timeline_filename:
-        _add_arg_to_env(env, BLUEFOG_TIMELINE, args.timeline_filename)
-
-    if args.verbose:
-        _add_arg_to_env(env, BLUEFOG_LOG_LEVEL, "debug")
-
-    return env
-
-def get_hosts_arg_and_hostnames(args):
-    # if hosts are not specified, either parse from hostfile, or default as
-    # localhost
-    if not args.hosts:
-        if args.hostfile:
-            args.hosts = _parse_host_files(args.hostfile)
-        else:
-            # Set hosts to localhost if not specified
-            args.hosts = 'localhost:{np}'.format(np=args.np)
-
-    all_host_names = []
-    host_list = args.hosts.split(',')
-    all_host_names = []
-    pattern = re.compile(r'^[\w.-]+:\d+$')
-    for host in host_list:
-        if not pattern.match(host.strip()):
-            raise ValueError('Invalid host input, please make sure it has '
-                             'format as : worker-0:2,worker-1:2.')
-        all_host_names.append(host.strip().split(':')[0])
-    hosts_arg = '-H {hosts}'.format(hosts=args.hosts)
-    return hosts_arg, all_host_names
-
 def main():
     args = parse_args()
 
@@ -202,7 +125,7 @@ def main():
         print(bluefog.__version__)
         exit(0)
 
-    hosts_arg, all_host_names = get_hosts_arg_and_hostnames(args)
+    hosts_arg, all_host_names = network_util.get_hosts_arg_and_hostnames(args)
     remote_host_names = network_util.filter_local_addresses(all_host_names)
 
     common_intfs = set()
@@ -241,7 +164,7 @@ def main():
     else:
         mpi_prefix = ""
 
-    if not _is_open_mpi_installed():
+    if not env_util.is_open_mpi_installed():
         raise Exception(
             'bfrun convenience script currently only supports Open MPI.\n\n'
             'Choose one of:\n'
@@ -253,7 +176,7 @@ def main():
     extra_flags = args.extra_flags if args.extra_flags else ''
     # Pass all the env variables to the mpirun command.
     env = os.environ.copy()
-    env = set_env_from_args(env, args)
+    env = env_util.set_env_from_args(env, args)
     mpirun_command = (
         '{prefix}mpirun --allow-run-as-root '
         '-np {num_proc} {hosts_arg} '

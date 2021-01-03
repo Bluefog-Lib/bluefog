@@ -493,3 +493,23 @@ class BlueFogBasics(object):
             yield
         finally:
             self.timeline_end_activity(tensor_name)
+
+    def suspend(self):
+        """Suspend the background thread of BlueFog.
+
+        It should be used under interactive python environment only.
+        """
+        if not util.is_running_from_ipython:
+            raise EnvironmentError(
+                "This function should be used only when you are under ipython environment.")
+        self._MPI_LIB_CTYPES.bluefog_suspend()
+
+    def resume(self):
+        """Resume the background thread of BlueFog.
+
+        It should be used under interactive python environment only.
+        """
+        if not util.is_running_from_ipython:
+            raise EnvironmentError(
+                "This function should be used only when you are under ipython environment.")
+        self._MPI_LIB_CTYPES.bluefog_resume()

@@ -45,6 +45,7 @@ from bluefog.torch.mpi_ops import in_neighbor_machine_ranks, out_neighbor_machin
 from bluefog.torch.mpi_ops import mpi_threads_supported
 from bluefog.torch.mpi_ops import unified_mpi_window_model_supported
 from bluefog.torch.mpi_ops import nccl_built, is_homogeneous
+from bluefog.torch.mpi_ops import suspend, resume
 
 from bluefog.torch.mpi_ops import allreduce, allreduce_nonblocking
 from bluefog.torch.mpi_ops import allreduce_, allreduce_nonblocking_
