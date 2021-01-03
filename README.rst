@@ -65,6 +65,16 @@ Then, install Bluefog with: ``pip install --no-cache-dir bluefog`` or
 ``BLUEFOG_WITH_NCCL=1 pip install bluefog`` if NCCL is supported (``NCCL>=2.7``). Check
 the `install_bluefog <https://bluefog-lib.github.io/bluefog/install.html>`_ page if you need more information or other install options.
 
+Using BlueFog With Jupyter Notebook
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+BlueFog is able to run interactively with Jupyte Notebook. Please check out our `hello world notebook <https://github.com/Bluefog-Lib/bluefog/blob/master/examples/interactive_bluefog_helloworld.ipynb>`_ or other notebooks in the example folder to start with.
+Interacitve BlueFog is great for research and algorithm experiment. For the large-scale machine learning problem, we recommand
+to use BlueFog with script.
+
+Using BlueFog With Script
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
 We provide high-level wrapper for torch optimizer. You just need to modify
 the existing script to distributed implementation is wrapping the optimizer
 with our ``DistributedNeighborAllreduceOptimizer``,
