@@ -31,6 +31,23 @@ class CommunicationType(Enum):
     allreduce = "allreduce"
     empty = "empty"
 
+_warning_message_num_step_per_communication = (
+    "Unexpected behavior:\n"
+    "  After num_step_per_communication times of forward computation `y=model(x)` are called,\n"
+    "  an optimizer step() function must be called.\n"
+    "  It does not matter how many step() functions are called in between.\n"
+    "  Please adjust num_step_per_communication to update model parameters locally.\n"
+    "  More information can be found in the FAQ page.\n"
+)
+_warning_message_backward_pass_per_step = (
+    "Unexpected behavior:\n"
+    "  After backward_passes_per_step times of backward computation `loss.backward()` are called,\n"
+    "  an optimizer step() function must be called.\n"
+    "  It does not matter how many step() functions are called in between.\n"
+    "  Please adjust backward_passes_per_step to accumulate gradients locally.\n"
+    "  More information can be found in the FAQ page.\n"
+)
+
 #pylint: disable=unused-argument
 def _named_leaf_module(module, parent_name=None):
     """Yield an iterator over all leaf modules."""
@@ -162,6 +179,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._backward_passes_per_step = backward_passes_per_step
         self._allreduce_delay = {v: self._backward_passes_per_step
                                  for _, v in sorted(named_parameters)}
+        self._error_encountered = False
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -182,11 +200,9 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         def hook(*ignore):
             assert not p.grad.requires_grad
             if self._allreduce_delay[p] <= 0:
-                raise AssertionError(
-                    "Unexpected behavior: backward computation were computed "
-                    "more than num_steps_per_communication times before call "
-                    "to step(). Adjust num_steps_per_communication to "
-                    "accumulate gradients locally.")
+                if not self._error_encountered:
+                    warnings.warn(_warning_message_backward_pass_per_step)
+                    self._error_encountered = True
             self._allreduce_delay[p] -= 1
             if self._allreduce_delay[p] == 0:
                 handle = self._allreduce_grad_async(p)
@@ -322,6 +338,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         assert isinstance(communication_type, CommunicationType)
         self._communication_type = communication_type
@@ -353,11 +370,9 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
                     bf.timeline_end_activity(parent_name+'.'+name)
                 if p.requires_grad:
                     if self._reduce_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
+                        if not self._error_encountered:
+                            warnings.warn(_warning_message_num_step_per_communication)
+                            self._error_encountered = True
                     self._reduce_delay[p] -= 1
                     if self._reduce_delay[p] == 0:
                         if self._communication_type == CommunicationType.allreduce:
@@ -485,6 +500,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         assert isinstance(communication_type, CommunicationType)
         self._communication_type = communication_type
@@ -552,11 +568,9 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             self._step_func(p, grad.data, param_group)
 
             if self._reduce_delay[p] <= 0:
-                raise AssertionError(
-                    "Unexpected behavior: forward computation were computed "
-                    "more than num_steps_per_communication times before call "
-                    "to step(). Adjust num_steps_per_communication to "
-                    "accumulate gradients locally.")
+                if not self._error_encountered:
+                    warnings.warn(_warning_message_num_step_per_communication)
+                    self._error_encountered = True
             self._reduce_delay[p] -= 1
             if self._reduce_delay[p] == 0:
                 if self._communication_type == CommunicationType.allreduce:
@@ -823,6 +837,7 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         self._bluefog_delay = {v: self._num_steps_per_communication
                                for _, v in sorted(named_parameters)}
@@ -852,11 +867,9 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                     continue
                 if p.requires_grad:
                     if self._bluefog_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
+                        if not self._error_encountered:
+                            warnings.warn(_warning_message_num_step_per_communication)
+                            self._error_encountered = True
                     self._bluefog_delay[p] -= 1
                     if self._bluefog_delay[p] == 0:
                         handle = bf.win_put_nonblocking(
@@ -875,11 +888,9 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                     continue
                 if p.requires_grad:
                     if self._bluefog_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
+                        if not self._error_encountered:
+                            warnings.warn(_warning_message_num_step_per_communication)
+                            self._error_encountered = True
                     self._bluefog_delay[p] -= 1
                     if self._bluefog_delay[p] == 0:
                         handle = bf.win_get_nonblocking(
@@ -984,6 +995,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         self._pushsum_delay = {v: self._num_steps_per_communication
                                for _, v in sorted(named_parameters)}
@@ -1027,11 +1039,9 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
                     continue
                 if p.requires_grad:
                     if self._pushsum_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
+                        if not self._error_encountered:
+                            warnings.warn(_warning_message_num_step_per_communication)
+                            self._error_encountered = True
                     self._pushsum_delay[p] -= 1
                     if self._pushsum_delay[p] == 0:
                         ps_weights = self._named_ps_weights[full_name]
