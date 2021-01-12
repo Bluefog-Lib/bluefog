@@ -267,6 +267,11 @@ def main():
         print(bluefog.__version__)
         exit(0)
 
+    def handler(signum, frame):
+        _maybe_kill_ipcontroller_process(args.profile)
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGINT, handler)
+
     env = os.environ.copy()
     env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
 
@@ -303,6 +308,7 @@ def main():
             multiple_machines_launch(args, env, all_host_names=all_host_names,
                                      hosts_arg=hosts_arg,
                                      remote_host_names=remote_host_names)
+        _maybe_kill_ipcontroller_process(args.profile)
     except Exception as e:
         print("Fail to launch ibfrun. Error: ", e)
         _maybe_kill_ipcontroller_process(args.profile)
