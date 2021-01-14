@@ -153,7 +153,9 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
     auto enqueue_result = EnqueueTensorAllreduce(
         bf_tensor, bf_output, bf_context, ready_event, is_hierarchical_local,
         op_name, device,
-        callback_wrapper([average, output, is_hierarchical_local]() mutable {
+        callback_wrapper([average, output, is_hierarchical_local,
+                          op_name, tid, timeline_ptr]() mutable {
+          timeline_ptr->ActivityStart(op_name, "Callback", &tid);
           // Will execute in the `device` context.
           ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
           int size =
@@ -162,6 +164,7 @@ int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
             output_buffer.div_(size);
           }
           MaybeCopyBufferBack(output, output_buffer);
+          timeline_ptr->ActivityEnd(op_name, &tid);
         }));
     ThrowIfError(enqueue_result);
   }

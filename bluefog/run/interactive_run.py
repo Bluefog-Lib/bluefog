@@ -165,13 +165,15 @@ def local_machine_launch(args, env: Dict[str, str]):
         print("Found and killed the unfinished ipcontroller process.")
     subprocess.run('ipcluster nbextension enable --user',
                    shell=True, env=env)
-    print(ipcontroller_command)
-    subprocess.Popen(ipcontroller_command, shell=True, env=env)
+    print("Starting the controller.")
+    stdout = None if args.verbose else subprocess.PIPE
+    p_controller = subprocess.Popen(ipcontroller_command, shell=True, env=env, stdout=stdout,
+                                    stderr=subprocess.STDOUT)
     _wait_engine_file_ready(args.profile)
-    print(ipengine_command)
-    subprocess.run(ipengine_command, shell=True,
-                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
+    print("Starting the engines.")
+    p_engine = subprocess.Popen(ipengine_command, shell=True, env=env)
+    while not p_controller.poll() and not p_engine.poll():
+        time.sleep(600)
 
 def multiple_machines_launch(args, env: Dict[str, str],
                              hosts_arg: str,
@@ -219,8 +221,10 @@ def multiple_machines_launch(args, env: Dict[str, str],
         print("Found and killed the unfinished ipcontroller process.")
     subprocess.run('ipcluster nbextension enable --user',
                    shell=True, env=env)
-    print(ipcontroller_command)
-    subprocess.Popen(ipcontroller_command, shell=True, env=env)
+    print("Starting the controller.")
+    stdout = None if args.verbose else subprocess.PIPE
+    p_controller = subprocess.Popen(ipcontroller_command, shell=True, env=env, stdout=stdout,
+                                    stderr=subprocess.STDOUT)
     engine_file = _wait_engine_file_ready(args.profile)
     client_file = _wait_client_file_ready(args.profile)
     # Copy the engine file to all remote hosts
@@ -229,6 +233,7 @@ def multiple_machines_launch(args, env: Dict[str, str],
     assert network_util.scp_transmit_file(
         client_file, remote_host_names, args.ssh_port)
 
+    print("Starting the engines.")
     ipengine_command = "ipengine start --profile {profile}".format(
         profile=args.profile,
     )
@@ -256,8 +261,9 @@ def multiple_machines_launch(args, env: Dict[str, str],
                              if env_util.is_exportable(key)),
                 command=ipengine_command)
     )
-    subprocess.run(mpi_ipengine_command, shell=True,
-                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    p_engine = subprocess.Popen(mpi_ipengine_command, shell=True, env=env)
+    while not p_controller.poll() and not p_engine.poll():
+        time.sleep(600)
 
 
 def main():
@@ -266,6 +272,11 @@ def main():
     if args.version:
         print(bluefog.__version__)
         exit(0)
+
+    def handler(signum, frame):
+        _maybe_kill_ipcontroller_process(args.profile)
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGINT, handler)
 
     env = os.environ.copy()
     env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
@@ -303,6 +314,7 @@ def main():
             multiple_machines_launch(args, env, all_host_names=all_host_names,
                                      hosts_arg=hosts_arg,
                                      remote_host_names=remote_host_names)
+        _maybe_kill_ipcontroller_process(args.profile)
     except Exception as e:
         print("Fail to launch ibfrun. Error: ", e)
         _maybe_kill_ipcontroller_process(args.profile)
