@@ -352,40 +352,42 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                layer.register_forward_hook(self._make_hook(parent_name))
+            model.register_forward_hook(self._make_hook())
+            for _, layer in _named_leaf_module(model):
+                #layer.register_forward_hook(self._make_hook(parent_name))
                 for _, p in layer.named_parameters():
                     self._requires_update.add(p)
 
-    def _make_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if not module.training:
-                    continue
-                if self._name_parameters.get(parent_name+'.'+name, None) is None:
-                    # Some case like encoder-decode, which shared the same weights.
-                    continue
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if p.requires_grad:
-                    if self._reduce_delay[p] <= 0:
-                        if not self._error_encountered:
-                            warnings.warn(_warning_message_num_step_per_communication)
-                            self._error_encountered = True
-                    self._reduce_delay[p] -= 1
-                    if self._reduce_delay[p] == 0:
-                        if self._communication_type == CommunicationType.allreduce:
-                            handle = self._allreduce_data_async(p)
-                        elif self._communication_type == CommunicationType.neighbor_allreduce:
-                            handle = self._neighbor_allreduce_data_async(p)
-                        elif self._communication_type == CommunicationType.hierarchical_neighbor_allreduce:
-                            handle = self._hierarchical_neighbor_allreduce_data_async(p)
-                        elif self._communication_type == CommunicationType.empty:
-                            handle = None
-                        else:
-                            raise ValueError("Unsuppported CommunicationType encountered.")
-                        self._handles[p] = handle
+    def _make_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    if not layer.training:
+                        continue
+                    if self._name_parameters.get(parent_name+'.'+name, None) is None:
+                        # Some case like encoder-decode, which shared the same weights.
+                        continue
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(parent_name+'.'+name)
+                    if p.requires_grad:
+                        if self._reduce_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._reduce_delay[p] -= 1
+                        if self._reduce_delay[p] == 0:
+                            if self._communication_type == CommunicationType.allreduce:
+                                handle = self._allreduce_data_async(p)
+                            elif self._communication_type == CommunicationType.neighbor_allreduce:
+                                handle = self._neighbor_allreduce_data_async(p)
+                            elif self._communication_type == CommunicationType.hierarchical_neighbor_allreduce:
+                                handle = self._hierarchical_neighbor_allreduce_data_async(p)
+                            elif self._communication_type == CommunicationType.empty:
+                                handle = None
+                            else:
+                                raise ValueError("Unsuppported CommunicationType encountered.")
+                            self._handles[p] = handle
         return hook
 
     def _neighbor_allreduce_data_async(self, p):
@@ -850,53 +852,54 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                if self._pull_style:
-                    hook = self._make_get_hook(parent_name)
-                else:
-                    hook = self._make_put_hook(parent_name)
-                layer.register_forward_hook(hook)
+            if self._pull_style:
+                hook = self._make_get_hook()
+            else:
+                hook = self._make_put_hook()
+            model.register_forward_hook(hook)
 
-    def _make_put_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if not module.training:
-                    continue
-                if p.requires_grad:
-                    if self._bluefog_delay[p] <= 0:
-                        if not self._error_encountered:
-                            warnings.warn(_warning_message_num_step_per_communication)
-                            self._error_encountered = True
-                    self._bluefog_delay[p] -= 1
-                    if self._bluefog_delay[p] == 0:
-                        handle = bf.win_put_nonblocking(
-                            tensor=p.data, name=parent_name+'.'+name,
-                            dst_weights=self.dst_weights, require_mutex=False)
-                        self._handles[p] = handle
+    def _make_put_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(parent_name+'.'+name)
+                    if not layer.training:
+                        continue
+                    if p.requires_grad:
+                        if self._bluefog_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._bluefog_delay[p] -= 1
+                        if self._bluefog_delay[p] == 0:
+                            handle = bf.win_put_nonblocking(
+                                tensor=p.data, name=parent_name+'.'+name,
+                                dst_weights=self.dst_weights, require_mutex=False)
+                            self._handles[p] = handle
         return hook
 
-    def _make_get_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if not module.training:
-                    continue
-                if p.requires_grad:
-                    if self._bluefog_delay[p] <= 0:
-                        if not self._error_encountered:
-                            warnings.warn(_warning_message_num_step_per_communication)
-                            self._error_encountered = True
-                    self._bluefog_delay[p] -= 1
-                    if self._bluefog_delay[p] == 0:
-                        handle = bf.win_get_nonblocking(
-                            name=parent_name+'.'+name, src_weights=self.src_weights,
-                            require_mutex=True)
-                        self._handles[p] = handle
+    def _make_get_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(parent_name+'.'+name)
+                    if not layer.training:
+                        continue
+                    if p.requires_grad:
+                        if self._bluefog_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._bluefog_delay[p] -= 1
+                        if self._bluefog_delay[p] == 0:
+                            handle = bf.win_get_nonblocking(
+                                name=parent_name+'.'+name, src_weights=self.src_weights,
+                                require_mutex=True)
+                            self._handles[p] = handle
         return hook
 
     def _register_window(self):
@@ -1025,33 +1028,33 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                layer.register_forward_hook(self._make_hook(parent_name))
+            model.register_forward_hook(self._make_hook())
 
-    def _make_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                full_name = parent_name+'.'+name
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(full_name)
-                if not module.training:
-                    continue
-                if p.requires_grad:
-                    if self._pushsum_delay[p] <= 0:
-                        if not self._error_encountered:
-                            warnings.warn(_warning_message_num_step_per_communication)
-                            self._error_encountered = True
-                    self._pushsum_delay[p] -= 1
-                    if self._pushsum_delay[p] == 0:
-                        ps_weights = self._named_ps_weights[full_name]
-                        extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
-                        self._named_extension_parameters[name] = extended_parameter
-                        handle = bf.win_accumulate_nonblocking(
-                            tensor=extended_parameter, name=full_name,
-                            dst_weights=self.dst_weights,
-                            require_mutex=True)
-                        self._handles[p] = handle
+    def _make_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    full_name = parent_name+'.'+name
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(full_name)
+                    if not layer.training:
+                        continue
+                    if p.requires_grad:
+                        if self._pushsum_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._pushsum_delay[p] -= 1
+                        if self._pushsum_delay[p] == 0:
+                            ps_weights = self._named_ps_weights[full_name]
+                            extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
+                            self._named_extension_parameters[name] = extended_parameter
+                            handle = bf.win_accumulate_nonblocking(
+                                tensor=extended_parameter, name=full_name,
+                                dst_weights=self.dst_weights,
+                                require_mutex=True)
+                            self._handles[p] = handle
         return hook
 
     def turn_on_timeline(self):
