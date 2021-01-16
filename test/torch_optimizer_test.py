@@ -50,13 +50,29 @@ class LinearNet(nn.Module):
 class DuplicatedLinearNet(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(DuplicatedLinearNet, self).__init__()
-        self.fc = nn.Linear(input_dim, output_dim)
+        self.fc1 = nn.Linear(input_dim, output_dim)
         self.fc2 = nn.Linear(output_dim, output_dim)
         self._num_parameters = input_dim*output_dim+output_dim**2
 
     def forward(self, x):
-        x = self.fc(x)
+        x = self.fc1(x)
         x = self.fc2(x)
+        x = self.fc2(x)
+        return x
+    
+    @property
+    def num_parameters(self):
+        return self._num_parameters
+
+class HierarchicalLinearNet(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(HierarchicalLinearNet, self).__init__()
+        self.fc1 = LinearNet(input_dim, output_dim)
+        self.fc2 = LinearNet(output_dim, output_dim)
+        self._num_parameters = self.fc1.num_parameters+self.fc2.num_parameters
+
+    def forward(self, x):
+        x = self.fc1(x)
         x = self.fc2(x)
         return x
     
@@ -340,6 +356,80 @@ def test_standard_optimizer(device, communication_type, kwargs):
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
 
+hierarchical_model_scenarios = []
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                 id="AWC Neighbor Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="AWC doesn't converge for hierarchical model.")))
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                 id="ATC Neighbor Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="ATC doesn't converge for hierarchical model.")))
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", "win.put", {}, id="Window put on CPU",
+                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+if TEST_ON_GPU:
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                     id="AWC Neighbor Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="AWC doesn't converge for hierarchical model.")))
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                     id="ATC Neighbor Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="ATC doesn't converge for hierarchical model.")))
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", "win.put", {}, id="Window put on GPU",
+                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+@pytest.mark.parametrize("device,communication_type,kwargs", hierarchical_model_scenarios)
+def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
+    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
+    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+
+    problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
+        problem_setup(HierarchicalLinearNet)
+
+    isCUDA = device=="GPU"
+    if isCUDA:
+        # Bluefog: pin GPU to local rank.
+        device_id = (bf.local_rank() if bf.nccl_built() else
+                     bf.local_rank() % torch.cuda.device_count())
+        torch.cuda.set_device(device_id)
+        model.cuda()
+
+    if isinstance(communication_type, bf.CommunicationType):
+        base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
+                               bf.DistributedAdaptWithCombineOptimizer)
+        optimizer = base_dist_optimizer(optimizer, model=model,
+                                        communication_type=communication_type)
+    elif communication_type == "win.put":
+        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
+    elif communication_type == "gradient.allreduce":
+        optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model)
+    else:
+        raise ValueError("Communication_type under test is not expected.")
+
+    # Train and test
+    train_mse = []
+    test_mse = []
+    for _ in range(num_epochs):
+        standard_train(model, optimizer, train_dataloader, isCUDA)
+        train_mse.append(evaluation(model, train_dataloader, isCUDA))
+        test_mse.append(evaluation(model, test_dataloader, isCUDA))
+    train_mse = np.array(train_mse)
+    test_mse = np.array(test_mse)
+
+    # Check if the MSEs in the last three epochs are small enough
+    assert (
+        train_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+    assert (
+        test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+
 # Neighbor allreduce dynamic tests
 dynamic_neighbor_allreduce_scenarios = []
 dynamic_neighbor_allreduce_scenarios.append(
@@ -556,10 +646,29 @@ def test_optimizer_local_aggregation(device, communication_type, kwargs):
 local_aggregation_duplicated_scenarios = []
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
-                 id="AWC Neighbor Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="Don't support same layer called twice or more")))
+                 id="AWC Neighbor Allreduce on CPU"))
+local_aggregation_duplicated_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                 id="ATC Neighbor Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+local_aggregation_duplicated_scenarios.append(
+    pytest.param("CPU", "win.put", {}, id="Win Put on CPU",
+                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
+if TEST_ON_GPU:
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                     id="AWC Neighbor Allreduce on GPU"))
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                     id="ATC Neighbor Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", "win.put", {}, id="Win Put on GPU",
+                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
 
 @pytest.mark.filterwarnings("error:Unexpected behavior")
 @pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_duplicated_scenarios)
