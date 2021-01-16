@@ -482,7 +482,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
 
 class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
-    def __init__(self, params, model, communication_type, num_steps_per_communication=1):
+    def __init__(self, params, model, communication_type, backward_passes_per_step=1):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
@@ -503,7 +503,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         self._timeline_hook_handles = []
         self._use_timeline = False
         self._error_encountered = False
-        self._num_steps_per_communication = num_steps_per_communication
+        self._backward_passes_per_step = backward_passes_per_step
         assert isinstance(communication_type, CommunicationType)
         self._communication_type = communication_type
 
@@ -520,7 +520,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         else:
             self._step_func = None  # Need user to register their own step function.
 
-        self._reduce_delay = {v: self._num_steps_per_communication
+        self._reduce_delay = {v: self._backward_passes_per_step
                               for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
@@ -790,7 +790,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
                 if handle is not None:
                     output = bf.synchronize(handle)
                     p.set_(output)
-                self._reduce_delay[p] = self._num_steps_per_communication
+                self._reduce_delay[p] = self._backward_passes_per_step
         self._handles.clear()
 
         self._synchronized = True
@@ -1374,7 +1374,7 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
 
 def DistributedAdaptThenCombineOptimizer(optimizer, model,
                                          communication_type=CommunicationType.neighbor_allreduce,
-                                         num_steps_per_communication=1):
+                                         backward_passes_per_step=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer.
     The communication is applied on the parameters when backward propagation triggered and
@@ -1403,10 +1403,10 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
             hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
             Empty function just means no communication.
-        num_steps_per_communication: Number of expected backward function calls before each
-                                     communication. This allows local model parameter updates
-                                     per num_steps_per_communication before reducing them over
-                                     distributed computation resources.
+        backward_passes_per_step: Number of expected backward function calls before each
+                                  communication. This allows local model parameter updates
+                                  per num_steps_per_communication before reducing them over
+                                  distributed computation resources.
 
     Example for two scenarios to use num_steps_per_communication:
 
@@ -1415,7 +1415,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
-        >>>          num_steps_per_communication=J)
+        >>>          backward_passes_per_step=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
@@ -1427,7 +1427,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
-        >>>          num_steps_per_communication=J)
+        >>>          backward_passes_per_step=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
@@ -1440,7 +1440,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedAdaptThenCombineOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, communication_type, num_steps_per_communication)
+    return cls(optimizer.param_groups, model, communication_type, backward_passes_per_step)
 
 
 def DistributedAdaptWithCombineOptimizer(optimizer, model,
