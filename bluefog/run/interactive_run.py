@@ -154,11 +154,19 @@ def _write_ipengine_pid(profile):
     with open(os.path.join(path, "engine_pids.json"), 'w+') as f:
         json.dump(engine_pids, f)
 
+
 def _get_ipengine_pid_from_file(profile):
     path = _get_ip_file_dir(profile)
     with open(os.path.join(path, "engine_pids.json"), 'r') as f:
         engine_pids = json.load(f)
     return engine_pids
+
+
+def _delete_ipengine_pid(profile):
+    path = _get_ip_file_dir(profile)
+    engine_pid_file = os.path.join(path, "engine_pids.json")
+    if os.path.exists(engine_pid_file):
+        os.remove(engine_pid_file)
 
 
 def _maybe_kill_ipcontroller_process(profile):
@@ -187,9 +195,19 @@ def _maybe_kill_ipengine_processes(profile):
             os.kill(pid, signal.SIGINT)
         except:
             pass
+    _delete_ipengine_pid(profile)
 
 
-def interrupt_hanged_ipengine_processes(profile):
+def interrupt_hanged_processes(profile="bluefog"):
+    """ Send the interrupt signal to all hanged workers.
+
+    Args:
+        profile (str): The profile name for ipython environment, i.e.
+            the --ipython-profile you specified in `ibfrun`. By default,
+            this value should be 'bluefog'.
+
+    Note: This function is supported under localhost mode.
+    """
     engine_pids = _get_ipengine_pid_from_file(profile)
     if engine_pids is None:
         raise FileNotFoundError("Cannot find pids to interrupt the engines. Note this"
@@ -200,6 +218,9 @@ def interrupt_hanged_ipengine_processes(profile):
         rc = ipp.Client(profile=profile)
         rc[i].apply_sync(lambda: 0)
 
+    # Send an empty function to the workers. If it cannot be finished within the
+    # {timeout} second, we assume the worker is hanged then send the interrupt
+    # signal to it. If finished, do nothing.
     p_list = []
     for i in range(len(engine_pids)):
         p = multiprocessing.Process(target=send_request_to_rc, args=(i,))
