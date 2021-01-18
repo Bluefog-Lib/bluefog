@@ -31,6 +31,7 @@ class CommunicationType(Enum):
     allreduce = "allreduce"
     empty = "empty"
 
+# TODO(hanbinhu): Add URL for FAQ page
 _warning_message_num_step_per_communication = (
     "Unexpected behavior:\n"
     "  After num_steps_per_communication times of forward computation `y=model(x)` are called,\n"
