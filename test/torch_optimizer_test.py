@@ -370,7 +370,8 @@ hierarchical_model_scenarios.append(
                  id="ATC Neighbor Allreduce on CPU",
                  marks=pytest.mark.skip(reason="ATC doesn't converge for hierarchical model.")))
 hierarchical_model_scenarios.append(
-    pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
+    pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="GA may not converge for hierarchical model.")))
 hierarchical_model_scenarios.append(
     pytest.param("CPU", "win.put", {}, id="Window put on CPU",
                  marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
@@ -384,7 +385,8 @@ if TEST_ON_GPU:
                      id="ATC Neighbor Allreduce on GPU",
                      marks=pytest.mark.skip(reason="ATC doesn't converge for hierarchical model.")))
     hierarchical_model_scenarios.append(
-        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
+        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="GA may not converge for hierarchical model.")))
     hierarchical_model_scenarios.append(
         pytest.param("GPU", "win.put", {}, id="Window put on GPU",
                      marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
