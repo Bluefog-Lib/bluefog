@@ -6,16 +6,17 @@ FAQ
 .. contents:: Question Lists
   :local:
 
-Why does the warning related to ``num_communication_per_step`` or ``backward_passes_per_step`` pop up in Bluefog optimizer?
+Why does the warning related to ``num_steps_per_communication`` or ``backward_passes_per_step`` pop up in Bluefog optimizer?
 --------------------------------------------------------------------------------------------
 
-During your usage of Bluefog optimizer, you may encounter the following the two types of warnings.
+During your usage of Bluefog distributed optimizer, you may encounter the following
+two types of warnings:
 
 
 .. code-block:: python
 
    Warning (unexpected behavior):
-     After num_step_per_communication times of forward computation `y=model(x)` are called,
+     After num_steps_per_communication times of forward computation `y=model(x)` are called,
      an optimizer step() function must be called.
      It does not matter how many step() functions are called in between.
      Please adjust num_step_per_communication to update model parameters locally.
@@ -36,12 +37,13 @@ During your usage of Bluefog optimizer, you may encounter the following the two 
    behavior during forward computation, while ``DistributedGradientAllreduceOptimizer`` and 
    ``DistributedAdaptThenCombineOptimizer`` triggers during backward computation.
    This is also reflected by the optimizer argument naming.
-   All other optimizers uses ``num_step_per_communication``, while these two optimizers uses
+   All other optimizers uses ``num_steps_per_communication``, while these two optimizers uses
    ``backward_passes_per_step``.
    The following discussion only focuses on forward computation case, but it works for backward
    scenario as well.
 
-Consider the following admissible code snippet.
+To understand the meaning of the above two warnings,
+consider the following admissible code snippet for local gradient aggregation case:
 
 .. code-block:: python
    :emphasize-lines: 3,10,13
@@ -53,8 +55,8 @@ Consider the following admissible code snippet.
       for data, target in dataloader:
         opt.zero_grad()
         for i in range(J):
-          data_mini_batch = data[...]
-          target_mini_batch = target[...]
+          data_mini_batch = data[i::J] # Make sure batch_size = J * mini_batch_size
+          target_mini_batch = target[i::J]
           y = model(data_mini_batch) # Forward Computation <- Counting occurs.
           loss = mseloss(y, target_mini_batch)
           loss.backward()
@@ -68,7 +70,13 @@ We can see that step function happens right after ``J=3`` forward computations.
 With that, we accumulate the update for the model parameters in all ``J=3`` mini batches locally,
 and reduce the model parameters during the step function in a AWC style.
 
-Let's check another admissible code snippet.
+If ``num_steps_per_communication`` here doesn't match the number of mini batchs,
+the warning will be triggered.
+For example, there are 4 mini batches, with a ``num_steps_per_communication`` of 3,
+then the calling sequence is **FFFFS**. The warning will be thrown at the fourth **F**,
+because after 3 **F**, it should expect an **S** following it.
+
+Let's check another admissible code snippet for multi-round computation per communication case.
 
 .. code-block:: python
    :emphasize-lines: 3,9,13
@@ -79,8 +87,8 @@ Let's check another admissible code snippet.
    for _ in range(num_epochs):
       for data, target in dataloader:
         for i in range(J):
-          data_mini_batch = data[...]
-          target_mini_batch = target[...]
+          data_mini_batch = data[i::J] # Make sure batch_size = J * mini_batch_size
+          target_mini_batch = target[i::J]
           y = model(data_mini_batch) # Forward Computation <- Counting occurs.
           loss = mseloss(y, target_mini_batch)
           opt.zero_grad()
@@ -94,10 +102,21 @@ However, all other step functions in between, denoted by **s**, doesn't trigger 
 With that, we update the model locally after each mini batch; and at the last mini batch,
 the model parameters are reduced with its neighbors.
 
-These are two common usages for ``num_communication_per_step`` or ``backward_passes_per_step`` for
-Bluefog optimizer. But other usage is also allowed, as long as after ``num_communication_per_step``
-forward computation or ``backward_passes_per_step`` backward propogation, the step function is 
-executed. With that in mind, some other admissible calling procedures are **FFsFS**, **FsFFS**, etc.
+In this case, if ``num_steps_per_communication`` here doesn't match the number of mini batchs,
+the situation may be more dangerous, as no warning will be thrown.
+For example, there are 4 mini batches, with a ``num_steps_per_communication`` of 3,
+then the calling sequence is **FsFsFSFs** for the first batch. The communication is completed at
+the third mini batch, and there is one mini batch left in the first batch. For the second batch,
+the calling sequence is **FsFSFsFs**. We can see that the communication is finished at the second
+mini batch here, due to the left over mini batch in the first batch. No warning is thrown during
+this process, since after every 3 **F**, an **S** is followed.
+This kind of behavior may not be desired, and users should be careful with this situation.
+
+These are two common usages for ``num_steps_per_communication`` or ``backward_passes_per_step`` for
+Bluefog distributed optimizer. But other usage is also allowed, as long as after
+``num_steps_per_communication`` forward computation or ``backward_passes_per_step``
+backward propogation, the step function is executed.
+With that in mind, some other admissible calling procedures are **FFsFS**, **FsFFS**, etc.
 Some inadmissible calling procedures are **FFFFS**, **FFsFFS**.
 
 .. note::

@@ -174,6 +174,16 @@ def problem_setup(net=LinearNet):
     bf.broadcast_optimizer_state(optimizer, root_rank=0)
     return problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs
 
+def pin_model_to_device(device, model):
+    isCUDA = device=="GPU"
+    if isCUDA:
+        # Bluefog: pin GPU to local rank.
+        device_id = (bf.local_rank() if bf.nccl_built() else
+                     bf.local_rank() % torch.cuda.device_count())
+        torch.cuda.set_device(device_id)
+        model.cuda()
+    return isCUDA
+
 # Standard training process
 def standard_train(model, optimizer, dataloader, isCUDA):
     mseloss = nn.MSELoss()
@@ -312,19 +322,13 @@ if TEST_ON_GPU:
 # kwargs is some optional parameters related to certain communication types.
 @pytest.mark.parametrize("device,communication_type,kwargs", static_topo_scenarios)
 def test_standard_optimizer(device, communication_type, kwargs):
-    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    atc_style = kwargs.get("ATC", False)
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     if isinstance(communication_type, bf.CommunicationType):
         base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
@@ -384,21 +388,16 @@ if TEST_ON_GPU:
     hierarchical_model_scenarios.append(
         pytest.param("GPU", "win.put", {}, id="Window put on GPU",
                      marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+
 @pytest.mark.parametrize("device,communication_type,kwargs", hierarchical_model_scenarios)
 def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
-    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    atc_style = kwargs.get("ATC", False)
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup(HierarchicalLinearNet)
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     if isinstance(communication_type, bf.CommunicationType):
         base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
@@ -444,18 +443,12 @@ if TEST_ON_GPU:
 
 @pytest.mark.parametrize("device,atc_style,kwargs", dynamic_neighbor_allreduce_scenarios)
 def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
                            bf.DistributedAdaptWithCombineOptimizer)
@@ -494,18 +487,12 @@ if TEST_ON_GPU:
 
 @pytest.mark.parametrize("device,kwargs", dynamic_win_put_scenarios)
 def test_dynamic_win_put_optimizer(device, kwargs):
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
     
@@ -593,20 +580,14 @@ if TEST_ON_GPU:
                      marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
 @pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_scenarios)
 def test_optimizer_local_aggregation(device, communication_type, kwargs):
-    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
-    mini_batch_size = kwargs["mini_batch_size"] if "mini_batch_size" in kwargs else 16
+    atc_style = kwargs.get("ATC", False)
+    error_threshold = kwargs.get("error_threshold", 1.5)
+    mini_batch_size = kwargs.get("mini_batch_size", 16)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     J = train_dataloader.batch_size // mini_batch_size
 
@@ -675,19 +656,13 @@ if TEST_ON_GPU:
 def test_optimizer_local_aggregation_duplicated(device, communication_type, kwargs):
     # Accuracy doesn't matter here, mainly to test if there is warning thrown
     # for local aggregation.
-    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
-    mini_batch_size = kwargs["mini_batch_size"] if "mini_batch_size" in kwargs else 16
+    atc_style = kwargs.get("ATC", False)
+    mini_batch_size = kwargs.get("mini_batch_size", 16)
 
     _, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup(DuplicatedLinearNet)
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     mini_batch_size = train_dataloader.batch_size
     J = train_dataloader.batch_size // mini_batch_size

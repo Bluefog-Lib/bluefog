@@ -33,7 +33,7 @@ class CommunicationType(Enum):
 
 _warning_message_num_step_per_communication = (
     "Unexpected behavior:\n"
-    "  After num_step_per_communication times of forward computation `y=model(x)` are called,\n"
+    "  After num_steps_per_communication times of forward computation `y=model(x)` are called,\n"
     "  an optimizer step() function must be called.\n"
     "  It does not matter how many step() functions are called in between.\n"
     "  Please adjust num_step_per_communication to update model parameters locally.\n"
@@ -352,11 +352,11 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
+            # The hook is added at model level instead of layer level, as it avoids triggering
+            # the hook function of the same layer multiple times in case the layer is called 
+            # several times during the forward computation of the model.
             model.register_forward_hook(self._make_hook())
-            for _, layer in _named_leaf_module(model):
-                #layer.register_forward_hook(self._make_hook(parent_name))
-                for _, p in layer.named_parameters():
-                    self._requires_update.add(p)
+            self._requires_update.update(dict(model.named_parameters()).values())
 
     def _make_hook(self):
         def hook(model, *unused):
@@ -852,6 +852,9 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
+            # The hook is added at model level instead of layer level, as it avoids triggering
+            # the hook function of the same layer multiple times in case the layer is called 
+            # several times during the forward computation of the model.
             if self._pull_style:
                 hook = self._make_get_hook()
             else:
@@ -1028,6 +1031,9 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
+            # The hook is added at model level instead of layer level, as it avoids triggering
+            # the hook function of the same layer multiple times in case the layer is called 
+            # several times during the forward computation of the model.
             model.register_forward_hook(self._make_hook())
 
     def _make_hook(self):
