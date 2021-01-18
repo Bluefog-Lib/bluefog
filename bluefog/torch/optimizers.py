@@ -31,6 +31,24 @@ class CommunicationType(Enum):
     allreduce = "allreduce"
     empty = "empty"
 
+# TODO(hanbinhu): Add URL for FAQ page
+_warning_message_num_step_per_communication = (
+    "Unexpected behavior:\n"
+    "  After num_steps_per_communication times of forward computation `y=model(x)` are called,\n"
+    "  an optimizer step() function must be called.\n"
+    "  It does not matter how many step() functions are called in between.\n"
+    "  Please adjust num_step_per_communication to update model parameters locally.\n"
+    "  More information can be found in the FAQ page.\n"
+)
+_warning_message_backward_pass_per_step = (
+    "Unexpected behavior:\n"
+    "  After backward_passes_per_step times of backward computation `loss.backward()` are called,\n"
+    "  an optimizer step() function must be called.\n"
+    "  It does not matter how many step() functions are called in between.\n"
+    "  Please adjust backward_passes_per_step to accumulate gradients locally.\n"
+    "  More information can be found in the FAQ page.\n"
+)
+
 #pylint: disable=unused-argument
 def _named_leaf_module(module, parent_name=None):
     """Yield an iterator over all leaf modules."""
@@ -162,6 +180,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         self._backward_passes_per_step = backward_passes_per_step
         self._allreduce_delay = {v: self._backward_passes_per_step
                                  for _, v in sorted(named_parameters)}
+        self._error_encountered = False
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -182,11 +201,9 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         def hook(*ignore):
             assert not p.grad.requires_grad
             if self._allreduce_delay[p] <= 0:
-                raise AssertionError(
-                    "Unexpected behavior: backward computation were computed "
-                    "more than num_steps_per_communication times before call "
-                    "to step(). Adjust num_steps_per_communication to "
-                    "accumulate gradients locally.")
+                if not self._error_encountered:
+                    warnings.warn(_warning_message_backward_pass_per_step)
+                    self._error_encountered = True
             self._allreduce_delay[p] -= 1
             if self._allreduce_delay[p] == 0:
                 handle = self._allreduce_grad_async(p)
@@ -322,6 +339,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         assert isinstance(communication_type, CommunicationType)
         self._communication_type = communication_type
@@ -335,42 +353,42 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                layer.register_forward_hook(self._make_hook(parent_name))
-                for _, p in layer.named_parameters():
-                    self._requires_update.add(p)
+            # The hook is added at model level instead of layer level, as it avoids triggering
+            # the hook function of the same layer multiple times in case the layer is called 
+            # several times during the forward computation of the model.
+            model.register_forward_hook(self._make_hook())
+            self._requires_update.update(dict(model.named_parameters()).values())
 
-    def _make_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if not module.training:
-                    continue
-                if self._name_parameters.get(parent_name+'.'+name, None) is None:
-                    # Some case like encoder-decode, which shared the same weights.
-                    continue
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if p.requires_grad:
-                    if self._reduce_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
-                    self._reduce_delay[p] -= 1
-                    if self._reduce_delay[p] == 0:
-                        if self._communication_type == CommunicationType.allreduce:
-                            handle = self._allreduce_data_async(p)
-                        elif self._communication_type == CommunicationType.neighbor_allreduce:
-                            handle = self._neighbor_allreduce_data_async(p)
-                        elif self._communication_type == CommunicationType.hierarchical_neighbor_allreduce:
-                            handle = self._hierarchical_neighbor_allreduce_data_async(p)
-                        elif self._communication_type == CommunicationType.empty:
-                            handle = None
-                        else:
-                            raise ValueError("Unsuppported CommunicationType encountered.")
-                        self._handles[p] = handle
+    def _make_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    if not layer.training:
+                        continue
+                    if self._name_parameters.get(parent_name+'.'+name, None) is None:
+                        # Some case like encoder-decode, which shared the same weights.
+                        continue
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(parent_name+'.'+name)
+                    if p.requires_grad:
+                        if self._reduce_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._reduce_delay[p] -= 1
+                        if self._reduce_delay[p] == 0:
+                            if self._communication_type == CommunicationType.allreduce:
+                                handle = self._allreduce_data_async(p)
+                            elif self._communication_type == CommunicationType.neighbor_allreduce:
+                                handle = self._neighbor_allreduce_data_async(p)
+                            elif self._communication_type == CommunicationType.hierarchical_neighbor_allreduce:
+                                handle = self._hierarchical_neighbor_allreduce_data_async(p)
+                            elif self._communication_type == CommunicationType.empty:
+                                handle = None
+                            else:
+                                raise ValueError("Unsuppported CommunicationType encountered.")
+                            self._handles[p] = handle
         return hook
 
     def _neighbor_allreduce_data_async(self, p):
@@ -465,7 +483,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
 
 
 class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
-    def __init__(self, params, model, communication_type, num_steps_per_communication=1):
+    def __init__(self, params, model, communication_type, backward_passes_per_step=1):
         super(self.__class__, self).__init__(params)
 
         named_parameters, models = _check_named_parameters(self, model)
@@ -485,7 +503,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         self._should_synchronize = True
         self._timeline_hook_handles = []
         self._use_timeline = False
-        self._num_steps_per_communication = num_steps_per_communication
+        self._error_encountered = False
+        self._backward_passes_per_step = backward_passes_per_step
         assert isinstance(communication_type, CommunicationType)
         self._communication_type = communication_type
 
@@ -502,7 +521,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         else:
             self._step_func = None  # Need user to register their own step function.
 
-        self._reduce_delay = {v: self._num_steps_per_communication
+        self._reduce_delay = {v: self._backward_passes_per_step
                               for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
@@ -552,11 +571,9 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             self._step_func(p, grad.data, param_group)
 
             if self._reduce_delay[p] <= 0:
-                raise AssertionError(
-                    "Unexpected behavior: forward computation were computed "
-                    "more than num_steps_per_communication times before call "
-                    "to step(). Adjust num_steps_per_communication to "
-                    "accumulate gradients locally.")
+                if not self._error_encountered:
+                    warnings.warn(_warning_message_num_step_per_communication)
+                    self._error_encountered = True
             self._reduce_delay[p] -= 1
             if self._reduce_delay[p] == 0:
                 if self._communication_type == CommunicationType.allreduce:
@@ -774,7 +791,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
                 if handle is not None:
                     output = bf.synchronize(handle)
                     p.set_(output)
-                self._reduce_delay[p] = self._num_steps_per_communication
+                self._reduce_delay[p] = self._backward_passes_per_step
         self._handles.clear()
 
         self._synchronized = True
@@ -823,6 +840,7 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         self._bluefog_delay = {v: self._num_steps_per_communication
                                for _, v in sorted(named_parameters)}
@@ -835,57 +853,57 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                if self._pull_style:
-                    hook = self._make_get_hook(parent_name)
-                else:
-                    hook = self._make_put_hook(parent_name)
-                layer.register_forward_hook(hook)
+            # The hook is added at model level instead of layer level, as it avoids triggering
+            # the hook function of the same layer multiple times in case the layer is called 
+            # several times during the forward computation of the model.
+            if self._pull_style:
+                hook = self._make_get_hook()
+            else:
+                hook = self._make_put_hook()
+            model.register_forward_hook(hook)
 
-    def _make_put_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if not module.training:
-                    continue
-                if p.requires_grad:
-                    if self._bluefog_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
-                    self._bluefog_delay[p] -= 1
-                    if self._bluefog_delay[p] == 0:
-                        handle = bf.win_put_nonblocking(
-                            tensor=p.data, name=parent_name+'.'+name,
-                            dst_weights=self.dst_weights, require_mutex=False)
-                        self._handles[p] = handle
+    def _make_put_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(parent_name+'.'+name)
+                    if not layer.training:
+                        continue
+                    if p.requires_grad:
+                        if self._bluefog_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._bluefog_delay[p] -= 1
+                        if self._bluefog_delay[p] == 0:
+                            handle = bf.win_put_nonblocking(
+                                tensor=p.data, name=parent_name+'.'+name,
+                                dst_weights=self.dst_weights, require_mutex=False)
+                            self._handles[p] = handle
         return hook
 
-    def _make_get_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(parent_name+'.'+name)
-                if not module.training:
-                    continue
-                if p.requires_grad:
-                    if self._bluefog_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
-                    self._bluefog_delay[p] -= 1
-                    if self._bluefog_delay[p] == 0:
-                        handle = bf.win_get_nonblocking(
-                            name=parent_name+'.'+name, src_weights=self.src_weights,
-                            require_mutex=True)
-                        self._handles[p] = handle
+    def _make_get_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(parent_name+'.'+name)
+                    if not layer.training:
+                        continue
+                    if p.requires_grad:
+                        if self._bluefog_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._bluefog_delay[p] -= 1
+                        if self._bluefog_delay[p] == 0:
+                            handle = bf.win_get_nonblocking(
+                                name=parent_name+'.'+name, src_weights=self.src_weights,
+                                require_mutex=True)
+                            self._handles[p] = handle
         return hook
 
     def _register_window(self):
@@ -984,6 +1002,7 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
         self._synchronized = False
         self._should_synchronize = True
         self._use_timeline = False
+        self._error_encountered = False
         self._num_steps_per_communication = num_steps_per_communication
         self._pushsum_delay = {v: self._num_steps_per_communication
                                for _, v in sorted(named_parameters)}
@@ -1013,35 +1032,36 @@ class _DistributedPushSumOptimizer(torch.optim.Optimizer):
 
     def _register_hooks(self):
         for model in self._models:
-            for parent_name, layer in _named_leaf_module(model):
-                layer.register_forward_hook(self._make_hook(parent_name))
+            # The hook is added at model level instead of layer level, as it avoids triggering
+            # the hook function of the same layer multiple times in case the layer is called 
+            # several times during the forward computation of the model.
+            model.register_forward_hook(self._make_hook())
 
-    def _make_hook(self, parent_name):
-        def hook(module, *unused):
-            for name, p in module.named_parameters():
-                full_name = parent_name+'.'+name
-                if self._use_timeline:
-                    # End forward computation timeline
-                    bf.timeline_end_activity(full_name)
-                if not module.training:
-                    continue
-                if p.requires_grad:
-                    if self._pushsum_delay[p] <= 0:
-                        raise AssertionError(
-                            "Unexpected behavior: forward computation were computed "
-                            "more than num_steps_per_communication times before call "
-                            "to step(). Adjust num_steps_per_communication to "
-                            "accumulate gradients locally.")
-                    self._pushsum_delay[p] -= 1
-                    if self._pushsum_delay[p] == 0:
-                        ps_weights = self._named_ps_weights[full_name]
-                        extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
-                        self._named_extension_parameters[name] = extended_parameter
-                        handle = bf.win_accumulate_nonblocking(
-                            tensor=extended_parameter, name=full_name,
-                            dst_weights=self.dst_weights,
-                            require_mutex=True)
-                        self._handles[p] = handle
+    def _make_hook(self):
+        def hook(model, *unused):
+            for parent_name, layer in _named_leaf_module(model):
+                for name, p in layer.named_parameters():
+                    full_name = parent_name+'.'+name
+                    if self._use_timeline:
+                        # End forward computation timeline
+                        bf.timeline_end_activity(full_name)
+                    if not layer.training:
+                        continue
+                    if p.requires_grad:
+                        if self._pushsum_delay[p] <= 0:
+                            if not self._error_encountered:
+                                warnings.warn(_warning_message_num_step_per_communication)
+                                self._error_encountered = True
+                        self._pushsum_delay[p] -= 1
+                        if self._pushsum_delay[p] == 0:
+                            ps_weights = self._named_ps_weights[full_name]
+                            extended_parameter = torch.cat((p.data.view(-1), ps_weights), 0)
+                            self._named_extension_parameters[name] = extended_parameter
+                            handle = bf.win_accumulate_nonblocking(
+                                tensor=extended_parameter, name=full_name,
+                                dst_weights=self.dst_weights,
+                                require_mutex=True)
+                            self._handles[p] = handle
         return hook
 
     def turn_on_timeline(self):
@@ -1361,7 +1381,7 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
 
 def DistributedAdaptThenCombineOptimizer(optimizer, model,
                                          communication_type=CommunicationType.neighbor_allreduce,
-                                         num_steps_per_communication=1):
+                                         backward_passes_per_step=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer.
     The communication is applied on the parameters when backward propagation triggered and
@@ -1390,10 +1410,10 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
             hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
             Empty function just means no communication.
-        num_steps_per_communication: Number of expected backward function calls before each
-                                     communication. This allows local model parameter updates
-                                     per num_steps_per_communication before reducing them over
-                                     distributed computation resources.
+        backward_passes_per_step: Number of expected backward function calls before each
+                                  communication. This allows local model parameter updates
+                                  per num_steps_per_communication before reducing them over
+                                  distributed computation resources.
 
     Example for two scenarios to use num_steps_per_communication:
 
@@ -1402,7 +1422,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
-        >>>          num_steps_per_communication=J)
+        >>>          backward_passes_per_step=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
@@ -1414,7 +1434,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
-        >>>          num_steps_per_communication=J)
+        >>>          backward_passes_per_step=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
@@ -1427,7 +1447,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedAdaptThenCombineOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, communication_type, num_steps_per_communication)
+    return cls(optimizer.param_groups, model, communication_type, backward_passes_per_step)
 
 
 def DistributedAdaptWithCombineOptimizer(optimizer, model,

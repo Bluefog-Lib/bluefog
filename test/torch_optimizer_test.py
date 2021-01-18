@@ -37,9 +37,48 @@ class LinearNet(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(LinearNet, self).__init__()
         self.fc = nn.Linear(input_dim, output_dim)
+        self._num_parameters = input_dim*output_dim
 
     def forward(self, x):
         return self.fc(x)
+
+    @property
+    def num_parameters(self):
+        return self._num_parameters
+
+# A deep linear model for testing
+class DuplicatedLinearNet(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(DuplicatedLinearNet, self).__init__()
+        self.fc1 = nn.Linear(input_dim, output_dim)
+        self.fc2 = nn.Linear(output_dim, output_dim)
+        self._num_parameters = input_dim*output_dim+output_dim**2
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc2(x)
+        return x
+    
+    @property
+    def num_parameters(self):
+        return self._num_parameters
+
+class HierarchicalLinearNet(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(HierarchicalLinearNet, self).__init__()
+        self.fc1 = LinearNet(input_dim, output_dim)
+        self.fc2 = LinearNet(output_dim, output_dim)
+        self._num_parameters = self.fc1.num_parameters+self.fc2.num_parameters
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x
+    
+    @property
+    def num_parameters(self):
+        return self._num_parameters
 
 # A Simple dataset for testing.
 class SimpleDataset:
@@ -110,7 +149,7 @@ class LinearProblemBuilder:
         return SimpleDataset(X, Y)
 
 # Prepare the problem  to be solved
-def problem_setup():
+def problem_setup(net=LinearNet):
     bf.init()
     num_epochs = 50
     batch_size = 128
@@ -120,20 +159,30 @@ def problem_setup():
 
     # Setup Problem
     problem_builder = LinearProblemBuilder()
-    assert (
-        num_train_per_node*bf.size() >= problem_builder.input_dim*problem_builder.output_dim
-    ), "The number of samples is too small making it an underdetermined system."
     train_dataset = problem_builder.get_dataset(num_train_per_node)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
     test_dataset = problem_builder.get_dataset(num_test_per_node)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
     # Setup Model
-    model = LinearNet(problem_builder.input_dim, problem_builder.output_dim)
+    model = net(problem_builder.input_dim, problem_builder.output_dim)
+    assert (
+        num_train_per_node*bf.size() >= model.num_parameters
+    ), "The number of samples is too small making it an underdetermined system."
     # Setup Optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr*bf.size())
     bf.broadcast_parameters(model.state_dict(), root_rank=0)
     bf.broadcast_optimizer_state(optimizer, root_rank=0)
     return problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs
+
+def pin_model_to_device(device, model):
+    isCUDA = device=="GPU"
+    if isCUDA:
+        # Bluefog: pin GPU to local rank.
+        device_id = (bf.local_rank() if bf.nccl_built() else
+                     bf.local_rank() % torch.cuda.device_count())
+        torch.cuda.set_device(device_id)
+        model.cuda()
+    return isCUDA
 
 # Standard training process
 def standard_train(model, optimizer, dataloader, isCUDA):
@@ -273,19 +322,84 @@ if TEST_ON_GPU:
 # kwargs is some optional parameters related to certain communication types.
 @pytest.mark.parametrize("device,communication_type,kwargs", static_topo_scenarios)
 def test_standard_optimizer(device, communication_type, kwargs):
-    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    atc_style = kwargs.get("ATC", False)
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
+
+    if isinstance(communication_type, bf.CommunicationType):
+        base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
+                               bf.DistributedAdaptWithCombineOptimizer)
+        optimizer = base_dist_optimizer(optimizer, model=model,
+                                        communication_type=communication_type)
+    elif communication_type == "win.put":
+        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
+    elif communication_type == "gradient.allreduce":
+        optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model)
+    else:
+        raise ValueError("Communication_type under test is not expected.")
+
+    # Train and test
+    train_mse = []
+    test_mse = []
+    for _ in range(num_epochs):
+        standard_train(model, optimizer, train_dataloader, isCUDA)
+        train_mse.append(evaluation(model, train_dataloader, isCUDA))
+        test_mse.append(evaluation(model, test_dataloader, isCUDA))
+    train_mse = np.array(train_mse)
+    test_mse = np.array(test_mse)
+
+    # Check if the MSEs in the last three epochs are small enough
+    assert (
+        train_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+    assert (
+        test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
+    ), "Train MSE in the last three epochs doesn't coverge."
+
+hierarchical_model_scenarios = []
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                 id="AWC Neighbor Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="AWC doesn't converge for hierarchical model.")))
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                 id="ATC Neighbor Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="ATC doesn't converge for hierarchical model.")))
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="GA may not converge for hierarchical model.")))
+hierarchical_model_scenarios.append(
+    pytest.param("CPU", "win.put", {}, id="Window put on CPU",
+                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+if TEST_ON_GPU:
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                     id="AWC Neighbor Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="AWC doesn't converge for hierarchical model.")))
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                     id="ATC Neighbor Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="ATC doesn't converge for hierarchical model.")))
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="GA may not converge for hierarchical model.")))
+    hierarchical_model_scenarios.append(
+        pytest.param("GPU", "win.put", {}, id="Window put on GPU",
+                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+
+@pytest.mark.parametrize("device,communication_type,kwargs", hierarchical_model_scenarios)
+def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
+    atc_style = kwargs.get("ATC", False)
+    error_threshold = kwargs.get("error_threshold", 1.5)
+
+    problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
+        problem_setup(HierarchicalLinearNet)
+
+    isCUDA = pin_model_to_device(device, model)
 
     if isinstance(communication_type, bf.CommunicationType):
         base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
@@ -331,18 +445,12 @@ if TEST_ON_GPU:
 
 @pytest.mark.parametrize("device,atc_style,kwargs", dynamic_neighbor_allreduce_scenarios)
 def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
                            bf.DistributedAdaptWithCombineOptimizer)
@@ -381,18 +489,12 @@ if TEST_ON_GPU:
 
 @pytest.mark.parametrize("device,kwargs", dynamic_win_put_scenarios)
 def test_dynamic_win_put_optimizer(device, kwargs):
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
+    error_threshold = kwargs.get("error_threshold", 1.5)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
     
@@ -480,20 +582,14 @@ if TEST_ON_GPU:
                      marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
 @pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_scenarios)
 def test_optimizer_local_aggregation(device, communication_type, kwargs):
-    atc_style = kwargs["ATC"] if "ATC" in kwargs else False
-    error_threshold = kwargs["error_threshold"] if "error_threshold" in kwargs else 1.5
-    mini_batch_size = kwargs["mini_batch_size"] if "mini_batch_size" in kwargs else 16
+    atc_style = kwargs.get("ATC", False)
+    error_threshold = kwargs.get("error_threshold", 1.5)
+    mini_batch_size = kwargs.get("mini_batch_size", 16)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
-    isCUDA = device=="GPU"
-    if isCUDA:
-        # Bluefog: pin GPU to local rank.
-        device_id = (bf.local_rank() if bf.nccl_built() else
-                     bf.local_rank() % torch.cuda.device_count())
-        torch.cuda.set_device(device_id)
-        model.cuda()
+    isCUDA = pin_model_to_device(device, model)
 
     J = train_dataloader.batch_size // mini_batch_size
 
@@ -529,3 +625,67 @@ def test_optimizer_local_aggregation(device, communication_type, kwargs):
     assert (
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
+
+local_aggregation_duplicated_scenarios = []
+local_aggregation_duplicated_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                 id="AWC Neighbor Allreduce on CPU"))
+local_aggregation_duplicated_scenarios.append(
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                 id="ATC Neighbor Allreduce on CPU",
+                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+local_aggregation_duplicated_scenarios.append(
+    pytest.param("CPU", "win.put", {}, id="Win Put on CPU",
+                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+local_aggregation_duplicated_scenarios.append(
+    pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
+if TEST_ON_GPU:
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
+                     id="AWC Neighbor Allreduce on GPU"))
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
+                     id="ATC Neighbor Allreduce on GPU",
+                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", "win.put", {}, id="Win Put on GPU",
+                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    local_aggregation_duplicated_scenarios.append(
+        pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
+
+@pytest.mark.filterwarnings("error:Unexpected behavior")
+@pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_duplicated_scenarios)
+def test_optimizer_local_aggregation_duplicated(device, communication_type, kwargs):
+    # Accuracy doesn't matter here, mainly to test if there is warning thrown
+    # for local aggregation.
+    atc_style = kwargs.get("ATC", False)
+    mini_batch_size = kwargs.get("mini_batch_size", 16)
+
+    _, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
+        problem_setup(DuplicatedLinearNet)
+
+    isCUDA = pin_model_to_device(device, model)
+
+    mini_batch_size = train_dataloader.batch_size
+    J = train_dataloader.batch_size // mini_batch_size
+
+    if isinstance(communication_type, bf.CommunicationType):
+        base_dist_optimizer = (bf.DistributedAdaptThenCombineOptimizer if atc_style else
+                               bf.DistributedAdaptWithCombineOptimizer)
+        optimizer = base_dist_optimizer(optimizer, model=model,
+                                        communication_type=communication_type,
+                                        num_steps_per_communication=J)
+    elif communication_type == "win.put":
+        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model,
+                                                  num_steps_per_communication=J)
+    elif communication_type == "gradient.allreduce":
+        optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model,
+                                                             backward_passes_per_step=J)
+    else:
+        raise ValueError("Communication_type under test is not expected.")
+
+    # Train and test
+    for _ in range(num_epochs):
+        local_aggregation_train(model, optimizer, train_dataloader, isCUDA, mini_batch_size)
+        evaluation(model, train_dataloader, isCUDA)
+        evaluation(model, test_dataloader, isCUDA)
