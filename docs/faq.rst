@@ -6,7 +6,7 @@ FAQ
 .. contents:: Question Lists
   :local:
 
-Why does the warning related to ``num_steps_per_communication`` or ``backward_passes_per_step`` pop up in Bluefog optimizer?
+Why does the warning related to ``num_steps_per_communication`` pop up in Bluefog optimizer?
 --------------------------------------------------------------------------------------------
 
 During your usage of Bluefog distributed optimizer, you may encounter the following
@@ -21,13 +21,14 @@ two types of warnings:
      It does not matter how many step() functions are called in between.
      Please adjust num_step_per_communication to update model parameters locally.
      More information can be found in the FAQ page.
+
 .. code-block:: python
    
    Warning (unexpected behavior):
-     After backward_passes_per_step times of backward computation `loss.backward()` are called,
+     After num_steps_per_communication times of backward computation `loss.backward()` are called,
      an optimizer step() function must be called.
      It does not matter how many step() functions are called in between.
-     Please adjust backward_passes_per_step to accumulate gradients locally.
+     Please adjust num_steps_per_communication to accumulate gradients locally.
      More information can be found in the FAQ page.
 
 .. note::
@@ -37,10 +38,6 @@ two types of warnings:
    behavior during forward computation, while ``DistributedGradientAllreduceOptimizer`` and 
    ``DistributedAdaptThenCombineOptimizer`` triggers during backward computation.
    This is also reflected by the optimizer argument naming.
-   All other optimizers uses ``num_steps_per_communication``, while these two optimizers uses
-   ``backward_passes_per_step``.
-   The following discussion only focuses on forward computation case, but it works for backward
-   scenario as well.
 
 To understand the meaning of the above two warnings,
 consider the following admissible code snippet for local gradient aggregation case:
@@ -112,10 +109,9 @@ mini batch here, due to the left over mini batch in the first batch. No warning 
 this process, since after every 3 **F**, an **S** is followed.
 This kind of behavior may not be desired, and users should be careful with this situation.
 
-These are two common usages for ``num_steps_per_communication`` or ``backward_passes_per_step`` for
+These are two common usages for ``num_steps_per_communication``  for
 Bluefog distributed optimizer. But other usage is also allowed, as long as after
-``num_steps_per_communication`` forward computation or ``backward_passes_per_step``
-backward propogation, the step function is executed.
+``num_steps_per_communication`` forward computation or  backward propogation, the step function is executed.
 With that in mind, some other admissible calling procedures are **FFsFS**, **FsFFS**, etc.
 Some inadmissible calling procedures are **FFFFS**, **FFsFFS**.
 
