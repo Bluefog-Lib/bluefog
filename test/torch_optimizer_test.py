@@ -632,7 +632,6 @@ def test_optimizer_local_aggregation(device, communication_type, kwargs):
         test_mse.append(evaluation(model, test_dataloader, isCUDA))
     train_mse = np.array(train_mse)
     test_mse = np.array(test_mse)
-    print(train_mse)
 
     # Check if the MSEs in the last three epochs are small enough
     assert (
