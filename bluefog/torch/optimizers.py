@@ -845,11 +845,15 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         self._bluefog_delay = {v: self._num_steps_per_communication
                                for _, v in sorted(named_parameters)}
         self._timeline_hook_handles = []
+        self._unregistered_window = set()
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
             self._register_window()
             self._register_hooks()
+
+    def __del__(self):
+        self.unregister_window()
 
     def _register_hooks(self):
         for model in self._models:
@@ -907,6 +911,8 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         return hook
 
     def _register_window(self):
+        if bf.size() <= 1:
+            return
         for param_group in self.param_groups:
             for p in param_group["params"]:
                 name = self._parameter_names.get(p)
@@ -916,6 +922,23 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                 if not bf.win_create(p.data, name):
                     raise ValueError(
                         "Cannot allocate MPI window for the parameter {}".format(name))
+
+    def unregister_window(self):
+        ''' Unregister MPI Window objects for the optimizer manually.
+        '''
+        if bf.size() <= 1:
+            return
+        for param_group in self.param_groups:
+            for p in param_group["params"]:
+                name = self._parameter_names.get(p)
+                if name is None:
+                    raise KeyError(
+                        "Cannot find parameter {} in the _parameter_names dictionary".format(name))
+                if name not in self._unregistered_window:
+                    if not bf.win_free(name):
+                        raise ValueError(
+                            "Cannot free MPI window for the parameter {}".format(name))
+                    self._unregistered_window.add(name)
 
     def turn_on_timeline(self):
         handles = _register_timeline(self, self._models, self._parameter_names)
