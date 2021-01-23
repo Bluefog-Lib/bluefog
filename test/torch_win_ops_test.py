@@ -120,6 +120,24 @@ class WinOpsTests(unittest.TestCase):
         is_freed = bf.win_free()
         assert is_freed, "bf.win_free do not free window object successfully."
 
+    def test_win_get_names(self):
+        tensor_1 = torch.FloatTensor([1])
+        tensor_2 = torch.FloatTensor([2])
+        win_names = bf.get_current_created_window_names()
+        assert not win_names
+        assert bf.win_create(tensor_1, "1")
+        win_names = bf.get_current_created_window_names()
+        assert win_names == ["1"]
+        assert bf.win_create(tensor_2, "2")
+        win_names = bf.get_current_created_window_names()
+        assert win_names == ["1", "2"]
+        assert bf.win_free("1")
+        win_names = bf.get_current_created_window_names()
+        assert win_names == ["2"]
+        assert bf.win_free()
+        win_names = bf.get_current_created_window_names()
+        assert not win_names
+
     def test_win_update_with_given_weights(self):
         size = bf.size()
         rank = bf.rank()
