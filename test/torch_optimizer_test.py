@@ -553,7 +553,7 @@ local_aggregation_scenarios.append(
                  id="AWC Neighbor Allreduce on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce,
-                 {"ATC": True, "error_threshold": 10}, id="ATC Neighbor Allreduce on CPU"))
+                 {"ATC": True}, id="ATC Neighbor Allreduce on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
 local_aggregation_scenarios.append(
@@ -648,8 +648,7 @@ local_aggregation_duplicated_scenarios.append(
                  id="AWC Neighbor Allreduce on CPU"))
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
-                 id="ATC Neighbor Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                 id="ATC Neighbor Allreduce on CPU"))
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", "win.put", {}, id="Win Put on CPU",
                  marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
@@ -661,8 +660,7 @@ if TEST_ON_GPU:
                      id="AWC Neighbor Allreduce on GPU"))
     local_aggregation_duplicated_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
-                     id="ATC Neighbor Allreduce on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                     id="ATC Neighbor Allreduce on GPU"))
     local_aggregation_duplicated_scenarios.append(
         pytest.param("GPU", "win.put", {}, id="Win Put on GPU",
                      marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
