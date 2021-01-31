@@ -1259,7 +1259,8 @@ def DistributedWinPutOptimizer(optimizer, model, num_steps_per_communication=1, 
                                      communication. This allows local model parameter updates
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
-        window_prefix: A string to identify the unique DistributedWinPutOptimizer.
+        window_prefix: A string to identify the unique DistributedWinPutOptimizer, which will be
+                       applied as the prefix for window name.
 
     Returned optimizer has two extra parameters `dst_weights` and `force_barrier`.
     Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
