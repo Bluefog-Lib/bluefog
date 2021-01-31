@@ -59,10 +59,11 @@ class DuplicatedLinearNet(nn.Module):
         x = self.fc2(x)
         x = self.fc2(x)
         return x
-    
+
     @property
     def num_parameters(self):
         return self._num_parameters
+
 
 class HierarchicalLinearNet(nn.Module):
     def __init__(self, input_dim, output_dim):
@@ -75,7 +76,7 @@ class HierarchicalLinearNet(nn.Module):
         x = self.fc1(x)
         x = self.fc2(x)
         return x
-    
+
     @property
     def num_parameters(self):
         return self._num_parameters
@@ -85,19 +86,19 @@ class SimpleDataset:
     def __init__(self, x, y):
         self._x = x
         self._y = y
-    
+
     def __len__(self):
         return len(self._y)
-    
+
     def __getitem__(self, idx):
-        return (torch.tensor(self._x[idx],dtype=torch.float32),
-                torch.tensor(self._y[idx],dtype=torch.float32))
+        return (torch.tensor(self._x[idx], dtype=torch.float32),
+                torch.tensor(self._y[idx], dtype=torch.float32))
 
 # A ProblemBuilder for the linear problem with a specified input and output dimension.
 # The matrix A are randomly generated now.
 #   Y = XA + E, E ~ N(0, noise_level^2)
 class LinearProblemBuilder:
-    def __init__(self, input_dim = 16, output_dim = 3, noise_level = 1e-5):
+    def __init__(self, input_dim=16, output_dim=3, noise_level=1e-5):
         self._input_dim = input_dim
         self._output_dim = output_dim
         self._noise_level = noise_level
@@ -113,22 +114,24 @@ class LinearProblemBuilder:
     @property
     def input_dim(self):
         return self._input_dim
-    
+
     @input_dim.setter
     def input_dim(self, value):
         if not isinstance(value, int) or value <= 0:
-            raise ValueError("Input dimension should be an integer larger than 0.")
+            raise ValueError(
+                "Input dimension should be an integer larger than 0.")
         self._input_dim = value
         self._generate_matrices()
 
     @property
     def output_dim(self):
         return self._output_dim
-    
+
     @output_dim.setter
     def output_dim(self, value):
         if not isinstance(value, int) or value <= 0:
-            raise ValueError("Output dimension should be an integer larger than 0.")
+            raise ValueError(
+                "Output dimension should be an integer larger than 0.")
         self._output_dim = value
         self._generate_matrices()
 
@@ -139,7 +142,8 @@ class LinearProblemBuilder:
     @noise_level.setter
     def noise_level(self, value):
         if value < 0:
-            raise ValueError("Noise level should be larger than or equal to 0.")
+            raise ValueError(
+                "Noise level should be larger than or equal to 0.")
         self._noise_level = value
 
     def get_dataset(self, num_sample):
@@ -155,7 +159,7 @@ def problem_setup(net=LinearNet):
     batch_size = 128
     num_train_per_node = 1024
     num_test_per_node = 128
-    lr = 0.05
+    lr = 0.01
 
     # Setup Problem
     problem_builder = LinearProblemBuilder()
@@ -174,8 +178,9 @@ def problem_setup(net=LinearNet):
     bf.broadcast_optimizer_state(optimizer, root_rank=0)
     return problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs
 
+
 def pin_model_to_device(device, model):
-    isCUDA = device=="GPU"
+    isCUDA = device == "GPU"
     if isCUDA:
         # Bluefog: pin GPU to local rank.
         device_id = (bf.local_rank() if bf.nccl_built() else
@@ -222,7 +227,8 @@ def dynamic_neighbor_allreduce_train(model, optimizer, dataloader, isCUDA, dynam
     for data, target in dataloader:
         send_neighbors, recv_neighbors = next(dynamic_topo_gen)
         optimizer.send_neighbors = send_neighbors
-        optimizer.neighbor_weights = {r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
+        optimizer.neighbor_weights = {
+            r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
 
         if isCUDA:
@@ -251,6 +257,7 @@ def local_aggregation_train(model, optimizer, dataloader, isCUDA, mini_batch_siz
             loss.backward()
         optimizer.step()
 
+
 def evaluation(model, dataloader, isCUDA):
     mseloss = nn.MSELoss()
     model.eval()
@@ -265,6 +272,7 @@ def evaluation(model, dataloader, isCUDA):
         total_loss /= len(dataloader.dataset)
     avg_total_loss = bf.allreduce(total_loss)
     return avg_total_loss.item()
+
 
 static_topo_scenarios = []
 static_topo_scenarios.append(
@@ -336,7 +344,8 @@ def test_standard_optimizer(device, communication_type, kwargs):
         optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model,
                                                   window_prefix=window_prefix)
     elif communication_type == "gradient.allreduce":
-        optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model)
+        optimizer = bf.DistributedGradientAllreduceOptimizer(
+            optimizer, model=model)
     else:
         raise ValueError("Communication_type under test is not expected.")
 
@@ -394,6 +403,7 @@ if TEST_ON_GPU:
                      marks=pytest.mark.skip(
                          reason="Win put may not converge for hierarchical model.")))
 
+
 @pytest.mark.parametrize("device,communication_type,kwargs", hierarchical_model_scenarios)
 def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
     atc_style = kwargs.get("ATC", False)
@@ -414,7 +424,8 @@ def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
         optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model,
         window_prefix=window_prefix)
     elif communication_type == "gradient.allreduce":
-        optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model)
+        optimizer = bf.DistributedGradientAllreduceOptimizer(
+            optimizer, model=model)
     else:
         raise ValueError("Communication_type under test is not expected.")
 
@@ -451,6 +462,7 @@ if TEST_ON_GPU:
     dynamic_neighbor_allreduce_scenarios.append(
         pytest.param("GPU", True, {}, id="Dynamic ATC Neighbor Allreduce on GPU"))
 
+
 @pytest.mark.parametrize("device,atc_style,kwargs", dynamic_neighbor_allreduce_scenarios)
 def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
     error_threshold = kwargs.get("error_threshold", 1.5)
@@ -464,8 +476,9 @@ def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
                            bf.DistributedAdaptWithCombineOptimizer)
     optimizer = base_dist_optimizer(optimizer, model=model,
                                     communication_type=bf.CommunicationType.neighbor_allreduce)
-    
-    dynamic_topo_gen = topology_util.GetDynamicOnePeerSendRecvRanks(bf.load_topology(), bf.rank())
+
+    dynamic_topo_gen = topology_util.GetDynamicOnePeerSendRecvRanks(
+        bf.load_topology(), bf.rank())
 
     # Train and test
     train_mse = []
@@ -486,6 +499,7 @@ def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
 
+
 # Window put dynamic tests
 dynamic_win_put_scenarios = []
 dynamic_win_put_scenarios.append(
@@ -493,6 +507,7 @@ dynamic_win_put_scenarios.append(
 if TEST_ON_GPU:
     dynamic_win_put_scenarios.append(
         pytest.param("GPU", {'window_prefix':'GPU'}, id="Dynamic window put on GPU"))
+
 
 @pytest.mark.parametrize("device,kwargs", dynamic_win_put_scenarios)
 def test_dynamic_win_put_optimizer(device, kwargs):
@@ -510,7 +525,8 @@ def test_dynamic_win_put_optimizer(device, kwargs):
     train_mse = []
     test_mse = []
     for epoch in range(num_epochs):
-        dynamic_win_put_train(model, optimizer, train_dataloader, isCUDA, epoch)
+        dynamic_win_put_train(
+            model, optimizer, train_dataloader, isCUDA, epoch)
         train_mse.append(evaluation(model, train_dataloader, isCUDA))
         test_mse.append(evaluation(model, test_dataloader, isCUDA))
     train_mse = np.array(train_mse)
@@ -525,29 +541,26 @@ def test_dynamic_win_put_optimizer(device, kwargs):
     ), "Train MSE in the last three epochs doesn't coverge."
     optimizer.unregister_window()
 
+
 local_aggregation_scenarios = []
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
                  id="AWC Empty on CPU"))
-# TODO(ybc): Support local aggregation scenario for ATC optimizers
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
-                 id="ATC Empty on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                 id="ATC Empty on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": False},
                  id="AWC Allreduce on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.allreduce, {"ATC": True},
-                 id="ATC Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                 id="ATC Allreduce on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
                  id="AWC Neighbor Allreduce on CPU"))
 local_aggregation_scenarios.append(
-    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
-                 id="ATC Neighbor Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+    pytest.param("CPU", bf.CommunicationType.neighbor_allreduce,
+                 {"ATC": True}, id="ATC Neighbor Allreduce on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
 local_aggregation_scenarios.append(
@@ -567,26 +580,24 @@ if TEST_ON_GPU:
                      id="AWC Empty on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.empty, {"ATC": True, "error_threshold": 2},
-                     id="ATC Empty on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                     id="ATC Empty on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": False},
                      id="AWC Allreduce on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.allreduce, {"ATC": True},
-                     id="ATC Allreduce on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                     id="ATC Allreduce on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
                      id="AWC Neighbor Allreduce on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
-                     id="ATC Neighbor Allreduce on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                     id="ATC Neighbor Allreduce on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
     local_aggregation_scenarios.append(
         pytest.param("GPU", "win.put", {'window_prefix': 'GPU'}, id="Window put on GPU"))
+
 @pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_scenarios)
 def test_optimizer_local_aggregation(device, communication_type, kwargs):
     atc_style = kwargs.get("ATC", False)
@@ -612,7 +623,7 @@ def test_optimizer_local_aggregation(device, communication_type, kwargs):
                                                   num_steps_per_communication=J)
     elif communication_type == "gradient.allreduce":
         optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model,
-                                                             backward_passes_per_step=J)
+                                                             num_steps_per_communication=J)
     else:
         raise ValueError("Communication_type under test is not expected.")
 
@@ -620,7 +631,8 @@ def test_optimizer_local_aggregation(device, communication_type, kwargs):
     train_mse = []
     test_mse = []
     for _ in range(num_epochs):
-        local_aggregation_train(model, optimizer, train_dataloader, isCUDA, mini_batch_size)
+        local_aggregation_train(
+            model, optimizer, train_dataloader, isCUDA, mini_batch_size)
         train_mse.append(evaluation(model, train_dataloader, isCUDA))
         test_mse.append(evaluation(model, test_dataloader, isCUDA))
     train_mse = np.array(train_mse)
@@ -643,8 +655,7 @@ local_aggregation_duplicated_scenarios.append(
                  id="AWC Neighbor Allreduce on CPU"))
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
-                 id="ATC Neighbor Allreduce on CPU",
-                 marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                 id="ATC Neighbor Allreduce on CPU"))
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", "win.put", {'window_prefix': 'CPU'}, id="Win Put on CPU"))
 local_aggregation_duplicated_scenarios.append(
@@ -655,12 +666,12 @@ if TEST_ON_GPU:
                      id="AWC Neighbor Allreduce on GPU"))
     local_aggregation_duplicated_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
-                     id="ATC Neighbor Allreduce on GPU",
-                     marks=pytest.mark.skip(reason="ATC doesn't support local aggregation yet")))
+                     id="ATC Neighbor Allreduce on GPU"))
     local_aggregation_duplicated_scenarios.append(
         pytest.param("GPU", "win.put", {'window_prefix': 'GPU'}, id="Win Put on GPU"))
     local_aggregation_duplicated_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
+
 
 @pytest.mark.filterwarnings("error:Unexpected behavior")
 @pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_duplicated_scenarios)
@@ -691,13 +702,14 @@ def test_optimizer_local_aggregation_duplicated(device, communication_type, kwar
                                                   num_steps_per_communication=J)
     elif communication_type == "gradient.allreduce":
         optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model,
-                                                             backward_passes_per_step=J)
+                                                             num_steps_per_communication=J)
     else:
         raise ValueError("Communication_type under test is not expected.")
 
     # Train and test
     for _ in range(num_epochs):
-        local_aggregation_train(model, optimizer, train_dataloader, isCUDA, mini_batch_size)
+        local_aggregation_train(
+            model, optimizer, train_dataloader, isCUDA, mini_batch_size)
         evaluation(model, train_dataloader, isCUDA)
         evaluation(model, test_dataloader, isCUDA)
 

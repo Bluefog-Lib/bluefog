@@ -42,10 +42,10 @@ _warning_message_num_step_per_communication = (
 )
 _warning_message_backward_pass_per_step = (
     "Unexpected behavior:\n"
-    "  After backward_passes_per_step times of backward computation `loss.backward()` are called,\n"
+    "  After num_steps_per_communication times of backward computation `loss.backward()` are called,\n"
     "  an optimizer step() function must be called.\n"
     "  It does not matter how many step() functions are called in between.\n"
-    "  Please adjust backward_passes_per_step to accumulate gradients locally.\n"
+    "  Please adjust num_steps_per_communication to accumulate gradients locally.\n"
     "  More information can be found in the FAQ page.\n"
 )
 
@@ -523,6 +523,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
         self._reduce_delay = {v: self._backward_passes_per_step
                               for _, v in sorted(named_parameters)}
+        self._step_delay = {v: self._backward_passes_per_step
+                            for _, v in sorted(named_parameters)}
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -568,7 +570,13 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
                     "However, you can register you own step to this class. The signature "
                     "should be parameter-wise tep func:\n"
                     "   func(parameter, gradient, parameter_group) -> None\n")
-            self._step_func(p, grad.data, param_group)
+            if self._step_delay[p] <= 0:
+                if not self._error_encountered:
+                    warnings.warn(_warning_message_num_step_per_communication)
+                    self._error_encountered = True
+            self._step_delay[p] -= 1
+            if self._step_delay[p] == 0:
+                self._step_func(p, grad.data, param_group)
 
             if self._reduce_delay[p] <= 0:
                 if not self._error_encountered:
@@ -802,10 +810,22 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
             loss = None
             if closure is not None:
                 loss = closure()
+
+            if all(v != 0 for k, v in self._step_delay.items()):
+                # This corresponding to case 2 multiple local updates.
+                super(self.__class__, self).step()
+            elif all(v == 0 for k, v in self._step_delay.items()):
+                self._step_delay = self._step_delay.fromkeys(
+                    self._step_delay, self._backward_passes_per_step)
+            else:
+                raise ValueError(
+                    "We do not support partial step update in ATC yet.")
+
             self.synchronize()
             # TODO(ybc) Figure out a better and more robust way to do sync in ATC.
             # Note, tere self. _synchronized just turns from true to false immediately.
             self._synchronized = False
+
             return loss
         else:
             # Optimizer.step() might be triggered when user calls broadcast_optimizer_state()
@@ -1354,7 +1374,7 @@ def DistributedHierarchicalNeighborAllreduceOptimizer(optimizer, model,
 
 
 def DistributedGradientAllreduceOptimizer(optimizer, model,
-                                          backward_passes_per_step=1):
+                                          num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
     The communication happens when backward propagation happens, which is the same as Horovod.
@@ -1400,12 +1420,12 @@ def DistributedGradientAllreduceOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, backward_passes_per_step)
+    return cls(optimizer.param_groups, model, num_steps_per_communication)
 
 
 def DistributedAdaptThenCombineOptimizer(optimizer, model,
                                          communication_type=CommunicationType.neighbor_allreduce,
-                                         backward_passes_per_step=1):
+                                         num_steps_per_communication=1):
     """
     An distributed optimizer that wraps another torch.optim.Optimizer.
     The communication is applied on the parameters when backward propagation triggered and
@@ -1434,7 +1454,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         communication_type: A enum type to determine use neighbor_allreduce, or allreduce, or
             hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
             Empty function just means no communication.
-        backward_passes_per_step: Number of expected backward function calls before each
+        num_steps_per_communication: Number of expected backward function calls before each
                                   communication. This allows local model parameter updates
                                   per num_steps_per_communication before reducing them over
                                   distributed computation resources.
@@ -1446,7 +1466,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
-        >>>          backward_passes_per_step=J)
+        >>>          num_steps_per_communication=J)
         >>> opt.zero_grad()
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
@@ -1458,7 +1478,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
 
         >>> opt = bf.DistributedAdaptWithCombineOptimizer(optimizer, model,
         >>>          communication_type=CommunicationType.neighbor_allreduce,
-        >>>          backward_passes_per_step=J)
+        >>>          num_steps_per_communication=J)
         >>> for j in range(J):
         >>>     output = model(data_batch_i)
         >>>     loss = ...
@@ -1471,7 +1491,7 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedAdaptThenCombineOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, communication_type, backward_passes_per_step)
+    return cls(optimizer.param_groups, model, communication_type, num_steps_per_communication)
 
 
 def DistributedAdaptWithCombineOptimizer(optimizer, model,
