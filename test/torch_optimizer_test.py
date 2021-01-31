@@ -295,11 +295,8 @@ static_topo_scenarios.append(
                  id="ATC Neighbor Allreduce on CPU"))
 static_topo_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
-# TODO(hanbinhu): support multiple window put optimizer tests in the file. This issue may be due to
-# duplicate name registration for the MPI window.
 static_topo_scenarios.append(
-    pytest.param("CPU", "win.put", {}, id="Window put on CPU",
-                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    pytest.param("CPU", "win.put", {'window_prefix': 'CPU'}, id="Window put on CPU"))
 if TEST_ON_GPU:
     static_topo_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.empty, {"ATC": False, "error_threshold": 2},
@@ -322,8 +319,7 @@ if TEST_ON_GPU:
     static_topo_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
     static_topo_scenarios.append(
-        pytest.param("GPU", "win.put", {}, id="Window put on GPU",
-                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+        pytest.param("GPU", "win.put", {'window_prefix': 'GPU'}, id="Window put on GPU"))
 
 # device can be set to "GPU" or "CPU".
 # communication_type can be selected from bf.CommunicationType, "gradient.allreduce" or "win.put".
@@ -332,6 +328,7 @@ if TEST_ON_GPU:
 def test_standard_optimizer(device, communication_type, kwargs):
     atc_style = kwargs.get("ATC", False)
     error_threshold = kwargs.get("error_threshold", 1.5)
+    window_prefix = kwargs.get("window_prefix", None)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
@@ -344,7 +341,8 @@ def test_standard_optimizer(device, communication_type, kwargs):
         optimizer = base_dist_optimizer(optimizer, model=model,
                                         communication_type=communication_type)
     elif communication_type == "win.put":
-        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
+        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model,
+                                                  window_prefix=window_prefix)
     elif communication_type == "gradient.allreduce":
         optimizer = bf.DistributedGradientAllreduceOptimizer(
             optimizer, model=model)
@@ -369,6 +367,8 @@ def test_standard_optimizer(device, communication_type, kwargs):
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
 
+    if communication_type == "win.put":
+        optimizer.unregister_window()
 
 hierarchical_model_scenarios = []
 hierarchical_model_scenarios.append(
@@ -383,8 +383,9 @@ hierarchical_model_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU",
                  marks=pytest.mark.skip(reason="GA may not converge for hierarchical model.")))
 hierarchical_model_scenarios.append(
-    pytest.param("CPU", "win.put", {}, id="Window put on CPU",
-                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    pytest.param("CPU", "win.put", {'window_prefix': 'CPU'}, id="Window put on CPU",
+                 marks=pytest.mark.skip(reason="Win put may not converge for hierarchical model.")))
+
 if TEST_ON_GPU:
     hierarchical_model_scenarios.append(
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": False},
@@ -398,14 +399,16 @@ if TEST_ON_GPU:
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU",
                      marks=pytest.mark.skip(reason="GA may not converge for hierarchical model.")))
     hierarchical_model_scenarios.append(
-        pytest.param("GPU", "win.put", {}, id="Window put on GPU",
-                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+        pytest.param("GPU", "win.put", {'window_prefix', 'GPU'}, id="Window put on GPU",
+                     marks=pytest.mark.skip(
+                         reason="Win put may not converge for hierarchical model.")))
 
 
 @pytest.mark.parametrize("device,communication_type,kwargs", hierarchical_model_scenarios)
 def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
     atc_style = kwargs.get("ATC", False)
     error_threshold = kwargs.get("error_threshold", 1.5)
+    window_prefix = kwargs.get("window_prefix", None)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup(HierarchicalLinearNet)
@@ -418,7 +421,8 @@ def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
         optimizer = base_dist_optimizer(optimizer, model=model,
                                         communication_type=communication_type)
     elif communication_type == "win.put":
-        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
+        optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model,
+        window_prefix=window_prefix)
     elif communication_type == "gradient.allreduce":
         optimizer = bf.DistributedGradientAllreduceOptimizer(
             optimizer, model=model)
@@ -443,6 +447,8 @@ def test_optimizer_for_hierarchical_model(device, communication_type, kwargs):
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
 
+    if communication_type == "win.put":
+        optimizer.unregister_window()
 
 # Neighbor allreduce dynamic tests
 dynamic_neighbor_allreduce_scenarios = []
@@ -497,24 +503,24 @@ def test_dynamic_neighbor_allreduce_optimizer(device, atc_style, kwargs):
 # Window put dynamic tests
 dynamic_win_put_scenarios = []
 dynamic_win_put_scenarios.append(
-    pytest.param("CPU", {}, id="Dynamic window put on CPU",
-                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    pytest.param("CPU", {'window_prefix':'CPU'}, id="Dynamic window put on CPU"))
 if TEST_ON_GPU:
     dynamic_win_put_scenarios.append(
-        pytest.param("GPU", {}, id="Dynamic window put on GPU"))
+        pytest.param("GPU", {'window_prefix':'GPU'}, id="Dynamic window put on GPU"))
 
 
 @pytest.mark.parametrize("device,kwargs", dynamic_win_put_scenarios)
 def test_dynamic_win_put_optimizer(device, kwargs):
     error_threshold = kwargs.get("error_threshold", 1.5)
+    window_prefix = kwargs.get("window_prefix", None)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
 
     isCUDA = pin_model_to_device(device, model)
 
-    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
-
+    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model, window_prefix=window_prefix)
+    
     # Train and test
     train_mse = []
     test_mse = []
@@ -533,6 +539,7 @@ def test_dynamic_win_put_optimizer(device, kwargs):
     assert (
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
+    optimizer.unregister_window()
 
 
 local_aggregation_scenarios = []
@@ -557,8 +564,7 @@ local_aggregation_scenarios.append(
 local_aggregation_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
 local_aggregation_scenarios.append(
-    pytest.param("CPU", "win.put", {}, id="Window put on CPU",
-                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    pytest.param("CPU", "win.put", {'window_prefix': 'CPU'}, id="Window put on CPU"))
 local_aggregation_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"mini_batch_size": 4},
                  id="Neighbor allreduce AWC on CPU with a mini_batch_size of 4"))
@@ -590,15 +596,14 @@ if TEST_ON_GPU:
     local_aggregation_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
     local_aggregation_scenarios.append(
-        pytest.param("GPU", "win.put", {}, id="Window put on GPU",
-                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
-
+        pytest.param("GPU", "win.put", {'window_prefix': 'GPU'}, id="Window put on GPU"))
 
 @pytest.mark.parametrize("device,communication_type,kwargs", local_aggregation_scenarios)
 def test_optimizer_local_aggregation(device, communication_type, kwargs):
     atc_style = kwargs.get("ATC", False)
     error_threshold = kwargs.get("error_threshold", 1.5)
     mini_batch_size = kwargs.get("mini_batch_size", 16)
+    window_prefix = kwargs.get("window_prefix", None)
 
     problem_builder, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup()
@@ -641,6 +646,8 @@ def test_optimizer_local_aggregation(device, communication_type, kwargs):
         test_mse[-3:].max() < error_threshold*problem_builder.noise_level**2
     ), "Train MSE in the last three epochs doesn't coverge."
 
+    if communication_type == "win.put":
+        optimizer.unregister_window()
 
 local_aggregation_duplicated_scenarios = []
 local_aggregation_duplicated_scenarios.append(
@@ -650,8 +657,7 @@ local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
                  id="ATC Neighbor Allreduce on CPU"))
 local_aggregation_duplicated_scenarios.append(
-    pytest.param("CPU", "win.put", {}, id="Win Put on CPU",
-                 marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+    pytest.param("CPU", "win.put", {'window_prefix': 'CPU'}, id="Win Put on CPU"))
 local_aggregation_duplicated_scenarios.append(
     pytest.param("CPU", "gradient.allreduce", {}, id="Gradient Allreduce on CPU"))
 if TEST_ON_GPU:
@@ -662,8 +668,7 @@ if TEST_ON_GPU:
         pytest.param("GPU", bf.CommunicationType.neighbor_allreduce, {"ATC": True},
                      id="ATC Neighbor Allreduce on GPU"))
     local_aggregation_duplicated_scenarios.append(
-        pytest.param("GPU", "win.put", {}, id="Win Put on GPU",
-                     marks=pytest.mark.skip(reason="Multiple win_put optimizer tests will fail")))
+        pytest.param("GPU", "win.put", {'window_prefix': 'GPU'}, id="Win Put on GPU"))
     local_aggregation_duplicated_scenarios.append(
         pytest.param("GPU", "gradient.allreduce", {}, id="Gradient Allreduce on GPU"))
 
@@ -675,6 +680,7 @@ def test_optimizer_local_aggregation_duplicated(device, communication_type, kwar
     # for local aggregation.
     atc_style = kwargs.get("ATC", False)
     mini_batch_size = kwargs.get("mini_batch_size", 16)
+    window_prefix = kwargs.get("window_prefix", None)
 
     _, train_dataloader, test_dataloader, model, optimizer, num_epochs = \
         problem_setup(DuplicatedLinearNet)
@@ -692,6 +698,7 @@ def test_optimizer_local_aggregation_duplicated(device, communication_type, kwar
                                         num_steps_per_communication=J)
     elif communication_type == "win.put":
         optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model,
+                                                  window_prefix=window_prefix,
                                                   num_steps_per_communication=J)
     elif communication_type == "gradient.allreduce":
         optimizer = bf.DistributedGradientAllreduceOptimizer(optimizer, model=model,
@@ -705,3 +712,6 @@ def test_optimizer_local_aggregation_duplicated(device, communication_type, kwar
             model, optimizer, train_dataloader, isCUDA, mini_batch_size)
         evaluation(model, train_dataloader, isCUDA)
         evaluation(model, test_dataloader, isCUDA)
+
+    if communication_type == "win.put":
+        optimizer.unregister_window()

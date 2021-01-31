@@ -1281,6 +1281,10 @@ def win_wait(handle: int) -> bool:
     return True
 
 
+def get_current_created_window_names() -> List[str]:
+    """Return the names of current created windows."""
+    return sorted(list(_win_map.keys()))
+
 def get_win_version(name: str) -> Dict[int, int]:
     """ Get the version of tensor stored in the win buffer.
 
