@@ -823,7 +823,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
 
 class _DistributedWinOptimizer(torch.optim.Optimizer):
 
-    def __init__(self, params, model, num_steps_per_communication, pull_style):
+    def __init__(self, params, model, num_steps_per_communication, window_prefix, pull_style):
         super(self.__class__, self).__init__(params)
 
         if pull_style:
@@ -831,11 +831,12 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         else:
             self.dst_weights = None # use to control the behavior of win_put dynamically.
         self.force_barrier = False
+        self.window_prefix = window_prefix+'.' if window_prefix is not None else ''
 
         named_parameters, models = _check_named_parameters(self, model)
         self._models = models
         self._pull_style = pull_style
-        self._parameter_names = {v: k for k, v in sorted(named_parameters)}
+        self._parameter_names = {v: self.window_prefix+k for k, v in sorted(named_parameters)}
         self._handles = {}  # store parameter -> handle
         self._synchronized = False
         self._should_synchronize = True
@@ -845,7 +846,6 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         self._bluefog_delay = {v: self._num_steps_per_communication
                                for _, v in sorted(named_parameters)}
         self._timeline_hook_handles = []
-        self._unregistered_window = set()
         if os.getenv('BLUEFOG_TIMELINE'):
             self.turn_on_timeline()
         if bf.size() > 1:
@@ -872,7 +872,7 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                 for name, p in layer.named_parameters():
                     if self._use_timeline:
                         # End forward computation timeline
-                        bf.timeline_end_activity(parent_name+'.'+name)
+                        bf.timeline_end_activity(self.window_prefix+parent_name+'.'+name)
                     if not layer.training:
                         continue
                     if p.requires_grad:
@@ -883,7 +883,7 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                         self._bluefog_delay[p] -= 1
                         if self._bluefog_delay[p] == 0:
                             handle = bf.win_put_nonblocking(
-                                tensor=p.data, name=parent_name+'.'+name,
+                                tensor=p.data, name=self.window_prefix+parent_name+'.'+name,
                                 dst_weights=self.dst_weights, require_mutex=False)
                             self._handles[p] = handle
         return hook
@@ -894,7 +894,7 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                 for name, p in layer.named_parameters():
                     if self._use_timeline:
                         # End forward computation timeline
-                        bf.timeline_end_activity(parent_name+'.'+name)
+                        bf.timeline_end_activity(self.window_prefix+parent_name+'.'+name)
                     if not layer.training:
                         continue
                     if p.requires_grad:
@@ -905,8 +905,8 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                         self._bluefog_delay[p] -= 1
                         if self._bluefog_delay[p] == 0:
                             handle = bf.win_get_nonblocking(
-                                name=parent_name+'.'+name, src_weights=self.src_weights,
-                                require_mutex=True)
+                                name=self.window_prefix+parent_name+'.'+name,
+                                src_weights=self.src_weights, require_mutex=True)
                             self._handles[p] = handle
         return hook
 
@@ -934,11 +934,10 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
                 if name is None:
                     raise KeyError(
                         "Cannot find parameter {} in the _parameter_names dictionary".format(name))
-                if name not in self._unregistered_window:
+                if name in bf.get_current_created_window_names():
                     if not bf.win_free(name):
                         raise ValueError(
                             "Cannot free MPI window for the parameter {}".format(name))
-                    self._unregistered_window.add(name)
 
     def turn_on_timeline(self):
         handles = _register_timeline(self, self._models, self._parameter_names)
@@ -1249,8 +1248,7 @@ def DistributedPullGetOptimizer(optimizer, model,
     return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=True)
 
 
-def DistributedWinPutOptimizer(optimizer, model,
-                               num_steps_per_communication=1):
+def DistributedWinPutOptimizer(optimizer, model, num_steps_per_communication=1, window_prefix=None):
     """An distributed optimizer that wraps another torch.optim.Optimizer with
     pull model average through bf.win_put ops.
 
@@ -1261,6 +1259,7 @@ def DistributedWinPutOptimizer(optimizer, model,
                                      communication. This allows local model parameter updates
                                      per num_steps_per_communication before reducing them over
                                      distributed computation resources.
+        window_prefix: A string to identify the unique DistributedWinPutOptimizer.
 
     Returned optimizer has two extra parameters `dst_weights` and `force_barrier`.
     Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
@@ -1274,7 +1273,8 @@ def DistributedWinPutOptimizer(optimizer, model,
         (optimizer.__class__,),
         dict(_DistributedWinOptimizer.__dict__),
     )
-    return cls(optimizer.param_groups, model, num_steps_per_communication, pull_style=False)
+    return cls(optimizer.param_groups, model, num_steps_per_communication,
+               window_prefix, pull_style=False)
 
 
 def DistributedAllreduceOptimizer(optimizer, model,
