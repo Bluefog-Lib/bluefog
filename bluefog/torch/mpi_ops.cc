@@ -439,6 +439,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
+          } else {  // recv_size == 0 
+            output.mul_(self_weight);
           }
         }));
 
@@ -529,8 +531,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
             }
             output.resize_(shape_vector);
             MaybeCopyBufferBack(output, output_buffer);
-          } else {
-            output.set_(tensor);
+          } else { // recv_size == 0
+            output.set_(tensor.mul(self_weight));
           }
         }));
     ThrowIfError(enqueue_result);
