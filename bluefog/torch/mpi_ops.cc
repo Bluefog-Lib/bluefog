@@ -267,6 +267,9 @@ int DoAllgather(::torch::Tensor tensor, ::torch::Tensor output, const std::strin
 }
 
 int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
+                        const std::vector<int>& src_ranks,
+                        const std::vector<int>& dst_ranks,
+                        bool dynamic_neighbors_enabled, bool enable_topo_check,
                         const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
@@ -292,7 +295,8 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, ready_event, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_context, ready_event, src_ranks, dst_ranks,
+        dynamic_neighbors_enabled, enable_topo_check, op_name, CPU_DEVICE_ID,
         callback_wrapper([cpu_output, device, output]() mutable {
           with_device device_guard(device);
           // output needs to be resized before copying in the CPU tensor.
@@ -307,8 +311,9 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto ready_event = RecordReadyEvent(device);
     auto enqueue_result = EnqueueTensorNeighborAllgather(
-        bf_tensor, bf_context, ready_event,op_name, device,
-        callback_wrapper(/*func=*/[](){}));
+        bf_tensor, bf_context, ready_event, src_ranks, dst_ranks,
+        dynamic_neighbors_enabled, enable_topo_check, op_name, device,
+        callback_wrapper(/*func=*/[]() {}));
     ThrowIfError(enqueue_result);
   }
   return handle;

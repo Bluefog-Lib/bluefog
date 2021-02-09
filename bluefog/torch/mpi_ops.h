@@ -92,7 +92,9 @@ ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 
 #define NEIGHBOR_ALLGATHER_H(torch_Tensor, THTensor)                              \
   extern "C" int bluefog_torch_neighbor_allgather_nonblocking_##torch_Tensor(     \
-      THTensor* tensor, THTensor* output, char* name);
+      THTensor* tensor, THTensor* output, const std::vector<int>& src_ranks,      \
+      const std::vector<int>& dst_ranks, bool dynamic_neighbors_enabled,          \
+      bool enable_topo_check, char* name);
 
 NEIGHBOR_ALLGATHER_H(torch_ByteTensor, THByteTensor)
 NEIGHBOR_ALLGATHER_H(torch_CharTensor, THCharTensor)

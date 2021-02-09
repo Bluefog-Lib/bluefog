@@ -375,15 +375,28 @@ def _neighbor_allgather_function_factory(tensor):
     return 'bluefog_torch_neighbor_allgather_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allgather_nonblocking(tensor, output, name):
+def _neighbor_allgather_nonblocking(tensor, output, src_ranks, dst_ranks, name):
     function = _check_function(_neighbor_allgather_function_factory, tensor)
-    handle = getattr(mpi_lib, function)(tensor, output,
+    if dst_ranks is None and src_ranks is None:
+        src_ranks, dst_ranks = [], []
+        dynamic_neighbors_enabled = False
+    elif dst_ranks is not None and src_ranks is not None:
+        dynamic_neighbors_enabled = True
+    else:
+        raise ValueError(
+            "Argument dst_ranks and src_ranks have to be presented at the same time")
+    enable_topo_check = False
+    handle = getattr(mpi_lib, function)(tensor, output, src_ranks, dst_ranks,
+                                        dynamic_neighbors_enabled, enable_topo_check,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
-def neighbor_allgather(tensor: torch.Tensor, name: Optional[str] = None) -> torch.Tensor:
+def neighbor_allgather(tensor: torch.Tensor, *,
+                       src_ranks: Optional[List] = None,
+                       dst_ranks: Optional[List] = None,
+                       name: Optional[str] = None,) -> torch.Tensor:
     """
     A function that concatenates the input tensor with the same input tensor on
     on all neighbor Bluefog processes (Not include self). The input tensor is not modified.
@@ -393,6 +406,10 @@ def neighbor_allgather(tensor: torch.Tensor, name: Optional[str] = None) -> torc
 
     Arguments:
         tensor: A tensor to allgather.
+        dst_ranks: A list of destination ranks. If present, ignoring global topology setting.
+            This argument is useful under dynamic topology case.
+            Note dst_ranks and src_ranks should be presented at same time and compatible.
+        src_ranks: A list of source ranks.
         name: A name of the allgather operation.
 
     Returns:
@@ -401,11 +418,15 @@ def neighbor_allgather(tensor: torch.Tensor, name: Optional[str] = None) -> torc
         the first dimension, which may be greater and is the sum of all first
         dimensions of the tensors in neighbor Bluefog processes.
     """
-    handle = neighbor_allgather_nonblocking(tensor, name)
+    handle = neighbor_allgather_nonblocking(
+        tensor, src_ranks=src_ranks, dst_ranks=dst_ranks, name=name)
     return synchronize(handle)
 
 
-def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: Optional[str] = None) -> int:
+def neighbor_allgather_nonblocking(tensor: torch.Tensor, *,
+                                   src_ranks: Optional[List] = None,
+                                   dst_ranks: Optional[List] = None,
+                                   name: Optional[str] = None) -> int:
     """
     A function that nonblockingly concatenates the input tensor with the same input
     tensor on all neighbor Bluefog processes (Not include self).
@@ -416,6 +437,10 @@ def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: Optional[str] = N
 
     Arguments:
         tensor: A tensor to allgather.
+        src_ranks: A list of source ranks. If present, ignoring global topology setting.
+            This argument is useful under dynamic topology case.
+            Note dst_ranks and src_ranks should be presented at same time and compatible.
+        dst_ranks: A list of destination ranks.
         name: A name of the allgather operation.
 
     Returns:
@@ -423,7 +448,7 @@ def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: Optional[str] = N
         `synchronize()`.
     """
     output = tensor.new()  # real size will be allocated later.
-    return _neighbor_allgather_nonblocking(tensor, output, name)
+    return _neighbor_allgather_nonblocking(tensor, output, src_ranks, dst_ranks, name)
 
 
 def _neighbor_allreduce_function_factory(tensor):

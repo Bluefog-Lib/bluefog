@@ -135,6 +135,10 @@ Status EnqueueTensorAllgather(std::shared_ptr<Tensor> tensor,
 Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<OpContext> context,
                                       std::shared_ptr<ReadyEvent> ready_event,
+                                      const std::vector<int>& src_ranks,
+                                      const std::vector<int>& dst_ranks,
+                                      bool dynamic_neighbors_enabled,
+                                      bool enable_topo_check,
                                       const std::string& name, const int device,
                                       StatusCallback callback);
 
