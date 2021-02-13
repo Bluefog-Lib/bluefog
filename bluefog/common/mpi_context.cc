@@ -442,6 +442,19 @@ bool MPIContext::UnregisterAllWindowName() {
 
 Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                   Communicator comm_type) {
+  if (comm_type == Communicator::DYNAMIC) {
+    return Status::InvalidArgument(
+        "Try to allocate the output with dynamic topology but do not provide "
+        "the source and receive ranks.");
+  } else {
+    return AllocateOutput(entry, recvcounts, comm_type, nullptr, nullptr);
+  }
+}
+
+Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
+                                  Communicator comm_type,
+                                  std::shared_ptr<std::vector<int>> dst_ranks,
+                                  std::shared_ptr<std::vector<int>> src_ranks) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
@@ -475,6 +488,32 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
     ret_code =
         MPI_Neighbor_allgather(send_count, 1, MPI_INT, gather_count, 1, MPI_INT,
                                GetMPICommunicator(Communicator::GRAPH));
+  } else if (comm_type == Communicator::DYNAMIC) {
+    ret_code = MPI_SUCCESS;
+    // for (int i = 0; i < nrecv; ++i) {
+    //   void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+    //                           num_elements * i * element_size);
+    //   int ret_code = MPI_Irecv(
+    //       recvbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
+    //       entry.recv_neighbors->at(i),
+    //       mpi_ctx_.rank_ + entry.recv_neighbors->at(i),
+    //       mpi_ctx_.GetMPICommunicator(Communicator::GRAPH),
+    //       &requests[i + nsend]);
+    //   if (ret_code != MPI_SUCCESS) {
+    //     break;
+    //   }
+    // }
+    // for (int i = 0; i < nsend; ++i) {
+    //   int ret_code = MPI_Isend(
+    //       sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
+    //       entry.send_neighbors->at(i),
+    //       mpi_ctx_.rank_ + entry.send_neighbors->at(i),
+    //       mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
+    //   if (ret_code != MPI_SUCCESS) {
+    //     break;
+    //   }
+    // }
+    // MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
   }
 
   if (ret_code != MPI_SUCCESS) {
@@ -508,12 +547,14 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
 }
 
 void MPIContext::SetDisplacements(const int* recvcounts, int*& displcmnts,
-                                  Communicator comm_type) {
+                                  Communicator comm_type, int source_neighbor_cnt) {
   int cnt_size = 0;
   if (comm_type == Communicator::GLOBAL) {
     cnt_size = size_;
   } else if (comm_type == Communicator::GRAPH) {
     cnt_size = neighbor_indgree_;
+  } else if (comm_type == Communicator::DYNAMIC) {
+    cnt_size = source_neighbor_cnt;
   }
   for (int rc = 0; rc < cnt_size; ++rc) {
     if (rc == 0) {

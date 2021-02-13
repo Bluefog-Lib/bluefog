@@ -134,6 +134,11 @@ class MPIController {
                                               const int num_recv_neighbors,
                                               const int64_t fused_data_size);
 
+  std::string NeighborValueExchangeWithConstantElements(
+      const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+      std::shared_ptr<std::vector<int>> dst_ranks,
+      std::shared_ptr<std::vector<int>> src_ranks);
+
   // Outside dependencies
   MPIContext& mpi_ctx_;
 

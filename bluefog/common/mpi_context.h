@@ -156,8 +156,15 @@ class MPIContext {
   bool UnregisterWindowName(const std::string& name);
   bool UnregisterAllWindowName();
 
-  Status AllocateOutput(TensorTableEntry& entries, int*& recvcounts, Communicator comm_type);
-  void SetDisplacements(const int* recvcounts, int*& displcmnts, Communicator comm_type);
+  Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
+                        Communicator comm_type);
+  Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
+                        Communicator comm_type,
+                        std::shared_ptr<std::vector<int>> dst_ranks,
+                        std::shared_ptr<std::vector<int>> src_ranks);
+  // source_neighbor_cnt is required only when Communicator is dynamic.
+  void SetDisplacements(const int* recvcounts, int*& displcmnts,
+                        Communicator comm_type, int source_neighbor_cnt = -1);
 
   // Flag indicating whether mpi is enabled.
   bool enabled_ = false;
