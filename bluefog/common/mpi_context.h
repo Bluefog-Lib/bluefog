@@ -156,6 +156,11 @@ class MPIContext {
   bool UnregisterWindowName(const std::string& name);
   bool UnregisterAllWindowName();
 
+  std::string NeighborValueExchangeWithConstantElements(
+      const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+      std::shared_ptr<std::vector<int>> dst_ranks,
+      std::shared_ptr<std::vector<int>> src_ranks);
+
   Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                         Communicator comm_type);
   Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,

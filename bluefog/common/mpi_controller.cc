@@ -367,68 +367,6 @@ bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
   return res;
 }
 
-std::string GenerateNeighborAllreduceErrorMessage(const std::vector<MPI_Status>& statuses,
-                                                  int nsend, int nrecv) {
-  std::string error_message = "";
-  bool error_encountered = false;
-  for (int i = 0; i < nsend; ++i) {
-    const auto& status = statuses[i];
-    error_message += "MPI_Isend to Process " + std::to_string(status.MPI_SOURCE);
-    error_message += "; with tag " + std::to_string(status.MPI_TAG);
-    error_message += "; with error code " + std::to_string(status.MPI_ERROR) + "\n";
-    if(status.MPI_ERROR != MPI_SUCCESS) error_encountered = true;
-  }
-  for (int i = 0; i < nrecv; ++i) {
-    const auto& status = statuses[i+nsend];
-    error_message += "MPI_Irecv from Process " + std::to_string(status.MPI_SOURCE);
-    error_message += "; with tag " + std::to_string(status.MPI_TAG);
-    error_message += "; with error code " + std::to_string(status.MPI_ERROR) + "\n";
-    if(status.MPI_ERROR != MPI_SUCCESS) error_encountered = true;
-  }
-  if (!error_encountered) error_message = "";
-  return error_message;
-}
-
-std::string MPIController::NeighborValueExchangeWithConstantElements(
-  const void* input_ptr, void* output_ptr,
-  int num_elements, DataType dtype,
-  std::shared_ptr<std::vector<int>> dst_ranks,
-  std::shared_ptr<std::vector<int>> src_ranks
-) {
-  int nsend = dst_ranks->size();
-  int nrecv = src_ranks->size();
-  std::vector<MPI_Request> requests(nsend + nrecv);
-  std::vector<MPI_Status> statuses(nsend + nrecv);
-  int element_size = mpi_ctx_.GetMPITypeSize(dtype);
-  for (int i = 0; i < nrecv; ++i) {
-    void* recvbuf = (void*)(static_cast<const char*>(output_ptr) +
-                            num_elements * i * element_size);
-    int ret_code = MPI_Irecv(
-        recvbuf, num_elements, mpi_ctx_.GetMPIDataType(dtype), src_ranks->at(i),
-        /*tag=*/mpi_ctx_.rank_ + src_ranks->at(i),
-        mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL),
-        &requests[i + nsend]);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error(
-          "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI "
-          "output for details.");
-    }
-  }
-  for (int i = 0; i < nsend; ++i) {
-    int ret_code = MPI_Isend(
-        input_ptr, num_elements, mpi_ctx_.GetMPIDataType(dtype), dst_ranks->at(i),
-        /*tag=*/mpi_ctx_.rank_ + dst_ranks->at(i),
-        mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i]);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error(
-          "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI "
-          "output for details.");
-    }
-  }
-  MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
-  return GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
-}
-
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -479,7 +417,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
             "output for details.");
       }
     } else {
-      error_message = NeighborValueExchangeWithConstantElements(
+      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
         sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
         entry.send_neighbors, entry.recv_neighbors
       );
@@ -501,7 +439,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
                   mpi_ctx_.GetMPICommunicator(Communicator::LOCAL));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
-      error_message = NeighborValueExchangeWithConstantElements(
+      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
         sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
         entry.send_neighbors, entry.recv_neighbors
       );
@@ -628,40 +566,10 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
             "output for details.");
       }
     } else {
-      int nsend = first_entry.send_neighbors->size();
-      int nrecv = first_entry.recv_neighbors->size();
-      std::vector<MPI_Request> requests(nsend + nrecv);
-      std::vector<MPI_Status> statuses(nsend + nrecv);
-      for (int i = 0; i < nrecv; ++i) {
-        void* recvbuf =
-            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-        int ret_code = MPI_Irecv(recvbuf, num_elements,
-                                mpi_ctx_.GetMPIDataType(first_entry.output),
-                                first_entry.recv_neighbors->at(i),
-                                /*tag=*/mpi_ctx_.rank_ + first_entry.recv_neighbors->at(i),
-                                mpi_ctx_.GetMPICommunicator(Communicator::GRAPH),
-                                &requests[i + nsend]);
-        if (ret_code != MPI_SUCCESS) {
-          throw std::runtime_error(
-              "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI output "
-              "for details.");
-        }
-      }
-      for (int i = 0; i < nsend; ++i) {
-        int ret_code = MPI_Isend(
-            fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
-            first_entry.send_neighbors->at(i),
-            /*tag=*/mpi_ctx_.rank_ + first_entry.send_neighbors->at(i),
-            mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
-        if (ret_code != MPI_SUCCESS) {
-          throw std::runtime_error(
-              "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI output "
-              "for details.");
-        }
-      }
-      MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
-      error_message =
-          GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
+        fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
+        first_entry.send_neighbors, first_entry.recv_neighbors
+      );
     }
   } else {
     if (first_entry.send_neighbors->empty()) {
@@ -680,40 +588,10 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                   mpi_ctx_.GetMPICommunicator(Communicator::LOCAL));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
-      int nsend = first_entry.send_neighbors->size();
-      int nrecv = first_entry.recv_neighbors->size();
-      std::vector<MPI_Request> requests(nsend + nrecv);
-      std::vector<MPI_Status> statuses(nsend + nrecv);
-      for (int i = 0; i < nrecv; ++i) {
-        void* recvbuf =
-            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-        int ret_code = MPI_Irecv(recvbuf, num_elements,
-                                mpi_ctx_.GetMPIDataType(first_entry.output),
-                                first_entry.recv_neighbors->at(i),
-                                /*tag=*/mpi_ctx_.rank_ + first_entry.recv_neighbors->at(i),
-                                mpi_ctx_.GetMPICommunicator(Communicator::GRAPH),
-                                &requests[i + nsend]);
-        if (ret_code != MPI_SUCCESS) {
-          throw std::runtime_error(
-              "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI output "
-              "for details.");
-        }
-      }
-      for (int i = 0; i < nsend; ++i) {
-        int ret_code = MPI_Isend(
-            fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
-            first_entry.send_neighbors->at(i),
-            /*tag=*/mpi_ctx_.rank_ + first_entry.send_neighbors->at(i),
-            mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
-        if (ret_code != MPI_SUCCESS) {
-          throw std::runtime_error(
-              "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI output "
-              "for details.");
-        }
-      }
-      MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
-      error_message =
-          GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
+        fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
+        first_entry.send_neighbors, first_entry.recv_neighbors
+      );
     } else {
       // Do nothing here.
     }

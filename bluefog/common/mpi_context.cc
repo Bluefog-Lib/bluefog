@@ -440,6 +440,68 @@ bool MPIContext::UnregisterAllWindowName() {
   return true;
 }
 
+std::string GenerateNeighborAllreduceErrorMessage(const std::vector<MPI_Status>& statuses,
+                                                  int nsend, int nrecv) {
+  std::string error_message = "";
+  bool error_encountered = false;
+  for (int i = 0; i < nsend; ++i) {
+    const auto& status = statuses[i];
+    error_message += "MPI_Isend to Process " + std::to_string(status.MPI_SOURCE);
+    error_message += "; with tag " + std::to_string(status.MPI_TAG);
+    error_message += "; with error code " + std::to_string(status.MPI_ERROR) + "\n";
+    if(status.MPI_ERROR != MPI_SUCCESS) error_encountered = true;
+  }
+  for (int i = 0; i < nrecv; ++i) {
+    const auto& status = statuses[i+nsend];
+    error_message += "MPI_Irecv from Process " + std::to_string(status.MPI_SOURCE);
+    error_message += "; with tag " + std::to_string(status.MPI_TAG);
+    error_message += "; with error code " + std::to_string(status.MPI_ERROR) + "\n";
+    if(status.MPI_ERROR != MPI_SUCCESS) error_encountered = true;
+  }
+  if (!error_encountered) error_message = "";
+  return error_message;
+}
+
+std::string MPIContext::NeighborValueExchangeWithConstantElements(
+  const void* input_ptr, void* output_ptr,
+  int num_elements, DataType dtype,
+  std::shared_ptr<std::vector<int>> dst_ranks,
+  std::shared_ptr<std::vector<int>> src_ranks
+) {
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+  std::vector<MPI_Request> requests(nsend + nrecv);
+  std::vector<MPI_Status> statuses(nsend + nrecv);
+  int element_size = GetMPITypeSize(dtype);
+  for (int i = 0; i < nrecv; ++i) {
+    void* recvbuf = (void*)(static_cast<const char*>(output_ptr) +
+                            num_elements * i * element_size);
+    int ret_code = MPI_Irecv(
+        recvbuf, num_elements, GetMPIDataType(dtype), src_ranks->at(i),
+        /*tag=*/rank_ + src_ranks->at(i),
+        GetMPICommunicator(Communicator::GLOBAL),
+        &requests[i + nsend]);
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI "
+          "output for details.");
+    }
+  }
+  for (int i = 0; i < nsend; ++i) {
+    int ret_code = MPI_Isend(
+        input_ptr, num_elements, GetMPIDataType(dtype), dst_ranks->at(i),
+        /*tag=*/rank_ + dst_ranks->at(i),
+        GetMPICommunicator(Communicator::GLOBAL), &requests[i]);
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI "
+          "output for details.");
+    }
+  }
+  MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+  return GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+}
+
 Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                   Communicator comm_type) {
   if (comm_type == Communicator::DYNAMIC) {
