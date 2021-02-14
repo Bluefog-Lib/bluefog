@@ -259,12 +259,12 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
-  if (!entry.enable_topo_check) {
+  if (!entry.dynamic_neighbors_enabled) {
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   } else {
     bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-    mpi_ctx_.size_, entry, timeline_ptr,
-    mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+        mpi_ctx_.size_, entry, timeline_ptr,
+        mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
 
     if (is_topo_check_fail) {
       entry.callback(Status::InvalidArgument(
@@ -276,13 +276,10 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
                                      entry.send_neighbors, entry.recv_neighbors);
   }
   if (!status.ok()) {
-    delete[] recvcounts;
-    delete[] displcmnts;
-    entry.callback(status);
     return;
   }
 
-  if (!entry.enable_topo_check) {
+  if (!entry.dynamic_neighbors_enabled) {
     mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
   } else {
     mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::DYNAMIC,
@@ -297,15 +294,18 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
   with_device device_guard(entry.device);
 
   timeline_ptr->ActivityStart(entry.tensor_name, "COMMUNICATE");
-  // Pitfall: mpi_neighbor_allgather do not include itself.
-  int ret_code = MPI_Neighbor_allgatherv(
-      sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor), buffer_data,
-      recvcounts, displcmnts, mpi_ctx_.GetMPIDataType(entry.output),
-      mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
-  if (ret_code != MPI_SUCCESS) {
-    throw std::runtime_error(
-        "MPI_Neighbor_allgather failed, see MPI output for details.");
-  }
+  if (!entry.dynamic_neighbors_enabled) {
+    // Pitfall: mpi_neighbor_allgather do not include itself.
+    int ret_code = MPI_Neighbor_allgatherv(
+        sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
+        buffer_data, recvcounts, displcmnts,
+        mpi_ctx_.GetMPIDataType(entry.output),
+        mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Neighbor_allgather failed, see MPI output for details.");
+    }
+  } else {}
   delete[] recvcounts;
   delete[] displcmnts;
   timeline_ptr->ActivityEnd(entry.tensor_name);
