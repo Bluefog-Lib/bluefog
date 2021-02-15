@@ -577,6 +577,8 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
     cnt_size = size_;
   } else if (comm_type == Communicator::GRAPH) {
     cnt_size = neighbor_indgree_;
+  } else if (comm_type == Communicator::DYNAMIC) {
+    cnt_size = src_ranks->size();
   }
 
   int* send_count = new int[1];

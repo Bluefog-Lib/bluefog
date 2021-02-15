@@ -276,6 +276,9 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
                                      entry.send_neighbors, entry.recv_neighbors);
   }
   if (!status.ok()) {
+    timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
+    entry.callback(status);
+    timeline_ptr->ActivityEnd(entry.tensor_name);
     return;
   }
 
@@ -305,7 +308,15 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
       throw std::runtime_error(
           "MPI_Neighbor_allgather failed, see MPI output for details.");
     }
-  } else {}
+  } else {
+    std::string error_message =
+        mpi_ctx_.NeighborValueExchangeWithVaryingElements(
+            sendbuf, buffer_data, num_elements, recvcounts, displcmnts,
+            entry.tensor->dtype(), entry.send_neighbors, entry.recv_neighbors);
+    if (error_message != "") {
+      throw std::runtime_error(error_message);
+    }
+  }
   delete[] recvcounts;
   delete[] displcmnts;
   timeline_ptr->ActivityEnd(entry.tensor_name);
