@@ -158,20 +158,20 @@ class MPIContext {
 
   std::string NeighborValueExchangeWithConstantElements(
       const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
-      std::shared_ptr<std::vector<int>> dst_ranks,
-      std::shared_ptr<std::vector<int>> src_ranks);
+      const std::vector<int>* dst_ranks,
+      const std::vector<int>* src_ranks);
   std::string NeighborValueExchangeWithVaryingElements(
       const void* input_ptr, void* output_ptr, const int sendcount,
       const int* recvcounts, const int* displcmnts, DataType dtype,
-      std::shared_ptr<std::vector<int>> dst_ranks,
-      std::shared_ptr<std::vector<int>> src_ranks);
+      const std::vector<int>* dst_ranks,
+      const std::vector<int>* src_ranks);
 
   Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                         Communicator comm_type);
   Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                         Communicator comm_type,
-                        std::shared_ptr<std::vector<int>> dst_ranks,
-                        std::shared_ptr<std::vector<int>> src_ranks);
+                        const std::vector<int>* dst_ranks,
+                        const std::vector<int>* src_ranks);
   // source_neighbor_cnt is required only when Communicator is dynamic.
   void SetDisplacements(const int* recvcounts, int*& displcmnts,
                         Communicator comm_type, int source_neighbor_cnt = -1);

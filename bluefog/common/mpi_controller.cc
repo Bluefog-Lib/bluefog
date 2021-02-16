@@ -249,17 +249,18 @@ int MPIController::LoadTopologyWeights(
 }
 
 void MPIController::NeighborAllgather(TensorTableEntry& entry) {
-  int* recvcounts = new int[mpi_ctx_.neighbor_indgree_];
-  int* displcmnts = new int[mpi_ctx_.neighbor_indgree_];
-  if (!mpi_ctx_.IsTopoSetup()) {
-    throw std::runtime_error("Topology of MPI has not been set yet.");
-  }
-
+  int* recvcounts;
+  int* displcmnts;
   Status status;
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
 
   if (!entry.dynamic_neighbors_enabled) {
+    if (!mpi_ctx_.IsTopoSetup()) {
+      throw std::runtime_error("Topology of MPI has not been set yet.");
+    }
+    recvcounts = new int[mpi_ctx_.neighbor_indgree_];
+    displcmnts = new int[mpi_ctx_.neighbor_indgree_];
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   } else {
     bool is_topo_check_fail = CheckNeighborSendRecvPattern(
@@ -272,10 +273,15 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
           "allreduce with partial send/recv request."));
       return;
     }
+    recvcounts = new int[entry.recv_neighbors->size()];
+    displcmnts = new int[entry.recv_neighbors->size()];
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::DYNAMIC,
-                                     entry.send_neighbors, entry.recv_neighbors);
+                                     entry.send_neighbors.get(),
+                                     entry.recv_neighbors.get());
   }
   if (!status.ok()) {
+    delete[] recvcounts;
+    delete[] displcmnts;
     timeline_ptr->ActivityStart(entry.tensor_name, "CALLBACK");
     entry.callback(status);
     timeline_ptr->ActivityEnd(entry.tensor_name);
@@ -312,7 +318,7 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
     std::string error_message =
         mpi_ctx_.NeighborValueExchangeWithVaryingElements(
             sendbuf, buffer_data, num_elements, recvcounts, displcmnts,
-            entry.tensor->dtype(), entry.send_neighbors, entry.recv_neighbors);
+            entry.tensor->dtype(), entry.send_neighbors.get(), entry.recv_neighbors.get());
     if (error_message != "") {
       throw std::runtime_error(error_message);
     }
@@ -430,7 +436,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
     } else {
       error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
         sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
-        entry.send_neighbors, entry.recv_neighbors
+        entry.send_neighbors.get(), entry.recv_neighbors.get()
       );
     }
   } else {
@@ -452,7 +458,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
     if (mpi_ctx_.local_rank_ == 0) {
       error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
         sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
-        entry.send_neighbors, entry.recv_neighbors
+        entry.send_neighbors.get(), entry.recv_neighbors.get()
       );
     } else {
       // Do nothing here.
@@ -579,7 +585,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     } else {
       error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
         fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
-        first_entry.send_neighbors, first_entry.recv_neighbors
+        first_entry.send_neighbors.get(), first_entry.recv_neighbors.get()
       );
     }
   } else {
@@ -601,7 +607,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     if (mpi_ctx_.local_rank_ == 0) {
       error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
         fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
-        first_entry.send_neighbors, first_entry.recv_neighbors
+        first_entry.send_neighbors.get(), first_entry.recv_neighbors.get()
       );
     } else {
       // Do nothing here.

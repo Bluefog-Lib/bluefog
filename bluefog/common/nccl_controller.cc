@@ -503,6 +503,31 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
       });
 }
 
+void NCCLController::NeighborValueExchangeWithConstantElements(
+    const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+    const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks) {
+#if NCCL_MINOR > 6
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+  ncclGroupStart();
+  for (int i = 0; i < nrecv; i++) {
+    int element_size = mpi_ctx_.GetMPITypeSize(dtype);  // Assume NCCL use same size as MPI
+    void* recvbuf =
+        (void*)(static_cast<char*>(output_ptr) + i * num_elements * element_size);
+    NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(dtype),
+                       src_ranks->at(i), nccl_ctx_.nccl_comm,
+                       nccl_ctx_.stream));
+  }
+  for (int i = 0; i < nsend; i++) {
+    NCCLCHECK(ncclSend(input_ptr, num_elements, GetNCCLDataType(dtype),
+                       dst_ranks->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  ncclGroupEnd();
+#else
+  throw std::runtime_error("Try to use ncclSend and ncclRecv under NCCL < 2.7.");
+#endif
+}
+
 void NCCLController::NeighborValueExchangeWithVaryingElements(
   const void* input_ptr, void* output_ptr,  const int sendcount,
   const int* recvcounts, const int* displcmnts, DataType dtype,

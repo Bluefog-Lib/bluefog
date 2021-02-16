@@ -463,11 +463,8 @@ std::string GenerateNeighborAllreduceErrorMessage(const std::vector<MPI_Status>&
 }
 
 std::string MPIContext::NeighborValueExchangeWithConstantElements(
-  const void* input_ptr, void* output_ptr,
-  int num_elements, DataType dtype,
-  std::shared_ptr<std::vector<int>> dst_ranks,
-  std::shared_ptr<std::vector<int>> src_ranks
-) {
+    const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+    const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks) {
   int nsend = dst_ranks->size();
   int nrecv = src_ranks->size();
   std::vector<MPI_Request> requests(nsend + nrecv);
@@ -505,8 +502,8 @@ std::string MPIContext::NeighborValueExchangeWithConstantElements(
 std::string MPIContext::NeighborValueExchangeWithVaryingElements(
   const void* input_ptr, void* output_ptr, const int sendcount,
   const int* recvcounts, const int* displcmnts, DataType dtype,
-  std::shared_ptr<std::vector<int>> dst_ranks,
-  std::shared_ptr<std::vector<int>> src_ranks
+  const std::vector<int>* dst_ranks,
+  const std::vector<int>* src_ranks
 ) {
   int nsend = dst_ranks->size();
   int nrecv = src_ranks->size();
@@ -555,8 +552,8 @@ Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
 
 Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                                   Communicator comm_type,
-                                  std::shared_ptr<std::vector<int>> dst_ranks,
-                                  std::shared_ptr<std::vector<int>> src_ranks) {
+                                  const std::vector<int>* dst_ranks,
+                                  const std::vector<int>* src_ranks) {
   Timeline* timeline_ptr;
   Status timeline_status = GetBluefogTimeline(timeline_ptr);
   timeline_ptr->ActivityStart(entry.tensor_name, "ALLOCATE_OUTPUT");
