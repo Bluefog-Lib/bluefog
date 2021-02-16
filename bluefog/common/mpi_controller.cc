@@ -269,8 +269,7 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
 
     if (is_topo_check_fail) {
       entry.callback(Status::InvalidArgument(
-          "Send and recv neighbors dont' match in neighbor "
-          "allreduce with partial send/recv request."));
+          "Src and dst neighbor ranks do not match"));
       return;
     }
     recvcounts = new int[entry.recv_neighbors->size()];
@@ -409,8 +408,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
-        "Send and recv neighbors dont' match in neighbor "
-        "allreduce with partial send/recv request."));
+        "Src(recv from) and dst(send to) neighbor ranks do not match"));
     return;
   }
 
