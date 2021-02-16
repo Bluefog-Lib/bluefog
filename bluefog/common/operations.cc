@@ -1520,7 +1520,8 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   message.set_tensor_type(tensor->dtype());
   message.set_device(device);
   message.set_request_type(Request::NEIGHBOR_ALLGATHER);
-  // TODO(ybc) Add src_ranks and dst_ranks to messages
+  // TODO(ybc) Add src_ranks and dst_ranks to messages?
+  // Probably no need since we do not fuse neighbor_allgather.
   for (int i = 0; i < tensor->shape().dims(); i++) {
     message.add_tensor_shape((int64_t)tensor->shape().dim_size(i));
   }
@@ -1532,7 +1533,6 @@ Status EnqueueTensorNeighborAllgather(std::shared_ptr<Tensor> tensor,
   e.device = device;
   e.dynamic_neighbors_enabled = dynamic_neighbors_enabled;
   e.enable_topo_check = enable_topo_check;
-  // Copy-constructor should be called here.
   e.send_neighbors = std::make_shared<std::vector<int>>(dst_ranks);
   e.recv_neighbors = std::make_shared<std::vector<int>>(src_ranks);
   e.ready_event = ready_event;
