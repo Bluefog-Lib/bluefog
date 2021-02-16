@@ -503,6 +503,35 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
       });
 }
 
+void NCCLController::NeighborValueExchangeWithVaryingElements(
+  const void* input_ptr, void* output_ptr,  const int sendcount,
+  const int* recvcounts, const int* displcmnts, DataType dtype,
+  const std::vector<int>* dst_ranks,
+  const std::vector<int>* src_ranks
+) {
+#if NCCL_MINOR > 6
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+  ncclGroupStart();
+  for (int i = 0; i < nrecv; i++) {
+    int recv_count = recvcounts[i];
+    int target_disp = displcmnts[i];
+    int element_size = mpi_ctx_.GetMPITypeSize(dtype);  // Assume NCCL use same size as MPI
+    void* recvbuf =
+        (void*)(static_cast<char*>(output_ptr) + target_disp * element_size);
+    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(dtype),
+                       src_ranks->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  for (int i = 0; i < nsend; i++) {
+    NCCLCHECK(ncclSend(input_ptr, sendcount, GetNCCLDataType(dtype),
+                       dst_ranks->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  ncclGroupEnd();
+#else
+  throw std::runtime_error("Try to use ncclSend and ncclRecv under NCCL < 2.7.");
+#endif
+}
+
 void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   // Note the order of recvcounts and displcments is by the oder of
   // mpi_ctx_.neighbor_in_ranks_ because of MPI_Neighbor_allgather order is
@@ -544,23 +573,11 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   // Pitfall: neighbor_allgather do not include itself.
 #if NCCL_MINOR > 6
-  ncclGroupStart();
-  for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
-    int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
-    int recv_count = recvcounts[i];
-    int target_disp = displcmnts[i];
-    int element_size = mpi_ctx_.GetMPITypeSize(
-        entry.tensor->dtype());  // Assume NCCL use same size as MPI
-    void* recvbuf =
-        (void*)(static_cast<char*>(buffer_data) + target_disp * element_size);
-    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(entry.tensor),
-                       recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-  }
-  for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
-    NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                       send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-  }
-  ncclGroupEnd();
+  NeighborValueExchangeWithVaryingElements(
+    sendbuf, buffer_data, num_elements, recvcounts, displcmnts,
+    entry.tensor->dtype(), &mpi_ctx_.neighbor_out_ranks_,
+    &mpi_ctx_.neighbor_in_ranks_
+  );
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {

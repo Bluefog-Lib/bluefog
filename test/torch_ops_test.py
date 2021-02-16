@@ -1062,7 +1062,8 @@ class OpsTests(unittest.TestCase):
 
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
-                
+
+    @unittest.skipIf(bf.nccl_built(), 'nccl do not support variable size on allgather')
     def test_neighbor_allgather_dynamic(self):
         """Test that the neighbor all gather 1D, 2D, 3D tensors correctly in dynamic setting."""
         size = bf.size()
@@ -1103,6 +1104,7 @@ class OpsTests(unittest.TestCase):
             assert candidate_ranks == gathered_ranks, \
                 "bf.neighbor_allgather(dynamic) produces incorrect gathered tensor"
 
+    @unittest.skipIf(bf.nccl_built(), 'nccl do not support variable size on allgather')
     def test_neighbor_allgather_dynamic_variable_size(self):
         """Test neighbor_allgather 1D, 2D, 3D tensors with variable size in dynamic setting."""
         size = bf.size()
