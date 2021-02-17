@@ -199,15 +199,16 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         loss_step(X, y, w,
                   tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
 
-        # diffusion
-        phi = w - alpha * w.grad.data
-        w.data = bf.neighbor_allreduce(
-            phi, self_weight, neighbor_weights, name='local variable')
-        w.grad.data.zero_()
+        with torch.no_grad():
+            # diffusion
+            phi = w - alpha * w.grad.data
+            w.data = bf.neighbor_allreduce(
+                phi, self_weight, neighbor_weights, name='local variable')
+            w.grad.data.zero_()
 
-        # record convergence
-        if bf.rank() == 0:
-            mse.append(torch.norm(w.data - w_opt.data, p=2))
+            # record convergence
+            if bf.rank() == 0:
+                mse.append(torch.norm(w.data - w_opt.data, p=2))
 
     return w, mse
 
@@ -267,16 +268,17 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
                   loss=loss, rho=rho)
 
         # exact diffusion
-        psi = w - alpha * w.grad.data
-        phi = psi + w.data - psi_prev
-        w.data = bf.neighbor_allreduce(
-            phi, self_weight, neighbor_weights, name='local variable')
-        psi_prev = psi.clone()
-        w.grad.data.zero_()
+        with torch.no_grad():
+            psi = w - alpha * w.grad.data
+            phi = psi + w.data - psi_prev
+            w.data = bf.neighbor_allreduce(
+                phi, self_weight, neighbor_weights, name='local variable')
+            psi_prev = psi.clone()
+            w.grad.data.zero_()
 
-        # record convergence
-        if bf.rank() == 0:
-            mse.append(torch.norm(w.data - w_opt.data, p=2))
+            # record convergence
+            if bf.rank() == 0:
+                mse.append(torch.norm(w.data - w_opt.data, p=2))
 
     return w, mse
 
