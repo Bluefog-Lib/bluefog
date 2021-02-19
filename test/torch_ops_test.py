@@ -387,7 +387,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             nw = {i: 1.0 for i in neighbor_ranks}
             reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
-                                                   neighbor_weights=nw, name=name)
+                                                   src_weights=nw, name=name)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -450,7 +450,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             with pytest.raises(ValueError):
                 bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
-                                      neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                                      src_weights=neighbor_weights, dst_weights=send_ranks)
 
     def test_neighbor_allreduce_dynamic_topo_outside_static_topo_move(self):
         """Test that the neighbor all reduce (move) 1D, 2D, 3D tensors correctly
@@ -477,7 +477,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -511,7 +511,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -553,7 +553,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -591,7 +591,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -818,7 +818,7 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             nw = {i: 1.0 for i in neighbor_ranks}
             reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
-                                                   neighbor_weights=nw)
+                                                   src_weights=nw)
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
@@ -994,10 +994,10 @@ class OpsTests(unittest.TestCase):
 
             handle_1 = bf.neighbor_allreduce_nonblocking(
                 tensor_1, name=name_1, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             handle_2 = bf.neighbor_allreduce_nonblocking(
                 tensor_2, name=name_2, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
 
             output_1 = bf.synchronize(handle_1)
             output_2 = bf.synchronize(handle_2)

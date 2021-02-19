@@ -99,8 +99,8 @@ if not args.asynchronous_mode:
             self_weight = 1 / (len(recv_neighbors) + 1)
 
         x = bf.neighbor_allreduce(x, name='x', self_weight=self_weight,
-                                  neighbor_weights=neighbor_weights,
-                                  send_neighbors=send_neighbors, enable_topo_check=False)
+                                  src_weights=neighbor_weights,
+                                  dst_weights=send_neighbors, enable_topo_check=False)
         mse.append(torch.norm(x-x_bar, p=2) / torch.norm(x_bar, p=2))
 else:
     outdegree = len(bf.out_neighbor_ranks())

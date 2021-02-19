@@ -199,11 +199,13 @@ def diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         loss_step(X, y, w,
                   tensor_name='neighbor.allreduce.local_variable', loss=loss, rho=rho)
 
+        # diffusion
         with torch.no_grad():
-            # diffusion
             phi = w - alpha * w.grad.data
-            w.data = bf.neighbor_allreduce(
-                phi, self_weight, neighbor_weights, name='local variable')
+            w.data = bf.neighbor_allreduce(phi,
+                                           self_weight=self_weight,
+                                           src_weights=neighbor_weights,
+                                           name='local variable')
             w.grad.data.zero_()
 
             # record convergence
@@ -271,8 +273,10 @@ def exact_diffusion(X, y, w_opt, loss, maxite=2000, alpha=1e-1, use_Abar=True, *
         with torch.no_grad():
             psi = w - alpha * w.grad.data
             phi = psi + w.data - psi_prev
-            w.data = bf.neighbor_allreduce(
-                phi, self_weight, neighbor_weights, name='local variable')
+            w.data = bf.neighbor_allreduce(phi,
+                                           self_weight=self_weight,
+                                           src_weights=neighbor_weights,
+                                           name='local variable')
             psi_prev = psi.clone()
             w.grad.data.zero_()
 
@@ -330,8 +334,7 @@ def gradient_tracking(X, y, w_opt, loss, maxite=2000, alpha=1e-1, **kwargs):
         # q^{k+1} = neighbor_allreduce(q^k) + grad(w^{k+1}) - grad(w^k)
 
         # Notice the communication of neighbor_allreduce can overlap with gradient computation.
-        w_handle = bf.neighbor_allreduce_nonblocking(
-            w.data, name='Grad.Tracking.w')
+        w_handle = bf.neighbor_allreduce_nonblocking(w.data, name='Grad.Tracking.w')
         q_handle = bf.neighbor_allreduce_nonblocking(q, name='Grad.Tracking.q')
         w.data = bf.synchronize(w_handle) - alpha * q
         # calculate local gradient

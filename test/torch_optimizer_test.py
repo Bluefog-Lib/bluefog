@@ -226,8 +226,8 @@ def dynamic_neighbor_allreduce_train(model, optimizer, dataloader, isCUDA, dynam
     model.train()
     for data, target in dataloader:
         send_neighbors, recv_neighbors = next(dynamic_topo_gen)
-        optimizer.send_neighbors = send_neighbors
-        optimizer.neighbor_weights = {
+        optimizer.dst_weights = send_neighbors
+        optimizer.src_weights = {
             r: 1/(len(recv_neighbors) + 1) for r in recv_neighbors}
         optimizer.self_weight = 1 / (len(recv_neighbors) + 1)
 
