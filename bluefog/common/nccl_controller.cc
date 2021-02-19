@@ -661,9 +661,17 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, entry, timeline_ptr_,
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  bool is_topo_check_fail = false;
+  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
+    if (entry.is_hierarchical) {
+      // TODO: support check.
+      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
+                  << "allreduce ops but it is not supported yet.";
+    }
+    is_topo_check_fail = CheckNeighborSendRecvPattern(
+        entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
+        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  }
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
         "Send and recv neighbors dont' match in neighbor "
@@ -907,9 +915,17 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, first_entry, timeline_ptr_,
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  bool is_topo_check_fail = false;
+  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
+    if (entry.is_hierarchical) {
+      // TODO: support check.
+      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
+                  << "allreduce ops but it is not supported yet.";
+    }
+    is_topo_check_fail = CheckNeighborSendRecvPattern(
+        entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
+        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  }
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
       entry.callback(Status::InvalidArgument(

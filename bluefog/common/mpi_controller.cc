@@ -293,54 +293,47 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
 }
 
 // Function to check if the sending and receiving neighbors match in the topology.
-bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
-                                  Timeline* timeline_ptr, const MPI_Comm& comm) {
+bool CheckNeighborSendRecvPattern(
+  std::shared_ptr<std::vector<int>> send_neighbors,
+  std::shared_ptr<std::vector<int>> recv_neighbors,
+  const std::string& tensor_name,
+  int size, Timeline* timeline_ptr, const MPI_Comm& comm) {
   bool res = false;
-  // enabled the check if enable_topo_check is true and partial
-  // neighbor_allreduce is activated.
-  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
-    if (entry.is_hierarchical) {
-      // TODO: support check.
-      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
-                  << "allreduce ops but it is not supported yet.";
-      return res;
-    }
-    timeline_ptr->ActivityStart(entry.tensor_name, "NEGOTIATION");
-    // Put all the send and recv neighbors in a single vector, and obtain a send
-    // matrix and a recv matrix through MPI_Allgather.
-    bool* send_check_buf = new bool[2 * size];
-    std::fill_n(send_check_buf, 2 * size, false);
-    bool* recv_check_buf = new bool[2 * size * size];
-    for (int send_rank : *(entry.send_neighbors))
-      send_check_buf[send_rank] = true;
-    for (int recv_rank : *(entry.recv_neighbors))
-      send_check_buf[size + recv_rank] = true;
-    int ret_code = MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
-                                 recv_check_buf, size * 2, MPI_C_BOOL, comm);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error(
-          "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, "
-          "see MPI output for details.");
-    }
-    // This checks that send matrix and transposed recv matrix should be the
-    // same. If same, the topology is good to go. If not, there is mismatch edge
-    // to be fixed.
-    auto GetSendIndex = [size](int i, int j) -> int { return 2*size*i+j; };
-    auto GetRecvIndex = [size](int i, int j) -> int { return 2*size*i+j+size; };
-    for (int i = 0; i < size; ++i) {
-      if (res) break;
-      for (int j = 0; j < size; ++j) {
-        if (recv_check_buf[GetSendIndex(i, j)] !=
-            recv_check_buf[GetRecvIndex(j, i)]) {
-          res = true;
-          break;
-        }
+  timeline_ptr->ActivityStart(tensor_name, "NEGOTIATION");
+  // Put all the send and recv neighbors in a single vector, and obtain a send
+  // matrix and a recv matrix through MPI_Allgather.
+  bool* send_check_buf = new bool[2 * size];
+  std::fill_n(send_check_buf, 2 * size, false);
+  bool* recv_check_buf = new bool[2 * size * size];
+  for (int send_rank : *(send_neighbors))
+    send_check_buf[send_rank] = true;
+  for (int recv_rank : *(recv_neighbors))
+    send_check_buf[size + recv_rank] = true;
+  int ret_code = MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
+                               recv_check_buf, size * 2, MPI_C_BOOL, comm);
+  if (ret_code != MPI_SUCCESS) {
+    throw std::runtime_error(
+        "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, "
+        "see MPI output for details.");
+  }
+  // This checks that send matrix and transposed recv matrix should be the
+  // same. If same, the topology is good to go. If not, there is mismatch edge
+  // to be fixed.
+  auto GetSendIndex = [size](int i, int j) -> int { return 2*size*i+j; };
+  auto GetRecvIndex = [size](int i, int j) -> int { return 2*size*i+j+size; };
+  for (int i = 0; i < size; ++i) {
+    if (res) break;
+    for (int j = 0; j < size; ++j) {
+      if (recv_check_buf[GetSendIndex(i, j)] !=
+          recv_check_buf[GetRecvIndex(j, i)]) {
+        res = true;
+        break;
       }
     }
-    delete [] send_check_buf;
-    delete [] recv_check_buf;
-    timeline_ptr->ActivityEnd(entry.tensor_name);
   }
+  delete [] send_check_buf;
+  delete [] recv_check_buf;
+  timeline_ptr->ActivityEnd(tensor_name);
   return res;
 }
 
@@ -385,9 +378,17 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   // If only partial sending is enabled, the following code block checks whether the sending
   // and recieving neighbors match each other when enable_topo_check is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, entry, timeline_ptr,
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  bool is_topo_check_fail = false;
+  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
+    if (entry.is_hierarchical) {
+      // TODO: support check.
+      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
+                  << "allreduce ops but it is not supported yet.";
+    }
+    is_topo_check_fail = CheckNeighborSendRecvPattern(
+        entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
+        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  }
 
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
@@ -583,9 +584,17 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, first_entry, timeline_ptr,
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  bool is_topo_check_fail = false;
+  if (first_entry.enable_topo_check && first_entry.dynamic_neighbors_enabled) {
+    if (first_entry.is_hierarchical) {
+      // TODO: support check.
+      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
+                  << "allreduce ops but it is not supported yet.";
+    }
+    is_topo_check_fail = CheckNeighborSendRecvPattern(
+        first_entry.send_neighbors, first_entry.recv_neighbors, first_entry.tensor_name,
+        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+  }
 
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
