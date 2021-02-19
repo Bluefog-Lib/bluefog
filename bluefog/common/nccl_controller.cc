@@ -670,7 +670,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     }
     is_topo_check_fail = CheckNeighborSendRecvPattern(
         entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
-        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+        mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   }
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
@@ -916,15 +916,15 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
   bool is_topo_check_fail = false;
-  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
-    if (entry.is_hierarchical) {
+  if (first_entry.enable_topo_check && first_entry.dynamic_neighbors_enabled) {
+    if (first_entry.is_hierarchical) {
       // TODO: support check.
       BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
                   << "allreduce ops but it is not supported yet.";
     }
     is_topo_check_fail = CheckNeighborSendRecvPattern(
-        entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
-        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+        first_entry.send_neighbors, first_entry.recv_neighbors, first_entry.tensor_name,
+        mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   }
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
