@@ -670,7 +670,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     }
     is_topo_check_fail = CheckNeighborSendRecvPattern(
         entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
-        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+        mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   }
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
@@ -924,7 +924,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     }
     is_topo_check_fail = CheckNeighborSendRecvPattern(
         entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
-        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+        mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   }
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
