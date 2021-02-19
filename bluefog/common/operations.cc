@@ -432,6 +432,20 @@ void CheckForStalledTensors(BluefogGlobalState& state) {
   }
 }
 
+template<typename T>
+bool IsSameList (std::shared_ptr<std::vector<T>> n1, std::shared_ptr<std::vector<T>> n2) {
+  if (n1 == nullptr && n2 == nullptr) return true;
+  if (n1 == nullptr || n2 == nullptr) return false;
+  if (n1->size() != n2->size()) return false;
+  // The order matters as well.
+  for (int i = 0; i < n1->size(); i++) {
+    if (n1->at(i) != n2->at(i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 bool RunLoopOnce(BluefogGlobalState& state);
@@ -948,20 +962,6 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
       // Attempt to add more responses to this fused response.
       const TensorTableEntry& entry =
           state.tensor_queue.GetTensorEntry(response.tensor_names()[0]);
-      auto IsSameNeighborList =
-          [](std::shared_ptr<std::vector<int>> n1,
-             std::shared_ptr<std::vector<int>> n2) -> bool {
-        if (n1 == nullptr && n2 == nullptr) return true;
-        if (n1 == nullptr || n2 == nullptr) return false;
-        if (n1->size() != n2->size()) return false;
-        // The order matters as well.
-        for (int i = 0; i < n1->size(); i++) {
-          if (n1->at(i) != n2->at(i)) {
-            return false;
-          }
-        }
-        return true;
-      };
       // Recall that send_neighbors is empty or not determines we use partial
       // neighbor allreduce or not.
       int num_recv_neighbors = !entry.dynamic_neighbors_enabled
@@ -985,10 +985,9 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
             entry.dynamic_neighbors_enabled == new_entry.dynamic_neighbors_enabled &&
             entry.is_hierarchical == new_entry.is_hierarchical &&
-            IsSameNeighborList(entry.send_neighbors,
-                               new_entry.send_neighbors) &&
-            IsSameNeighborList(entry.recv_neighbors,
-                               new_entry.recv_neighbors) &&
+            IsSameList(entry.send_neighbors, new_entry.send_neighbors) &&
+            IsSameList(entry.send_weights, new_entry.send_weights) &&
+            IsSameList(entry.recv_neighbors, new_entry.recv_neighbors) &&
             tensor_size + new_tensor_size <= state.tensor_fusion_threshold) {
           // These tensors will fuse together well.
           tensor_size += new_tensor_size;
@@ -1545,6 +1544,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
+                                      std::shared_ptr<std::vector<float>> send_weights,
                                       bool dynamic_neighbors_enabled,
                                       bool is_hierarchical,
                                       bool enable_topo_check,
@@ -1569,6 +1569,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   e.ready_event = ready_event;
   e.recv_neighbors = recv_neighbors;
   e.send_neighbors = send_neighbors;
+  e.send_weights = send_weights;
   e.dynamic_neighbors_enabled = dynamic_neighbors_enabled;
   e.is_hierarchical = is_hierarchical;
   e.enable_topo_check = enable_topo_check;

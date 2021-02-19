@@ -427,16 +427,20 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
   std::vector<int> src_neighbors;
   for (auto kv : src_weights)
-      src_neighbors.push_back(kv.first);
+    src_neighbors.push_back(kv.first);
   std::sort(src_neighbors.begin(), src_neighbors.end());
 
   std::vector<int> dst_neighbors;
   for (auto kv : dst_weights)
-      dst_neighbors.push_back(kv.first);
+    dst_neighbors.push_back(kv.first);
   std::sort(dst_neighbors.begin(), dst_neighbors.end());
+  std::vector<float> dst_weights_vec;
+  for (int rank : dst_neighbors)
+    dst_weights_vec.push_back(dst_weights.at(rank));
 
   auto bf_src_neighbors = std::make_shared<std::vector<int>>(src_neighbors);
   auto bf_dst_neighbors = std::make_shared<std::vector<int>>(dst_neighbors);
+  auto bf_dst_weights_vec = std::make_shared<std::vector<float>>(dst_weights_vec);
   auto ready_event = RecordReadyEvent(device);
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
@@ -448,9 +452,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, bf_src_neighbors,
-        bf_dst_neighbors, dynamic_neighbors_enabled, is_hierarchical,
-        enable_topo_check, op_name, CPU_DEVICE_ID,
+        bf_tensor, bf_output, bf_context, ready_event,
+        bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
+        dynamic_neighbors_enabled, is_hierarchical, enable_topo_check, op_name, CPU_DEVICE_ID,
         callback_wrapper([self_weight, src_weights, avg_computation,
                           cpu_output, tensor, src_neighbors,
                           dynamic_neighbors_enabled, is_hierarchical, output,
@@ -471,9 +475,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_output = std::make_shared<TorchTensor>(output);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, bf_src_neighbors,
-        bf_dst_neighbors, dynamic_neighbors_enabled, is_hierarchical,
-        enable_topo_check, op_name, device,
+        bf_tensor, bf_output, bf_context, ready_event,
+        bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
+        dynamic_neighbors_enabled, is_hierarchical, enable_topo_check, op_name, device,
         callback_wrapper([self_weight, src_weights, avg_computation,
                           src_neighbors, dynamic_neighbors_enabled,
                           is_hierarchical, tensor, output]() mutable {

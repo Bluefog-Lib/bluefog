@@ -278,6 +278,7 @@ struct TensorTableEntry {
   // Neighbors for dynamic neighbor_allreduce.
   std::shared_ptr<std::vector<int>> send_neighbors;
   std::shared_ptr<std::vector<int>> recv_neighbors;
+  std::shared_ptr<std::vector<float>> send_weights;
 
   // Boolean value if dynamic neighbor is enabled.
   bool dynamic_neighbors_enabled = false;
