@@ -434,7 +434,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
                                     dst_weights, enable_topo_check, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
     if dst_weights is None:
-        dst_weights = []
+        dst_weights = {}
         dynamic_neighbors_enabled = False
     elif len(set(dst_weights)) != len(dst_weights):
         raise ValueError("Argument dst_weights should only contain the unique ranks.")
@@ -443,6 +443,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
                          "enabling dynamic topology.")
     else:
         dynamic_neighbors_enabled = True
+        if isinstance(dst_weights, list):
+            dst_weights = {dst:1.0 for dst in dst_weights}
     if self_weight is None and src_weights is None:
         # Implying this is static graph.
         if is_topo_weighted():

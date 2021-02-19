@@ -111,13 +111,13 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_FloatTensor, THCudaTensor)
 NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
 #endif
 
-#define NEIGHBOR_ALLREDUCE_H(torch_Tensor, THTensor)                             \
-  extern "C" int bluefog_torch_neighbor_allreduce_nonblocking_##torch_Tensor(    \
-      THTensor* tensor, THTensor* output, double self_weight,                    \
-      const std::unordered_map<int, double>& neighbor_weights,                   \
-      const std::vector<int>& send_neighbors, bool dynamic_neighbors_enabled,    \
-      bool enable_topo_check, bool avg_computation, bool is_hierarchical,        \
-      char* name);
+#define NEIGHBOR_ALLREDUCE_H(torch_Tensor, THTensor)                           \
+  extern "C" int bluefog_torch_neighbor_allreduce_nonblocking_##torch_Tensor(  \
+      THTensor* tensor, THTensor* output, double self_weight,                  \
+      const std::unordered_map<int, double>& src_weights,                      \
+      const std::unordered_map<int, double>& dst_weights,                      \
+      bool dynamic_neighbors_enabled, bool enable_topo_check,                  \
+      bool avg_computation, bool is_hierarchical, char* name);
 
 NEIGHBOR_ALLREDUCE_H(torch_HalfTensor, THHalfTensor)
 NEIGHBOR_ALLREDUCE_H(torch_FloatTensor, THFloatTensor)
