@@ -327,8 +327,9 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
-        if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+        # NCCL do not support the varying case.
+        # if TEST_ON_GPU:
+        #     dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -1156,11 +1157,16 @@ class OpsTests(unittest.TestCase):
             fname = inspect.currentframe().f_code.co_name
             warnings.warn("Skip {} due to size 1".format(fname))
             return
-        tensor = torch.FloatTensor([rank])
-        gathered = bf.neighbor_allgather(tensor)
-        # The order of gathered value is always the same as the in_neighbor_ranks.
-        np.testing.assert_allclose(gathered.numpy(), bf.in_neighbor_ranks())
-        
+        dtypes = [torch.FloatTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        for dtype in dtypes:
+            tensor = torch.FloatTensor([rank])
+            tensor = self.cast_and_place(tensor, dtype)
+            gathered = bf.neighbor_allgather(tensor)
+            # The order of gathered value is always the same as the in_neighbor_ranks.
+            np.testing.assert_allclose(gathered.cpu().numpy(), bf.in_neighbor_ranks())
+
     def test_neighbor_allgather_order_dynamic(self):
         """Test neighbor_allgather gives correct order of collected value under dynamic topo."""
         size = bf.size()
@@ -1172,11 +1178,16 @@ class OpsTests(unittest.TestCase):
         src_ranks = np.random.permutation(
             [i for i in range(size) if i != rank])
         dst_ranks = np.random.permutation(src_ranks)
-        tensor = torch.FloatTensor([rank])
-        gathered = bf.neighbor_allgather(
-            tensor, dst_ranks=dst_ranks, src_ranks=src_ranks)
-        # The order of gathered value is always the same as the src_ranks.
-        np.testing.assert_allclose(gathered.numpy(), src_ranks)
+
+        dtypes = [torch.FloatTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        for dtype in dtypes:
+            tensor = torch.FloatTensor([rank])
+            gathered = bf.neighbor_allgather(
+                tensor, dst_ranks=dst_ranks, src_ranks=src_ranks)
+            # The order of gathered value is always the same as the src_ranks.
+            np.testing.assert_allclose(gathered.cpu().numpy(), src_ranks)
 
     @unittest.skip("Need re-design of API.")
     def test_pair_gossip(self):

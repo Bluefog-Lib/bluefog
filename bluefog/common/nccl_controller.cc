@@ -578,7 +578,7 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   } else {
     bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-        mpi_ctx_.size_, entry, timeline_ptr,
+        mpi_ctx_.size_, entry, timeline_ptr_,
         mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
 
     if (is_topo_check_fail) {
