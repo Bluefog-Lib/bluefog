@@ -1148,6 +1148,36 @@ class OpsTests(unittest.TestCase):
                 assert rank_tensor.data.max() == i, \
                     "bf.neighbor_allgather(dynamic, var) produces incorrect gathered tensor"
 
+    def test_neighbor_allgather_order(self):
+        """Test neighbor_allgather gives correct order of collected value by default"""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        tensor = torch.FloatTensor([rank])
+        gathered = bf.neighbor_allgather(tensor)
+        # The order of gathered value is always the same as the in_neighbor_ranks.
+        np.testing.assert_allclose(gathered.numpy(), bf.in_neighbor_ranks())
+        
+    def test_neighbor_allgather_order_dynamic(self):
+        """Test neighbor_allgather gives correct order of collected value under dynamic topo."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        src_ranks = np.random.permutation(
+            [i for i in range(size) if i != rank])
+        dst_ranks = np.random.permutation(src_ranks)
+        tensor = torch.FloatTensor([rank])
+        gathered = bf.neighbor_allgather(
+            tensor, dst_ranks=dst_ranks, src_ranks=src_ranks)
+        # The order of gathered value is always the same as the src_ranks.
+        np.testing.assert_allclose(gathered.numpy(), src_ranks)
+
     @unittest.skip("Need re-design of API.")
     def test_pair_gossip(self):
         size = bf.size()

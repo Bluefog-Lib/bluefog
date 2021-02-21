@@ -406,8 +406,9 @@ def neighbor_allgather(tensor: torch.Tensor, *,
     For example: rank 0 with tensor shape [3, 5, 4] and rank 1 with tensor shape [5, 5, 4] are
     allowed, the output will be [8, 5, 4] assuming two are connected.
 
-    If src_ranks and dst_ranks is not provided, the neighbor_allgather gather the tensors according
-    to the global default topology.
+    If src_ranks and dst_ranks are not provided, the neighbor_allgather gathers the tensors according
+    to the global default topology, which can be obtained through `bf.in_neighbor_ranks`.
+    Otherwise, the order is the same as src_ranks provided.
 
     Arguments:
         tensor: A tensor to allgather.

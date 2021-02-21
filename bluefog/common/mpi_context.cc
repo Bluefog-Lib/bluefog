@@ -440,7 +440,7 @@ bool MPIContext::UnregisterAllWindowName() {
   return true;
 }
 
-std::string GenerateNeighborAllreduceErrorMessage(const std::vector<MPI_Status>& statuses,
+std::string GenerateNeighborExchangeErrorMessage(const std::vector<MPI_Status>& statuses,
                                                   int nsend, int nrecv) {
   std::string error_message = "";
   bool error_encountered = false;
@@ -496,7 +496,7 @@ std::string MPIContext::NeighborValueExchangeWithConstantElements(
     }
   }
   MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
-  return GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+  return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
 }
 
 std::string MPIContext::NeighborValueExchangeWithVaryingElements(
@@ -536,7 +536,7 @@ std::string MPIContext::NeighborValueExchangeWithVaryingElements(
     }
   }
   MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
-  return GenerateNeighborAllreduceErrorMessage(statuses, nsend, nrecv);
+  return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
 }
 
 Status MPIContext::AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
