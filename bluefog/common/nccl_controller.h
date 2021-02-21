@@ -176,6 +176,13 @@ class NCCLController {
   ncclResult_t ncclRecvByBcast(void* sendbuf, const int count,
                                ncclDataType_t data_type, int peer_rank);
 #endif
+  void NeighborValueExchangeWithConstantElements(
+      const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+      const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks);
+  void NeighborValueExchangeWithVaryingElements(
+      const void* input_ptr, void* output_ptr, const int sendcount,
+      const int* recvcounts, const int* displcmnts, DataType dtype,
+      const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks);
 
   void MemcpyInFusionBuffer(const std::vector<TensorTableEntry>& entries,
                             void*& buffer_data, size_t& buffer_len);

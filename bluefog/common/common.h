@@ -82,6 +82,7 @@ enum class Communicator {
   LOCAL = 1,
   CROSS = 2,
   GRAPH = 3,
+  DYNAMIC = 4,
 };
 
 enum class DataType {
