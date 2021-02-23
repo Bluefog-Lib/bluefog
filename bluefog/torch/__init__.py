@@ -74,4 +74,6 @@ from bluefog.torch.mpi_ops import set_skip_negotiate_stage, get_skip_negotiate_s
 
 from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
 from bluefog.torch.mpi_ops import timeline_context
+
 from bluefog.torch.utility import broadcast_optimizer_state, broadcast_parameters, allreduce_parameters
+from bluefog.torch.utility import construct_topology
