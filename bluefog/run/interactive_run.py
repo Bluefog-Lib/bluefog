@@ -62,10 +62,11 @@ def parse_args():
     parser_start.add_argument('--ipython-profile', action="store", dest="profile",
                               type=str, default="bluefog",
                               help="The profile name for ipython environment.")
-    
+
     parser_start.add_argument('--disable-heartbeat', action="store_true", dest="disable_heartbeat",
-                              help='Disable the heartbeat checking service between ipcontroller and ipengines.')
-    
+                              help='Disable the heartbeat checking service between '
+                              'ipcontroller and ipengines.')
+
     group_hosts_parent = parser_start.add_argument_group('host arguments')
     group_hosts = group_hosts_parent.add_mutually_exclusive_group()
     group_hosts.add_argument('-H', '--hosts', action='store', dest='hosts',
@@ -84,6 +85,10 @@ def parse_args():
 
     parser_start.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
                               help='Extra mpi flages you want to pass for mpirun.')
+    
+    parser_stop.add_argument('--ipython-profile', action="store", dest="profile",
+                              type=str, default="bluefog",
+                              help="The profile name for ipython environment.")
 
     parsed_args = parser.parse_args()
     return parsed_args
