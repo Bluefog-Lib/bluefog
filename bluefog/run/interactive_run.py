@@ -178,7 +178,10 @@ def _write_ipengine_pid(profile):
 
 def _get_ipengine_pid_from_file(profile):
     path = _get_ip_file_dir(profile)
-    with open(os.path.join(path, "engine_pids.json"), 'r') as f:
+    engine_pid_file = os.path.join(path, "engine_pids.json")
+    if not os.path.exists(engine_pid_file):
+        return None
+    with open(engine_pid_file, 'r') as f:
         engine_pids = json.load(f)
     return engine_pids
 
@@ -411,6 +414,7 @@ def main():
         subprocess.run(ipcluster_stop_command, shell=True,
                        env=env, capture_output=True)
         _maybe_kill_ipcontroller_process(args.profile)
+        _maybe_kill_ipengine_processes(args.profile)
         exit(0)
 
     # action of start
