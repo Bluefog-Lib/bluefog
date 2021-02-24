@@ -396,7 +396,7 @@ def neighbor_allgather(tensor: torch.Tensor, *,
                        src_ranks: Optional[List] = None,
                        dst_ranks: Optional[List] = None,
                        enable_topo_check: bool = True,
-                       name: Optional[str] = None,) -> torch.Tensor:
+                       name: Optional[str] = None) -> torch.Tensor:
     """
     A function that concatenates the input tensor with the same input tensor on
     on all neighbor Bluefog processes (Not include self). The input tensor is not modified.

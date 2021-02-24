@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import argparse
-import ipyparallel as ipp
 import json
 import os
 import multiprocessing
@@ -23,6 +22,7 @@ import subprocess
 import time
 from typing import Dict, List
 
+import ipyparallel as ipp
 import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 
@@ -85,7 +85,7 @@ def parse_args():
 
     parser_start.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
                               help='Extra mpi flages you want to pass for mpirun.')
-    
+
     parser_stop.add_argument('--ipython-profile', action="store", dest="profile",
                               type=str, default="bluefog",
                               help="The profile name for ipython environment.")
@@ -202,7 +202,7 @@ def _maybe_kill_ipcontroller_process(profile):
               "Maybe it is already been stopped.")
         return False
     try:
-        for _ in range(2):  # Kill two times 
+        for _ in range(2):  # Kill two times
             os.kill(pid, signal.SIGINT)
         return True
     except:
