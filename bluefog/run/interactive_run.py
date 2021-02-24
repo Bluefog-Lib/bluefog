@@ -108,7 +108,7 @@ def _disable_heart_beatcheck(profile):
         return True
     except:
         return False
-            
+
 def _delete_ipengine_config(profile):
     config_file = os.path.join(_get_ip_file_dir(
         profile), "..",  "ipengine_config.py")
@@ -202,7 +202,8 @@ def _maybe_kill_ipcontroller_process(profile):
               "Maybe it is already been stopped.")
         return False
     try:
-        os.kill(pid, signal.SIGINT)
+        for _ in range(2):  # Kill two times 
+            os.kill(pid, signal.SIGINT)
         return True
     except:
         return False
@@ -214,11 +215,13 @@ def _maybe_kill_ipengine_processes(profile):
     engine_pids = _get_ipengine_pid_from_file(profile)
     if engine_pids is None:
         return
-    for _, pid in engine_pids.items():
-        try:
-            os.kill(pid, signal.SIGINT)
-        except:
-            pass
+    for _ in range(2):  # Kill two times
+        for _, pid in engine_pids.items():
+            try:
+                os.kill(pid, signal.SIGINT)
+            except:
+                pass
+
     _delete_ipengine_config(profile)
     _delete_ipengine_pid(profile)
 
