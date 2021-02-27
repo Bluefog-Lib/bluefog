@@ -708,6 +708,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       if(entry.dst_weighting_enabled)
       {
         for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+          // Add ready event
           auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
           weighted_tensors.push_back(std::move(weighted_tensor_ptr));
           NCCLCHECK(ncclSend(weighted_tensors[i].get()->data(), num_elements,
@@ -959,12 +960,12 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
 
   const void* weighted_fused_input_data = nullptr;
   if (first_entry.dst_weighting_enabled) {
-    throw std::runtime_error("Not Implemented for dst_weight fusion");
-    if (first_entry.device == CPU_DEVICE_ID) {
-      throw std::runtime_error("NCCL Neighbor Allreduce failed: perform operation on CPU data.");
-    } else {
-
-    }
+    void* weight_buffer_data = nullptr;
+    MemcpyInWeightFusionBuffer(weight_buffer_data, first_entry.send_neighbors->size(),
+                               fused_input_data, num_elements, element_size,
+                               first_entry.context, first_entry.device);
+    //TODO(hhb): add weighting implementation.
+    weighted_fused_input_data = weight_buffer_data;
   }
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
@@ -1837,6 +1838,30 @@ void NCCLController::MemcpyInFusionBuffer(
   }
 
   buffer_len = (size_t)offset;
+}
+
+void NCCLController::MemcpyInWeightFusionBuffer(
+  void*& weight_buffer_data, size_t num_dst,
+  const void* buffer_data, int64_t num_elements, int element_size,
+  std::shared_ptr<OpContext> context, int device) {
+  // Access the fusion buffer.
+  FusionBufferManager* buffer_manager;
+  auto fusion_status = GetBluefogFusionBuffer(buffer_manager);
+  if (!fusion_status.ok()){
+    throw std::runtime_error(fusion_status.reason());
+  }
+  std::shared_ptr<PersistentBuffer> buffer =
+      buffer_manager->GetWeightBuffer(device);
+  weight_buffer_data = const_cast<void*>(buffer->AccessData(context));
+  size_t data_size = num_elements * element_size;
+
+  int64_t offset = 0;
+  for (size_t i = 0; i < num_dst; ++i) {
+    void* weight_buffer_data_at_offset = (uint8_t*)weight_buffer_data + offset;
+    CUDACHECK(cudaMemcpy(weight_buffer_data_at_offset, buffer_data, data_size,
+                         cudaMemcpyDeviceToDevice));
+    offset += data_size;
+  }
 }
 
 void NCCLController::MemcpyOutFusionBuffer(

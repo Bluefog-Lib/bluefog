@@ -841,7 +841,8 @@ class OpsTests(unittest.TestCase):
 
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+            pass
+            #dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))
@@ -1071,7 +1072,8 @@ class OpsTests(unittest.TestCase):
 
         dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+            pass
+            #dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         # By default, we use exponential two ring topology.
         num_indegree = int(np.ceil(np.log2(size)))

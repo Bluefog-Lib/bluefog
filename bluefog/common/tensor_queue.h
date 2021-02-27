@@ -82,13 +82,36 @@ class FusionBufferManager {
                           std::function<void()> on_start_init,
                           std::function<void()> on_end_init);
 
+  // Initializes a buffer of the given threshold size times MPI size if not already cached.
+  //
+  // Args:
+  //  threshold: Size of the buffer in bytes.
+  //  mpi_size: Size of MPI nodes.
+  //  device: Device ID to associate the buffer.
+  //  context: Framework used to create the buffer and associate it.
+  //  on_start_init: Callback on starting buffer initialization.
+  //  on_end_init: Callback on completing buffer initialization.
+  Status InitializeWeightBuffer(int64_t threshold,
+                                int mpi_size,
+                                int device,
+                                std::shared_ptr<OpContext> context,
+                                std::function<void()> on_start_init,
+                                std::function<void()> on_end_init);
+
   // Returns the buffer associated with the given device and framework, or null.
   std::shared_ptr<PersistentBuffer> GetBuffer(int device);
+
+  // Returns the weight buffer associated with the given device and framework, or null.
+  std::shared_ptr<PersistentBuffer> GetWeightBuffer(int device);
 
  private:
   // Memory buffers for Tensor Fusion.  They are keyed by device ID.
   std::unordered_map<int, std::pair<std::shared_ptr<PersistentBuffer>, int64_t>>
       tensor_fusion_buffers_;
+
+  // Memory buffers for Tensor Fusion with dst weight.  They are keyed by device ID.
+  std::unordered_map<int, std::pair<std::shared_ptr<PersistentBuffer>, int64_t>>
+      weight_tensor_fusion_buffers_;
 };
 
 }  // namespace common

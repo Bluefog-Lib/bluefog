@@ -154,5 +154,34 @@ std::shared_ptr<PersistentBuffer> FusionBufferManager::GetBuffer(int device) {
   return tensor_fusion_buffers_[device].first;
 }
 
+Status FusionBufferManager::InitializeWeightBuffer(
+    int64_t threshold, int mpi_size, int device, std::shared_ptr<OpContext> context,
+    std::function<void()> on_start_init, std::function<void()> on_end_init) {
+  auto& elem = weight_tensor_fusion_buffers_[device];
+  auto& buffer = elem.first;
+  int64_t& size = elem.second;
+  if (size != threshold*mpi_size) {
+    buffer.reset();
+    size = 0;
+  }
+
+  if (buffer == nullptr) {
+    on_start_init();
+    size = threshold*mpi_size;
+
+    // Lazily allocate persistent buffer for Tensor Fusion and keep it
+    // forever per device.
+    Status status = context->AllocatePersistent(size, &buffer);
+    on_end_init();
+
+    return status;
+  }
+
+  return Status::OK();
+}
+
+std::shared_ptr<PersistentBuffer> FusionBufferManager::GetWeightBuffer(int device) {
+  return weight_tensor_fusion_buffers_[device].first;
+}
 }  // namespace common
 }  // namespace bluefog

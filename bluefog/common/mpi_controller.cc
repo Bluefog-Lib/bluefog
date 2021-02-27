@@ -32,6 +32,33 @@
 namespace bluefog {
 namespace common {
 
+namespace {
+
+template <typename T, typename TS>
+void ScaleBufferCPUImpl(T* buffer, int64_t num_elements, TS scale_factor) {
+  for (int64_t i = 0; i < num_elements; ++i) {
+    buffer[i] = buffer[i] * scale_factor;
+  }
+}
+
+void ScaleCPUBuffer(double scale_factor, void* weighted_fused_input_data,
+                 int64_t num_elements, DataType dtype) {
+  switch (dtype) {
+    // TODO(hhb): FLOAT16 support
+    case DataType::BLUEFOG_FLOAT32:
+      ScaleBufferCPUImpl((float*) weighted_fused_input_data, num_elements, (float) scale_factor);
+      break;
+    case DataType::BLUEFOG_FLOAT64:
+      ScaleBufferCPUImpl((double*) weighted_fused_input_data, num_elements, scale_factor);
+      break;
+    default:
+      throw std::logic_error("Type " + DataType_Name(dtype) +
+                             " not supported by ScaleBufferCPUImpl.");
+  }
+}
+
+}
+
 // It may be because the win_create is called at different
 // threads from the win_put, win_get, etc. After moving win_create into
 // communicaiton thread, it resolved. (works in Openmpi=4.0.2 and MPICH).
@@ -636,13 +663,27 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   const void* weighted_fused_input_data = nullptr;
   if (first_entry.dst_weighting_enabled) {
     // Generate weighted data fusion for sending
-    BFLOG(INFO) << "Should not reach here";
-    throw std::runtime_error("Not Implemented for dst_weight fusion");
-    if (first_entry.device == CPU_DEVICE_ID) {
-
-    } else {
-
+    timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_WEIGHT_FUSION_BUFFER");
+    void* weight_buffer_data;
+    MemcpyInWeightFusionBuffer(weight_buffer_data, first_entry.send_neighbors->size(),
+                               fused_input_data, num_elements, element_size,
+                               first_entry.context, first_entry.device);
+    int64_t offset = 0;
+    for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
+      double dst_weight = first_entry.send_weights->at(i);
+      void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
+      if (first_entry.device == CPU_DEVICE_ID) {
+        ScaleCPUBuffer(dst_weight, weight_buffer_data_offset, num_elements,
+                       first_entry.tensor->dtype());
+      } else {
+#if HAVE_CUDA
+        // CUDA Weighting
+#endif
+      }
+      offset += num_elements * element_size;
     }
+    weighted_fused_input_data = weight_buffer_data;
+    timeline_ptr->ActivityEndAll(entries);
   }
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
@@ -1450,6 +1491,38 @@ Status MPIController::GetWindowVersionValue(const std::string& name,
   }
 
   return Status::OK();
+}
+
+void MPIController::MemcpyInWeightFusionBuffer(
+  void*& weight_buffer_data, size_t num_dst,
+  const void* buffer_data, int64_t num_elements, int element_size,
+  std::shared_ptr<OpContext> context, int device) {
+  // Access the fusion buffer.
+  FusionBufferManager* buffer_manager;
+  auto fusion_status = GetBluefogFusionBuffer(buffer_manager);
+  if (!fusion_status.ok()){
+    throw std::runtime_error(fusion_status.reason());
+  }
+  std::shared_ptr<PersistentBuffer> buffer =
+      buffer_manager->GetWeightBuffer(device);
+  weight_buffer_data = const_cast<void*>(buffer->AccessData(context));
+  size_t data_size = num_elements * element_size;
+
+  int64_t offset = 0;
+  for (size_t i = 0; i < num_dst; ++i) {
+    void* weight_buffer_data_at_offset = (uint8_t*)weight_buffer_data + offset;
+#if HAVE_CUDA
+    if (device != CPU_DEVICE_ID) {
+      CUDACHECK(cudaMemcpy(weight_buffer_data_at_offset, buffer_data, data_size,
+                           cudaMemcpyDeviceToDevice));
+    } else {
+#endif
+      std::memcpy(weight_buffer_data_at_offset, buffer_data, data_size);
+#if HAVE_CUDA
+    }
+#endif
+    offset += data_size;
+  }
 }
 
 void MPIController::MemcpyInFusionBuffer(
