@@ -839,8 +839,7 @@ class OpsTests(unittest.TestCase):
             warnings.warn("Skip {} due to size 1".format(fname))
             return
 
-        #dtypes = [torch.FloatTensor, torch.DoubleTensor]
-        dtypes = []
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 

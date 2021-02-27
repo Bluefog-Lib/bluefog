@@ -444,6 +444,8 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           int ret_code;
           auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
           weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+          //TODO(hhb): Temporary Solution for Ready Event Issue with data_weight
+          std::this_thread::sleep_for(std::chrono::microseconds(100));
           ret_code = MPI_Isend(
               weighted_tensors[i].get()->data(), num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
               entry.send_neighbors->at(i),
