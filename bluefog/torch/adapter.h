@@ -35,7 +35,7 @@ class TorchTensor : public common::Tensor {
   virtual const common::DataType dtype() const override;
   virtual const common::TensorShape shape() const override;
   virtual const void* data() const override;
-  virtual std::shared_ptr<common::Tensor> data_weight(float weight) override;
+  virtual std::unique_ptr<common::Tensor> data_weight(float weight) override;
   virtual int64_t size() const override;
   
   // TODO(ybc) Figure out a better encapsulated way to do it.

@@ -984,6 +984,7 @@ void NegotiateOfRequestOfMaster(BluefogGlobalState& state,
             response.devices() == new_response.devices() &&
             entry.tensor->dtype() == new_entry.tensor->dtype() &&
             entry.dynamic_neighbors_enabled == new_entry.dynamic_neighbors_enabled &&
+            entry.dst_weighting_enabled == new_entry.dst_weighting_enabled &&
             entry.is_hierarchical == new_entry.is_hierarchical &&
             IsSameList(entry.send_neighbors, new_entry.send_neighbors) &&
             IsSameList(entry.send_weights, new_entry.send_weights) &&
@@ -1544,8 +1545,9 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
                                       std::shared_ptr<ReadyEvent> ready_event,
                                       std::shared_ptr<std::vector<int>> recv_neighbors,
                                       std::shared_ptr<std::vector<int>> send_neighbors,
-                                      std::shared_ptr<std::vector<float>> send_weights,
+                                      std::shared_ptr<std::vector<double>> send_weights,
                                       bool dynamic_neighbors_enabled,
+                                      bool dst_weighting_enabled,
                                       bool is_hierarchical,
                                       bool enable_topo_check,
                                       const std::string& name, const int device,
@@ -1571,6 +1573,7 @@ Status EnqueueTensorNeighborAllreduce(std::shared_ptr<Tensor> tensor,
   e.send_neighbors = send_neighbors;
   e.send_weights = send_weights;
   e.dynamic_neighbors_enabled = dynamic_neighbors_enabled;
+  e.dst_weighting_enabled = dst_weighting_enabled;
   e.is_hierarchical = is_hierarchical;
   e.enable_topo_check = enable_topo_check;
   e.device = device;

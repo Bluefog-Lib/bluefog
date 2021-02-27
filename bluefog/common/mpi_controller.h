@@ -28,10 +28,8 @@ namespace common {
 // Function to check if the sending and receiving neighbors match in the
 // topology.
 bool CheckNeighborSendRecvPattern(
-  std::shared_ptr<std::vector<int>> send_neighbors,
-  std::shared_ptr<std::vector<int>> recv_neighbors,
-  const std::string& tensor_name,
-  int size, Timeline* timeline_ptr, const MPI_Comm& comm);
+  const std::vector<int>* send_neighbors, const std::vector<int>* recv_neighbors,
+  const std::string& tensor_name, int size, Timeline* timeline_ptr, const MPI_Comm& comm);
 
 class MPIController {
  public:

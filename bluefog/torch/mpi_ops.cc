@@ -409,8 +409,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
                         double self_weight,
                         const std::unordered_map<int, double>& src_weights,
                         const std::unordered_map<int, double>& dst_weights,
-                        bool dynamic_neighbors_enabled, bool enable_topo_check,
-                        bool avg_computation, bool is_hierarchical, const std::string& name) {
+                        bool dynamic_neighbors_enabled, bool dst_weighting_enabled,
+                        bool enable_topo_check, bool avg_computation, bool is_hierarchical,
+                        const std::string& name) {
   ThrowIfError(common::CheckInitialized());
 
   auto handle = handle_manager.AllocateHandle();
@@ -434,13 +435,13 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
   for (auto kv : dst_weights)
     dst_neighbors.push_back(kv.first);
   std::sort(dst_neighbors.begin(), dst_neighbors.end());
-  std::vector<float> dst_weights_vec;
+  std::vector<double> dst_weights_vec;
   for (int rank : dst_neighbors)
     dst_weights_vec.push_back(dst_weights.at(rank));
 
   auto bf_src_neighbors = std::make_shared<std::vector<int>>(src_neighbors);
   auto bf_dst_neighbors = std::make_shared<std::vector<int>>(dst_neighbors);
-  auto bf_dst_weights_vec = std::make_shared<std::vector<float>>(dst_weights_vec);
+  auto bf_dst_weights_vec = std::make_shared<std::vector<double>>(dst_weights_vec);
   auto ready_event = RecordReadyEvent(device);
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
@@ -454,7 +455,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_tensor, bf_output, bf_context, ready_event,
         bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
-        dynamic_neighbors_enabled, is_hierarchical, enable_topo_check, op_name, CPU_DEVICE_ID,
+        dynamic_neighbors_enabled, dst_weighting_enabled, is_hierarchical,
+        enable_topo_check, op_name, CPU_DEVICE_ID,
         callback_wrapper([self_weight, src_weights, avg_computation,
                           cpu_output, tensor, src_neighbors,
                           dynamic_neighbors_enabled, is_hierarchical, output,
@@ -477,7 +479,8 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
         bf_tensor, bf_output, bf_context, ready_event,
         bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
-        dynamic_neighbors_enabled, is_hierarchical, enable_topo_check, op_name, device,
+        dynamic_neighbors_enabled, dst_weighting_enabled,
+        is_hierarchical, enable_topo_check, op_name, device,
         callback_wrapper([self_weight, src_weights, avg_computation,
                           src_neighbors, dynamic_neighbors_enabled,
                           is_hierarchical, tensor, output]() mutable {

@@ -436,6 +436,7 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
     if dst_weights is None:
         dst_weights = {}
         dynamic_neighbors_enabled = False
+        dst_weighting_enabled = False
     elif len(set(dst_weights)) != len(dst_weights):
         raise ValueError("Argument dst_weights should only contain the unique ranks.")
     elif self_weight is None or src_weights is None:
@@ -443,8 +444,10 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
                          "enabling dynamic topology.")
     else:
         dynamic_neighbors_enabled = True
+        dst_weighting_enabled = True
         if isinstance(dst_weights, list):
             dst_weights = {dst:1.0 for dst in dst_weights}
+            dst_weighting_enabled = False
     if self_weight is None and src_weights is None:
         # Implying this is static graph.
         if is_topo_weighted():
@@ -479,8 +482,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     is_hierarchical = False
-    handle = getattr(mpi_lib, function)(tensor, output, self_weight, src_weights,
-                                        dst_weights, dynamic_neighbors_enabled,
+    handle = getattr(mpi_lib, function)(tensor, output, self_weight, src_weights, dst_weights,
+                                        dynamic_neighbors_enabled, dst_weighting_enabled,
                                         enable_topo_check, weighted_average_computation,
                                         is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)

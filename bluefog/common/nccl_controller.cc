@@ -669,7 +669,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                   << "allreduce ops but it is not supported yet.";
     }
     is_topo_check_fail = CheckNeighborSendRecvPattern(
-        entry.send_neighbors, entry.recv_neighbors, entry.tensor_name,
+        entry.send_neighbors.get(), entry.recv_neighbors.get(), entry.tensor_name,
         mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   }
   if (is_topo_check_fail) {
@@ -678,6 +678,9 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
         "allreduce with partial send/recv request."));
     return; 
   }
+
+  std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
+  // Ensure the lifecycle of the weighted tensors are alive after communication.
 
 #if NCCL_MINOR > 6
   if (!entry.is_hierarchical) {
@@ -702,9 +705,20 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
         NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
                           recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-      for (int send_rank : *entry.send_neighbors) {
-        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                          send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      if(entry.dst_weighting_enabled)
+      {
+        for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
+          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+          NCCLCHECK(ncclSend(weighted_tensors[i].get()->data(), num_elements,
+                             GetNCCLDataType(entry.tensor), entry.send_neighbors->at(i),
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+      } else {
+        for (int send_rank : *entry.send_neighbors) {
+          NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                             send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
       }
     }
     ncclGroupEnd();
@@ -754,7 +768,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute(
-      [this, entry, event_queue, tid]() mutable {
+      [this, entry, event_queue, tid, buffer_data, weighted_tensors]() mutable {
         with_device device_guard(entry.device);
         WaitForEvents(event_queue, {entry}, this->timeline_ptr_, tid);
 
@@ -923,7 +937,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                   << "allreduce ops but it is not supported yet.";
     }
     is_topo_check_fail = CheckNeighborSendRecvPattern(
-        first_entry.send_neighbors, first_entry.recv_neighbors, first_entry.tensor_name,
+        first_entry.send_neighbors.get(), first_entry.recv_neighbors.get(), first_entry.tensor_name,
         mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
   }
   if (is_topo_check_fail) {
@@ -941,6 +955,16 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   const void* fused_input_data = buffer_data;
   if (timeline_ptr_->Initialized()) {
     RecordEvent(event_queue, "MEM_CPY_IN");
+  }
+
+  const void* weighted_fused_input_data = nullptr;
+  if (first_entry.dst_weighting_enabled) {
+    throw std::runtime_error("Not Implemented for dst_weight fusion");
+    if (first_entry.device == CPU_DEVICE_ID) {
+      throw std::runtime_error("NCCL Neighbor Allreduce failed: perform operation on CPU data.");
+    } else {
+
+    }
   }
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
@@ -975,10 +999,22 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                            GetNCCLDataType(first_entry.tensor), recv_rank,
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-      for (int send_rank : *first_entry.send_neighbors) {
-        NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                           GetNCCLDataType(first_entry.tensor), send_rank,
-                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      if (!first_entry.dst_weighting_enabled)
+      {
+        for (int send_rank : *first_entry.send_neighbors) {
+          NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                             GetNCCLDataType(first_entry.tensor), send_rank,
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+      } else {
+        size_t i = 0;
+        for (int send_rank : *first_entry.send_neighbors) {
+          void* sendbuf = 
+              (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
+          NCCLCHECK(ncclSend(sendbuf, num_elements,
+                             GetNCCLDataType(first_entry.tensor), send_rank,
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
       }
     }
     ncclGroupEnd();
@@ -1053,7 +1089,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute(
-      [this, entries, event_queue, tid, buffer_data]() mutable {
+      [this, entries, event_queue, tid, buffer_data, weighted_fused_input_data]() mutable {
         auto& first_entry = entries[0];
         with_device device_guard(first_entry.device);
         WaitForEvents(event_queue, entries, this->timeline_ptr_, tid);

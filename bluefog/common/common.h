@@ -211,7 +211,7 @@ class Tensor {
   virtual const DataType dtype() const = 0;
   virtual const TensorShape shape() const = 0;
   virtual const void* data() const = 0;
-  virtual std::shared_ptr<common::Tensor> data_weight(float weight) = 0;
+  virtual std::unique_ptr<common::Tensor> data_weight(float weight) = 0;
   virtual int64_t size() const = 0;
   virtual ~Tensor() = default;
 };
@@ -278,10 +278,13 @@ struct TensorTableEntry {
   // Neighbors for dynamic neighbor_allreduce.
   std::shared_ptr<std::vector<int>> send_neighbors;
   std::shared_ptr<std::vector<int>> recv_neighbors;
-  std::shared_ptr<std::vector<float>> send_weights;
+  std::shared_ptr<std::vector<double>> send_weights;
 
   // Boolean value if dynamic neighbor is enabled.
   bool dynamic_neighbors_enabled = false;
+
+  // Boolean value for enabling destination(send) weighting operation or not.
+  bool dst_weighting_enabled = false;
 
   // Boolean value for enabling topology check.
   bool enable_topo_check = false;

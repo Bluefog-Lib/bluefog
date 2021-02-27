@@ -116,8 +116,9 @@ NEIGHBOR_ALLGATHER_H(torch_cuda_DoubleTensor, THCudaDoubleTensor)
       THTensor* tensor, THTensor* output, double self_weight,                  \
       const std::unordered_map<int, double>& src_weights,                      \
       const std::unordered_map<int, double>& dst_weights,                      \
-      bool dynamic_neighbors_enabled, bool enable_topo_check,                  \
-      bool avg_computation, bool is_hierarchical, char* name);
+      bool dynamic_neighbors_enabled, bool dst_weighting_enabled,              \
+      bool enable_topo_check, bool avg_computation, bool is_hierarchical,      \
+      char* name);
 
 NEIGHBOR_ALLREDUCE_H(torch_HalfTensor, THHalfTensor)
 NEIGHBOR_ALLREDUCE_H(torch_FloatTensor, THFloatTensor)
