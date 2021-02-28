@@ -14,10 +14,6 @@
 # limitations under the License.
 # ==============================================================================
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import os
 import torch
@@ -76,4 +72,29 @@ from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
 from bluefog.torch.mpi_ops import timeline_context
 
 from bluefog.torch.utility import broadcast_optimizer_state, broadcast_parameters, allreduce_parameters
-from bluefog.torch.utility import construct_topology
+
+from bluefog.common.topology_util import (
+    GetRecvWeights,
+    GetSendWeights,
+    IsRegularGraph,
+    IsTopologyEquivalent,
+)
+
+from bluefog.common.topology_util import (
+    ExponentialTwoGraph,
+    ExponentialGraph,
+    FullyConnectedGraph,
+    MeshGrid2DGraph,
+    RingGraph,
+    StarGraph,
+    SymmetricExponentialGraph,
+)
+
+from bluefog.common.topology_util import (
+    GetDynamicOnePeerSendRecvRanks,
+    GetExp2DynamicSendRecvMachineRanks,
+    GetInnerOuterRingDynamicSendRecvRanks,
+    GetInnerOuterExpo2DynamicSendRecvRanks
+)
+
+from bluefog.torch.topology_util import infer_destination_source_ranks

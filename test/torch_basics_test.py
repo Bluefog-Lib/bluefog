@@ -28,8 +28,15 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
-from bluefog.common.topology_util import ExponentialGraph, RingGraph, RingGraph
-from bluefog.common.topology_util import IsTopologyEquivalent
+from bluefog.torch.topology_util import (
+    ExponentialGraph,
+    RingGraph,
+    StarGraph,
+    MeshGrid2DGraph,
+    FullyConnectedGraph,
+)
+from bluefog.torch.topology_util import IsTopologyEquivalent
+from bluefog.torch.topology_util import infer_destination_source_ranks
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -75,10 +82,12 @@ class BasicsTests(unittest.TestCase):
 
         if size == 1:
             expected_topology = nx.from_numpy_array(
-                np.array([[0.5]]), create_using=nx.DiGraph)
+                np.array([[0.5]]), create_using=nx.DiGraph
+            )
         elif size == 2:
             expected_topology = nx.from_numpy_array(
-                np.array([[0, 0.2], [0.2, 0]]), create_using=nx.DiGraph)
+                np.array([[0, 0.2], [0.2, 0]]), create_using=nx.DiGraph
+            )
         else:
             expected_topology = RingGraph(size)
 
@@ -96,10 +105,16 @@ class BasicsTests(unittest.TestCase):
         bf.init()
         size = bf.size()
         if size == 4:
-            expected_topology = nx.DiGraph(np.array(
-                [[1/3., 1/3., 1/3., 0.], [0., 1/3., 1/3., 1/3.],
-                 [1/3., 0., 1/3., 1/3.], [1/3., 1/3., 0., 1/3.]]
-            ))
+            expected_topology = nx.DiGraph(
+                np.array(
+                    [
+                        [1 / 3.0, 1 / 3.0, 1 / 3.0, 0.0],
+                        [0.0, 1 / 3.0, 1 / 3.0, 1 / 3.0],
+                        [1 / 3.0, 0.0, 1 / 3.0, 1 / 3.0],
+                        [1 / 3.0, 1 / 3.0, 0.0, 1 / 3.0],
+                    ]
+                )
+            )
         elif size == 1:
             expected_topology = nx.DiGraph(np.array([[1.0]]))
         else:
@@ -113,15 +128,13 @@ class BasicsTests(unittest.TestCase):
         rank = bf.rank()
         size = bf.size()
         assert bf.set_topology(ExponentialGraph(size))
-        in_neighobrs = bf.in_neighbor_ranks()
+        in_neighbors = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
         degree = int(np.ceil(np.log2(size)))
-        expected_in_neighbors = sorted([(rank - 2**i) %
-                                        size for i in range(degree)])
-        expected_out_neighbors = sorted([(rank + 2**i) %
-                                         size for i in range(degree)])
-        assert sorted(in_neighobrs) == expected_in_neighbors
+        expected_in_neighbors = sorted([(rank - 2 ** i) % size for i in range(degree)])
+        expected_out_neighbors = sorted([(rank + 2 ** i) % size for i in range(degree)])
+        assert sorted(in_neighbors) == expected_in_neighbors
         assert sorted(out_neighbors) == expected_out_neighbors
 
     def test_in_out_neighbors_biring(self):
@@ -129,20 +142,49 @@ class BasicsTests(unittest.TestCase):
         rank = bf.rank()
         size = bf.size()
         assert bf.set_topology(RingGraph(size))
-        in_neighobrs = bf.in_neighbor_ranks()
+        in_neighbors = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
-        expected_in_neighbors = list(set(
-            map(lambda x: x % size, [rank - 1, rank + 1])))
-        expected_out_neighbors = list(set(
-            map(lambda x: x % size, [rank - 1, rank + 1])))
+        expected_in_neighbors = list(set(map(lambda x: x % size, [rank - 1, rank + 1])))
+        expected_out_neighbors = list(
+            set(map(lambda x: x % size, [rank - 1, rank + 1]))
+        )
 
         if size <= 1:
             expected_in_neighbors = []
             expected_out_neighbors = []
 
-        assert sorted(in_neighobrs) == expected_in_neighbors
+        assert sorted(in_neighbors) == expected_in_neighbors
         assert sorted(out_neighbors) == expected_out_neighbors
+
+
+@pytest.mark.parametrize(
+    "topo_func",
+    [ExponentialGraph, RingGraph, StarGraph, MeshGrid2DGraph, FullyConnectedGraph],
+)
+def test_infer_destination_source_ranks(topo_func):
+    bf.init()
+    size = bf.size()
+    bf.set_topology(topo_func(size))
+    topo = bf.load_topology()
+    in_neighbors = bf.in_neighbor_ranks()
+    out_neighbors = bf.out_neighbor_ranks()
+
+    src_ranks = infer_destination_source_ranks(dst_ranks=out_neighbors)
+    assert sorted(src_ranks) == in_neighbors
+    dst_ranks = infer_destination_source_ranks(src_ranks=in_neighbors)
+    assert sorted(dst_ranks) == out_neighbors
+
+    W = infer_destination_source_ranks(
+        dst_ranks=out_neighbors, construct_adjacency_matrix=True
+    )
+    expected_W = (nx.to_numpy_array(topo) > 0).astype(float)
+    expected_W /= expected_W.sum(axis=0)
+    np.testing.assert_allclose(W, expected_W)
+    W = infer_destination_source_ranks(
+        src_ranks=in_neighbors, construct_adjacency_matrix=True
+    )
+    np.testing.assert_allclose(W, expected_W)
 
 
 if __name__ == "__main__":
