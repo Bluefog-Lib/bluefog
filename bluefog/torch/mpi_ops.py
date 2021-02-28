@@ -375,55 +375,99 @@ def _neighbor_allgather_function_factory(tensor):
     return 'bluefog_torch_neighbor_allgather_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allgather_nonblocking(tensor, output, name):
+def _neighbor_allgather_nonblocking(tensor, output, src_ranks, dst_ranks, enable_topo_check, name):
     function = _check_function(_neighbor_allgather_function_factory, tensor)
-    handle = getattr(mpi_lib, function)(tensor, output,
+    if dst_ranks is None and src_ranks is None:
+        src_ranks, dst_ranks = [], []
+        dynamic_neighbors_enabled = False
+    elif dst_ranks is not None and src_ranks is not None:
+        dynamic_neighbors_enabled = True
+    else:
+        raise ValueError(
+            "Argument dst_ranks and src_ranks have to be presented at the same time")
+    handle = getattr(mpi_lib, function)(tensor, output, src_ranks, dst_ranks,
+                                        dynamic_neighbors_enabled, enable_topo_check,
                                         name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
-def neighbor_allgather(tensor: torch.Tensor, name: Optional[str] = None) -> torch.Tensor:
+def neighbor_allgather(tensor: torch.Tensor, *,
+                       src_ranks: Optional[List] = None,
+                       dst_ranks: Optional[List] = None,
+                       enable_topo_check: bool = True,
+                       name: Optional[str] = None) -> torch.Tensor:
     """
     A function that concatenates the input tensor with the same input tensor on
     on all neighbor Bluefog processes (Not include self). The input tensor is not modified.
 
     The concatenation is done on the first dimension, so the input tensors on the
-    different processes must have the same rank and shape.
+    different processes must have the same shape except the first dimension.
+    For example: rank 0 with tensor shape [3, 5, 4] and rank 1 with tensor shape [5, 5, 4] are
+    allowed, the output will be [8, 5, 4] assuming two are connected.
+
+    If src_ranks and dst_ranks are not provided, the neighbor_allgather gathers the tensors according
+    to the global default topology, which can be obtained through `bf.in_neighbor_ranks`.
+    Otherwise, the order is the same as src_ranks provided.
 
     Arguments:
         tensor: A tensor to allgather.
+        dst_ranks: A list of destination ranks. If present, ignoring global topology setting.
+            This argument is useful under dynamic topology case.
+            Note dst_ranks and src_ranks should be presented at same time and compatible.
+        src_ranks: A list of source ranks.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
         name: A name of the allgather operation.
 
     Returns:
-        A tensor of the same type as `tensor`, concatenated on dimension zero
-        across all processes. The shape is identical to the input shape, except for
-        the first dimension, which may be greater and is the sum of all first
-        dimensions of the tensors in neighbor Bluefog processes.
+        A tensor of the same type as `tensor`, concatenated on dimension zero.
+        The shape is identical to the input shape, except for
+        the first dimension. The order of gathered tensors is guaranteed to be the same order as
+        the src_ranks if specified or in_neighbor_ranks through the default topology.
     """
-    handle = neighbor_allgather_nonblocking(tensor, name)
+    handle = neighbor_allgather_nonblocking(
+        tensor, src_ranks=src_ranks, dst_ranks=dst_ranks, enable_topo_check=enable_topo_check, name=name)
     return synchronize(handle)
 
 
-def neighbor_allgather_nonblocking(tensor: torch.Tensor, name: Optional[str] = None) -> int:
+def neighbor_allgather_nonblocking(tensor: torch.Tensor, *,
+                                   src_ranks: Optional[List] = None,
+                                   dst_ranks: Optional[List] = None,
+                                   enable_topo_check: bool = True,
+                                   name: Optional[str] = None) -> int:
     """
     A function that nonblockingly concatenates the input tensor with the same input
     tensor on all neighbor Bluefog processes (Not include self).
     The input tensor is not modified.
 
     The concatenation is done on the first dimension, so the input tensors on the
-    different processes must have the same rank and shape.
+    different processes must have the same shape except the first dimension.
+    For example: rank 0 with tensor shape [3, 5, 4] and rank 1 with tensor shape [5, 5, 4] are
+    allowed, the output will be [8, 5, 4] assuming two are connected.
+
+    If src_ranks and dst_ranks is not provided, the neighbor_allgather gather the tensors according
+    to the global default topology.
 
     Arguments:
         tensor: A tensor to allgather.
+        src_ranks: A list of source ranks. If present, ignoring global topology setting.
+            This argument is useful under dynamic topology case.
+            Note dst_ranks and src_ranks should be presented at same time and compatible.
+        dst_ranks: A list of destination ranks.
+        enable_topo_check: When send_neighbors is present, enabling this option checks if the
+            sending and recieving neighbors match with each other. Disabling this check can boost
+            the performance.
         name: A name of the allgather operation.
 
     Returns:
-        A handle to the allgather operation that can be used with `poll()` or
-        `synchronize()`.
+        A handle to the neighbor_allgather operation that can be used with `poll()` or
+        `synchronize()`. Check neighbor_allgather function for the output tensor information.
     """
     output = tensor.new()  # real size will be allocated later.
-    return _neighbor_allgather_nonblocking(tensor, output, name)
+    return _neighbor_allgather_nonblocking(tensor, output, src_ranks, dst_ranks,
+                                           enable_topo_check, name)
 
 
 def _neighbor_allreduce_function_factory(tensor):

@@ -318,7 +318,6 @@ class OpsTests(unittest.TestCase):
                     rank_tensor.data.max() == i
                 ), "bf.allgather produces incorrect gathered tensor"
 
-    @unittest.skipIf(bf.nccl_built(), 'nccl do not support variable size on allgather')
     def test_allgather_variable_size(self):
         size = bf.size()
         rank = bf.rank()
@@ -328,8 +327,9 @@ class OpsTests(unittest.TestCase):
             return
         dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
-        if TEST_ON_GPU:
-            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+        # NCCL do not support the varying case.
+        # if TEST_ON_GPU:
+        #     dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
@@ -1156,6 +1156,132 @@ class OpsTests(unittest.TestCase):
 
             assert sorted(candidate_ranks) == gathered_ranks, \
                 "bf.neighbor_allgather produces incorrect gathered tensor"
+
+    def test_neighbor_allgather_dynamic(self):
+        """Test that the neighbor all gather 1D, 2D, 3D tensors correctly in dynamic setting."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # Connect to all other ranks
+        neighbor_ranks = [i for i in range(size) if i != rank]
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            gathered = bf.neighbor_allgather(tensor, dst_ranks=neighbor_ranks, src_ranks=neighbor_ranks)
+            tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
+
+            assert list(gathered.shape) == [23 * (size-1)] + [23] * (dim - 1)
+
+            candidate_ranks = list(map(float, neighbor_ranks[:]))
+            gathered_ranks = []
+
+            for i, _ in enumerate(neighbor_ranks):
+                rank_tensor = gathered[i * 23: (i + 1) * 23]
+                assert (
+                    list(rank_tensor.shape) == [23] * dim
+                ), "bf.neighbor_allgather(dynamic) produces incorrect gathered shape"
+                assert (
+                    rank_tensor.data.min() == rank_tensor.data.max()
+                ), "bf.neighbor_allgather(dynamic) produces incorrect gathered tensor"
+                gathered_ranks.append(rank_tensor.data.max().item())
+
+            assert candidate_ranks == gathered_ranks, \
+                "bf.neighbor_allgather(dynamic) produces incorrect gathered tensor"
+
+    def test_neighbor_allgather_dynamic_variable_size(self):
+        """Test neighbor_allgather 1D, 2D, 3D tensors with variable size in dynamic setting."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor, torch.IntTensor, torch.DoubleTensor, torch.LongTensor,
+                  torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+        
+        # Connect to all other ranks
+        neighbor_ranks = [i for i in range(size) if i != rank]
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            # Support tests up to MPI Size of 35
+            if size > 35:
+                break
+
+            tensor_sizes = [17, 32, 81, 12, 15, 23, 22] * 5
+            tensor_sizes = tensor_sizes[:size]
+
+            tensor = torch.FloatTensor(
+                *([tensor_sizes[rank]] + [17] * (dim - 1))).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            gathered = bf.neighbor_allgather(tensor, dst_ranks=neighbor_ranks, src_ranks=neighbor_ranks)
+            tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
+
+            tensor_sizes[rank] = 0 # remove self-size since neighbor_allgather does not include self.
+            expected_size = sum(tensor_sizes)
+            assert list(gathered.shape) == [expected_size] + [17] * (dim - 1)
+
+            for i in range(size):
+                if i == rank:
+                    continue
+                rank_size = [tensor_sizes[i]] + [17] * (dim - 1)
+                rank_tensor = gathered[sum(tensor_sizes[:i]):sum(tensor_sizes[:i + 1])]
+                assert list(rank_tensor.shape) == rank_size, \
+                    "bf.neighbor_allgather(dynamic, var) produces incorrect gathered shape"
+                assert rank_tensor.data.min() == i, \
+                    "bf.neighbor_allgather(dynamic, var) produces incorrect gathered tensor"
+                assert rank_tensor.data.max() == i, \
+                    "bf.neighbor_allgather(dynamic, var) produces incorrect gathered tensor"
+
+    def test_neighbor_allgather_order(self):
+        """Test neighbor_allgather gives correct order of collected value by default"""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        dtypes = [torch.FloatTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        for dtype in dtypes:
+            tensor = torch.FloatTensor([rank])
+            tensor = self.cast_and_place(tensor, dtype)
+            gathered = bf.neighbor_allgather(tensor)
+            # The order of gathered value is always the same as the in_neighbor_ranks.
+            np.testing.assert_allclose(gathered.cpu().numpy(), bf.in_neighbor_ranks())
+
+    def test_neighbor_allgather_order_dynamic(self):
+        """Test neighbor_allgather gives correct order of collected value under dynamic topo."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+        src_ranks = np.random.permutation(
+            [i for i in range(size) if i != rank])
+        dst_ranks = np.random.permutation(src_ranks)
+
+        dtypes = [torch.FloatTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor]
+        for dtype in dtypes:
+            tensor = torch.FloatTensor([rank])
+            gathered = bf.neighbor_allgather(
+                tensor, dst_ranks=dst_ranks, src_ranks=src_ranks)
+            # The order of gathered value is always the same as the src_ranks.
+            np.testing.assert_allclose(gathered.cpu().numpy(), src_ranks)
 
     @unittest.skip("Need re-design of API.")
     def test_pair_gossip(self):

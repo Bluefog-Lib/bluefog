@@ -503,35 +503,115 @@ void NCCLController::Broadcast(TensorTableEntry& entry) {
       });
 }
 
-void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
-  // Note the order of recvcounts and displcments is by the oder of
-  // mpi_ctx_.neighbor_in_ranks_ because of MPI_Neighbor_allgather order is
-  // determined by then the order of the  values in sources and destinations is
-  // identical to the input that was used by the process with the same rank in
-  // comm_old in the creation call if the communicator was created with
-  // MPI_Dist_graph_create_adjacent.
-  int* recvcounts = new int[mpi_ctx_.neighbor_indgree_];
-  int* displcmnts = new int[mpi_ctx_.neighbor_indgree_];
-  if (!mpi_ctx_.IsTopoSetup()) {
-    throw std::runtime_error(
-        "Topology has not been set yet cannot run neighbor_allgather");
+void NCCLController::NeighborValueExchangeWithConstantElements(
+    const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+    const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks) {
+#if NCCL_MINOR > 6
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+  ncclGroupStart();
+  for (int i = 0; i < nrecv; i++) {
+    int element_size = mpi_ctx_.GetMPITypeSize(dtype);  // Assume NCCL use same size as MPI
+    void* recvbuf =
+        (void*)(static_cast<char*>(output_ptr) + i * num_elements * element_size);
+    NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(dtype),
+                       src_ranks->at(i), nccl_ctx_.nccl_comm,
+                       nccl_ctx_.stream));
   }
-  Status status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
-  mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
-  if (!CheckSameRecvSize(recvcounts, mpi_ctx_.neighbor_indgree_)) {
-    delete[] recvcounts;
-    delete[] displcmnts;
-    entry.callback(Status::PreconditionError(
-        "Neighbor_allgather/allreduce doesn't support varying lenght of "
-        "vector. Please make "
-        "sure the size of tensors is the same among all processes."));
-    return;
+  for (int i = 0; i < nsend; i++) {
+    NCCLCHECK(ncclSend(input_ptr, num_elements, GetNCCLDataType(dtype),
+                       dst_ranks->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  ncclGroupEnd();
+#else
+  throw std::runtime_error("Try to use ncclSend and ncclRecv under NCCL < 2.7.");
+#endif
+}
+
+void NCCLController::NeighborValueExchangeWithVaryingElements(
+  const void* input_ptr, void* output_ptr,  const int sendcount,
+  const int* recvcounts, const int* displcmnts, DataType dtype,
+  const std::vector<int>* dst_ranks,
+  const std::vector<int>* src_ranks
+) {
+#if NCCL_MINOR > 6
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+  ncclGroupStart();
+  for (int i = 0; i < nrecv; i++) {
+    int recv_count = recvcounts[i];
+    int target_disp = displcmnts[i];
+    int element_size = mpi_ctx_.GetMPITypeSize(dtype);  // Assume NCCL use same size as MPI
+    void* recvbuf =
+        (void*)(static_cast<char*>(output_ptr) + target_disp * element_size);
+    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(dtype),
+                       src_ranks->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  for (int i = 0; i < nsend; i++) {
+    NCCLCHECK(ncclSend(input_ptr, sendcount, GetNCCLDataType(dtype),
+                       dst_ranks->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  }
+  ncclGroupEnd();
+#else
+  throw std::runtime_error("Try to use ncclSend and ncclRecv under NCCL < 2.7.");
+#endif
+}
+
+void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
+  int* recvcounts;
+  int* displcmnts;
+  Status status;
+
+  if (!entry.dynamic_neighbors_enabled) {
+    if (!mpi_ctx_.IsTopoSetup()) {
+      throw std::runtime_error(
+          "Topology has not been set yet cannot run neighbor_allgather");
+    }
+    // Note the order of recvcounts and displcments is by the oder of
+    // mpi_ctx_.neighbor_in_ranks_ because of MPI_Neighbor_allgather order is
+    // determined by then the order of the  values in sources and destinations is
+    // identical to the input that was used by the process with the same rank in
+    // comm_old in the creation call if the communicator was created with
+    // MPI_Dist_graph_create_adjacent.
+    recvcounts = new int[mpi_ctx_.neighbor_indgree_];
+    displcmnts = new int[mpi_ctx_.neighbor_indgree_];
+    status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
+  } else {
+    bool is_topo_check_fail = false;
+    if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
+      if (entry.is_hierarchical) {
+        // TODO: support check.
+        BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
+                    << "allreduce ops but it is not supported yet.";
+      }
+      is_topo_check_fail = CheckNeighborSendRecvPattern(
+          entry.send_neighbors.get(), entry.recv_neighbors.get(), entry.tensor_name,
+          mpi_ctx_.size_, timeline_ptr_, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
+    }
+
+    if (is_topo_check_fail) {
+      entry.callback(Status::InvalidArgument(
+          "Src and dst neighbor ranks do not match"));
+      return;
+    }
+    recvcounts = new int[entry.recv_neighbors->size()];
+    displcmnts = new int[entry.recv_neighbors->size()];
+    status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::DYNAMIC,
+                                     entry.send_neighbors.get(),
+                                     entry.recv_neighbors.get());
   }
   if (!status.ok()) {
     delete[] recvcounts;
     delete[] displcmnts;
     entry.callback(status);
     return;
+  }
+
+  if (!entry.dynamic_neighbors_enabled) {
+    mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::GRAPH);
+  } else {
+    mpi_ctx_.SetDisplacements(recvcounts, displcmnts, Communicator::DYNAMIC,
+                              /*source_neighbor_cnt=*/entry.recv_neighbors->size());
   }
 
   const void* sendbuf = entry.tensor->data();
@@ -544,23 +624,17 @@ void NCCLController::NeighborAllgather(TensorTableEntry& entry) {
   timeline_ptr_->ActivityStart(entry.tensor_name, "COMM. (NCCL)");
   // Pitfall: neighbor_allgather do not include itself.
 #if NCCL_MINOR > 6
-  ncclGroupStart();
-  for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
-    int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
-    int recv_count = recvcounts[i];
-    int target_disp = displcmnts[i];
-    int element_size = mpi_ctx_.GetMPITypeSize(
-        entry.tensor->dtype());  // Assume NCCL use same size as MPI
-    void* recvbuf =
-        (void*)(static_cast<char*>(buffer_data) + target_disp * element_size);
-    NCCLCHECK(ncclRecv(recvbuf, recv_count, GetNCCLDataType(entry.tensor),
-                       recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+  if (!entry.dynamic_neighbors_enabled) {
+    NeighborValueExchangeWithVaryingElements(
+        sendbuf, buffer_data, num_elements, recvcounts, displcmnts,
+        entry.tensor->dtype(), &mpi_ctx_.neighbor_out_ranks_,
+        &mpi_ctx_.neighbor_in_ranks_);
+  } else {
+    NeighborValueExchangeWithVaryingElements(
+        sendbuf, buffer_data, num_elements, recvcounts, displcmnts,
+        entry.tensor->dtype(), entry.send_neighbors.get(),
+        entry.recv_neighbors.get());
   }
-  for (int send_rank : mpi_ctx_.neighbor_out_ranks_) {
-    NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                       send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-  }
-  ncclGroupEnd();
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute([this, entry, tid]() mutable {
