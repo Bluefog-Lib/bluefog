@@ -1,7 +1,7 @@
 import socket
 import psutil
 
-from bluefog.ruun.horovodrun.util import threads
+from bluefog.run.horovodrun.util import threads
 
 
 def _get_local_host_addresses():

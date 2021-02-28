@@ -14,7 +14,6 @@
 # ==============================================================================
 
 import argparse
-import ipyparallel as ipp
 import json
 import os
 import multiprocessing
@@ -23,6 +22,7 @@ import subprocess
 import time
 from typing import Dict, List
 
+import ipyparallel as ipp
 import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 
@@ -62,10 +62,11 @@ def parse_args():
     parser_start.add_argument('--ipython-profile', action="store", dest="profile",
                               type=str, default="bluefog",
                               help="The profile name for ipython environment.")
-    
+
     parser_start.add_argument('--disable-heartbeat', action="store_true", dest="disable_heartbeat",
-                              help='Disable the heartbeat checking service between ipcontroller and ipengines.')
-    
+                              help='Disable the heartbeat checking service between '
+                              'ipcontroller and ipengines.')
+
     group_hosts_parent = parser_start.add_argument_group('host arguments')
     group_hosts = group_hosts_parent.add_mutually_exclusive_group()
     group_hosts.add_argument('-H', '--hosts', action='store', dest='hosts',
@@ -85,6 +86,10 @@ def parse_args():
     parser_start.add_argument('--extra-mpi-flags', action="store", dest="extra_flags",
                               help='Extra mpi flages you want to pass for mpirun.')
 
+    parser_stop.add_argument('--ipython-profile', action="store", dest="profile",
+                              type=str, default="bluefog",
+                              help="The profile name for ipython environment.")
+
     parsed_args = parser.parse_args()
     return parsed_args
 
@@ -103,7 +108,7 @@ def _disable_heart_beatcheck(profile):
         return True
     except:
         return False
-            
+
 def _delete_ipengine_config(profile):
     config_file = os.path.join(_get_ip_file_dir(
         profile), "..",  "ipengine_config.py")
@@ -173,7 +178,10 @@ def _write_ipengine_pid(profile):
 
 def _get_ipengine_pid_from_file(profile):
     path = _get_ip_file_dir(profile)
-    with open(os.path.join(path, "engine_pids.json"), 'r') as f:
+    engine_pid_file = os.path.join(path, "engine_pids.json")
+    if not os.path.exists(engine_pid_file):
+        return None
+    with open(engine_pid_file, 'r') as f:
         engine_pids = json.load(f)
     return engine_pids
 
@@ -194,7 +202,8 @@ def _maybe_kill_ipcontroller_process(profile):
               "Maybe it is already been stopped.")
         return False
     try:
-        os.kill(pid, signal.SIGINT)
+        for _ in range(2):  # Kill two times
+            os.kill(pid, signal.SIGINT)
         return True
     except:
         return False
@@ -206,11 +215,13 @@ def _maybe_kill_ipengine_processes(profile):
     engine_pids = _get_ipengine_pid_from_file(profile)
     if engine_pids is None:
         return
-    for _, pid in engine_pids.items():
-        try:
-            os.kill(pid, signal.SIGINT)
-        except:
-            pass
+    for _ in range(2):  # Kill two times
+        for _, pid in engine_pids.items():
+            try:
+                os.kill(pid, signal.SIGINT)
+            except:
+                pass
+
     _delete_ipengine_config(profile)
     _delete_ipengine_pid(profile)
 
@@ -406,6 +417,7 @@ def main():
         subprocess.run(ipcluster_stop_command, shell=True,
                        env=env, capture_output=True)
         _maybe_kill_ipcontroller_process(args.profile)
+        _maybe_kill_ipengine_processes(args.profile)
         exit(0)
 
     # action of start
