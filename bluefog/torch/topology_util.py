@@ -5,30 +5,6 @@ import numpy as np
 import torch
 import bluefog.torch as bf
 
-from bluefog.common.topology_util import (
-    GetRecvWeights,
-    GetSendWeights,
-    IsRegularGraph,
-    IsTopologyEquivalent,
-)
-
-from bluefog.common.topology_util import (
-    ExponentialTwoGraph,
-    ExponentialGraph,
-    FullyConnectedGraph,
-    MeshGrid2DGraph,
-    RingGraph,
-    StarGraph,
-    SymmetricExponentialGraph,
-)
-
-from bluefog.common.topology_util import (
-    GetDynamicOnePeerSendRecvRanks,
-    GetExp2DynamicSendRecvMachineRanks,
-    GetInnerOuterRingDynamicSendRecvRanks,
-    GetInnerOuterExpo2DynamicSendRecvRanks,
-)
-
 
 def _check_ranks(rank_list: List[Any], self_rank: int, size: int) -> [bool, str]:
     for rank in rank_list:
@@ -43,7 +19,7 @@ def _check_ranks(rank_list: List[Any], self_rank: int, size: int) -> [bool, str]
     return True, ""
 
 
-def infer_destination_source_ranks(
+def InferDestinationSourceRanks(
     *,
     dst_ranks: Optional[List[int]] = None,
     src_ranks: Optional[List[int]] = None,
@@ -57,7 +33,7 @@ def infer_destination_source_ranks(
         src_ranks: A list of destination ranks. If provided the src_ranks, a corresponding
             dst_link will be returned.
         construct_adjacency_matrix: If true, adjacency matrix will be return instead.
-            Element w_{ij} represents the weights sending from node i to node j. 
+            Element w_{ij} represents the weights sending from node i to node j.
             We use column normalized style, i.e. the sum of receiving weight is 1.
 
     Raises:
@@ -91,8 +67,10 @@ def infer_destination_source_ranks(
     for k, adj in adjacency_dict.items():
         for v in adj:
             inv_adjacency_dict[v].append(k)
+    return_list = inv_adjacency_dict.get(bf.rank())
+
     if not construct_adjacency_matrix:
-        return inv_adjacency_dict.get(bf.rank())
+        return return_list
 
     # construct_adjacency_matrix
     W = np.eye(bf.size())
@@ -101,4 +79,4 @@ def infer_destination_source_ranks(
     if dst_ranks is None:
         W = W.T
 
-    return W / W.sum(axis=1)
+    return return_list, W / W.sum(axis=1)

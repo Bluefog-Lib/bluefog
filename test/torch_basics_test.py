@@ -28,15 +28,14 @@ import torch
 
 from common import mpi_env_rank_and_size
 import bluefog.torch as bf
-from bluefog.torch.topology_util import (
+from bluefog.torch import (
     ExponentialGraph,
     RingGraph,
     StarGraph,
     MeshGrid2DGraph,
     FullyConnectedGraph,
 )
-from bluefog.torch.topology_util import IsTopologyEquivalent
-from bluefog.torch.topology_util import infer_destination_source_ranks
+from bluefog.torch import IsTopologyEquivalent, infer_destination_source_ranks
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -170,20 +169,20 @@ def test_infer_destination_source_ranks(topo_func):
     in_neighbors = bf.in_neighbor_ranks()
     out_neighbors = bf.out_neighbor_ranks()
 
-    src_ranks = infer_destination_source_ranks(dst_ranks=out_neighbors)
-    assert sorted(src_ranks) == in_neighbors
-    dst_ranks = infer_destination_source_ranks(src_ranks=in_neighbors)
-    assert sorted(dst_ranks) == out_neighbors
-
-    W = infer_destination_source_ranks(
-        dst_ranks=out_neighbors, construct_adjacency_matrix=True
-    )
+    # Make the W into average rule.
     expected_W = (nx.to_numpy_array(topo) > 0).astype(float)
     expected_W /= expected_W.sum(axis=0)
+
+    src_ranks, W = infer_destination_source_ranks(
+        dst_ranks=out_neighbors, construct_adjacency_matrix=True
+    )
+    assert sorted(src_ranks) == in_neighbors
     np.testing.assert_allclose(W, expected_W)
-    W = infer_destination_source_ranks(
+
+    dst_ranks, W = infer_destination_source_ranks(
         src_ranks=in_neighbors, construct_adjacency_matrix=True
     )
+    assert sorted(dst_ranks) == out_neighbors
     np.testing.assert_allclose(W, expected_W)
 
 
