@@ -35,7 +35,11 @@ from bluefog.torch import (
     MeshGrid2DGraph,
     FullyConnectedGraph,
 )
-from bluefog.torch import IsTopologyEquivalent, infer_destination_source_ranks
+from bluefog.torch import (
+    IsTopologyEquivalent,
+    InferDestinationFromSourceRanks,
+    InferSourceFromDestinationRanks,
+)
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -161,7 +165,7 @@ class BasicsTests(unittest.TestCase):
     "topo_func",
     [ExponentialGraph, RingGraph, StarGraph, MeshGrid2DGraph, FullyConnectedGraph],
 )
-def test_infer_destination_source_ranks(topo_func):
+def test_infer_destination_from_source_ranks(topo_func):
     bf.init()
     size = bf.size()
     bf.set_topology(topo_func(size))
@@ -173,16 +177,33 @@ def test_infer_destination_source_ranks(topo_func):
     expected_W = (nx.to_numpy_array(topo) > 0).astype(float)
     expected_W /= expected_W.sum(axis=0)
 
-    src_ranks, W = infer_destination_source_ranks(
-        dst_ranks=out_neighbors, construct_adjacency_matrix=True
-    )
-    assert sorted(src_ranks) == in_neighbors
-    np.testing.assert_allclose(W, expected_W)
-
-    dst_ranks, W = infer_destination_source_ranks(
+    src_ranks, W = InferDestinationFromSourceRanks(
         src_ranks=in_neighbors, construct_adjacency_matrix=True
     )
-    assert sorted(dst_ranks) == out_neighbors
+    assert sorted(src_ranks) == out_neighbors
+    np.testing.assert_allclose(W, expected_W)
+
+
+@pytest.mark.parametrize(
+    "topo_func",
+    [ExponentialGraph, RingGraph, StarGraph, MeshGrid2DGraph, FullyConnectedGraph],
+)
+def test_infer_source_from_destination_ranks(topo_func):
+    bf.init()
+    size = bf.size()
+    bf.set_topology(topo_func(size))
+    topo = bf.load_topology()
+    in_neighbors = bf.in_neighbor_ranks()
+    out_neighbors = bf.out_neighbor_ranks()
+
+    # Make the W into average rule.
+    expected_W = (nx.to_numpy_array(topo) > 0).astype(float)
+    expected_W /= expected_W.sum(axis=0)
+
+    dst_ranks, W = InferSourceFromDestinationRanks(
+        dst_ranks=out_neighbors, construct_adjacency_matrix=True
+    )
+    assert sorted(dst_ranks) == in_neighbors
     np.testing.assert_allclose(W, expected_W)
 
 
