@@ -24,8 +24,8 @@ namespace bluefog {
 namespace common {
 
 // Scales buffer by scalar
-void ScaleBufferCudaImpl(const void* fused_input_data, void* buffer_data, const int64_t num_elements,
-                         double scale_factor, DataType dtype, cudaStream_t stream);
+void ScaleBufferCudaImpl(double scale_factor, void* buffer_data, const int64_t num_elements,
+                         DataType dtype, cudaStream_t stream);
 
 } // namespace common
 } // namespace bluefog
