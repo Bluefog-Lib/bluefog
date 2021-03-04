@@ -70,6 +70,7 @@ class TorchOpContext : public common::OpContext {
   virtual common::Status AllocateZeros(
       int64_t num_elements, common::DataType dtype,
       std::shared_ptr<common::Tensor>* tensor) override;
+  virtual std::shared_ptr<common::ReadyEvent> RecordReadyEvent(int device) override;
   virtual common::Framework framework() const override;
 
  private:

@@ -753,7 +753,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     return; 
   }
 
-  std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
+  std::shared_ptr<std::vector<std::unique_ptr<common::Tensor>>> weighted_tensors;
   // Ensure the lifecycle of the weighted tensors are alive after communication.
 
 #if NCCL_MINOR > 6
@@ -772,6 +772,14 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                           send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
     } else {
+      if(entry.dst_weighting_enabled) {
+        for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
+          weighted_tensors->push_back(std::move(weighted_tensor_ptr));
+        }
+      }
+      std::shared_ptr<common::ReadyEvent> ready_event =
+          entry.context->RecordReadyEvent(entry.device);
       for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
         int recv_rank = entry.recv_neighbors->at(i);
         void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
@@ -781,11 +789,13 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       }
       if(entry.dst_weighting_enabled)
       {
+        if (ready_event != nullptr) {
+          while (!ready_event->Ready()) {
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+          }
+        }
         for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
-          // Add ready event
-          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
-          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
-          NCCLCHECK(ncclSend(weighted_tensors[i].get()->data(), num_elements,
+          NCCLCHECK(ncclSend((*weighted_tensors)[i].get()->data(), num_elements,
                              GetNCCLDataType(entry.tensor), entry.send_neighbors->at(i),
                              nccl_ctx_.nccl_comm, nccl_ctx_.stream));
         }
@@ -843,7 +853,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
 
   auto tid = std::this_thread::get_id();
   nccl_ctx_.finalizer_thread_pool.execute(
-      [this, entry, event_queue, tid, buffer_data, weighted_tensors]() mutable {
+      [this, entry, event_queue, tid, weighted_tensors]() mutable {
         with_device device_guard(entry.device);
         WaitForEvents(event_queue, {entry}, this->timeline_ptr_, tid);
 

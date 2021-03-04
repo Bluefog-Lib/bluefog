@@ -178,6 +178,10 @@ Status TorchOpContext::AllocateZeros(int64_t num_elements, DataType dtype,
 
 Framework TorchOpContext::framework() const { return Framework::PYTORCH; }
 
+std::shared_ptr<common::ReadyEvent> TorchOpContext::RecordReadyEvent(int device) {
+  return torch::RecordReadyEvent(device);
+}
+
 #if HAVE_CUDA
 struct ReadyEventRegistry {
   std::unordered_map<int, std::queue<cudaEvent_t>> cuda_events;

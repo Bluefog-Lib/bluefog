@@ -468,6 +468,18 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
     } else {
       int nsend = entry.send_neighbors->size();
       int nrecv = entry.recv_neighbors->size();
+
+      // Ensure the lifecycle of the weighted tensors are alive after communication.
+      std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
+      if (entry.dst_weighting_enabled) {
+        for (int i = 0; i < nsend; ++i) {
+          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
+          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+        }
+      }
+      std::shared_ptr<common::ReadyEvent> ready_event =
+          entry.context->RecordReadyEvent(entry.device);
+
       std::vector<MPI_Request> requests(nsend + nrecv);
       std::vector<MPI_Status> statuses(nsend + nrecv);
       int element_size = mpi_ctx_.GetMPITypeSize(entry.output->dtype());
@@ -487,17 +499,14 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
         }
       }
 
-      std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
-      // Ensure the lifecycle of the weighted tensors are alive after communication.
-
       if (entry.dst_weighting_enabled) {
+        if (ready_event != nullptr) {
+          while (!ready_event->Ready()) {
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+          }
+        }
         for (int i = 0; i < nsend; ++i) {
-          int ret_code;
-          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
-          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
-          //TODO(hhb): Temporary Solution for Ready Event Issue with data_weight
-          std::this_thread::sleep_for(std::chrono::microseconds(100));
-          ret_code = MPI_Isend(
+          int ret_code = MPI_Isend(
               weighted_tensors[i].get()->data(), num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
               entry.send_neighbors->at(i),
               mpi_ctx_.rank_ + entry.send_neighbors->at(i),

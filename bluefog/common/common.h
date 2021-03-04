@@ -241,6 +241,7 @@ class OpContext {
                                 std::shared_ptr<Tensor>* tensor) = 0;
   virtual Status AllocateZeros(int64_t num_elements, DataType dtype,
                                std::shared_ptr<Tensor>* tensor) = 0;
+  virtual std::shared_ptr<ReadyEvent> RecordReadyEvent(int device) = 0;
   virtual Framework framework() const = 0;
   virtual ~OpContext() = default;
 };
