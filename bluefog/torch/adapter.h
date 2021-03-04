@@ -32,7 +32,7 @@ namespace torch {
 class TorchTensor : public common::Tensor {
  public:
   TorchTensor(::torch::Tensor tensor);
-  virtual const common::DataType dtype() const override;
+  virtual common::DataType dtype() const override;
   virtual const common::TensorShape shape() const override;
   virtual const void* data() const override;
   virtual std::unique_ptr<common::Tensor> data_weight(float weight) override;

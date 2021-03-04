@@ -89,7 +89,7 @@ const void* TFPersistentBuffer::AccessData(
 
 TFTensor::TFTensor(::tensorflow::Tensor& tensor) : tensor_(tensor) {}
 
-const common::DataType TFTensor::dtype() const {
+common::DataType TFTensor::dtype() const {
   switch (tensor_.dtype()) {
     case ::tensorflow::DT_UINT8:
       return common::DataType::BLUEFOG_UINT8;

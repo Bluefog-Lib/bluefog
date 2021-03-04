@@ -43,7 +43,7 @@ using ::bluefog::common::with_device;
 
 TorchTensor::TorchTensor(::torch::Tensor tensor) : tensor_(tensor) {}
 
-const DataType TorchTensor::dtype() const {
+DataType TorchTensor::dtype() const {
   switch (tensor_.scalar_type()) {
     case ::torch::kByte:
       return DataType::BLUEFOG_UINT8;
