@@ -27,6 +27,8 @@
 #include "operations.h"
 #include "timeline.h"
 
+#include "cuda/cuda_kernels.h"
+
 namespace bluefog {
 namespace common {
 
@@ -1048,7 +1050,14 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     MemcpyInWeightFusionBuffer(weight_buffer_data, first_entry.send_neighbors->size(),
                                fused_input_data, num_elements, element_size,
                                first_entry.context, first_entry.device);
-    //TODO(hhb): add weighting implementation.
+    int64_t offset = 0;
+    for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
+      double dst_weight = first_entry.send_weights->at(i);
+      void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
+      ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
+                          first_entry.tensor->dtype(), nccl_ctx_.stream);
+      offset += num_elements * element_size;
+    }
     weighted_fused_input_data = weight_buffer_data;
   }
 

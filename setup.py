@@ -437,6 +437,26 @@ def is_torch_cuda(build_ext, include_dirs, extra_compile_args):
         print('INFO: Above error indicates that this PyTorch installation does not support CUDA.')
         return False
 
+def build_nvcc_extra_objects():
+    # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -rdc=true -c cuda_kernels.cu
+    # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -dlink -o cuda_kernels_link.o \
+    #      cuda_kernels.o -lcudart
+    nvcc = 'nvcc'
+    import torch
+    common_flags = f"'-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(torch.compiled_with_cxx11_abi())}'"
+    nvcc_with_flags = f"{nvcc} --compiler-options {common_flags}"
+
+    extra_object_dir = 'bluefog/common/cuda/'
+    source = extra_object_dir+'cuda_kernels.cu'
+    object_file = extra_object_dir+'cuda_kernels.o'
+    object_link = extra_object_dir+'cuda_kernels_link.o'
+
+    command_object = f"{nvcc_with_flags} -rdc=true -c {source} -o {object_file}"
+    command_link   = f"{nvcc_with_flags} -dlink {object_file} -lcudart -o {object_link}"
+
+    subprocess.run([command_object], shell=True)
+    subprocess.run([command_link], shell=True)
+    return [object_file, object_link]
 
 def build_torch_extension(build_ext, global_options, torch_version):
     # Backup the options, preventing other plugins access libs that
@@ -447,6 +467,9 @@ def build_torch_extension(build_ext, global_options, torch_version):
     if have_cuda:
         cuda_include_dirs, cuda_lib_dirs = get_cuda_dirs(
             build_ext, options['COMPILE_FLAGS'])
+        cuda_extra_objects = build_nvcc_extra_objects()
+        options['EXTRA_OBJECTS'] += cuda_extra_objects
+
         options['INCLUDES'] += cuda_include_dirs
         options['LIBRARY_DIRS'] += cuda_lib_dirs
         options['LIBRARIES'] += ['cudart']
@@ -491,6 +514,7 @@ def build_torch_extension(build_ext, global_options, torch_version):
     else:
         # CUDAExtension fails with `ld: library not found for -lcudart` if CUDA is not present
         from torch.utils.cpp_extension import CppExtension as TorchExtension
+    bluefog_tensorflow_mpi_lib.extra_objects = options['EXTRA_OBJECTS']
 
     ext = TorchExtension(bluefog_torch_mpi_lib.name,
                          define_macros=updated_macros,
@@ -504,6 +528,7 @@ def build_torch_extension(build_ext, global_options, torch_version):
                          extra_compile_args=options['COMPILE_FLAGS'],
                          extra_link_args=options['LINK_FLAGS'],
                          library_dirs=options['LIBRARY_DIRS'],
+                         extra_objects=options['EXTRA_OBJECTS'],
                          libraries=options['LIBRARIES'])
 
     # Patch an existing bluefog_torch_mpi_lib extension object.

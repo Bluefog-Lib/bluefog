@@ -29,6 +29,10 @@
 #include "operations.h"
 #include "timeline.h"
 
+#if HAVE_CUDA
+#include "cuda/cuda_kernels.h"
+#endif
+
 namespace bluefog {
 namespace common {
 
@@ -507,8 +511,8 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
         }
         for (int i = 0; i < nsend; ++i) {
           int ret_code = MPI_Isend(
-              weighted_tensors[i].get()->data(), num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
-              entry.send_neighbors->at(i),
+              weighted_tensors[i].get()->data(), num_elements,
+              mpi_ctx_.GetMPIDataType(entry.tensor), entry.send_neighbors->at(i),
               mpi_ctx_.rank_ + entry.send_neighbors->at(i),
               mpi_ctx_.GetMPICommunicator(Communicator::GRAPH), &requests[i]);
           if (ret_code != MPI_SUCCESS) {
@@ -679,7 +683,8 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                        first_entry.tensor->dtype());
       } else {
 #if HAVE_CUDA
-        // CUDA Weighting
+        ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
+                            first_entry.tensor->dtype(), mpi_ctx_.stream);
 #endif
       }
       offset += num_elements * element_size;
@@ -747,6 +752,9 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
           }
         }
       } else {
+#if HAVE_CUDA
+        cudaStreamSynchronize(mpi_ctx_.stream);
+#endif
         for (int i = 0; i < nsend; ++i) {
           void* sendbuf = 
               (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
