@@ -437,13 +437,12 @@ def is_torch_cuda(build_ext, include_dirs, extra_compile_args):
         print('INFO: Above error indicates that this PyTorch installation does not support CUDA.')
         return False
 
-def build_nvcc_extra_objects():
+def build_nvcc_extra_objects(cxx11_abi: bool):
     # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -rdc=true -c cuda_kernels.cu
     # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -dlink -o cuda_kernels_link.o \
     #      cuda_kernels.o -lcudart
     nvcc = 'nvcc'
-    import torch
-    common_flags = f"'-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(torch.compiled_with_cxx11_abi())}'"
+    common_flags = f"'-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(cxx11_abi)}'"
     nvcc_with_flags = f"{nvcc} --compiler-options {common_flags}"
 
     extra_object_dir = 'bluefog/common/cuda/'
@@ -454,20 +453,23 @@ def build_nvcc_extra_objects():
     command_object = f"{nvcc_with_flags} -rdc=true -c {source} -o {object_file}"
     command_link   = f"{nvcc_with_flags} -dlink {object_file} -lcudart -o {object_link}"
 
-    subprocess.run([command_object], shell=True)
-    subprocess.run([command_link], shell=True)
+    subprocess.check_call([command_object], shell=True)
+    subprocess.check_call([command_link], shell=True)
     return [object_file, object_link]
 
 def build_torch_extension(build_ext, global_options, torch_version):
     # Backup the options, preventing other plugins access libs that
     # compiled with compiler of this plugin
+    import torch
+    is_cxx11_abi = torch.compiled_with_cxx11_abi()
+
     options = copy.deepcopy(global_options)
     have_cuda = is_torch_cuda(build_ext, include_dirs=options['INCLUDES'],
                               extra_compile_args=options['COMPILE_FLAGS'])
     if have_cuda:
         cuda_include_dirs, cuda_lib_dirs = get_cuda_dirs(
             build_ext, options['COMPILE_FLAGS'])
-        cuda_extra_objects = build_nvcc_extra_objects()
+        cuda_extra_objects = build_nvcc_extra_objects(is_cxx11_abi)
         options['EXTRA_OBJECTS'] += cuda_extra_objects
 
         options['INCLUDES'] += cuda_include_dirs
@@ -501,9 +503,8 @@ def build_torch_extension(build_ext, global_options, torch_version):
         updated_macros, 'TORCH_VERSION', str(torch_version))
 
     # Always set _GLIBCXX_USE_CXX11_ABI, since PyTorch can only detect whether it was set to 1.
-    import torch
     updated_macros = set_macro(updated_macros, '_GLIBCXX_USE_CXX11_ABI',
-                               str(int(torch.compiled_with_cxx11_abi())))
+                               str(int(is_cxx11_abi)))
 
     # PyTorch requires -DTORCH_API_INCLUDE_EXTENSION_H
     updated_macros = set_macro(
