@@ -1,6 +1,9 @@
 BlueFog
 =======
 
+.. image:: https://github.com/Bluefog-Lib/bluefog/actions/workflows/ci.yml/badge.svg
+    :target: https://github.com/Bluefog-Lib/bluefog/actions/workflows/ci.yml/badge.svg
+
 .. image:: https://travis-ci.com/Bluefog-Lib/bluefog.svg?branch=master
     :target: https://travis-ci.com/Bluefog-Lib/bluefog
 
