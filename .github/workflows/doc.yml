@@ -19,7 +19,7 @@ jobs:
         python-version: 3.7
     - name: Build Document
       run: |
-        python -m pip install sphinx sphinx_rtd_theme
+        python -m pip install matplotlib sphinx sphinx_rtd_theme
         cd docs && make html
         touch _build/html/.nojekyll
     - name: Deploy Github Pages
