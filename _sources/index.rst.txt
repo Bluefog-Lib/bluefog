@@ -68,6 +68,7 @@ In this scenario, the communcation cost for each iteration is only one unit dela
    Spectrum of Machine Learning Algorithm<alg_spectrum>
    Codebase Structure <code_structure>
    Development Guide <devel_guide>
+   FAQ <faq>
 
 .. _openmpi: https://www.open-mpi.org/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
