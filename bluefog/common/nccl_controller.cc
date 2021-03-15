@@ -755,7 +755,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     return; 
   }
 
-  std::shared_ptr<std::vector<std::unique_ptr<common::Tensor>>> weighted_tensors;
+  std::vector<std::shared_ptr<common::Tensor>> weighted_tensors;
   // Ensure the lifecycle of the weighted tensors are alive after communication.
 
 #if NCCL_MINOR > 6
@@ -777,7 +777,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
       if(entry.dst_weighting_enabled) {
         for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
           auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
-          weighted_tensors->push_back(std::move(weighted_tensor_ptr));
+          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
         }
       }
       std::shared_ptr<common::ReadyEvent> ready_event =
@@ -797,7 +797,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
           }
         }
         for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
-          NCCLCHECK(ncclSend((*weighted_tensors)[i].get()->data(), num_elements,
+          NCCLCHECK(ncclSend(weighted_tensors[i].get()->data(), num_elements,
                              GetNCCLDataType(entry.tensor), entry.send_neighbors->at(i),
                              nccl_ctx_.nccl_comm, nccl_ctx_.stream));
         }
