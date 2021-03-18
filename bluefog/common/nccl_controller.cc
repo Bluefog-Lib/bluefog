@@ -1101,12 +1101,12 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                              nccl_ctx_.nccl_comm, nccl_ctx_.stream));
         }
       } else {
-        size_t i = 0;
-        for (int send_rank : *first_entry.send_neighbors) {
+        for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
           void* sendbuf = 
               (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
           NCCLCHECK(ncclSend(sendbuf, num_elements,
-                             GetNCCLDataType(first_entry.tensor), send_rank,
+                             GetNCCLDataType(first_entry.tensor),
+                             first_entry.send_neighbors->at(i),
                              nccl_ctx_.nccl_comm, nccl_ctx_.stream));
         }
       }
@@ -1951,8 +1951,8 @@ void NCCLController::MemcpyInWeightFusionBuffer(
   int64_t offset = 0;
   for (size_t i = 0; i < num_dst; ++i) {
     void* weight_buffer_data_at_offset = (uint8_t*)weight_buffer_data + offset;
-    CUDACHECK(cudaMemcpy(weight_buffer_data_at_offset, buffer_data, data_size,
-                         cudaMemcpyDeviceToDevice));
+    CUDACHECK(cudaMemcpyAsync(weight_buffer_data_at_offset, buffer_data, data_size,
+                              cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
     offset += data_size;
   }
 }
