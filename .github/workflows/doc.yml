@@ -1,4 +1,4 @@
-name: Docu CI
+name: Document CI
 
 on:
   push:
