@@ -23,7 +23,7 @@ jobs:
     - name: Install BlueFog
       run: |
         git submodule update --init --recursive
-        python -m pip install .
+        python -m pip install -e .
     - name: Build Document
       run: |
         python -m pip install matplotlib sphinx sphinx_rtd_theme
