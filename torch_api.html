@@ -237,6 +237,1582 @@
 </dl>
 </li>
 </ul>
+<span class="target" id="module-bluefog.torch"></span><dl class="py class">
+<dt id="bluefog.torch.CommunicationType">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">CommunicationType</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.CommunicationType" title="Permalink to this definition">¶</a></dt>
+<dd><p>An enumeration.</p>
+<dl class="py attribute">
+<dt id="bluefog.torch.CommunicationType.neighbor_allreduce">
+<code class="sig-name descname"><span class="pre">neighbor_allreduce</span></code><em class="property"> <span class="pre">=</span> <span class="pre">'neighbor.allreduce'</span></em><a class="headerlink" href="#bluefog.torch.CommunicationType.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="bluefog.torch.CommunicationType.hierarchical_neighbor_allreduce">
+<code class="sig-name descname"><span class="pre">hierarchical_neighbor_allreduce</span></code><em class="property"> <span class="pre">=</span> <span class="pre">'hierarchical.neighbor.allreduce'</span></em><a class="headerlink" href="#bluefog.torch.CommunicationType.hierarchical_neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="bluefog.torch.CommunicationType.allreduce">
+<code class="sig-name descname"><span class="pre">allreduce</span></code><em class="property"> <span class="pre">=</span> <span class="pre">'allreduce'</span></em><a class="headerlink" href="#bluefog.torch.CommunicationType.allreduce" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="bluefog.torch.CommunicationType.empty">
+<code class="sig-name descname"><span class="pre">empty</span></code><em class="property"> <span class="pre">=</span> <span class="pre">'empty'</span></em><a class="headerlink" href="#bluefog.torch.CommunicationType.empty" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedAdaptThenCombineOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedAdaptThenCombineOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="pre">optimizer</span></em>, <em class="sig-param"><span class="pre">model</span></em>, <em class="sig-param"><span class="pre">communication_type=&lt;CommunicationType.neighbor_allreduce:</span> <span class="pre">'neighbor.allreduce'&gt;</span></em>, <em class="sig-param"><span class="pre">num_steps_per_communication=1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAdaptThenCombineOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer.
+The communication is applied on the parameters when backward propagation triggered and
+run the communication after parameter updated with gradient.</p>
+<p>In order to maximize the overlapping between communication and computation, we override
+the step() function in standard optimizer provided by PyTorch. Currenly, we support
+SGD, ADAM, AdaDelta, RMSProp, AdaGrad. If you don’t use these, you need
+to register your own step function to the returned optimizer through</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">register_step_function</span><span class="p">(</span><span class="n">step_func</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>where the signature should be func(self, parameter, gradient, parameter_group) -&gt; None.
+Note, it has to be paramter-wise and parameter_group is the one that the standard
+torch.optimizer provided, which can store the auxuilary information or state of
+optimizer like learning_rate, weight_decay, etc.</p>
+<p>Returned optimizer has three extra parameters <cite>self_weight</cite>, <cite>neighbor_weights</cite> and
+<cite>send_neighbors</cite>, <cite>neighbor_machine_weights</cite> and <cite>send_neighbor_machines</cite> to control
+the behavior of hierarchical neighbor allreduce. Changing the values
+of these knobs to achieve dynamic topologies.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>communication_type</strong> – A enum type to determine use neighbor_allreduce, or allreduce, or
+hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
+Empty function just means no communication.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected backward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Example for two scenarios to use num_steps_per_communication:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedAdaptWithCombineOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">communication_type</span><span class="o">=</span><span class="n">CommunicationType</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens here</span>
+</pre></div>
+</div>
+<p>Scenario 2) Local updating the model. (Used in case that decreasing the communication).</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedAdaptWithCombineOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">communication_type</span><span class="o">=</span><span class="n">CommunicationType</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens at the last iteration</span>
+</pre></div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedAdaptWithCombineOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedAdaptWithCombineOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="pre">optimizer</span></em>, <em class="sig-param"><span class="pre">model</span></em>, <em class="sig-param"><span class="pre">communication_type=&lt;CommunicationType.neighbor_allreduce:</span> <span class="pre">'neighbor.allreduce'&gt;</span></em>, <em class="sig-param"><span class="pre">num_steps_per_communication=1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAdaptWithCombineOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer.
+The communication is applied on the parameters when forward propagation triggered. Hence,
+communication is overlapped with both forward and backward phase. Unlike AdaptThenCombine,
+this dist-optimizer do not need to register customized step function.</p>
+<p>Returned optimizer has three extra parameters <cite>self_weight</cite>, <cite>neighbor_weights</cite> and
+<cite>send_neighbors</cite>, <cite>neighbor_machine_weights</cite> and <cite>send_neighbor_machines</cite> to control
+the behavior of hierarchical neighbor allreduce. Changing the values
+of these knobs to achieve dynamic topologies.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>communication_type</strong> – A enum type to determine use neighbor_allreduce, or allreduce, or
+hierarchical_neighbor_allreduce, or empty function as communcaiton behavior.
+Empty function just means no communication.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected backward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Example for two scenarios to use num_steps_per_communication:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedAdaptWithCombineOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">communication_type</span><span class="o">=</span><span class="n">CommunicationType</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens here</span>
+</pre></div>
+</div>
+<p>Scenario 2) Local updating the model. (Used in case that decreasing the communication).</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedAdaptWithCombineOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">communication_type</span><span class="o">=</span><span class="n">CommunicationType</span><span class="o">.</span><span class="n">neighbor_allreduce</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>         <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens at the last iteration</span>
+</pre></div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedGradientAllreduceOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedGradientAllreduceOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps_per_communication</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedGradientAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
+The communication happens when backward propagation happens, which is the same as Horovod.
+In addition, allreduce is applied on gradient instead of parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected backward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Example for two scenarios to use num_steps_per_communication:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Scenario 1) Local accumulation of gradient without update model.</dt><dd><p>(Used in large batch size or large model cases)</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedGradientAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>                                               <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens here</span>
+</pre></div>
+</div>
+<p>Scenario 2) Local updating the model. (Used in case that decreasing the communication).</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">opt</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">DistributedGradientAllreduceOptimizer</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>                                               <span class="n">num_steps_per_communication</span><span class="o">=</span><span class="n">J</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">J</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">output</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data_batch_i</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># Allreducing happens at the last iteration</span>
+</pre></div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedWinPutOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedWinPutOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps_per_communication</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedWinPutOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer with
+pull model average through bf.win_put ops.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – Optimizer to use for computing gradients and applying updates.</p></li>
+<li><p><strong>model</strong> – The model or a list of models you want to train with.</p></li>
+<li><p><strong>num_steps_per_communication</strong> – Number of expected model forward function calls before each
+communication. This allows local model parameter updates
+per num_steps_per_communication before reducing them over
+distributed computation resources.</p></li>
+<li><p><strong>window_prefix</strong> – A string to identify the unique DistributedWinPutOptimizer, which will be
+applied as the prefix for window name.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Returned optimizer has two extra parameters <cite>dst_weights</cite> and <cite>force_barrier</cite>.
+Set dst_weights dictionary as {rank: scaling} differently per iteration to achieve
+win_put over dynamic graph behavior. If force_barrier is True, a barrier function
+will put at <cite>step()</cite> to synchronous processes.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedAllreduceOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedAllreduceOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps_per_communication</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through allreduce ops.
+The communication for allreduce is applied on the parameters when forward propagation happens.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This API will be deprecated in the future.
+Use <code class="docutils literal notranslate"><span class="pre">DistributedAdaptWithCombineOptimizer</span></code> instead.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedNeighborAllreduceOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedNeighborAllreduceOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps_per_communication</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
+neighbor_allreduce ops over parameters.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This API will be deprecated in the future.
+Use <code class="docutils literal notranslate"><span class="pre">DistributedAdaptWithCombineOptimizer</span></code> instead.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.DistributedHierarchicalNeighborAllreduceOptimizer">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">DistributedHierarchicalNeighborAllreduceOptimizer</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps_per_communication</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.DistributedHierarchicalNeighborAllreduceOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>An distributed optimizer that wraps another torch.optim.Optimizer through
+hierarchical_neighbor_allreduce ops over parameters.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This API will be deprecated in the future.
+Use <code class="docutils literal notranslate"><span class="pre">DistributedAdaptWithCombineOptimizer</span></code> instead.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.init">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">init</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topology_fn</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">networkx.classes.digraph.DiGraph</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.init" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that initializes BlueFog.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>topology_fn</strong> – A callable function that takes size as input and return
+networkx.DiGraph object to decide the topology. If not provided
+a default exponential graph (base 2) structure is called.</p></li>
+<li><p><strong>is_weighted</strong> – If set to true, the neighbor ops like (win_update, neighbor_allreduce) will
+execute the weighted average instead, where the weight is the value used in
+topology matrix (including self).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.shutdown">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">shutdown</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">None</span><a class="headerlink" href="#bluefog.torch.shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that shuts BlueFog down.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.size">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">size</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.size" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the number of BlueFog processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar containing the number of BlueFog processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.local_size">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">local_size</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.local_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the number of BlueFog processes within the
+node the current process is running on.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar containing the number of local BlueFog processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.rank">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">rank</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.rank" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the BlueFog rank of the calling process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar with the BlueFog rank of the calling process.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.local_rank">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">local_rank</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.local_rank" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the local BlueFog rank of the calling process, within the
+node that it is running on. For example, if there are seven processes running
+on a node, their local ranks will be zero through six, inclusive.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar with the local BlueFog rank of the calling process.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.machine_size">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">machine_size</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.machine_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the BlueFog size of the machine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar with the BlueFog size of the machine.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.machine_rank">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">machine_rank</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.machine_rank" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the BlueFog rank of the machine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>An integer scalar with the BlueFog rank of the machine.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.load_topology">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">load_topology</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.load_topology" title="Permalink to this definition">¶</a></dt>
+<dd><p>A funnction that returns the virtual topology MPI used.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>networkx.DiGraph.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>topology</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.set_topology">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">set_topology</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topology</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">networkx.classes.digraph.DiGraph</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.set_topology" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that sets the virtual topology MPI used.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>Topo</strong> – A networkx.DiGraph object to decide the topology. If not provided
+a default exponential graph (base 2) structure is used.</p></li>
+<li><p><strong>is_weighted</strong> – If set to true, the win_update and neighbor_allreduce will execute the
+weighted average instead, where the weights are the value used in topology matrix
+(including self weight). Note win_get/win_put/win_accumulate do not use this weight
+since win_update already uses these weights.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A boolean value that whether topology is set correctly or not.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">set_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">()))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.load_machine_topology">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">load_machine_topology</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.load_machine_topology" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns the virtual topology for the machine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>networkx.DiGraph.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>machine_topology</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.set_machine_topology">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">set_machine_topology</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topology</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">networkx.classes.digraph.DiGraph</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.set_machine_topology" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that sets the virtual machine topology.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>Topo</strong> – A networkx.DiGraph object to decide the machine topology. It shall not be None.</p></li>
+<li><p><strong>is_weighted</strong> – If set to true, hierarchical_neighbor_allreduce will execute the
+weighted average instead, where the weights are the value used in machine topology
+matrix (including self weight).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A boolean value that whether machine topology is set correctly or not.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">set_machine_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">()))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.in_neighbor_ranks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">in_neighbor_ranks</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.in_neighbor_ranks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the ranks of all in-neighbors.
+Notice: No matter self-loop is presented or not, self rank will not be included.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>in_neighbor_ranks</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.out_neighbor_ranks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">out_neighbor_ranks</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.out_neighbor_ranks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the ranks of all out-neighbors.
+Notice: No matter self-loop is presented or not, self rank will not be included.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>out_neighbor_ranks</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.in_neighbor_machine_ranks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">in_neighbor_machine_ranks</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.in_neighbor_machine_ranks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the machine ranks of all in-neighbors.
+Notice: No matter self-loop is presented or not, self machine rank will not be included.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>in_neighbor_machine_ranks</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.out_neighbor_machine_ranks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">out_neighbor_machine_ranks</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.out_neighbor_machine_ranks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the machine ranks of all out-neighbors.
+Notice: No matter self-loop is presented or not, self machine rank will not be included.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>out_neighbor_machine_ranks</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.mpi_threads_supported">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">mpi_threads_supported</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.mpi_threads_supported" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that returns a flag indicating whether MPI multi-threading is supported.</p>
+<p>If MPI multi-threading is supported, users may mix and match BlueFog usage with other
+MPI libraries, such as <cite>mpi4py</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating whether MPI multi-threading is supported.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.unified_mpi_window_model_supported">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">unified_mpi_window_model_supported</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.unified_mpi_window_model_supported" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a boolean value to indicate the MPI_Win model is unified or not.
+Unfornuately, it is a collective call. We have to create a fake win to get
+this information.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.nccl_built">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">nccl_built</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.nccl_built" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns True if BlueFog was compiled with NCCL support.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating whether NCCL support was compiled.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.is_homogeneous">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">is_homogeneous</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.is_homogeneous" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns True if the cluster is homogeneous.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A boolean value indicating whether every node in the cluster has same number of ranks
+and if it is true it also indicates the ranks are continuous in machines.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.suspend">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">suspend</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.suspend" title="Permalink to this definition">¶</a></dt>
+<dd><p>Suspend the background thread of BlueFog.</p>
+<p>It should be used under interactive python environment only.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.resume">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">resume</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.resume" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resume the background thread of BlueFog.</p>
+<p>It should be used under interactive python environment only.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allreduce">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allreduce</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_hierarchical_local</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.allreduce" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs averaging or summation of the input tensor over all the
+Bluefog processes. The input tensor is not modified.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to average and sum.</p></li>
+<li><p><strong>average</strong> – A flag indicating whether to compute average or summation,
+defaults to average.</p></li>
+<li><p><strong>is_hierarchical_local</strong> – If set, allreduce is executed within one machine instead of
+global allreduce.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>, averaged or summed across all
+processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allreduce_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allreduce_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_hierarchical_local</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs nonblocking averaging or summation of the input tensor
+over all the Bluefog processes. The input tensor is not modified.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to average and sum.</p></li>
+<li><p><strong>average</strong> – A flag indicating whether to compute average or summation,
+defaults to average.</p></li>
+<li><p><strong>is_hierarchical_local</strong> – If set, allreduce is executed within one machine instead of
+global allreduce.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the allreduce operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allreduce_">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allreduce_</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_hierarchical_local</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.allreduce_" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs averaging or summation of the input tensor over all the
+Bluefog processes. The operation is performed in-place.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to average and sum.</p></li>
+<li><p><strong>average</strong> – A flag indicating whether to compute average or summation,
+defaults to average.</p></li>
+<li><p><strong>is_hierarchical_local</strong> – If set, allreduce is executed within one machine instead of
+global allreduce.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>, averaged or summed across all
+processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allreduce_nonblocking_">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allreduce_nonblocking_</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_hierarchical_local</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.allreduce_nonblocking_" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs nonblocking averaging or summation of the input tensor
+over all the Bluefog processes. The operation is performed in-place.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to average and sum.</p></li>
+<li><p><strong>average</strong> – A flag indicating whether to compute average or summation,
+defaults to average.</p></li>
+<li><p><strong>is_hierarchical_local</strong> – If set, allreduce is executed within one machine instead of
+global allreduce.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the allreduce operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allgather">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allgather</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.allgather" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that concatenates the input tensor with the same input tensor on
+all other Bluefog processes. The input tensor is not modified.</p>
+<p>The concatenation is done on the first dimension, so the input tensors on the
+different processes must have the same rank and shape.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to allgather.</p></li>
+<li><p><strong>name</strong> – A name of the allgather operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same type as <cite>tensor</cite>, concatenated on dimension zero
+across all processes. The shape is identical to the input shape, except for
+the first dimension, which may be greater and is the sum of all first
+dimensions of the tensors in different Bluefog processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allgather_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allgather_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.allgather_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly concatenates the input tensor with the same input
+tensor on all other Bluefog processes. The input tensor is not modified.</p>
+<p>The concatenation is done on the first dimension, so the input tensors on the
+different processes must have the same rank and shape.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to allgather.</p></li>
+<li><p><strong>name</strong> – A name of the allgather operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the allgather operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.broadcast">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">broadcast</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.broadcast" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that broadcasts the input tensor on root rank to the same input tensor
+on all other Bluefog processes. The input tensor is not modified.</p>
+<p>The broadcast operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The broadcast will not start until all processes
+are ready to send and receive the tensor.</p>
+<p>This acts as a thin wrapper around an autograd function.  If your input
+tensor requires gradients, then callings this function will allow gradients
+to be computed and backpropagated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to broadcast.</p></li>
+<li><p><strong>root_rank</strong> – The rank to broadcast the value from.</p></li>
+<li><p><strong>name</strong> – A name of the broadcast operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>, with the value broadcasted
+from root rank.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.broadcast_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">broadcast_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.broadcast_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly broadcasts the input tensor on root rank to the same
+input tensor on all other Bluefog processes. The input tensor is not modified.</p>
+<p>The broadcast operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The broadcast will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to broadcast.</p></li>
+<li><p><strong>root_rank</strong> – The rank to broadcast the value from.</p></li>
+<li><p><strong>name</strong> – A name of the broadcast operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the broadcast operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.broadcast_">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">broadcast_</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root_rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.broadcast_" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that broadcasts the input tensor on root rank to the same input tensor
+on all other Bluefog processes. The operation is performed in-place.</p>
+<p>The broadcast operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The broadcast will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to broadcast.</p></li>
+<li><p><strong>root_rank</strong> – The rank to broadcast the value from.</p></li>
+<li><p><strong>name</strong> – A name of the broadcast operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>, with the value broadcasted
+from root rank.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.broadcast_nonblocking_">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">broadcast_nonblocking_</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root_rank</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.broadcast_nonblocking_" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly broadcasts the input tensor on root rank to the same
+input tensor on all other Bluefog processes. The operation is performed in-place.</p>
+<p>The broadcast operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The broadcast will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to broadcast.</p></li>
+<li><p><strong>root_rank</strong> – The rank to broadcast the value from.</p></li>
+<li><p><strong>name</strong> – A name of the broadcast operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the broadcast operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.neighbor_allgather">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allgather</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.neighbor_allgather" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that concatenates the input tensor with the same input tensor on
+on all neighbor Bluefog processes (Not include self). The input tensor is not modified.</p>
+<p>The concatenation is done on the first dimension, so the input tensors on the
+different processes must have the same shape except the first dimension.
+For example: rank 0 with tensor shape [3, 5, 4] and rank 1 with tensor shape [5, 5, 4] are
+allowed, the output will be [8, 5, 4] assuming two are connected.</p>
+<p>If src_ranks and dst_ranks are not provided, the neighbor_allgather gathers the tensors according
+to the global default topology, which can be obtained through <cite>bf.in_neighbor_ranks</cite>.
+Otherwise, the order is the same as src_ranks provided.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to allgather.</p></li>
+<li><p><strong>dst_ranks</strong> – A list of destination ranks. If present, ignoring global topology setting.
+This argument is useful under dynamic topology case.
+Note dst_ranks and src_ranks should be presented at same time and compatible.</p></li>
+<li><p><strong>src_ranks</strong> – A list of source ranks.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
+<li><p><strong>name</strong> – A name of the allgather operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same type as <cite>tensor</cite>, concatenated on dimension zero.
+The shape is identical to the input shape, except for
+the first dimension. The order of gathered tensors is guaranteed to be the same order as
+the src_ranks if specified or in_neighbor_ranks through the default topology.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.neighbor_allgather_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allgather_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.neighbor_allgather_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly concatenates the input tensor with the same input
+tensor on all neighbor Bluefog processes (Not include self).
+The input tensor is not modified.</p>
+<p>The concatenation is done on the first dimension, so the input tensors on the
+different processes must have the same shape except the first dimension.
+For example: rank 0 with tensor shape [3, 5, 4] and rank 1 with tensor shape [5, 5, 4] are
+allowed, the output will be [8, 5, 4] assuming two are connected.</p>
+<p>If src_ranks and dst_ranks is not provided, the neighbor_allgather gather the tensors according
+to the global default topology.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to allgather.</p></li>
+<li><p><strong>src_ranks</strong> – A list of source ranks. If present, ignoring global topology setting.
+This argument is useful under dynamic topology case.
+Note dst_ranks and src_ranks should be presented at same time and compatible.</p></li>
+<li><p><strong>dst_ranks</strong> – A list of destination ranks.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
+<li><p><strong>name</strong> – A name of the allgather operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the neighbor_allgather operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>. Check neighbor_allgather function for the output tensor information.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.neighbor_allreduce">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allreduce</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">send_neighbors</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs weighted averaging of the input tensor over the negihbors and itself
+in the Bluefog processes. The default behavior is (uniformly) average.</p>
+<p>The input tensor is not modified.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to execute weighted average with neighbors.</p></li>
+<li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – The weights for in-neighbor nodes, used with self weight.
+If neighbor_weights is presented, the return tensor will return the weighted average
+defined by these weights and the self_weight. If not, the return tensor will return
+the weighted average defined by the topology weights is provided or uniformly average.
+The data structure of weights should be {rank : weight} and rank has to belong to the
+(in-)neighbors.</p></li>
+<li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
+the current node sends to all of its (out-)neighbors. If having values, assume only
+part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+partial neighbors listed in this variable in a dynamic graph, and <cite>self_weight</cite> and
+<cite>neighbor_weights</cite> must be present.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>,  across all processes.</p>
+</dd>
+</dl>
+<p>Note: self_weight and neighbor_weights must be presented at the same time.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.neighbor_allreduce_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allreduce_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">send_neighbors</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly performs weighted averaging of the input tensor over the
+negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.</p>
+<p>The input tensor is not modified.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to execute weighted average with neighbors.</p></li>
+<li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – The weights for in-neighbor nodes, used with self weight.
+If neighbor_weights is presented, the return tensor will return the weighted average
+defined by these weights and the self_weight. If not, the return tensor will return
+the weighted average defined by the topology weights is provided or uniformly average.
+The data structure of weights should be {rank : weight} and rank has to belong to the
+(in-)neighbors.</p></li>
+<li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
+the current node sends to all of its (out-)neighbors. If having values, assume only
+part of (out-)neighbors will be sent to. In this mode, this node sends its value to
+partial neighbors listed in this variable in a dynamic graph, and <cite>self_weight</cite> and
+<cite>neighbor_weights</cite> must be present.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
+<li><p><strong>name</strong> – A name of the neighbor_allreduce operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the neighbor_allreduce operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+<p>Note: self_weight and neighbor_weights must be presented at the same time.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.hierarchical_neighbor_allreduce">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">hierarchical_neighbor_allreduce</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_machine_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">send_neighbor_machines</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.hierarchical_neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that performs weighted averaging of the input tensor over the negihbor machines and
+itself in the Bluefog processes. It is similar to neighbor_allreduce. But each machine runs
+allreduce internal first to form a super node then executes the neighbor allreduce at machine
+level. The default behavior is (uniformly) average.</p>
+<p>The input tensor is not modified.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<p>Warning: This function should be called only under homogenerous environment, all machines have
+same number of Bluefog processes – bf.local_size().</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to execute weighted average with neighbor machines.</p></li>
+<li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_machine_weights</strong> – The weights for in-neighbor nodes, used with self weight.
+The data structure of weights should be {machine id : weight}.  All processes under
+same machine should specifiy the same weights dictionary.</p></li>
+<li><p><strong>send_neighbor_machines</strong> – The list of neighbor machines to be sent to. All processes under
+same machine should specifiy the same machine id.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tensor of the same shape and type as <cite>tensor</cite>,  across all processes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.hierarchical_neighbor_allreduce_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">hierarchical_neighbor_allreduce_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_machine_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">send_neighbor_machines</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.hierarchical_neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>A function that nonblockingly performs weighted averaging of the input tensor over the negihbor
+machines and itself in the Bluefog processes. It is similar to neighbor_allreduce. But
+each machine runs allreduce internal first to form a super node then executes
+the neighbor allreduce at machine level. The default behavior is (uniformly) average.</p>
+<p>The input tensor is not modified.</p>
+<p>The reduction operation is keyed by the name. If name is not provided, an incremented
+auto-generated name is used. The tensor type and shape must be the same on all
+Bluefog processes for a given name. The reduction will not start until all processes
+are ready to send and receive the tensor.</p>
+<p>Warning: This function should be called only under homogenerous environment, all machines have
+same number of Bluefog processes – bf.local_size().</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to execute weighted average with neighbor machines.</p></li>
+<li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_machine_weights</strong> – The weights for in-neighbor nodes, used with self weight.
+The data structure of weights should be {machine id : weight}.  All processes under
+same machine should specifiy the same weights dictionary.</p></li>
+<li><p><strong>send_neighbor_machines</strong> – The list of neighbor machines to be sent to. All processes under
+same machine should specifiy the same machine id.</p></li>
+<li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
+sending and recieving neighbors match with each other. Disabling this check can boost
+the performance.</p></li>
+<li><p><strong>name</strong> – A name of the reduction operation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the hierarchical_neighbor_allreduce operation that can be used with <cite>poll()</cite> or
+<cite>synchronize()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.poll">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">poll</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.poll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Polls an allreduce, neighbor_allreduce, etc operation handle to determine whether underlying
+nonblocking operation has completed. After <cite>poll()</cite> returns <cite>True</cite>, <cite>wait()</cite>
+will return without blocking.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A flag indicating whether the operation has completed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.synchronize">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">synchronize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.synchronize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait an allreduce, neighbor_allreduce, etc operation until
+it’s completed. Returns the result of the operation.
+It is the same function as <cite>wait()</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>An output tensor of the operation.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.wait">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">wait</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait an allreduce, neighbor_allreduce, etc operation until
+it’s completed. Returns the result of the operation.
+It is just alias of <cite>synchronize()</cite> function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handle</strong> – A handle returned by an allreduce, neighbor_allreduce, etc. nonblocking operation.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>An output tensor of the operation.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.barrier">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">barrier</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.barrier" title="Permalink to this definition">¶</a></dt>
+<dd><p>Barrier function to sychronize all MPI processes.</p>
+<p>After this function returns, it is guaranteed that all blocking functions
+before it is finished.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_create">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_create</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zero_init</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_create" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create MPI window for remote memoery access.</p>
+<p>The window is dedicated to the provided tensor only, which is identified by unqiue name.
+It is a blocking operation, which required all bluefog process involved.
+The initial values of MPI windows for neighbors are the same as input tensor unless
+zero_init is set to be true.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> (<em>torch.Tensor</em>) – Provide the size, data type, and/or memory for window.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The unique name to associate the window object.</p></li>
+<li><p><strong>zero_init</strong> (<em>boll</em>) – If set true, the buffer value initialize as zero instead of
+the value of tensor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Indicate the creation succeed or not.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+<p>Note: The window with same name across different bluefog processes should associate
+the tensor with same shape. Otherwise, the rest win_ops like win_update, win_put may
+encounter unrecoverable memory segmentation fault.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_free">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_free</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_free" title="Permalink to this definition">¶</a></dt>
+<dd><p>Free the MPI windows associated with name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The unique name to associate the window object.
+If name is none, free all the window objects.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Indicate the free succeed or not.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_update">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_update</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reset</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clone</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.win_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Locally synchronized the window objects and returned the reduced neighbor tensor.
+Note the returned tensor is the same tensor used in win_create and in-place modification
+is happened. During the update, a mutex for local variable is acquired.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – the weight for self node, used with neighbor_weights.</p></li>
+<li><p><strong>neighbor_weights</strong> – the weights for neighbor nodes, used with self_weight.
+If neighbor_weights is presented, the return tensor will return the weighted average
+defined by these weights and the self_weight. If not, the return tensor will return
+the weighted average defined by the topology weights if provided or mean value.
+The data structure of weights should be {rank : weight} and rank has to belong to
+the (in-)neighbors.</p></li>
+<li><p><strong>reset</strong> – If reset is True, the buffer used to store the neighbor tensor included in
+neighbor_weights will be reset to zero.
+The reset is always happened after the weights computation.
+If neighbor_weights is not presented and reset is True, all the neighbor will be reset.</p></li>
+<li><p><strong>clone</strong> – If set up to be true, the win_update result will return a new tensor instead of
+in-place change.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, the window mutex associated with local process will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The average tensor of all neighbors’ cooresponding tensors.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+<p>Note: Weights here will be useful if you need a dynamic weighted average, i.e. the weights
+change with the iterations. If static weight need, then setting the weights through the
+bf.set_topology(.., is_weighted=True) is a better choice.</p>
+<p>Note2: self_weight and neighbor_weights must be presented at the same time.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_update_then_collect">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_update_then_collect</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.win_update_then_collect" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to sync the neighbor buffers then accumulate all
+neighbor buffers’ tensors into self tensor and clear the buffer.
+It is equivalent to</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">win_update</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">self_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">neighbor_weights</span><span class="o">=</span><span class="p">{</span><span class="n">neighbor</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="n">reset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="go">               require_mutex=require_mutex)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> – The unique name to associate the window object.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The average tensor of all neighbors’ cooresponding tensors.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_put_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_put_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.win_put_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>Passively put the tensor into neighbor’s shared window memory.
+This is a non-blocking function, which will return without waiting the
+win_put operation is really finished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tesnor</strong> – The tensor that shares to neighbor.</p></li>
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_put send
+tensor information to neigbors), Default is 1.0.</p></li>
+<li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
+Namely, {rank: weight} means put tensor * weight to the rank neighbor.
+If not provided, dst_weights will be set as all neighbor ranks defined by
+virtual topology with weight 1.
+Note dst_weights should only contain the ranks that belong to out-neighbors.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, out-neighbor process’s window mutex will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the win_put operation that can be used with <cite>win_poll()</cite> or
+<cite>win_wait()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_put">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_put</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_put" title="Permalink to this definition">¶</a></dt>
+<dd><p>Passively put the tensor into neighbor’s shared window memory.
+This is a blocking function, which will return until win_put operation
+is finished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – The tensor that shares to neighbor.</p></li>
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_put send
+tensor information to neigbors), Default is 1.0.</p></li>
+<li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
+Namely, {rank: weight} means put tensor * weight to the rank neighbor.
+If not provided, dst_weights will be set as all neighbor ranks defined by
+virtual topology with weight 1.
+Note dst_weights should only contain the ranks that belong to out-neighbors.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, out-neighbor process’s window mutex will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A bool value to indicate the put succeeded or not.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_get_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_get_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.win_get_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>Passively get the tensor(s) from neighbors’ shared window memory into
+local shared memory, which cannot be accessed in python directly.
+The win_update function is responsible for fetching that memeory.
+This is a non-blocking function, which will return without waiting the
+win_get operation is really finished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>src_weights</strong> – A dictionary that maps the source ranks to the weight.
+Namely, {rank: weight} means get tensor from rank neighbor multipling the weight.
+If not provided, src_weights will be set as all neighbor ranks defined by
+virtual topology with weight 1.0.
+Note src_weights should only contain the in-neighbors only.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, out-neighbor process’s window mutex will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the win_get operation that can be used with <cite>win_poll()</cite> or
+<cite>win_wait()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_get">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_get</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Passively get the tensor(s) from neighbors’ shared window memory into
+local shared memory, which cannot be accessed in python directly.
+The win_update function is responsible for fetching that memeory.
+This is a blocking function, which will return until win_get operation
+is finished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> – A tensor to get the result, should have same shape and type of
+the window object associated with name.</p></li>
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>src_weights</strong> – A dictionary that maps the source ranks to the weight.
+Namely, {rank: weight} means get tensor * weight to the rank neighbor.
+If not provided, src_weights will be set as all neighbor ranks defined by
+virtual topology with weight 1.0 / (neighbor_size+1).
+Note src_weights should only contain the ranks that either
+belong to int-neighbors or self.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, out-neighbor process’s window mutex will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A bool value to indicate the get succeeded or not.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_accumulate_nonblocking">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_accumulate_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_accumulate_nonblocking" title="Permalink to this definition">¶</a></dt>
+<dd><p>Passively accmulate the tensor into neighbor’s shared window memory.
+Only SUM ops is supported now.
+This is a non-blocking function, which will return without waiting the
+win_accumulate operation is really finished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tesnor</strong> – The tensor that shares to neighbor.</p></li>
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_accumulate
+send tensor information to neigbors), Default is 1.0.</p></li>
+<li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
+Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
+If not provided, dst_weights will be set as all neighbor ranks defined by
+virtual topology with weight 1.
+Note dst_weights should only contain the ranks that belong to out-neighbors.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, out-neighbor process’s window mutex will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A handle to the win_accmulate operation that can be used with <cite>win_poll()</cite> or
+<cite>win_wait()</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_accumulate">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_accumulate</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_mutex</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_accumulate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Passively accmulate the tensor into neighbor’s shared window memory.
+Only SUM ops is supported now.
+This is a blocking function, which will return until win_accumulate operation
+is finished.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tesnor</strong> – The tensor that shares to neighbor.</p></li>
+<li><p><strong>name</strong> – The unique name to associate the window object.</p></li>
+<li><p><strong>self_weight</strong> – In-place multiply the weight to tensor (Happened after win_accumulate
+send tensor information to neigbors), Default is 1.0.</p></li>
+<li><p><strong>dst_weights</strong> – A dictionary that maps the destination ranks to the weight.
+Namely, {rank: weight} means accumulate tensor * weight to the rank neighbor.
+If not provided, dst_weights will be set as all neighbor ranks defined by
+virtual topology with weight 1.
+Note dst_weights should only contain the ranks that belong to out-neighbors.</p></li>
+<li><p><strong>require_mutex</strong> – If set to be true, out-neighbor process’s window mutex will be
+acquired.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A bool value to indicate the accumulate succeeded or not.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_wait">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_wait</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait until the async win ops identified by handle is done.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_poll">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_poll</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handle</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.win_poll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return whether the win ops identified by handle is done or not.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_mutex">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_mutex</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">for_self</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.win_mutex" title="Permalink to this definition">¶</a></dt>
+<dd><p>A win object implemented mutex context manager. Note, there are N distributed
+mutex over N corresponding processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> – Used to get the mutex for the window that registered by name.</p></li>
+<li><p><strong>ranks</strong> – The mutex associated with the specified ranks is acquired.
+If not presented, the mutex with all out_neighbor ranks are acquired.</p></li>
+<li><p><strong>for_self</strong> – If it is false, it will require the remote mutexes at processes ranks, which
+is specified by argument ranks). If it is true, it will require the self mutex.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">win_create</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">win_mutex</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+<span class="go">        tensor = bf.win_update_then_collect(name)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">win_put</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.get_win_version">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">get_win_version</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.get_win_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the version of tensor stored in the win buffer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> – The unique name to get the associated window object.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dictionary maps from neighbor ranks to version. 0 means the latest
+tensor stored in win buffer has been read/sync. Non-negative value
+means the tensor has been updated through put or get before read/sync.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.get_current_created_window_names">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">get_current_created_window_names</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.get_current_created_window_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the names of current created windows.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.win_associated_p">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">win_associated_p</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">float</span><a class="headerlink" href="#bluefog.torch.win_associated_p" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the associated correction P, used in Push-Sum algorithm, for each named window.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The unique name to associate the window object.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The p value. (Initialized as 1.)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.turn_on_win_ops_with_associated_p">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">turn_on_win_ops_with_associated_p</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.turn_on_win_ops_with_associated_p" title="Permalink to this definition">¶</a></dt>
+<dd><p>Turn on the global state of win operations with associated p.</p>
+<p>If it is state is on, all win ops such as put, update, accumulate also apply on the
+associated p value as well.
+The default state is off.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.turn_off_win_ops_with_associated_p">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">turn_off_win_ops_with_associated_p</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.turn_off_win_ops_with_associated_p" title="Permalink to this definition">¶</a></dt>
+<dd><p>Turn off the global state of win operations with associated p.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.set_skip_negotiate_stage">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">set_skip_negotiate_stage</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">None</span><a class="headerlink" href="#bluefog.torch.set_skip_negotiate_stage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Skip the negotiate stage or not. (Default state is no skip).</p>
+<p>For some MPI implementation, it doesn’t have support for multiple thread.
+To use the win ops, it has to turn off the negotiate the stage.
+After turn off the negotiate the sate the error in collective callse like
+size mismatch, order of tensor is randomized, may not be able to be handled properly.
+But it may help to boost the performance.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.get_skip_negotiate_stage">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">get_skip_negotiate_stage</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.get_skip_negotiate_stage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the value of skip the negotiate stage. (Default state is no skip).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.timeline_start_activity">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">timeline_start_activity</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activity_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.timeline_start_activity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A python interface to call the timeline for StartActivity.
+If you want to use this function, please make sure to turn on the timeline first by
+setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use
+bfrun –timeline-filename {file_name} …</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor_name</strong> (<em>str</em>) – The activity associated tensor name.</p></li>
+<li><p><strong>activity_name</strong> (<em>str</em>) – The activity type.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A boolean value that whether timeline is executed correctly or not.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common.util</span> <span class="kn">import</span> <span class="n">env</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">env</span><span class="p">(</span><span class="n">BLUEFOG_TIMELINE</span><span class="o">=</span><span class="s2">&quot;./timeline_file&quot;</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">timeline_start_activity</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">,</span> <span class="n">activity_name</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">timeline_end_activity</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.timeline_end_activity">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">timeline_end_activity</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.timeline_end_activity" title="Permalink to this definition">¶</a></dt>
+<dd><p>A python interface to call the timeline for EndActivity.</p>
+<p>Please check comments in timeline_start_activity for more explanation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.timeline_context">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">timeline_context</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activity_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.timeline_context" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager for activating timeline record.
+If you want to use this function, please make sure to turn on the timeline first by
+setting the ENV variable BLUEFOG_TIMELINE = {file_name}, or use
+bfrun –timeline-filename {file_name} …</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor_name</strong> (<em>str</em>) – The activity associated tensor name.</p></li>
+<li><p><strong>activity_name</strong> (<em>str</em>) – The activity type.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">bf</span><span class="o">.</span><span class="n">timeline_context</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">,</span> <span class="n">activity_name</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.broadcast_optimizer_state">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">broadcast_optimizer_state</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root_rank</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.broadcast_optimizer_state" title="Permalink to this definition">¶</a></dt>
+<dd><p>Broadcasts an optimizer state from root rank to all other processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> – An optimizer.</p></li>
+<li><p><strong>root_rank</strong> – The rank of the process from which the optimizer will be
+broadcasted to all other processes.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.broadcast_parameters">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">broadcast_parameters</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root_rank</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.broadcast_parameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Broadcasts the parameters from root rank to all other processes.
+Typical usage is to broadcast the <code class="docutils literal notranslate"><span class="pre">model.state_dict()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">model.named_parameters()</span></code>, or <code class="docutils literal notranslate"><span class="pre">model.parameters()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> – One of the following:
+- list of parameters to broadcast
+- dict of parameters to broadcast</p></li>
+<li><p><strong>root_rank</strong> – The rank of the process from which parameters will be
+broadcasted to all other processes.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.allreduce_parameters">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">allreduce_parameters</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#bluefog.torch.allreduce_parameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Allreduce the parameters of all other processes, i.e., forcing all
+processes to have same average model.
+Typical usage is to allreduce the <code class="docutils literal notranslate"><span class="pre">model.named_parameters()</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">model.parameters()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>params</strong> – One of the following:
+- list of parameters to allreduce
+- dict of parameters to allreduce</p>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 
 
