@@ -17,11 +17,11 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.7
-    - name: Install BlueFog
+    - name: Install OpenMPI
       run: |
         sudo apt-get install -y -q openmpi-bin libopenmpi-dev
-        git clone https://github.com/Bluefog-Lib/bluefog.git
-          cd bluefog && git submodule update --init --recursive
+   - name: Install BlueFog
+        git submodule update --init --recursive
         python -m pip install .
     - name: Build Document
       run: |
