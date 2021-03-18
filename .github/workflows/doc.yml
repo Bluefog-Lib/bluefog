@@ -20,6 +20,8 @@ jobs:
     - name: Install BlueFog
       run: |
         sudo apt-get install -y -q openmpi-bin libopenmpi-dev
+        git clone https://github.com/Bluefog-Lib/bluefog.git
+          cd bluefog && git submodule update --init --recursive
         python -m pip install .
     - name: Build Document
       run: |
