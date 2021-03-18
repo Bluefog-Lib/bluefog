@@ -20,7 +20,8 @@ jobs:
     - name: Install OpenMPI
       run: |
         sudo apt-get install -y -q openmpi-bin libopenmpi-dev
-   - name: Install BlueFog
+    - name: Install BlueFog
+      run: |
         git submodule update --init --recursive
         python -m pip install .
     - name: Build Document
