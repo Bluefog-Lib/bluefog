@@ -1,10 +1,8 @@
 name: Document CI
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  release:
+    types: [create, edited, prereleased, published]
 
 jobs:
   github-page:
