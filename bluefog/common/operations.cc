@@ -780,6 +780,8 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
       [&]() { timeline.ActivityStartAll(entries, "INIT_FUSION_BUFFER"); },
       [&]() { timeline.ActivityEndAll(entries); });
   
+  // As the dst_weight requires extra memory to scale the tensor for each destination, therefore,
+  // extra memory is required.
   Status status_dst_weight = Status::OK();
   if (first_entry.dst_weighting_enabled) {
     status_dst_weight = bluefog_global.fusion_buffer.InitializeWeightBuffer(

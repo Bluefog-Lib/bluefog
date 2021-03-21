@@ -86,13 +86,13 @@ class FusionBufferManager {
   //
   // Args:
   //  threshold: Size of the buffer in bytes.
-  //  mpi_size: Size of MPI nodes.
+  //  world_size: Size of MPI nodes.
   //  device: Device ID to associate the buffer.
   //  context: Framework used to create the buffer and associate it.
   //  on_start_init: Callback on starting buffer initialization.
   //  on_end_init: Callback on completing buffer initialization.
   Status InitializeWeightBuffer(int64_t threshold,
-                                int mpi_size,
+                                int world_size,
                                 int device,
                                 std::shared_ptr<OpContext> context,
                                 std::function<void()> on_start_init,

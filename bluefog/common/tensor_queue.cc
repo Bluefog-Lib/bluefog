@@ -155,19 +155,20 @@ std::shared_ptr<PersistentBuffer> FusionBufferManager::GetBuffer(int device) {
 }
 
 Status FusionBufferManager::InitializeWeightBuffer(
-    int64_t threshold, int mpi_size, int device, std::shared_ptr<OpContext> context,
+    int64_t threshold, int world_size, int device, std::shared_ptr<OpContext> context,
     std::function<void()> on_start_init, std::function<void()> on_end_init) {
   auto& elem = weight_tensor_fusion_buffers_[device];
   auto& buffer = elem.first;
   int64_t& size = elem.second;
-  if (size != threshold*mpi_size) {
+  // threshold * (world_size-1) is the upper bound for buffer
+  if (size != threshold*(world_size-1)) {
     buffer.reset();
     size = 0;
   }
 
   if (buffer == nullptr) {
     on_start_init();
-    size = threshold*mpi_size;
+    size = threshold*(world_size-1);
 
     // Lazily allocate persistent buffer for Tensor Fusion and keep it
     // forever per device.
