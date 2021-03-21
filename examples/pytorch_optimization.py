@@ -16,7 +16,7 @@
 import os
 import torch
 import matplotlib
-matplotlib.use('agg')
+matplotlib.use('agg') # Make matplotlib more robust when interface plotting is impossible.
 import matplotlib.pyplot as plt
 import argparse
 
