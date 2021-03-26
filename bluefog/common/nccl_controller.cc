@@ -789,23 +789,19 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
         NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
                           recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-      if(entry.dst_weighting_enabled)
-      {
+      if(entry.dst_weighting_enabled) {
         if (ready_event != nullptr) {
           while (!ready_event->Ready()) {
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
           }
         }
-        for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
-          NCCLCHECK(ncclSend(weighted_tensors[i].get()->data(), num_elements,
-                             GetNCCLDataType(entry.tensor), entry.send_neighbors->at(i),
-                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-        }
-      } else {
-        for (int send_rank : *entry.send_neighbors) {
-          NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                             send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-        }
+      }
+      for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+        const void* buffer_send = sendbuf;
+        if (entry.dst_weighting_enabled)
+          buffer_send = weighted_tensors[i].get()->data();
+        NCCLCHECK(ncclSend(buffer_send, num_elements, GetNCCLDataType(entry.tensor),
+                           entry.send_neighbors->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
     }
     ncclGroupEnd();
@@ -815,6 +811,11 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
           "Under hierarchical neighbor_allreduce, argument "
           "send_machine_neighbors should "
           "not be empty.");
+    }
+    if (entry.dst_weighting_enabled) {
+      throw std::runtime_error(
+          "Under hierarchical neighbor_allreduce, argument "
+          "dst_weight should not be enabled for now.");
     }
     // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
     // divided by local size at call back stage.
@@ -1093,22 +1094,13 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                            GetNCCLDataType(first_entry.tensor), recv_rank,
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-      if (!first_entry.dst_weighting_enabled)
-      {
-        for (int send_rank : *first_entry.send_neighbors) {
-          NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                             GetNCCLDataType(first_entry.tensor), send_rank,
-                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-        }
-      } else {
-        for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
-          void* sendbuf = 
-              (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
-          NCCLCHECK(ncclSend(sendbuf, num_elements,
-                             GetNCCLDataType(first_entry.tensor),
-                             first_entry.send_neighbors->at(i),
-                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-        }
+      for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
+        const void* sendbuf = fused_input_data;
+        if (first_entry.dst_weighting_enabled)
+          sendbuf = (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
+        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(first_entry.tensor),
+                           first_entry.send_neighbors->at(i),
+                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
     }
     ncclGroupEnd();
@@ -1123,6 +1115,11 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
         "Local size is smaller than 2, in this case, you should use "
         "neighbor_allreduce instead of hierarchical_neighbor_allreduce."
       );
+    }
+    if (first_entry.dst_weighting_enabled) {
+      throw std::runtime_error(
+          "Under hierarchical neighbor_allreduce, argument "
+          "dst_weight should not be enabled for now.");
     }
 
     // 1. In-place allreduce for all local ranks. Note it is sum, so we need to

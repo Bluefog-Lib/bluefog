@@ -638,7 +638,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor, *,
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
                                            dst_weights, enable_topo_check, name=name)
 
-
+# TODO(hanbinhu) #81 Add dst_weight for hierarchical neighbor allreduce.
 def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
                                     self_weight: float = None,
                                     neighbor_machine_weights: Dict[int, float] = None,

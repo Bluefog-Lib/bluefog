@@ -237,6 +237,7 @@ class MPIContext {
   MPI_Datatype mpi_float16_t;
   MPI_Op mpi_float16_sum;
 
+  // TODO(hhb): #80 We should use a common context for MPI and NCCL controller for CUDA usage.
 #if HAVE_CUDA
   // CUDA Stream
   cudaStream_t stream;

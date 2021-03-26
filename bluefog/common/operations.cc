@@ -785,7 +785,7 @@ void PerformOperationWithFusion(std::vector<TensorTableEntry>& entries) {
   Status status_dst_weight = Status::OK();
   if (first_entry.dst_weighting_enabled) {
     status_dst_weight = bluefog_global.fusion_buffer.InitializeWeightBuffer(
-      bluefog_global.tensor_fusion_threshold, mpi_context.size_,
+      bluefog_global.tensor_fusion_threshold_for_dst_weight, mpi_context.size_,
       first_entry.device, first_entry.context,
       [&]() { timeline.ActivityStartAll(entries, "INIT_WEIGHT_FUSION_BUFFER"); },
       [&]() { timeline.ActivityEndAll(entries); });
