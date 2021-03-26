@@ -148,7 +148,7 @@ class MPIContext {
 
   MPI_Op GetMPISumOp(DataType dtype);
 
-  MPI_Comm GetMPICommunicator(Communicator comm);
+  MPI_Comm GetMPICommunicator(Communicator comm) const;
 
   int GetMPITypeSize(DataType dtype);
 

@@ -294,23 +294,13 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
     displcmnts = new int[mpi_ctx_.neighbor_indgree_];
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   } else {
-    bool is_topo_check_fail = false;
-    if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
-      if (entry.is_hierarchical) {
-        // TODO: support check.
-        BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
-                    << "allreduce ops but it is not supported yet.";
-      }
-      is_topo_check_fail = CheckNeighborSendRecvPattern(
-          entry.send_neighbors.get(), entry.recv_neighbors.get(), entry.tensor_name,
-          mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-    }
-
+    bool is_topo_check_fail = CheckNeighborSendRecvPatternForEntry(entry, mpi_ctx_, timeline_ptr);
     if (is_topo_check_fail) {
       entry.callback(Status::InvalidArgument(
           "Src and dst neighbor ranks do not match"));
       return;
     }
+
     recvcounts = new int[entry.recv_neighbors->size()];
     displcmnts = new int[entry.recv_neighbors->size()];
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::DYNAMIC,
@@ -372,7 +362,7 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
 
 // Function to check if the sending and receiving neighbors match in the topology.
 bool CheckNeighborSendRecvPattern(
-  const std::vector<int>* send_neighbors, const std::vector<int>* recv_neighbors,
+  const std::vector<int>& send_neighbors, const std::vector<int>& recv_neighbors,
   const std::string& tensor_name, int size, Timeline* timeline_ptr, const MPI_Comm& comm) {
   bool res = false;
   timeline_ptr->ActivityStart(tensor_name, "NEGOTIATION");
@@ -381,17 +371,12 @@ bool CheckNeighborSendRecvPattern(
   bool* send_check_buf = new bool[2 * size];
   std::fill_n(send_check_buf, 2 * size, false);
   bool* recv_check_buf = new bool[2 * size * size];
-  for (int send_rank : *(send_neighbors))
+  for (int send_rank : send_neighbors)
     send_check_buf[send_rank] = true;
-  for (int recv_rank : *(recv_neighbors))
+  for (int recv_rank : recv_neighbors)
     send_check_buf[size + recv_rank] = true;
-  int ret_code = MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
-                               recv_check_buf, size * 2, MPI_C_BOOL, comm);
-  if (ret_code != MPI_SUCCESS) {
-    throw std::runtime_error(
-        "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, "
-        "see MPI output for details.");
-  }
+  MPICHECK(MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
+                         recv_check_buf, size * 2, MPI_C_BOOL, comm));
   // This checks that send matrix and transposed recv matrix should be the
   // same. If same, the topology is good to go. If not, there is mismatch edge
   // to be fixed.
@@ -413,6 +398,24 @@ bool CheckNeighborSendRecvPattern(
   return res;
 }
 
+bool CheckNeighborSendRecvPatternForEntry(const TensorTableEntry& entry,
+                                          const MPIContext& mpi_ctx,
+                                          Timeline* timeline_ptr) {
+  bool is_topo_check_fail = false;
+  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
+    if (entry.is_hierarchical) {
+      // TODO: support check.
+      BFLOG(WARNING) << "Request to check topology for hierarchical neighbor "
+                     << "allreduce ops but it is not supported yet.";
+    } else {
+      is_topo_check_fail = CheckNeighborSendRecvPattern(
+          *entry.send_neighbors, *entry.recv_neighbors, entry.tensor_name,
+          mpi_ctx.size_, timeline_ptr, mpi_ctx.GetMPICommunicator(Communicator::GLOBAL));
+    }
+  }
+  return is_topo_check_fail;
+}
+
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   const void* sendbuf = entry.tensor->data();
   int num_elements = entry.tensor->shape().num_elements();
@@ -432,18 +435,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   // If only partial sending is enabled, the following code block checks whether the sending
   // and recieving neighbors match each other when enable_topo_check is set to be True.
-  bool is_topo_check_fail = false;
-  if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
-    if (entry.is_hierarchical) {
-      // TODO: support check.
-      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
-                  << "allreduce ops but it is not supported yet.";
-    }
-    is_topo_check_fail = CheckNeighborSendRecvPattern(
-        entry.send_neighbors.get(), entry.recv_neighbors.get(), entry.tensor_name,
-        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-  }
-
+  bool is_topo_check_fail = CheckNeighborSendRecvPatternForEntry(entry, mpi_ctx_, timeline_ptr);
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
         "Src(recv from) and dst(send to) neighbor ranks do not match"));
@@ -615,18 +607,8 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
-  bool is_topo_check_fail = false;
-  if (first_entry.enable_topo_check && first_entry.dynamic_neighbors_enabled) {
-    if (first_entry.is_hierarchical) {
-      // TODO: support check.
-      BFLOG(WARNING) << "Request to check topology for hierarchical neighbor "
-                     << "allreduce ops but it is not supported yet.";
-    }
-    is_topo_check_fail = CheckNeighborSendRecvPattern(
-        first_entry.send_neighbors.get(), first_entry.recv_neighbors.get(), first_entry.tensor_name,
-        mpi_ctx_.size_, timeline_ptr, mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-  }
-
+  bool is_topo_check_fail = CheckNeighborSendRecvPatternForEntry(first_entry, mpi_ctx_,
+                                                                 timeline_ptr);
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
       entry.callback(Status::InvalidArgument(
