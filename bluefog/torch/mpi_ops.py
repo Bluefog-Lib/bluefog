@@ -570,6 +570,7 @@ def neighbor_allreduce(tensor: torch.Tensor, *,
 
     Note: self_weight and neighbor_weights must be presented at the same time.
     """
+    # TODO(hanbinhu) #82 Symmetrical argument for self_weight, src_weights, dst_weights
     if (self_weight is None and src_weights is not None) or \
        (self_weight is not None and src_weights is None):
         raise ValueError("Arguments self_weight and src_weights have to be presented at "
@@ -625,6 +626,7 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor, *,
 
     Note: self_weight and neighbor_weights must be presented at the same time.
     """
+    # TODO(hanbinhu) #82 Symmetrical argument for self_weight, src_weights, dst_weights
     if (self_weight is None and src_weights is not None) or \
        (self_weight is not None and src_weights is None):
         raise ValueError("Arguments self_weight and src_weights have to be presented at "

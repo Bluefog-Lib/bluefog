@@ -467,6 +467,9 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           weighted_tensors.push_back(std::move(weighted_tensor_ptr));
         }
       }
+      // TODO(ybc) #83 Better design pattern for data_weight synchronization
+      // This ready event make sure the data_weight computation is done before communication, as
+      // Pytorch CUDA stream is not synchronized with our CUDA stream.
       std::shared_ptr<common::ReadyEvent> ready_event =
           entry.context->RecordReadyEvent(entry.device);
 
