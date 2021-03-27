@@ -739,9 +739,9 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
   // Ensure the lifecycle of the weighted tensors are alive after communication.
 
 #if NCCL_MINOR > 6
-  if (!entry.is_hierarchical) {
+  if (!entry.is_hierarchical) {  // neighbor allreduce without hierarchy
     ncclGroupStart();
-    if (!entry.dynamic_neighbors_enabled) {
+    if (!entry.dynamic_neighbors_enabled) {  // static topology
       for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
         int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
         void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
@@ -753,13 +753,17 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
         NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
                           send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-    } else {
+    } else {  // dynamic topology
       if(entry.dst_weighting_enabled) {
         for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
           auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
           weighted_tensors.push_back(std::move(weighted_tensor_ptr));
         }
       }
+      // TODO(ybc) #83 Better design pattern for data_weight synchronization
+      // This ready event makes sure the data_weight computation is done before communication, as
+      // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
+      // it is running on CPU.
       std::shared_ptr<common::ReadyEvent> ready_event =
           entry.context->RecordReadyEvent(entry.device);
       for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
@@ -770,22 +774,20 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                           recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
       if(entry.dst_weighting_enabled) {
-        if (ready_event != nullptr) {
-          while (!ready_event->Ready()) {
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-          }
+        while ((ready_event != nullptr) && !ready_event->Ready()) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
       }
       for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
-        const void* buffer_send = sendbuf;
-        if (entry.dst_weighting_enabled)
-          buffer_send = weighted_tensors[i].get()->data();
+        const void* buffer_send = (entry.dst_weighting_enabled)
+                                      ? weighted_tensors[i]->data()
+                                      : sendbuf;
         NCCLCHECK(ncclSend(buffer_send, num_elements, GetNCCLDataType(entry.tensor),
                            entry.send_neighbors->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
     }
     ncclGroupEnd();
-  } else {
+  } else {  // hierarchical neighbor allreduce
     if (entry.send_neighbors->empty()) {
       throw std::runtime_error(
           "Under hierarchical neighbor_allreduce, argument "
@@ -1016,22 +1018,11 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     RecordEvent(event_queue, "MEM_CPY_IN");
   }
 
-  const void* weighted_fused_input_data = nullptr;
-  if (first_entry.dst_weighting_enabled) {
-    void* weight_buffer_data = nullptr;
-    MemcpyInWeightFusionBuffer(weight_buffer_data, first_entry.send_neighbors->size(),
-                               fused_input_data, num_elements, element_size,
-                               first_entry.context, first_entry.device);
-    int64_t offset = 0;
-    for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
-      double dst_weight = first_entry.send_weights->at(i);
-      void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
-      ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
-                          first_entry.tensor->dtype(), nccl_ctx_.stream);
-      offset += num_elements * element_size;
-    }
-    weighted_fused_input_data = weight_buffer_data;
-  }
+  const void* weighted_fused_input_data =
+      (first_entry.dst_weighting_enabled)
+          ? GenerateWeightedFusedInputData(fused_input_data, first_entry,
+                                           num_elements, element_size)
+          : nullptr;
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
   // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
@@ -1040,9 +1031,9 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // Hence, we need to offset the buffer data to location for neighbors.
   buffer_data = (uint8_t*)buffer_data + num_elements * element_size;
 
-  if (!first_entry.is_hierarchical) {
+  if (!first_entry.is_hierarchical) {  // neighbor allreduce without hierarchy
     ncclGroupStart();
-    if (!first_entry.dynamic_neighbors_enabled) {
+    if (!first_entry.dynamic_neighbors_enabled) {  // static topology
       for (int i = 0; i < mpi_ctx_.neighbor_indgree_; i++) {
         int recv_rank = mpi_ctx_.neighbor_in_ranks_[i];
         void* recvbuf =
@@ -1056,7 +1047,7 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                            GetNCCLDataType(first_entry.tensor), send_rank,
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-    } else {
+    } else {  // dynamic topology
       for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
         int recv_rank = first_entry.recv_neighbors->at(i);
         void* recvbuf =
@@ -1066,16 +1057,17 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
       for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
-        const void* sendbuf = fused_input_data;
-        if (first_entry.dst_weighting_enabled)
-          sendbuf = (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
+        const void* sendbuf =
+            (first_entry.dst_weighting_enabled)
+                ? (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size)
+                : fused_input_data;
         NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(first_entry.tensor),
                            first_entry.send_neighbors->at(i),
                            nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
     }
     ncclGroupEnd();
-  } else {
+  } else {  // hierarchical neighbor allreduce
     if (first_entry.send_neighbors->empty()) {
       throw std::runtime_error(
           "Under hierarchical neighbor_allreduce, argument "
@@ -1923,6 +1915,28 @@ void NCCLController::MemcpyInWeightFusionBuffer(
                               cudaMemcpyDeviceToDevice, nccl_ctx_.stream));
     offset += data_size;
   }
+}
+
+const void* NCCLController::GenerateWeightedFusedInputData(const void* fused_input_data,
+                                                           const TensorTableEntry& entry,
+                                                           int64_t num_elements, int element_size) {
+  // Given a fused_input_data like [t_1, t_2], the storage for neighbor_allreduce in
+  // weighted fused input data is like [t_1_w1, t_2_w1 | t_1_w2, t_2_w2 | t_1_w3, t_2_w3].
+  // Here t_1 and t_2  means self tensor 1 and 2 and _w1, _w2, and _w3 means the
+  // destination weights to destination 1, 2, and 3.
+  void* weight_buffer_data = nullptr;
+  MemcpyInWeightFusionBuffer(weight_buffer_data, entry.send_neighbors->size(),
+                             fused_input_data, num_elements, element_size,
+                             entry.context, entry.device);
+  int64_t offset = 0;
+  for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+    double dst_weight = entry.send_weights->at(i);
+    void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
+    ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
+                        entry.tensor->dtype(), nccl_ctx_.stream);
+    offset += num_elements * element_size;
+  }
+  return weight_buffer_data;
 }
 
 void NCCLController::MemcpyOutFusionBuffer(

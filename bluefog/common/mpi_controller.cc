@@ -449,13 +449,13 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // including itself is more intuitive.
   std::string error_message = "";
 
-  if (!entry.is_hierarchical) {
-    if (!entry.dynamic_neighbors_enabled) {
+  if (!entry.is_hierarchical) {  // neighbor allreduce without hierarchy
+    if (!entry.dynamic_neighbors_enabled) {  // static topology
       MPICHECK(MPI_Neighbor_allgather(
           sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
           buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
           mpi_ctx_.GetMPICommunicator(Communicator::GRAPH)));
-    } else {
+    } else {  // dynamic topology
       int nsend = entry.send_neighbors->size();
       int nrecv = entry.recv_neighbors->size();
 
@@ -468,8 +468,9 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
         }
       }
       // TODO(ybc) #83 Better design pattern for data_weight synchronization
-      // This ready event make sure the data_weight computation is done before communication, as
-      // Pytorch CUDA stream is not synchronized with our CUDA stream.
+      // This ready event makes sure the data_weight computation is done before communication, as
+      // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
+      // it is running on CPU.
       std::shared_ptr<common::ReadyEvent> ready_event =
           entry.context->RecordReadyEvent(entry.device);
 
@@ -486,16 +487,14 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
       }
 
       if (entry.dst_weighting_enabled) {
-        if (ready_event != nullptr) {
-          while (!ready_event->Ready()) {
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-          }
+        while ((ready_event != nullptr) && !ready_event->Ready()) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
       }
       for (int i = 0; i < nsend; ++i) {
-        const void* buffer_send = sendbuf;
-        if (entry.dst_weighting_enabled)
-          buffer_send = weighted_tensors[i].get()->data();
+        const void* buffer_send = (entry.dst_weighting_enabled)
+                                      ? weighted_tensors[i]->data()
+                                      : sendbuf;
         MPICHECK(MPI_Isend(buffer_send, num_elements,
             mpi_ctx_.GetMPIDataType(entry.tensor), entry.send_neighbors->at(i),
             /*tag=*/mpi_ctx_.rank_ + entry.send_neighbors->at(i),
@@ -505,7 +504,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
       error_message =
           GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
     }
-  } else {
+  } else {  // hierarchical neighbor allreduce
     if (entry.send_neighbors->empty()) {
       throw std::runtime_error(
           "Under hierarchical neighbor_allreduce, argument "
@@ -630,26 +629,8 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   if (first_entry.dst_weighting_enabled) {
     // Generate weighted data fusion for sending
     timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_WEIGHT_FUSION_BUFFER");
-    void* weight_buffer_data;
-    MemcpyInWeightFusionBuffer(weight_buffer_data, first_entry.send_neighbors->size(),
-                               fused_input_data, num_elements, element_size,
-                               first_entry.context, first_entry.device);
-    int64_t offset = 0;
-    for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
-      double dst_weight = first_entry.send_weights->at(i);
-      void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
-      if (first_entry.device == CPU_DEVICE_ID) {
-        ScaleCPUBuffer(dst_weight, weight_buffer_data_offset, num_elements,
-                       first_entry.tensor->dtype());
-      } else {
-#if HAVE_CUDA
-        ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
-                            first_entry.tensor->dtype(), mpi_ctx_.stream);
-#endif
-      }
-      offset += num_elements * element_size;
-    }
-    weighted_fused_input_data = weight_buffer_data;
+    weighted_fused_input_data = GenerateWeightedFusedInputData(fused_input_data, first_entry,
+                                                               num_elements, element_size);
     timeline_ptr->ActivityEndAll(entries);
   }
 
@@ -667,13 +648,13 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // including itself is more intuitive.
   std::string error_message = "";
 
-  if (!first_entry.is_hierarchical) {
-    if (!first_entry.dynamic_neighbors_enabled) {
+  if (!first_entry.is_hierarchical) {  // neighbor allreduce without hierarchy
+    if (!first_entry.dynamic_neighbors_enabled) {  // static topology
       MPICHECK(MPI_Neighbor_allgather(
           fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
           buffer_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.output),
           mpi_ctx_.GetMPICommunicator(Communicator::GRAPH)));
-    } else {
+    } else {  // dynamic topology
       int nsend = first_entry.send_neighbors->size();
       int nrecv = first_entry.recv_neighbors->size();
       std::vector<MPI_Request> requests(nsend + nrecv);
@@ -692,10 +673,10 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
       }
 #endif
       for (int i = 0; i < nsend; ++i) {
-        const void* sendbuf = fused_input_data;
-        if (first_entry.dst_weighting_enabled)
-          sendbuf = 
-              (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
+        const void* sendbuf =
+            (first_entry.dst_weighting_enabled)
+                ? (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size)
+                : fused_input_data;
         MPICHECK(MPI_Isend(sendbuf, num_elements,
             mpi_ctx_.GetMPIDataType(first_entry.tensor), first_entry.send_neighbors->at(i),
             /*tag=*/mpi_ctx_.rank_ + first_entry.send_neighbors->at(i),
@@ -705,7 +686,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
       error_message =
           GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
     }
-  } else {
+  } else {  // hierarchical neighbor allreduce
     if (first_entry.send_neighbors->empty()) {
       throw std::runtime_error(
           "Under hierarchical neighbor_allreduce, argument "
@@ -1440,6 +1421,35 @@ void MPIController::MemcpyInWeightFusionBuffer(
 #endif
     offset += data_size;
   }
+}
+
+const void* MPIController::GenerateWeightedFusedInputData(const void* fused_input_data,
+                                                          const TensorTableEntry& entry,
+                                                          int64_t num_elements, int element_size) {
+  // Given a fused_input_data like [t_1, t_2], the storage for neighbor_allreduce in
+  // weighted fused input data is like [t_1_w1, t_2_w1 | t_1_w2, t_2_w2 | t_1_w3, t_2_w3].
+  // Here t_1 and t_2  means self tensor 1 and 2 and _w1, _w2, and _w3 means the
+  // destination weights to destination 1, 2, and 3.
+  void* weight_buffer_data;
+  MemcpyInWeightFusionBuffer(weight_buffer_data, entry.send_neighbors->size(),
+                             fused_input_data, num_elements, element_size,
+                             entry.context, entry.device);
+  int64_t offset = 0;
+  for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+    double dst_weight = entry.send_weights->at(i);
+    void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
+    if (entry.device == CPU_DEVICE_ID) {
+      ScaleCPUBuffer(dst_weight, weight_buffer_data_offset, num_elements,
+                     entry.tensor->dtype());
+    } else {
+#if HAVE_CUDA
+      ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
+                          entry.tensor->dtype(), mpi_ctx_.stream);
+#endif
+    }
+    offset += num_elements * element_size;
+  }
+  return weight_buffer_data;
 }
 
 void MPIController::MemcpyInFusionBuffer(

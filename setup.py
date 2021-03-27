@@ -21,6 +21,7 @@ import shlex
 import subprocess
 import sys
 import textwrap
+import shlex
 import traceback
 from typing import List
 
@@ -449,18 +450,23 @@ def build_nvcc_extra_objects(nvcc_cmd: str, cxx11_abi: bool) -> List[str]:
     # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -rdc=true -c cuda_kernels.cu
     # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -dlink -o cuda_kernels_link.o \
     #      cuda_kernels.o -lcudart
-    nvcc_flags = f"--compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(cxx11_abi)}'"
+    nvcc_flags = f'-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(cxx11_abi)}'
 
     extra_object_dir = 'bluefog/common/cuda/'
     source = extra_object_dir+'cuda_kernels.cu'
     object_file = extra_object_dir+'cuda_kernels.o'
     object_link = extra_object_dir+'cuda_kernels_link.o'
 
-    command_object = f"{nvcc_cmd} {nvcc_flags} -rdc=true -c {source} -o {object_file}"
-    command_link   = f"{nvcc_cmd} {nvcc_flags} -dlink {object_file} -lcudart -o {object_link}"
+    command_object = [nvcc_cmd, '--compiler-options', nvcc_flags,
+                      '-rdc=true', '-c', source, '-o', object_file]
+    command_link = [nvcc_cmd, '--compiler-options', nvcc_flags,
+                    '-dlink', object_file, '-lcudart', '-o', object_link]
 
-    subprocess.check_call([command_object], shell=True)
-    subprocess.check_call([command_link], shell=True)
+    command_object_str = ' '.join(shlex.quote(par) for par in command_object)
+    command_link_str = ' '.join(shlex.quote(par) for par in command_link)
+
+    subprocess.check_call(command_object_str, shell=True)
+    subprocess.check_call(command_link_str, shell=True)
     return [object_file, object_link]
 
 def build_torch_extension(build_ext, global_options, torch_version):

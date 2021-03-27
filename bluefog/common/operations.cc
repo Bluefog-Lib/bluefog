@@ -482,6 +482,8 @@ void BackgroundThreadLoop(BluefogGlobalState& state) {
   if (bluefog_fusion_threshold != nullptr) {
     state.tensor_fusion_threshold =
         std::strtol(bluefog_fusion_threshold, nullptr, 10);
+    state.tensor_fusion_threshold_for_dst_weight =
+        state.tensor_fusion_threshold;
   }
 
   // Initialize the tensor count table. No tensors are available yet.

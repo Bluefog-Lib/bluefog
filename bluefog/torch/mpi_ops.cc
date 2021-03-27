@@ -407,11 +407,14 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
   auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
 
-  std::map<int, double> src_weights_map;
+  // src_neighbors, dst_neighbors --> list of ranks only used in Enqueue
+  // src_weights_ordered_map --> used in callback only
+  // dst_weights_vec --> used in Enqueue for sending (same order of dst_neighbors)
+  std::map<int, double> src_weights_ordered_map;
   for (auto kv : src_weights)
-    src_weights_map.insert(kv);
+    src_weights_ordered_map.insert(kv);
   std::vector<int> src_neighbors;
-  for (auto kv : src_weights_map)
+  for (auto kv : src_weights_ordered_map)
     src_neighbors.push_back(kv.first);
 
   std::vector<int> dst_neighbors;
@@ -440,11 +443,11 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
         dynamic_neighbors_enabled, dst_weighting_enabled, is_hierarchical,
         enable_topo_check, op_name, CPU_DEVICE_ID,
-        callback_wrapper([self_weight, src_weights_map, avg_computation, cpu_output, tensor,
+        callback_wrapper([self_weight, src_weights_ordered_map, avg_computation, cpu_output, tensor,
                           dynamic_neighbors_enabled, is_hierarchical, output, device]() mutable {
           with_device device_guard(device);
           output.copy_(cpu_output);
-          PerformNeighborAllreduceCallback(tensor, output, self_weight, src_weights_map,
+          PerformNeighborAllreduceCallback(tensor, output, self_weight, src_weights_ordered_map,
                                            avg_computation, dynamic_neighbors_enabled,
                                            is_hierarchical);
         }));
@@ -460,9 +463,9 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
         bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
         dynamic_neighbors_enabled, dst_weighting_enabled,
         is_hierarchical, enable_topo_check, op_name, device,
-        callback_wrapper([self_weight, src_weights_map, avg_computation, dynamic_neighbors_enabled,
-                          is_hierarchical, tensor, output]() mutable {
-          PerformNeighborAllreduceCallback(tensor, output, self_weight, src_weights_map,
+        callback_wrapper([self_weight, src_weights_ordered_map, avg_computation,
+                          dynamic_neighbors_enabled, is_hierarchical, tensor, output]() mutable {
+          PerformNeighborAllreduceCallback(tensor, output, self_weight, src_weights_ordered_map,
                                            avg_computation, dynamic_neighbors_enabled,
                                            is_hierarchical);
         }));

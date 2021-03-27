@@ -83,6 +83,9 @@ class FusionBufferManager {
                           std::function<void()> on_end_init);
 
   // Initializes a buffer of the given threshold size times MPI size if not already cached.
+  // There is one constraint to noticed here. We need WeightBuffer is always larger than
+  // (size-1)*fusion Buffer since we don't want to tensor being able to put into the fusion
+  // buffer but not able to put into weightbuffer.
   //
   // Args:
   //  threshold: Size of the buffer in bytes.
