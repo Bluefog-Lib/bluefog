@@ -289,7 +289,7 @@ class BlueFogBasics(object):
 
         if not isinstance(topology, networkx.DiGraph):
             raise TypeError("Machine topology must be a networkx.DiGraph obejct.")
-        if topology.number_of_nodes != self.machine_size():
+        if topology.number_of_nodes() != self.machine_size():
             raise TypeError(
                 "topology must be a networkx.DiGraph obejct with same number of nodes "
                 "as bf.machine_size()."
@@ -339,7 +339,7 @@ class BlueFogBasics(object):
 
         if not isinstance(topology, networkx.DiGraph):
             raise TypeError("topology must be a networkx.DiGraph obejct.")
-        if topology.number_of_nodes != self.size():
+        if topology.number_of_nodes() != self.size():
             raise TypeError(
                 "topology must be a networkx.DiGraph obejct with same number of nodes as bf.size()."
             )
