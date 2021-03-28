@@ -11,6 +11,9 @@ BlueFog
     :target: https://img.shields.io/badge/License-Apache%202.0-blue.svg
     :alt: License
 
+.. image:: https://zenodo.org/badge/225537951.svg
+   :target: https://zenodo.org/badge/latestdoi/225537951
+
 .. image:: https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat
     :target: https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat
     
@@ -146,11 +149,26 @@ Checkout our `API explanation page <https://bluefog-lib.github.io/bluefog/bluefo
 The Bluefog source code was based off `Horovod <https://github.com/horovod/horovod>`_ repository. Hence, BlueFog shared lots of common features from Horovod such as `timeline <https://bluefog-lib.github.io/bluefog/timeline.html>`_, tensor-fusion, etc. Here, we want to express our gratitude to the Horovod team. 
 
 Materials
---------
+---------
 *Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA, 2020 `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
 
-*BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, BlueFog Team, To Appear in 2020
+*BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, BlueFog Team, To Appear in 2021
 
+Cite
+----
+Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
+  
+.. code-block::
+
+    @software{bluefog2021_4616052,
+      author       = {BlueFog team},
+      title        = {BlueFog},
+      month        = Mar.,
+      year         = 2021,
+      publisher    = {Zenodo},
+      doi          = {10.5281/zenodo.4616052},
+      url          = {https://doi.org/10.5281/zenodo.4616052}
+    }
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples

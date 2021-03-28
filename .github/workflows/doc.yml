@@ -1,0 +1,34 @@
+name: Document CI
+
+on:
+  release:
+    types: [create, edited, prereleased, published]
+
+jobs:
+  github-page:
+
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    - name: Install OpenMPI
+      run: |
+        sudo apt-get install -y -q openmpi-bin libopenmpi-dev
+    - name: Install BlueFog
+      run: |
+        git submodule update --init --recursive
+        python -m pip install -e .
+    - name: Build Document
+      run: |
+        python -m pip install matplotlib sphinx sphinx_rtd_theme
+        cd docs && make html
+        touch _build/html/.nojekyll
+    - name: Deploy Github Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs/_build/html
