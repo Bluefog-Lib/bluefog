@@ -92,6 +92,8 @@ def _infer_topo(
         for v in adj:
             inv_adjacency_dict[v].append(k)
     return_list = inv_adjacency_dict.get(bf.rank())
+    if return_list is None:
+        return_list = []
 
     if not construct_adjacency_matrix:
         return return_list
