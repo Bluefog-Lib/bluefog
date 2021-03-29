@@ -14,10 +14,6 @@
 # limitations under the License.
 # ==============================================================================
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import os
 import torch
@@ -30,10 +26,10 @@ from bluefog.torch.optimizers import (
     DistributedWinPutOptimizer,
     DistributedAllreduceOptimizer,
     DistributedNeighborAllreduceOptimizer,
-    DistributedHierarchicalNeighborAllreduceOptimizer
+    DistributedHierarchicalNeighborAllreduceOptimizer,
 )
 
-check_extension('bluefog.torch', __file__, 'mpi_lib')
+check_extension("bluefog.torch", __file__, "mpi_lib")
 
 from bluefog.torch.mpi_ops import init, shutdown
 from bluefog.torch.mpi_ops import size, local_size, rank, local_rank
@@ -74,4 +70,38 @@ from bluefog.torch.mpi_ops import set_skip_negotiate_stage, get_skip_negotiate_s
 
 from bluefog.torch.mpi_ops import timeline_start_activity, timeline_end_activity
 from bluefog.torch.mpi_ops import timeline_context
-from bluefog.torch.utility import broadcast_optimizer_state, broadcast_parameters, allreduce_parameters
+
+from bluefog.torch.utility import (
+    broadcast_optimizer_state,
+    broadcast_parameters,
+    allreduce_parameters,
+)
+
+from bluefog.common.topology_util import (
+    GetRecvWeights,
+    GetSendWeights,
+    IsRegularGraph,
+    IsTopologyEquivalent,
+)
+
+from bluefog.common.topology_util import (
+    ExponentialTwoGraph,
+    ExponentialGraph,
+    FullyConnectedGraph,
+    MeshGrid2DGraph,
+    RingGraph,
+    StarGraph,
+    SymmetricExponentialGraph,
+)
+
+from bluefog.common.topology_util import (
+    GetDynamicOnePeerSendRecvRanks,
+    GetExp2DynamicSendRecvMachineRanks,
+    GetInnerOuterRingDynamicSendRecvRanks,
+    GetInnerOuterExpo2DynamicSendRecvRanks,
+)
+
+from bluefog.torch.topology_util import (
+    InferSourceFromDestinationRanks,
+    InferDestinationFromSourceRanks,
+)
