@@ -19,23 +19,26 @@ from multiprocessing import Process, Queue
 import os
 import sysconfig
 
-EXTENSIONS = ['tensorflow', 'torch']
+EXTENSIONS = ["tensorflow", "torch"]
+
 
 def is_running_from_ipython():
     from IPython import get_ipython
+
     return get_ipython() is not None
+
 
 def get_ext_suffix():
     """Determine library extension for various versions of Python."""
-    ext_suffix = sysconfig.get_config_var('EXT_SUFFIX')
+    ext_suffix = sysconfig.get_config_var("EXT_SUFFIX")
     if ext_suffix:
         return ext_suffix
 
-    ext_suffix = sysconfig.get_config_var('SO')
+    ext_suffix = sysconfig.get_config_var("SO")
     if ext_suffix:
         return ext_suffix
 
-    return '.so'
+    return ".so"
 
 
 def get_extension_full_path(pkg_path, *args):
@@ -48,8 +51,7 @@ def get_extension_full_path(pkg_path, *args):
 def check_extension(ext_name, pkg_path, *args):
     full_path = get_extension_full_path(pkg_path, *args)
     if not os.path.exists(full_path):
-        raise ImportError(
-            'Extension {} has not been built. '.format(ext_name))
+        raise ImportError("Extension {} has not been built. ".format(ext_name))
 
 
 def _check_extension_lambda(ext_base_name, fn, fn_desc, verbose):
@@ -57,36 +59,43 @@ def _check_extension_lambda(ext_base_name, fn, fn_desc, verbose):
     Tries to load the extension in a new process.  If successful, puts fn(ext)
     to the queue or False otherwise.  Mutes all stdout/stderr.
     """
+
     def _target_fn(ext_base_name, fn, fn_desc, queue, verbose):
         import importlib
         import sys
         import traceback
 
         if verbose:
-            print('Checking whether extension {ext_base_name} was {fn_desc}.'.format(
-                ext_base_name=ext_base_name, fn_desc=fn_desc))
+            print(
+                "Checking whether extension {ext_base_name} was {fn_desc}.".format(
+                    ext_base_name=ext_base_name, fn_desc=fn_desc
+                )
+            )
         else:
             # Suppress output
-            sys.stdout = open(os.devnull, 'w')
-            sys.stderr = open(os.devnull, 'w')
+            sys.stdout = open(os.devnull, "w")
+            sys.stderr = open(os.devnull, "w")
 
         try:
-            ext = importlib.import_module('.' + ext_base_name, 'bluefog')
+            ext = importlib.import_module("." + ext_base_name, "bluefog")
             result = fn(ext)
         except:  # pylint: disable=bare-except
             traceback.print_exc()
             result = None
 
         if verbose:
-            print('Extension {ext_base_name} {flag} {fn_desc}.'.format(
-                ext_base_name=ext_base_name, flag=('was' if result else 'was NOT'),
-                fn_desc=fn_desc))
+            print(
+                "Extension {ext_base_name} {flag} {fn_desc}.".format(
+                    ext_base_name=ext_base_name,
+                    flag=("was" if result else "was NOT"),
+                    fn_desc=fn_desc,
+                )
+            )
 
         queue.put(result)
 
     queue = Queue()
-    p = Process(target=_target_fn,
-                args=(ext_base_name, fn, fn_desc, queue, verbose))
+    p = Process(target=_target_fn, args=(ext_base_name, fn, fn_desc, queue, verbose))
     p.daemon = True
     p.start()
     p.join()
@@ -95,15 +104,17 @@ def _check_extension_lambda(ext_base_name, fn, fn_desc, verbose):
 
 def extension_available(ext_base_name, verbose=False):
     available_fn = lambda ext: ext is not None
-    return _check_extension_lambda(
-        ext_base_name, available_fn, 'built', verbose) or False
+    return (
+        _check_extension_lambda(ext_base_name, available_fn, "built", verbose) or False
+    )
 
 
 def mpi_built(verbose=False):
     for ext_base_name in EXTENSIONS:
         built_fn = lambda ext: ext.mpi_built()
         result = _check_extension_lambda(
-            ext_base_name, built_fn, 'built with MPI', verbose)
+            ext_base_name, built_fn, "built with MPI", verbose
+        )
         if result is not None:
             return result
     return False
