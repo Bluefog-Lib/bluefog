@@ -54,6 +54,14 @@ struct BluefogGlobalState {
   // Whether collective context has been completed on the background thread.
   std::atomic_bool initialization_done{false};
 
+  // Condition variable and its mutex for main loop in communication thread.
+  std::condition_variable loop_cv;
+  std::mutex loop_mutex;
+
+  // Under negotiation, the entries sends to master first and wait until it 
+  // returns ok to run. This variable keeps the records of that.
+  std::atomic_int unfinished_enqueued_entries{0};
+
   // Timeline writer.
   Timeline timeline;
 
