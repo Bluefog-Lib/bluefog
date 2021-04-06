@@ -75,7 +75,7 @@ bool WindowManager::InitializeMutexWin(const MPI_Comm& mpi_comm) {
 std::vector<int> WindowManager::GetVersionMemoryCopy() { return version_mem_; }
 
 void WindowManager::resetVersionWinMem(int initialValue /*=0*/) {
-  for (int i = 0; i < version_mem_.size(); i++) {
+  for (int i = 0; i < (int) version_mem_.size(); i++) {
     version_mem_[i] = initialValue;
   }
 }

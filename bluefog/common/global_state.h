@@ -18,6 +18,7 @@
 #define BLUEFOG_COMMON_GLOBAL_STATE_H
 
 #include <atomic>
+#include <condition_variable>
 #include <chrono>
 #include <memory>
 #include <queue>
