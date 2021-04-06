@@ -1121,7 +1121,7 @@ bool RunLoopOnce(BluefogGlobalState& state) {
 
   std::unique_lock<std::mutex> lk(state.loop_mutex);
   // The real mutex for queue is the on under TensorQueue.
-  state.loop_cv.wait(lk, [&state] {
+  state.loop_cv.wait_for(lk, std::chrono::seconds(10), [&state] {
     // When we requesting shut_down, or any unfinished entries waiting in the
     // negotiation we should not wait.
     return state.shut_down || (state.unfinished_enqueued_entries > 0) ||
