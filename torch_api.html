@@ -13,6 +13,7 @@
   
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
 
   
   
@@ -668,7 +669,7 @@ matrix (including self weight).</p></li>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">bluefog.torch</span> <span class="k">as</span> <span class="nn">bf</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">set_machine_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">()))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bf</span><span class="o">.</span><span class="n">set_machine_topology</span><span class="p">(</span><span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="n">bf</span><span class="o">.</span><span class="n">machine_size</span><span class="p">()))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -1100,7 +1101,7 @@ the performance.</p></li>
 
 <dl class="py function">
 <dt id="bluefog.torch.neighbor_allreduce">
-<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allreduce</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">send_neighbors</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allreduce</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">torch.Tensor</span><a class="headerlink" href="#bluefog.torch.neighbor_allreduce" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that performs weighted averaging of the input tensor over the negihbors and itself
 in the Bluefog processes. The default behavior is (uniformly) average.</p>
 <p>The input tensor is not modified.</p>
@@ -1113,17 +1114,17 @@ are ready to send and receive the tensor.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to execute weighted average with neighbors.</p></li>
 <li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
-<li><p><strong>neighbor_weights</strong> – The weights for in-neighbor nodes, used with self weight.
+<li><p><strong>src_weights</strong> – The weights for in-neighbor nodes, used with self weight.
 If neighbor_weights is presented, the return tensor will return the weighted average
 defined by these weights and the self_weight. If not, the return tensor will return
 the weighted average defined by the topology weights is provided or uniformly average.
 The data structure of weights should be {rank : weight} and rank has to belong to the
 (in-)neighbors.</p></li>
-<li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
+<li><p><strong>dst_weights</strong> – The weights for out-neighbor nodes. If set to be None, assume the
 the current node sends to all of its (out-)neighbors. If having values, assume only
-part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-partial neighbors listed in this variable in a dynamic graph, and <cite>self_weight</cite> and
-<cite>neighbor_weights</cite> must be present.</p></li>
+part of (out-)neighbors will be sent to. If set to be a list, assume all the weights
+are one. In this mode, this node sends its value to partial neighbors listed in this
+variable in a dynamic graph, and <cite>self_weight</cite> and <cite>src_weights</cite> must be present.</p></li>
 <li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
 sending and recieving neighbors match with each other. Disabling this check can boost
 the performance.</p></li>
@@ -1139,7 +1140,7 @@ the performance.</p></li>
 
 <dl class="py function">
 <dt id="bluefog.torch.neighbor_allreduce_nonblocking">
-<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allreduce_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">send_neighbors</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">neighbor_allreduce_nonblocking</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_weight</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_weights</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_topo_check</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">int</span><a class="headerlink" href="#bluefog.torch.neighbor_allreduce_nonblocking" title="Permalink to this definition">¶</a></dt>
 <dd><p>A function that nonblockingly performs weighted averaging of the input tensor over the
 negihbors and itself in the Bluefog processes. The default behavior is (uniformly) average.</p>
 <p>The input tensor is not modified.</p>
@@ -1152,17 +1153,17 @@ are ready to send and receive the tensor.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>tensor</strong> – A tensor to execute weighted average with neighbors.</p></li>
 <li><p><strong>self_weight</strong> – The weight for self node, used with neighbor_weights.</p></li>
-<li><p><strong>neighbor_weights</strong> – The weights for in-neighbor nodes, used with self weight.
+<li><p><strong>src_weights</strong> – The weights for in-neighbor nodes, used with self weight.
 If neighbor_weights is presented, the return tensor will return the weighted average
 defined by these weights and the self_weight. If not, the return tensor will return
 the weighted average defined by the topology weights is provided or uniformly average.
 The data structure of weights should be {rank : weight} and rank has to belong to the
 (in-)neighbors.</p></li>
-<li><p><strong>send_neighbors</strong> – The list of neighbor nodes to be sent to. If set to be None, assume the
+<li><p><strong>dst_weights</strong> – The weights for out-neighbor nodes. If set to be None, assume the
 the current node sends to all of its (out-)neighbors. If having values, assume only
-part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-partial neighbors listed in this variable in a dynamic graph, and <cite>self_weight</cite> and
-<cite>neighbor_weights</cite> must be present.</p></li>
+part of (out-)neighbors will be sent to. If set to be a list, assume all the weights
+are one. In this mode, this node sends its value to partial neighbors listed in this
+variable in a dynamic graph, and <cite>self_weight</cite> and <cite>src_weights</cite> must be present.</p></li>
 <li><p><strong>enable_topo_check</strong> – When send_neighbors is present, enabling this option checks if the
 sending and recieving neighbors match with each other. Disabling this check can boost
 the performance.</p></li>
@@ -1809,6 +1810,315 @@ or <code class="docutils literal notranslate"><span class="pre">model.parameters
 <dd class="field-odd"><p><strong>params</strong> – One of the following:
 - list of parameters to allreduce
 - dict of parameters to allreduce</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.GetRecvWeights">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">GetRecvWeights</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">networkx.classes.digraph.DiGraph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.GetRecvWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights for receiving dictionary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.GetSendWeights">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">GetSendWeights</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">networkx.classes.digraph.DiGraph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.GetSendWeights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a Tuple of self_weight and neighbor_weights for sending dictionary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.IsRegularGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">IsRegularGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">networkx.classes.digraph.DiGraph</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.IsRegularGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dtermine a graph is regular or not, i.e. all nodes have the same degree.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.IsTopologyEquivalent">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">IsTopologyEquivalent</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo1</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">networkx.classes.digraph.DiGraph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topo2</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">networkx.classes.digraph.DiGraph</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">bool</span><a class="headerlink" href="#bluefog.torch.IsTopologyEquivalent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine two topologies are equivalent or not.</p>
+<p>Notice we do not check two topologies are isomorphism. Instead checking
+the adjacenty matrix is the same only.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.ExponentialTwoGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">ExponentialTwoGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.ExponentialTwoGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate graph topology such that each points only
+connected to a point such that the index difference is the power of 2.</p>
+<p>Example: A ExponentialTwoGraph with 12 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">ExponentialTwoGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-1.png" class="plot-directive" src="_images/torch_api-1.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.ExponentialGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">ExponentialGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.ExponentialGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate graph topology such that each points only
+connected to a point such that the index difference is power of base. (Default is 2)</p>
+<p>Example: A ExponentialGraph with 12 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">ExponentialGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-2.png" class="plot-directive" src="_images/torch_api-2.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.FullyConnectedGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">FullyConnectedGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.FullyConnectedGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate fully connected structure of graph.
+For example, a FullyConnectedGraph with 16 nodes:</p>
+<p>Example: A FullyConnectedGraph 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">FullyConnectedGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_spring</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-3.png" class="plot-directive" src="_images/torch_api-3.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.MeshGrid2DGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">MeshGrid2DGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.MeshGrid2DGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate 2D MeshGrid structure of graph.</p>
+<p>Assume shape = (nrow, ncol), when shape is provided, a meshgrid of nrow*ncol will be generated.
+when shape is not provided, nrow and ncol will be the two closest factors of size.</p>
+<p>For example: size = 24, nrow and ncol will be 4 and 6, respectively.
+We assume  nrow will be equal to or smaller than ncol.
+If size is a prime number, nrow will be 1, and ncol will be size, which degrades the topology
+into a linear one.</p>
+<p>Example: A MeshGrid2DGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">MeshGrid2DGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_spring</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-4.png" class="plot-directive" src="_images/torch_api-4.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.RingGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">RingGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connect_style</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.RingGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate ring structure of graph (uniliteral).
+Argument connect_style should be an integer between 0 and 2, where
+0 represents the bi-connection, 1 represents the left-connection,
+and 2 represents the right-connection.</p>
+<p>Example: A RingGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">RingGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-5.png" class="plot-directive" src="_images/torch_api-5.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.StarGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">StarGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.StarGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate star structure of graph.</p>
+<p>All other ranks are connected to the center_rank. The connection is
+bidirection, i.e. if the weight from node i to node j is non-zero, so
+is the weight from node j to node i.</p>
+<p>Example: A StarGraph with 16 nodes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">StarGraph</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_spring</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-6.png" class="plot-directive" src="_images/torch_api-6.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.SymmetricExponentialGraph">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">SymmetricExponentialGraph</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">networkx.classes.digraph.DiGraph</span><a class="headerlink" href="#bluefog.torch.SymmetricExponentialGraph" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Generate symmeteric graph topology such that for the first half of nodes
+only connected to a point such that the index difference is power of base (Default is 4)
+and the connectivity for the second half of nodes just mirrored to the first half.</p>
+</div></blockquote>
+<p>Example: A SymmetricExponentialGraph with 12 nodes</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">networkx</span> <span class="k">as</span> <span class="nn">nx</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">G</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">SymmetricExponentialGraph</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nx</span><span class="o">.</span><span class="n">draw_circular</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="figure align-default">
+<img alt="_images/torch_api-7.png" class="plot-directive" src="_images/torch_api-7.png" />
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.GetDynamicOnePeerSendRecvRanks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">GetDynamicOnePeerSendRecvRanks</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">networkx.classes.digraph.DiGraph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.GetDynamicOnePeerSendRecvRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outoging send rank and corresponding recieving rank(s).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>topo</strong> (<em>nx.DiGraph</em>) – The base topology to generate dynamic send and receive ranks.</p></li>
+<li><p><strong>self_rank</strong> (<em>int</em>) – The self rank.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields</dt>
+<dd class="field-even"><p><em>Iterator[Tuple[List[int], List[int]]]</em> – send_ranks, recv_ranks.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">topo</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">PowerTwoRingGraph</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">GetDynamicOnePeerSendRecvRanks</span><span class="p">(</span><span class="n">topo</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">gen</span><span class="p">))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.GetExp2DynamicSendRecvMachineRanks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">GetExp2DynamicSendRecvMachineRanks</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.GetExp2DynamicSendRecvMachineRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outgoing send machine id and corresponding recieving
+machine id(s) for Exponentia-2 topology.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>world_size</strong> (<em>int</em>) – the size of all nodes; world_size = num_machines * nodes_per_machine</p></li>
+<li><p><strong>local_size</strong> (<em>int</em>) – number of nodes in each machine</p></li>
+<li><p><strong>self_rank</strong> (<em>int</em>) – The self rank.</p></li>
+<li><p><strong>local_rank</strong> (<em>int</em>) – The self local rank.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields</dt>
+<dd class="field-even"><p><em>Iterator[Tuple[List[int], List[int]]]</em> – send_machine_ids, recv_machine_ids.</p>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This function should be used under homogeneous enviroment only, i.e. all machines have
+the same number of local processes.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.GetInnerOuterRingDynamicSendRecvRanks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">GetInnerOuterRingDynamicSendRecvRanks</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.GetInnerOuterRingDynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+for Inner-Ring-Outer-Ring topology.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>world_size</strong> (<em>int</em>) – the size of all nodes; world_size = num_machines * nodes_per_machine</p></li>
+<li><p><strong>local_size</strong> (<em>int</em>) – number of nodes in each machine</p></li>
+<li><p><strong>self_rank</strong> (<em>int</em>) – The self rank.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields</dt>
+<dd class="field-even"><p><em>Iterator[Tuple[List[int], List[int]]]</em> – send_ranks, recv_ranks.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">bf</span><span class="o">.</span><span class="n">local_size</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">GetInnerOuterRingDynamicSendRecvRanks</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">gen</span><span class="p">))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.GetInnerOuterExpo2DynamicSendRecvRanks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">GetInnerOuterExpo2DynamicSendRecvRanks</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_size</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">self_rank</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.GetInnerOuterExpo2DynamicSendRecvRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>A utility function to generate 1-outgoing send rank and corresponding recieving rank(s)
+for Inner-Exp2-Outer-Exp2 ring topology.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>world_size</strong> (<em>int</em>) – the size of all nodes; world_size = num_machines * nodes_per_machine</p></li>
+<li><p><strong>local_size</strong> (<em>int</em>) – number of nodes in each machine</p></li>
+<li><p><strong>self_rank</strong> (<em>int</em>) – The self rank.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields</dt>
+<dd class="field-even"><p><em>Iterator[Tuple[List[int], List[int]]]</em> – send_ranks, recv_ranks.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">bluefog.common</span> <span class="kn">import</span> <span class="n">topology_util</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span> <span class="o">=</span> <span class="n">bf</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">bf</span><span class="o">.</span><span class="n">local_size</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">topology_util</span><span class="o">.</span><span class="n">GetInnerOuterExpo2DynamicSendRecvRanks</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">local_size</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">gen</span><span class="p">))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.InferSourceFromDestinationRanks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">InferSourceFromDestinationRanks</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dst_ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">construct_adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">numpy.array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.InferSourceFromDestinationRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Infer the source ranks from destination ranks. This is collective communication call.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dst_ranks</strong> – A list of destination ranks.</p></li>
+<li><p><strong>construct_adjacency_matrix</strong> – If true, adjacency matrix will be return instead.
+Element w_{ij} represents the weights sending from node i to node j.
+We use column normalized style, i.e. the sum of receiving weight is 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If dst_ranks or src_ranks does not contain integer from 0 to size-1.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>If construct_adjacency_matrix is false, returns the source ranks list.
+If construct_adjacency_matrix is true, returns the the source ranks list
+and a 2-D numpy array.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="bluefog.torch.InferDestinationFromSourceRanks">
+<code class="sig-prename descclassname"><span class="pre">bluefog.torch.</span></code><code class="sig-name descname"><span class="pre">InferDestinationFromSourceRanks</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_ranks</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">construct_adjacency_matrix</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span> </span><span class="pre">numpy.array</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#bluefog.torch.InferDestinationFromSourceRanks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Infer the destination ranks from source ranks. This is collective communication call.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src_ranks</strong> – A list of destination ranks.</p></li>
+<li><p><strong>construct_adjacency_matrix</strong> – If true, adjacency matrix will be return instead.
+Element w_{ij} represents the weights sending from node i to node j.
+We use column normalized style, i.e. the sum of receiving weight is 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If dst_ranks or src_ranks does not contain integer from 0 to size-1.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>If construct_adjacency_matrix is false, returns the destination ranks list.
+If construct_adjacency_matrix is true, returns the the sodestinationrce ranks
+list and a 2-D numpy array.</p>
 </dd>
 </dl>
 </dd></dl>
