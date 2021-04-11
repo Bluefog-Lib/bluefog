@@ -1,7 +1,9 @@
 #!/bin/bash
 # Assume running under the root directory of Bluefog
+set -e
+set -x
 
-RAND_ID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+RAND_ID=$(git log -1 --format='%H' | fold -w 16 | head -n 1)
 TMP_DIR=/tmp/bluefog_${RAND_ID}
 TMP_EXAMPLE_DIR=${TMP_DIR}/examples
 TMP_TEST_DIR=${TMP_DIR}/test
