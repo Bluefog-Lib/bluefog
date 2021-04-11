@@ -43,7 +43,7 @@ using ::bluefog::common::with_device;
 
 TorchTensor::TorchTensor(::torch::Tensor tensor) : tensor_(tensor) {}
 
-const DataType TorchTensor::dtype() const {
+DataType TorchTensor::dtype() const {
   switch (tensor_.scalar_type()) {
     case ::torch::kByte:
       return DataType::BLUEFOG_UINT8;
@@ -76,15 +76,15 @@ const common::TensorShape TorchTensor::shape() const {
 
 const void* TorchTensor::data() const { return tensor_.data_ptr(); }
 
-std::shared_ptr<common::Tensor> TorchTensor::data_weight(float weight) {
+std::unique_ptr<common::Tensor> TorchTensor::data_weight(float weight) {
   if (weight == 1.0) {
-    return std::make_shared<TorchTensor>(tensor_);
+    return std::make_unique<TorchTensor>(tensor_);
   } else {
     int device =
         tensor_.device().is_cuda() ? tensor_.device().index() : CPU_DEVICE_ID;
     with_device device_context(device);
     // Note we call mul instead of mul_
-    return std::make_shared<TorchTensor>(tensor_.mul(weight));
+    return std::make_unique<TorchTensor>(tensor_.mul(weight));
   }
 }
 
@@ -177,6 +177,10 @@ Status TorchOpContext::AllocateZeros(int64_t num_elements, DataType dtype,
 }
 
 Framework TorchOpContext::framework() const { return Framework::PYTORCH; }
+
+std::shared_ptr<common::ReadyEvent> TorchOpContext::RecordReadyEvent(int device) {
+  return torch::RecordReadyEvent(device);
+}
 
 #if HAVE_CUDA
 struct ReadyEventRegistry {

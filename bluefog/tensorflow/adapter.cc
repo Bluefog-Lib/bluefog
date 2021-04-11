@@ -89,7 +89,7 @@ const void* TFPersistentBuffer::AccessData(
 
 TFTensor::TFTensor(::tensorflow::Tensor& tensor) : tensor_(tensor) {}
 
-const common::DataType TFTensor::dtype() const {
+common::DataType TFTensor::dtype() const {
   switch (tensor_.dtype()) {
     case ::tensorflow::DT_UINT8:
       return common::DataType::BLUEFOG_UINT8;
@@ -128,7 +128,7 @@ const void* TFTensor::data() const {
   return (const void*)tensor_.tensor_data().data();
 }
 
-std::shared_ptr<common::Tensor> TFTensor::data_weight(float weight) {
+std::unique_ptr<common::Tensor> TFTensor::data_weight(float weight) {
   throw std::runtime_error("Tensorflow with weight is not implemented yet.");
 };
 

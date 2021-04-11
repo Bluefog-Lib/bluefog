@@ -21,7 +21,9 @@ import shlex
 import subprocess
 import sys
 import textwrap
+import shlex
 import traceback
+from typing import List
 
 
 from distutils.errors import CompileError, DistutilsError, \
@@ -437,16 +439,52 @@ def is_torch_cuda(build_ext, include_dirs, extra_compile_args):
         print('INFO: Above error indicates that this PyTorch installation does not support CUDA.')
         return False
 
+def get_nvcc_cmd() -> str:
+    from shutil import which
+    nvcc_cmd = which('nvcc')
+    if nvcc_cmd is None:
+        raise DistutilsPlatformError('Unable to find NVCC compiler')
+    return nvcc_cmd
+
+def build_nvcc_extra_objects(nvcc_cmd: str, cxx11_abi: bool) -> List[str]:
+    # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -rdc=true -c cuda_kernels.cu
+    # nvcc --compiler-options '-fPIC -D_GLIBCXX_USE_CXX11_ABI=0' -dlink -o cuda_kernels_link.o \
+    #      cuda_kernels.o -lcudart
+    nvcc_flags = f'-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(cxx11_abi)}'
+
+    extra_object_dir = 'bluefog/common/cuda/'
+    source = extra_object_dir+'cuda_kernels.cu'
+    object_file = extra_object_dir+'cuda_kernels.o'
+    object_link = extra_object_dir+'cuda_kernels_link.o'
+
+    command_object = [nvcc_cmd, '--compiler-options', nvcc_flags,
+                      '-rdc=true', '-c', source, '-o', object_file]
+    command_link = [nvcc_cmd, '--compiler-options', nvcc_flags,
+                    '-dlink', object_file, '-lcudart', '-o', object_link]
+
+    command_object_str = ' '.join(shlex.quote(par) for par in command_object)
+    command_link_str = ' '.join(shlex.quote(par) for par in command_link)
+
+    subprocess.check_call(command_object_str, shell=True)
+    subprocess.check_call(command_link_str, shell=True)
+    return [object_file, object_link]
 
 def build_torch_extension(build_ext, global_options, torch_version):
     # Backup the options, preventing other plugins access libs that
     # compiled with compiler of this plugin
+    import torch
+    is_cxx11_abi = torch.compiled_with_cxx11_abi()
+
     options = copy.deepcopy(global_options)
     have_cuda = is_torch_cuda(build_ext, include_dirs=options['INCLUDES'],
                               extra_compile_args=options['COMPILE_FLAGS'])
     if have_cuda:
         cuda_include_dirs, cuda_lib_dirs = get_cuda_dirs(
             build_ext, options['COMPILE_FLAGS'])
+        nvcc_cmd = get_nvcc_cmd()
+        cuda_extra_objects = build_nvcc_extra_objects(nvcc_cmd, is_cxx11_abi)
+        options['EXTRA_OBJECTS'] += cuda_extra_objects
+
         options['INCLUDES'] += cuda_include_dirs
         options['LIBRARY_DIRS'] += cuda_lib_dirs
         options['LIBRARIES'] += ['cudart']
@@ -478,9 +516,8 @@ def build_torch_extension(build_ext, global_options, torch_version):
         updated_macros, 'TORCH_VERSION', str(torch_version))
 
     # Always set _GLIBCXX_USE_CXX11_ABI, since PyTorch can only detect whether it was set to 1.
-    import torch
     updated_macros = set_macro(updated_macros, '_GLIBCXX_USE_CXX11_ABI',
-                               str(int(torch.compiled_with_cxx11_abi())))
+                               str(int(is_cxx11_abi)))
 
     # PyTorch requires -DTORCH_API_INCLUDE_EXTENSION_H
     updated_macros = set_macro(
@@ -504,6 +541,7 @@ def build_torch_extension(build_ext, global_options, torch_version):
                          extra_compile_args=options['COMPILE_FLAGS'],
                          extra_link_args=options['LINK_FLAGS'],
                          library_dirs=options['LIBRARY_DIRS'],
+                         extra_objects=options['EXTRA_OBJECTS'],
                          libraries=options['LIBRARIES'])
 
     # Patch an existing bluefog_torch_mpi_lib extension object.

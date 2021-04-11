@@ -15,8 +15,9 @@
 # ==============================================================================
 
 from contextlib import contextmanager
-from typing import List, Dict, Optional
+from typing import List, Dict, Union, Optional
 
+import numpy as np
 import torch
 
 from bluefog.torch import mpi_lib  # C library
@@ -474,68 +475,64 @@ def _neighbor_allreduce_function_factory(tensor):
     return 'bluefog_torch_neighbor_allreduce_nonblocking_' + tensor.type().replace('.', '_')
 
 
-def _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
-                                    send_neighbors, enable_topo_check, name):
+def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
+                                    dst_weights, enable_topo_check, name):
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
-    if send_neighbors is None:
-        send_neighbors = []
+    if dst_weights is None:
+        dst_weights = {}
         dynamic_neighbors_enabled = False
-    elif len(set(send_neighbors)) != len(send_neighbors):
-        raise ValueError("Argument send_neighbors should only contain the unique ranks.")
-    elif self_weight is None or neighbor_weights is None:
-        raise ValueError("Arguments self_weight and neighbor_weights should be presented if "
+        dst_weighting_enabled = False
+    elif len(set(dst_weights)) != len(dst_weights):
+        raise ValueError("Argument dst_weights should only contain the unique ranks.")
+    elif self_weight is None or src_weights is None:
+        raise ValueError("Arguments self_weight and src_weights should be presented if "
                          "enabling dynamic topology.")
-    elif not send_neighbors:
-        raise ValueError("Argument send_neighbors cannot be empty list but we plan to support "
-                         "it in future.")
     else:
         dynamic_neighbors_enabled = True
-    if self_weight is None and neighbor_weights is None:
+        if isinstance(dst_weights, list):
+            dst_weights = {dst:1.0 for dst in dst_weights}
+        dst_weighting_enabled = not np.allclose(list(dst_weights.values()), 1.0)
+    if self_weight is None and src_weights is None:
         # Implying this is static graph.
         if is_topo_weighted():
             topology = load_topology()
-            self_weight, neighbor_weights = GetRecvWeights(topology, rank())
+            self_weight, src_weights = GetRecvWeights(topology, rank())
             weighted_average_computation = True
         else:
             weight = 1.0/(len(in_neighbor_ranks())+1)
             self_weight = weight
-            neighbor_weights = {r: weight for r in in_neighbor_ranks()}
+            src_weights = {r: weight for r in in_neighbor_ranks()}
             weighted_average_computation = False
-    elif self_weight is not None and neighbor_weights is not None:
-        if not isinstance(neighbor_weights, dict):
+    elif self_weight is not None and src_weights is not None:
+        if not isinstance(src_weights, dict):
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
                              "(in-)neighbor rank to the weights.")
         if not isinstance(self_weight, float):
             raise ValueError(
                 "Argument self_weight has to be a float for self rank.")
         if not dynamic_neighbors_enabled and \
-           not set(neighbor_weights.keys()).issubset(set(in_neighbor_ranks())):
+           not set(src_weights.keys()).issubset(set(in_neighbor_ranks())):
             raise ValueError("The key of weights should only contain the ranks that belong to "
                              " in-neighbors and self rank.")
-        uniform_weights = 1.0/(len(neighbor_weights)+1)
-        weighted_average_computation = False
-        if abs(self_weight - uniform_weights) > 1e-6:
-            weighted_average_computation = True
-        for n_weights in neighbor_weights.values():
-            if abs(n_weights - uniform_weights) > 1e-6:
-                weighted_average_computation = True
-                break
+        uniform_weights = 1.0/(len(src_weights)+1)
+        weighted_average_computation = not(np.isclose(self_weight, uniform_weights) and
+                                           np.allclose(list(src_weights.values()), uniform_weights))
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
     is_hierarchical = False
-    handle = getattr(mpi_lib, function)(tensor, output, self_weight, neighbor_weights,
-                                        send_neighbors, dynamic_neighbors_enabled,
+    handle = getattr(mpi_lib, function)(tensor, output, self_weight, src_weights, dst_weights,
+                                        dynamic_neighbors_enabled, dst_weighting_enabled,
                                         enable_topo_check, weighted_average_computation,
                                         is_hierarchical, name.encode() if name is not None else "")
     _handle_map[handle] = (tensor, output)
     return handle
 
 
-def neighbor_allreduce(tensor: torch.Tensor,
+def neighbor_allreduce(tensor: torch.Tensor, *,
                        self_weight: Optional[float] = None,
-                       neighbor_weights: Optional[Dict[int, float]] = None,
-                       send_neighbors: Optional[List[int]] = None,
+                       src_weights: Optional[Dict[int, float]] = None,
+                       dst_weights: Optional[Union[Dict[int, float], List[int]]] = None,
                        enable_topo_check: bool = True,
                        name: Optional[str] = None) -> torch.Tensor:
     """
@@ -552,17 +549,17 @@ def neighbor_allreduce(tensor: torch.Tensor,
     Arguments:
         tensor: A tensor to execute weighted average with neighbors.
         self_weight: The weight for self node, used with neighbor_weights.
-        neighbor_weights: The weights for in-neighbor nodes, used with self weight.
+        src_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
-        send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
+        dst_weights: The weights for out-neighbor nodes. If set to be None, assume the
             the current node sends to all of its (out-)neighbors. If having values, assume only
-            part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-            partial neighbors listed in this variable in a dynamic graph, and `self_weight` and
-            `neighbor_weights` must be present.
+            part of (out-)neighbors will be sent to. If set to be a list, assume all the weights
+            are one. In this mode, this node sends its value to partial neighbors listed in this
+            variable in a dynamic graph, and `self_weight` and `src_weights` must be present.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
             sending and recieving neighbors match with each other. Disabling this check can boost
             the performance.
@@ -573,19 +570,24 @@ def neighbor_allreduce(tensor: torch.Tensor,
 
     Note: self_weight and neighbor_weights must be presented at the same time.
     """
-    if (self_weight is None and neighbor_weights is not None) or \
-       (self_weight is not None and neighbor_weights is None):
-        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+    # TODO(hanbinhu) #82 Symmetrical argument for self_weight, src_weights, dst_weights
+    if (self_weight is None and src_weights is not None) or \
+       (self_weight is not None and src_weights is None):
+        raise ValueError("Arguments self_weight and src_weights have to be presented at "
                          "the same time")
-    handle = neighbor_allreduce_nonblocking(tensor, self_weight, neighbor_weights,
-                                            send_neighbors, enable_topo_check, name)
+    handle = neighbor_allreduce_nonblocking(tensor,
+                                            self_weight=self_weight,
+                                            src_weights=src_weights,
+                                            dst_weights=dst_weights,
+                                            enable_topo_check=enable_topo_check,
+                                            name=name)
     return synchronize(handle)
 
 
-def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
+def neighbor_allreduce_nonblocking(tensor: torch.Tensor, *,
                                    self_weight: Optional[float] = None,
-                                   neighbor_weights: Optional[Dict[int, float]] = None,
-                                   send_neighbors: Optional[List[int]] = None,
+                                   src_weights: Optional[Dict[int, float]] = None,
+                                   dst_weights: Optional[Union[Dict[int, float], List[int]]] = None,
                                    enable_topo_check: bool = True,
                                    name: Optional[str] = None) -> int:
     """
@@ -602,17 +604,17 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     Arguments:
         tensor: A tensor to execute weighted average with neighbors.
         self_weight: The weight for self node, used with neighbor_weights.
-        neighbor_weights: The weights for in-neighbor nodes, used with self weight.
+        src_weights: The weights for in-neighbor nodes, used with self weight.
             If neighbor_weights is presented, the return tensor will return the weighted average
             defined by these weights and the self_weight. If not, the return tensor will return
             the weighted average defined by the topology weights is provided or uniformly average.
             The data structure of weights should be {rank : weight} and rank has to belong to the
             (in-)neighbors.
-        send_neighbors: The list of neighbor nodes to be sent to. If set to be None, assume the
+        dst_weights: The weights for out-neighbor nodes. If set to be None, assume the
             the current node sends to all of its (out-)neighbors. If having values, assume only
-            part of (out-)neighbors will be sent to. In this mode, this node sends its value to
-            partial neighbors listed in this variable in a dynamic graph, and `self_weight` and
-            `neighbor_weights` must be present.
+            part of (out-)neighbors will be sent to. If set to be a list, assume all the weights
+            are one. In this mode, this node sends its value to partial neighbors listed in this
+            variable in a dynamic graph, and `self_weight` and `src_weights` must be present.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
             sending and recieving neighbors match with each other. Disabling this check can boost
             the performance.
@@ -624,20 +626,21 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor,
 
     Note: self_weight and neighbor_weights must be presented at the same time.
     """
-    if (self_weight is None and neighbor_weights is not None) or \
-       (self_weight is not None and neighbor_weights is None):
-        raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
+    # TODO(hanbinhu) #82 Symmetrical argument for self_weight, src_weights, dst_weights
+    if (self_weight is None and src_weights is not None) or \
+       (self_weight is not None and src_weights is None):
+        raise ValueError("Arguments self_weight and src_weights have to be presented at "
                          "the same time")
-    if send_neighbors is None:
+    if dst_weights is None:
         first_dim = tensor.shape[0] * len(in_neighbor_ranks())
     else:
-        first_dim = tensor.shape[0] * len(neighbor_weights)
+        first_dim = tensor.shape[0] * len(src_weights)
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
     output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
-    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, neighbor_weights,
-                                           send_neighbors, enable_topo_check, name=name)
+    return _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
+                                           dst_weights, enable_topo_check, name=name)
 
-
+# TODO(hanbinhu) #81 Add dst_weight for hierarchical neighbor allreduce.
 def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
                                     self_weight: float = None,
                                     neighbor_machine_weights: Dict[int, float] = None,

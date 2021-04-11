@@ -22,6 +22,10 @@
 #include <unordered_map>
 #include <vector>
 
+#if HAVE_CUDA
+#include "cuda_runtime.h"
+#endif
+
 #include "common.h"
 #include "mpi.h"
 
@@ -144,7 +148,7 @@ class MPIContext {
 
   MPI_Op GetMPISumOp(DataType dtype);
 
-  MPI_Comm GetMPICommunicator(Communicator comm);
+  MPI_Comm GetMPICommunicator(Communicator comm) const;
 
   int GetMPITypeSize(DataType dtype);
 
@@ -232,7 +236,16 @@ class MPIContext {
   // MPI Custom  data type for float16.
   MPI_Datatype mpi_float16_t;
   MPI_Op mpi_float16_sum;
+
+  // TODO(hhb): #80 We should use a common context for MPI and NCCL controller for CUDA usage.
+#if HAVE_CUDA
+  // CUDA Stream
+  cudaStream_t stream;
+#endif
 };
+
+std::string GenerateNeighborExchangeErrorMessage(const std::vector<MPI_Status>& statuses,
+                                                 int nsend, int nrecv);
 
 }  // namespace common
 }  // namespace bluefog

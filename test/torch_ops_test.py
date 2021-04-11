@@ -171,6 +171,7 @@ class OpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
+            torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
             tensor = self.cast_and_place(tensor, dtype)
             name = "allreduce_tensor_{}_{}".format(dim, dtype)
@@ -387,7 +388,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             nw = {i: 1.0 for i in neighbor_ranks}
             reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
-                                                   neighbor_weights=nw, name=name)
+                                                   src_weights=nw, name=name)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
             ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
@@ -450,7 +451,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             with pytest.raises(ValueError):
                 bf.neighbor_allreduce(tensor, name=name, self_weight=self_weight,
-                                      neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                                      src_weights=neighbor_weights, dst_weights=send_ranks)
 
     def test_neighbor_allreduce_dynamic_topo_outside_static_topo_move(self):
         """Test that the neighbor all reduce (move) 1D, 2D, 3D tensors correctly
@@ -477,7 +478,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -511,7 +512,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -521,7 +522,7 @@ class OpsTests(unittest.TestCase):
                 (reduced_tensor.data - (rank-1) % size).abs().max() < eps
             ), "bf.neighbor_allreduce (move) produces incorrect reduced tensor"
 
-    @unittest.skip("Haven't fully clear on the usage due to sync issues. Temporarily disabled")
+    #@unittest.skip("Haven't fully clear on the usage due to sync issues. Temporarily disabled")
     def test_neighbor_allreduce_dynamic_topo_with_empty_send_neighbors(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly with empty
            send_neighbors."""
@@ -553,7 +554,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -591,7 +592,7 @@ class OpsTests(unittest.TestCase):
             name = "neighbor_allreduce_{}_{}".format(dim, dtype)
             reduced_tensor = bf.neighbor_allreduce(
                 tensor, name=name, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
@@ -818,7 +819,7 @@ class OpsTests(unittest.TestCase):
             tensor = self.cast_and_place(tensor, dtype)
             nw = {i: 1.0 for i in neighbor_ranks}
             reduced_tensor = bf.neighbor_allreduce(tensor, self_weight=1.0,
-                                                   neighbor_weights=nw)
+                                                   src_weights=nw)
             tensor, reduced_tensor = self.convert_cpu_fp16_to_fp32(tensor, reduced_tensor)
             assert (
                 list(reduced_tensor.shape) == [23] * dim
@@ -829,6 +830,45 @@ class OpsTests(unittest.TestCase):
             assert (
                 reduced_tensor.data.max() == sum_value
             ), "bf.neighbor_allreduce (sum) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_dst_weight(self):
+        """Test that the neighbor allreduce with destination weights works correctly."""
+        size = bf.size()
+        rank = bf.rank()
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # By default, we use exponential two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        dst_weight = 0.5
+        expected_value = (np.sum(neighbor_ranks) + rank)*dst_weight
+
+        self_weight = 0.5
+        src_weights = {i: 1.0 for i in neighbor_ranks}
+        dst_weights = {(rank + 2**i) % size : dst_weight for i in range(num_indegree)}
+
+        dims = [1,2,3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_(rank)
+            tensor = self.cast_and_place(tensor, dtype)
+            name = "neighbor_allreduce_{}_{}".format(dim, dtype)
+            reduced_tensor = bf.neighbor_allreduce(
+                tensor, name=name, self_weight=self_weight,
+                src_weights=src_weights, dst_weights=dst_weights)
+            eps = EPSILON if tensor.dtype != torch.float16 else LOOSE_EPSILON
+            assert (
+                list(reduced_tensor.shape) == [23] * dim
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced shape"
+            assert (
+                (reduced_tensor - expected_value).abs().max() < eps
+            ), "bf.neighbor_allreduce (avg) produces incorrect reduced tensor"
 
     def test_neighbor_allreduce_weighted_avg(self):
         """Test that the neighbor all reduce (avg) 1D, 2D, 3D tensors correctly."""
@@ -994,10 +1034,10 @@ class OpsTests(unittest.TestCase):
 
             handle_1 = bf.neighbor_allreduce_nonblocking(
                 tensor_1, name=name_1, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
             handle_2 = bf.neighbor_allreduce_nonblocking(
                 tensor_2, name=name_2, self_weight=self_weight,
-                neighbor_weights=neighbor_weights, send_neighbors=send_ranks)
+                src_weights=neighbor_weights, dst_weights=send_ranks)
 
             output_1 = bf.synchronize(handle_1)
             output_2 = bf.synchronize(handle_2)
@@ -1019,6 +1059,59 @@ class OpsTests(unittest.TestCase):
                 ((output_2.data - 1).mul_(num_indegree+1) -
                  sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced tensor"
+
+    def test_neighbor_allreduce_dst_weight_fusion(self):
+        """Test neighbor allreduce works with destination weights under tensor fusion."""
+        size = bf.size()
+        rank = bf.rank()
+        K = 50 # number of tensors send in short time
+        if size <= 1:
+            fname = inspect.currentframe().f_code.co_name
+            warnings.warn("Skip {} due to size 1".format(fname))
+            return
+
+        dtypes = [torch.FloatTensor, torch.DoubleTensor]
+        if TEST_ON_GPU:
+            dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
+
+        # By default, we use exponential two ring topology.
+        num_indegree = int(np.ceil(np.log2(size)))
+        neighbor_ranks = [(rank - 2**i) % size for i in range(num_indegree)]
+        sum_value = (np.sum(neighbor_ranks)+rank)*K
+
+        dst_weight = 0.5
+        self_weight = dst_weight
+        src_weights = {i: 1.0 for i in neighbor_ranks}
+        dst_weights = {(rank + 2**i) % size: dst_weight for i in range(num_indegree)}
+
+        dims = [1, 2, 3]
+        for dtype, dim in itertools.product(dtypes, dims):
+            tensor_list, handles, names = [], [], []
+            for i in range(K):
+                tensor = torch.FloatTensor(*([23] * dim)).fill_(i + rank*K)
+                tensor = self.cast_and_place(tensor, dtype)
+                tensor_list.append(tensor)
+                names.append("index{}_{}_{}".format(i, dtype, dim))
+
+            for i in range(K):
+                handle = bf.neighbor_allreduce_nonblocking(
+                    tensor_list[i], name=names[i],
+                    self_weight=self_weight, src_weights=src_weights, dst_weights=dst_weights)
+                handles.append(handle)
+
+            outputs = []
+            for i in range(K):
+                output = bf.synchronize(handles[i])
+                outputs.append(output)
+
+            for i in range(K):
+                assert (
+                    list(outputs[i].shape) == [23] * dim
+                ), f"{names[i]} (fusion) produces incorrect reduced shape"
+                output_normalized = outputs[i]/dst_weight - i*(num_indegree+1)
+                assert (
+                    (output_normalized - sum_value).abs().max() < EPSILON
+                ), f"{names[i]} (fusion) produces incorrect reduced tensor"
 
     def test_neighbor_allgather(self):
         """Test that the neighbor all gather 1D, 2D, 3D tensors correctly."""
@@ -1115,7 +1208,7 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
-        
+
         # Connect to all other ranks
         neighbor_ranks = [i for i in range(size) if i != rank]
         dims = [1, 2, 3]
@@ -1130,10 +1223,11 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(
                 *([tensor_sizes[rank]] + [17] * (dim - 1))).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gathered = bf.neighbor_allgather(tensor, dst_ranks=neighbor_ranks, src_ranks=neighbor_ranks)
+            gathered = bf.neighbor_allgather(
+                tensor, dst_ranks=neighbor_ranks, src_ranks=neighbor_ranks)
             tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
 
-            tensor_sizes[rank] = 0 # remove self-size since neighbor_allgather does not include self.
+            tensor_sizes[rank] = 0  # remove self since neighbor_allgather does not include self
             expected_size = sum(tensor_sizes)
             assert list(gathered.shape) == [expected_size] + [17] * (dim - 1)
 

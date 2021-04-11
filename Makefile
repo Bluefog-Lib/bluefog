@@ -19,7 +19,7 @@ test_torch: test_torch_basic test_torch_ops test_torch_win_ops test_torch_optimi
 test_tensorflow: test_tensorflow_basic test_tensorflow_ops
 test_all: test_torch test_tensorflow
 
-clean: clean_build clean_so
+clean: clean_build clean_so clean_o
 
 .PHONY: test_torch_basic
 test_torch_basic:
@@ -51,8 +51,12 @@ test_tensorflow_ops:
 
 .PHONY: clean_build
 clean_build:
-	rm -R build
+	rm -fR build
 
 .PHONY: clean_so
 clean_so:
-	rm ./bluefog/torch/mpi_lib.*.so
+	rm -f ./bluefog/torch/mpi_lib.*.so
+
+.PHONY: clean_o
+clean_o:
+	rm -f ./bluefog/common/cuda/*.o

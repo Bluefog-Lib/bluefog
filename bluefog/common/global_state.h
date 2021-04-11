@@ -18,6 +18,7 @@
 #define BLUEFOG_COMMON_GLOBAL_STATE_H
 
 #include <atomic>
+#include <condition_variable>
 #include <chrono>
 #include <memory>
 #include <queue>
@@ -54,6 +55,14 @@ struct BluefogGlobalState {
   // Whether collective context has been completed on the background thread.
   std::atomic_bool initialization_done{false};
 
+  // Condition variable and its mutex for main loop in communication thread.
+  std::condition_variable loop_cv;
+  std::mutex loop_mutex;
+
+  // Under negotiation, the entries sends to master first and wait until it 
+  // returns ok to run. This variable keeps the records of that.
+  std::atomic_int unfinished_enqueued_entries{0};
+
   // Timeline writer.
   Timeline timeline;
 
@@ -80,13 +89,12 @@ struct BluefogGlobalState {
   // Threshold for Tensor Fusion.  All tensors that occupy memory beyond this
   // threshold will be fused.
   int64_t tensor_fusion_threshold = 8 * 1024 * 1024;
+  int64_t tensor_fusion_threshold_for_dst_weight = tensor_fusion_threshold;
   FusionBufferManager fusion_buffer;
 
   // Because setting topology happens in the main thread instead of communication
-  // thread. Following three variables are to sync between them.
+  // thread. Not really used since the condition variable refactor.
   std::atomic_bool setting_topology{false};
-  std::atomic_bool setting_topology_done{false};
-  std::atomic_bool ready_to_setting_topology{false};
 
   // Only exists on the coordinator node (rank zero). Maintains a vector of
   // requests to allreduce every tensor (keyed by tensor name).

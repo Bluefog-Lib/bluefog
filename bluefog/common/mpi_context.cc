@@ -75,7 +75,7 @@ bool WindowManager::InitializeMutexWin(const MPI_Comm& mpi_comm) {
 std::vector<int> WindowManager::GetVersionMemoryCopy() { return version_mem_; }
 
 void WindowManager::resetVersionWinMem(int initialValue /*=0*/) {
-  for (int i = 0; i < version_mem_.size(); i++) {
+  for (size_t i = 0; i < version_mem_.size(); i++) {
     version_mem_[i] = initialValue;
   }
 }
@@ -222,7 +222,7 @@ MPI_Op MPIContext::GetMPISumOp(DataType dtype) {
   return dtype == DataType::BLUEFOG_FLOAT16 ? mpi_float16_sum : MPI_SUM;
 }
 
-MPI_Comm MPIContext::GetMPICommunicator(Communicator comm) {
+MPI_Comm MPIContext::GetMPICommunicator(Communicator comm) const {
   switch (comm) {
     case Communicator::GLOBAL:
       return mpi_comm;
@@ -332,6 +332,13 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
 
   // Create custom MPI float16 summation op.
   MPI_Op_create(&float16_sum, 1, &mpi_float16_sum);
+
+#if HAVE_CUDA
+  int greatest_priority;
+  CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
+  CUDACHECK(cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking,
+                                         greatest_priority));
+#endif
 }
 
 void MPIContext::Finalize(MPIContextManager& ctx_manager) {

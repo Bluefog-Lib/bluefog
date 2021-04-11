@@ -47,10 +47,10 @@ class TFPersistentBuffer : public common::PersistentBuffer {
 class TFTensor : public common::Tensor {
  public:
   TFTensor(::tensorflow::Tensor& tensor);
-  virtual const common::DataType dtype() const override;
+  virtual common::DataType dtype() const override;
   virtual const common::TensorShape shape() const override;
   virtual const void* data() const override;
-  virtual std::shared_ptr<common::Tensor> data_weight(float weight) override;
+  virtual std::unique_ptr<common::Tensor> data_weight(float weight) override;
   virtual int64_t size() const override;
 
  protected:

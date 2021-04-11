@@ -29,8 +29,39 @@
 #include "operations.h"
 #include "timeline.h"
 
+#if HAVE_CUDA
+#include "cuda/cuda_kernels.h"
+#endif
+
 namespace bluefog {
 namespace common {
+
+namespace {
+
+template <typename T, typename TS>
+void ScaleBufferCPUImpl(T* buffer, int64_t num_elements, TS scale_factor) {
+  for (int64_t i = 0; i < num_elements; ++i) {
+    buffer[i] = buffer[i] * scale_factor;
+  }
+}
+
+void ScaleCPUBuffer(double scale_factor, void* weighted_fused_input_data,
+                 int64_t num_elements, DataType dtype) {
+  switch (dtype) {
+    // TODO(hhb): FLOAT16 support
+    case DataType::BLUEFOG_FLOAT32:
+      ScaleBufferCPUImpl((float*) weighted_fused_input_data, num_elements, (float) scale_factor);
+      break;
+    case DataType::BLUEFOG_FLOAT64:
+      ScaleBufferCPUImpl((double*) weighted_fused_input_data, num_elements, scale_factor);
+      break;
+    default:
+      throw std::logic_error("Type " + DataType_Name(dtype) +
+                             " not supported by ScaleBufferCPUImpl.");
+  }
+}
+
+}
 
 // It may be because the win_create is called at different
 // threads from the win_put, win_get, etc. After moving win_create into
@@ -263,15 +294,13 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
     displcmnts = new int[mpi_ctx_.neighbor_indgree_];
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::GRAPH);
   } else {
-    bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-        mpi_ctx_.size_, entry, timeline_ptr,
-        mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-
+    bool is_topo_check_fail = CheckNeighborSendRecvPatternForEntry(entry, mpi_ctx_, timeline_ptr);
     if (is_topo_check_fail) {
       entry.callback(Status::InvalidArgument(
           "Src and dst neighbor ranks do not match"));
       return;
     }
+
     recvcounts = new int[entry.recv_neighbors->size()];
     displcmnts = new int[entry.recv_neighbors->size()];
     status = mpi_ctx_.AllocateOutput(entry, recvcounts, Communicator::DYNAMIC,
@@ -332,55 +361,59 @@ void MPIController::NeighborAllgather(TensorTableEntry& entry) {
 }
 
 // Function to check if the sending and receiving neighbors match in the topology.
-bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
-                                  Timeline* timeline_ptr, const MPI_Comm& comm) {
+bool CheckNeighborSendRecvPattern(
+  const std::vector<int>& send_neighbors, const std::vector<int>& recv_neighbors,
+  const std::string& tensor_name, int size, Timeline* timeline_ptr, const MPI_Comm& comm) {
   bool res = false;
-  // enabled the check if enable_topo_check is true and partial
-  // neighbor_allreduce is activated.
+  timeline_ptr->ActivityStart(tensor_name, "NEGOTIATION");
+  // Put all the send and recv neighbors in a single vector, and obtain a send
+  // matrix and a recv matrix through MPI_Allgather.
+  bool* send_check_buf = new bool[2 * size];
+  std::fill_n(send_check_buf, 2 * size, false);
+  bool* recv_check_buf = new bool[2 * size * size];
+  for (int send_rank : send_neighbors)
+    send_check_buf[send_rank] = true;
+  for (int recv_rank : recv_neighbors)
+    send_check_buf[size + recv_rank] = true;
+  MPICHECK(MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
+                         recv_check_buf, size * 2, MPI_C_BOOL, comm));
+  // This checks that send matrix and transposed recv matrix should be the
+  // same. If same, the topology is good to go. If not, there is mismatch edge
+  // to be fixed.
+  auto GetSendIndex = [size](int i, int j) -> int { return 2*size*i+j; };
+  auto GetRecvIndex = [size](int i, int j) -> int { return 2*size*i+j+size; };
+  for (int i = 0; i < size; ++i) {
+    if (res) break;
+    for (int j = 0; j < size; ++j) {
+      if (recv_check_buf[GetSendIndex(i, j)] !=
+          recv_check_buf[GetRecvIndex(j, i)]) {
+        res = true;
+        break;
+      }
+    }
+  }
+  delete [] send_check_buf;
+  delete [] recv_check_buf;
+  timeline_ptr->ActivityEnd(tensor_name);
+  return res;
+}
+
+bool CheckNeighborSendRecvPatternForEntry(const TensorTableEntry& entry,
+                                          const MPIContext& mpi_ctx,
+                                          Timeline* timeline_ptr) {
+  bool is_topo_check_fail = false;
   if (entry.enable_topo_check && entry.dynamic_neighbors_enabled) {
     if (entry.is_hierarchical) {
       // TODO: support check.
-      BFLOG(INFO) << "Request to check topology for hierarchical neighbor "
-                  << "allreduce ops but it is not supported yet.";
-      return res;
+      BFLOG(WARNING) << "Request to check topology for hierarchical neighbor "
+                     << "allreduce ops but it is not supported yet.";
+    } else {
+      is_topo_check_fail = CheckNeighborSendRecvPattern(
+          *entry.send_neighbors, *entry.recv_neighbors, entry.tensor_name,
+          mpi_ctx.size_, timeline_ptr, mpi_ctx.GetMPICommunicator(Communicator::GLOBAL));
     }
-    timeline_ptr->ActivityStart(entry.tensor_name, "NEGOTIATION");
-    // Put all the send and recv neighbors in a single vector, and obtain a send
-    // matrix and a recv matrix through MPI_Allgather.
-    bool* send_check_buf = new bool[2 * size];
-    std::fill_n(send_check_buf, 2 * size, false);
-    bool* recv_check_buf = new bool[2 * size * size];
-    for (int send_rank : *(entry.send_neighbors))
-      send_check_buf[send_rank] = true;
-    for (int recv_rank : *(entry.recv_neighbors))
-      send_check_buf[size + recv_rank] = true;
-    int ret_code = MPI_Allgather(send_check_buf, size * 2, MPI_C_BOOL,
-                                 recv_check_buf, size * 2, MPI_C_BOOL, comm);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error(
-          "MPI_Allgather (for dynamic neighbor_allreduce negotiation) failed, "
-          "see MPI output for details.");
-    }
-    // This checks that send matrix and transposed recv matrix should be the
-    // same. If same, the topology is good to go. If not, there is mismatch edge
-    // to be fixed.
-    auto GetSendIndex = [size](int i, int j) -> int { return 2*size*i+j; };
-    auto GetRecvIndex = [size](int i, int j) -> int { return 2*size*i+j+size; };
-    for (int i = 0; i < size; ++i) {
-      if (res) break;
-      for (int j = 0; j < size; ++j) {
-        if (recv_check_buf[GetSendIndex(i, j)] !=
-            recv_check_buf[GetRecvIndex(j, i)]) {
-          res = true;
-          break;
-        }
-      }
-    }
-    delete [] send_check_buf;
-    delete [] recv_check_buf;
-    timeline_ptr->ActivityEnd(entry.tensor_name);
   }
-  return res;
+  return is_topo_check_fail;
 }
 
 void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
@@ -402,10 +435,7 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
 
   // If only partial sending is enabled, the following code block checks whether the sending
   // and recieving neighbors match each other when enable_topo_check is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, entry, timeline_ptr,
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-
+  bool is_topo_check_fail = CheckNeighborSendRecvPatternForEntry(entry, mpi_ctx_, timeline_ptr);
   if (is_topo_check_fail) {
     entry.callback(Status::InvalidArgument(
         "Src(recv from) and dst(send to) neighbor ranks do not match"));
@@ -419,25 +449,62 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
   // including itself is more intuitive.
   std::string error_message = "";
 
-  if (!entry.is_hierarchical) {
-    if (!entry.dynamic_neighbors_enabled) {
-      int ret_code = MPI_Neighbor_allgather(
+  if (!entry.is_hierarchical) {  // neighbor allreduce without hierarchy
+    if (!entry.dynamic_neighbors_enabled) {  // static topology
+      MPICHECK(MPI_Neighbor_allgather(
           sendbuf, num_elements, mpi_ctx_.GetMPIDataType(entry.tensor),
           buffer_data, num_elements, mpi_ctx_.GetMPIDataType(entry.output),
-          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
-      if (ret_code != MPI_SUCCESS) {
-        throw std::runtime_error(
-            "MPI_Neighbor_allreduce (through neighbor_allgather) failed, see "
-            "MPI "
-            "output for details.");
+          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH)));
+    } else {  // dynamic topology
+      int nsend = entry.send_neighbors->size();
+      int nrecv = entry.recv_neighbors->size();
+
+      // Ensure the lifecycle of the weighted tensors are alive after communication.
+      std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
+      if (entry.dst_weighting_enabled) {
+        for (int i = 0; i < nsend; ++i) {
+          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
+          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+        }
       }
-    } else {
-      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
-        sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
-        entry.send_neighbors.get(), entry.recv_neighbors.get()
-      );
+      // TODO(ybc) #83 Better design pattern for data_weight synchronization
+      // This ready event makes sure the data_weight computation is done before communication, as
+      // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
+      // it is running on CPU.
+      std::shared_ptr<common::ReadyEvent> ready_event =
+          entry.context->RecordReadyEvent(entry.device);
+
+      std::vector<MPI_Request> requests(nsend + nrecv);
+      std::vector<MPI_Status> statuses(nsend + nrecv);
+      int element_size = mpi_ctx_.GetMPITypeSize(entry.output->dtype());
+      for (int i = 0; i < nrecv; ++i) {
+        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                num_elements * i * element_size);
+        MPICHECK(MPI_Irecv(recvbuf, num_elements,
+            mpi_ctx_.GetMPIDataType(entry.output), entry.recv_neighbors->at(i),
+            /*tag=*/mpi_ctx_.rank_ + entry.recv_neighbors->at(i),
+            mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i + nsend]));
+      }
+
+      if (entry.dst_weighting_enabled) {
+        while ((ready_event != nullptr) && !ready_event->Ready()) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+        }
+      }
+      for (int i = 0; i < nsend; ++i) {
+        const void* buffer_send = (entry.dst_weighting_enabled)
+                                      ? weighted_tensors[i]->data()
+                                      : sendbuf;
+        MPICHECK(MPI_Isend(buffer_send, num_elements,
+            mpi_ctx_.GetMPIDataType(entry.tensor), entry.send_neighbors->at(i),
+            /*tag=*/mpi_ctx_.rank_ + entry.send_neighbors->at(i),
+            mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i]));
+      }
+      MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+      error_message =
+          GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
     }
-  } else {
+  } else {  // hierarchical neighbor allreduce
     if (entry.send_neighbors->empty()) {
       throw std::runtime_error(
           "Under hierarchical neighbor_allreduce, argument "
@@ -447,6 +514,11 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
       throw std::runtime_error(
           "Local size is smaller than 2, in this case, you should use "
           "neighbor_allreduce instead of hierarchical_neighbor_allreduce.");
+    }
+    if (entry.dst_weighting_enabled) {
+      throw std::runtime_error(
+          "Under hierarchical neighbor_allreduce, argument "
+          "dst_weight should not be enabled for now.");
     }
     // 1. In-place allreduce
     MPI_Allreduce(MPI_IN_PLACE, (void*)sendbuf, num_elements,
@@ -537,10 +609,8 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // If only partial sending is enabled, the following code block checks whether
   // the sending and recieving neighbors match each other when enable_topo_check
   // is set to be True.
-  bool is_topo_check_fail = CheckNeighborSendRecvPattern(
-      mpi_ctx_.size_, first_entry, timeline_ptr,
-      mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL));
-
+  bool is_topo_check_fail = CheckNeighborSendRecvPatternForEntry(first_entry, mpi_ctx_,
+                                                                 timeline_ptr);
   if (is_topo_check_fail) {
     for (auto& entry : entries) {
       entry.callback(Status::InvalidArgument(
@@ -554,6 +624,15 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   MemcpyInFusionBuffer(entries, buffer_data, buffer_len);
   timeline_ptr->ActivityEndAll(entries);
   const void* fused_input_data = buffer_data;
+
+  const void* weighted_fused_input_data = nullptr;
+  if (first_entry.dst_weighting_enabled) {
+    // Generate weighted data fusion for sending
+    timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_WEIGHT_FUSION_BUFFER");
+    weighted_fused_input_data = GenerateWeightedFusedInputData(fused_input_data, first_entry,
+                                                               num_elements, element_size);
+    timeline_ptr->ActivityEndAll(entries);
+  }
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
   // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
@@ -569,24 +648,45 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   // including itself is more intuitive.
   std::string error_message = "";
 
-  if (!first_entry.is_hierarchical) {
-    if (!first_entry.dynamic_neighbors_enabled) {
-      int ret_code = MPI_Neighbor_allgather(
+  if (!first_entry.is_hierarchical) {  // neighbor allreduce without hierarchy
+    if (!first_entry.dynamic_neighbors_enabled) {  // static topology
+      MPICHECK(MPI_Neighbor_allgather(
           fused_input_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.tensor),
           buffer_data, num_elements, mpi_ctx_.GetMPIDataType(first_entry.output),
-          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH));
-      if (ret_code != MPI_SUCCESS) {
-        throw std::runtime_error(
-            "MPI_Neighbor_allreduce (through neighbor_allgather) failed, see MPI "
-            "output for details.");
+          mpi_ctx_.GetMPICommunicator(Communicator::GRAPH)));
+    } else {  // dynamic topology
+      int nsend = first_entry.send_neighbors->size();
+      int nrecv = first_entry.recv_neighbors->size();
+      std::vector<MPI_Request> requests(nsend + nrecv);
+      std::vector<MPI_Status> statuses(nsend + nrecv);
+      for (int i = 0; i < nrecv; ++i) {
+        void* recvbuf =
+            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+        MPICHECK(MPI_Irecv(recvbuf, num_elements,
+            mpi_ctx_.GetMPIDataType(first_entry.output), first_entry.recv_neighbors->at(i),
+            /*tag=*/mpi_ctx_.rank_ + first_entry.recv_neighbors->at(i),
+            mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i + nsend]));
       }
-    } else {
-      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
-        fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
-        first_entry.send_neighbors.get(), first_entry.recv_neighbors.get()
-      );
+#if HAVE_CUDA
+      if (first_entry.dst_weighting_enabled && first_entry.device != CPU_DEVICE_ID) {
+        cudaStreamSynchronize(mpi_ctx_.stream);
+      }
+#endif
+      for (int i = 0; i < nsend; ++i) {
+        const void* sendbuf =
+            (first_entry.dst_weighting_enabled)
+                ? (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size)
+                : fused_input_data;
+        MPICHECK(MPI_Isend(sendbuf, num_elements,
+            mpi_ctx_.GetMPIDataType(first_entry.tensor), first_entry.send_neighbors->at(i),
+            /*tag=*/mpi_ctx_.rank_ + first_entry.send_neighbors->at(i),
+            mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i]));
+      }
+      MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+      error_message =
+          GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
     }
-  } else {
+  } else {  // hierarchical neighbor allreduce
     if (first_entry.send_neighbors->empty()) {
       throw std::runtime_error(
           "Under hierarchical neighbor_allreduce, argument "
@@ -596,6 +696,11 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
       throw std::runtime_error(
           "Local size is smaller than 2, in this case, you should use "
           "neighbor_allreduce instead of hierarchical_neighbor_allreduce.");
+    }
+    if (first_entry.dst_weighting_enabled) {
+      throw std::runtime_error(
+          "Under hierarchical neighbor_allreduce, argument "
+          "dst_weight should not be enabled for now.");
     }
     // 1. In-place allreduce
     MPI_Allreduce(MPI_IN_PLACE, (void*)fused_input_data, num_elements,
@@ -1284,6 +1389,67 @@ Status MPIController::GetWindowVersionValue(const std::string& name,
   }
 
   return Status::OK();
+}
+
+void MPIController::MemcpyInWeightFusionBuffer(
+  void*& weight_buffer_data, size_t num_dst,
+  const void* buffer_data, int64_t num_elements, int element_size,
+  std::shared_ptr<OpContext> context, int device) {
+  // Access the fusion buffer.
+  FusionBufferManager* buffer_manager;
+  auto fusion_status = GetBluefogFusionBuffer(buffer_manager);
+  if (!fusion_status.ok()){
+    throw std::runtime_error(fusion_status.reason());
+  }
+  std::shared_ptr<PersistentBuffer> buffer =
+      buffer_manager->GetWeightBuffer(device);
+  weight_buffer_data = const_cast<void*>(buffer->AccessData(context));
+  size_t data_size = num_elements * element_size;
+
+  int64_t offset = 0;
+  for (size_t i = 0; i < num_dst; ++i) {
+    void* weight_buffer_data_at_offset = (uint8_t*)weight_buffer_data + offset;
+#if HAVE_CUDA
+    if (device != CPU_DEVICE_ID) {
+      CUDACHECK(cudaMemcpy(weight_buffer_data_at_offset, buffer_data, data_size,
+                           cudaMemcpyDeviceToDevice));
+    } else {
+#endif
+      std::memcpy(weight_buffer_data_at_offset, buffer_data, data_size);
+#if HAVE_CUDA
+    }
+#endif
+    offset += data_size;
+  }
+}
+
+const void* MPIController::GenerateWeightedFusedInputData(const void* fused_input_data,
+                                                          const TensorTableEntry& entry,
+                                                          int64_t num_elements, int element_size) {
+  // Given a fused_input_data like [t_1, t_2], the storage for neighbor_allreduce in
+  // weighted fused input data is like [t_1_w1, t_2_w1 | t_1_w2, t_2_w2 | t_1_w3, t_2_w3].
+  // Here t_1 and t_2  means self tensor 1 and 2 and _w1, _w2, and _w3 means the
+  // destination weights to destination 1, 2, and 3.
+  void* weight_buffer_data;
+  MemcpyInWeightFusionBuffer(weight_buffer_data, entry.send_neighbors->size(),
+                             fused_input_data, num_elements, element_size,
+                             entry.context, entry.device);
+  int64_t offset = 0;
+  for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+    double dst_weight = entry.send_weights->at(i);
+    void* weight_buffer_data_offset = (uint8_t*)weight_buffer_data + offset;
+    if (entry.device == CPU_DEVICE_ID) {
+      ScaleCPUBuffer(dst_weight, weight_buffer_data_offset, num_elements,
+                     entry.tensor->dtype());
+    } else {
+#if HAVE_CUDA
+      ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
+                          entry.tensor->dtype(), mpi_ctx_.stream);
+#endif
+    }
+    offset += num_elements * element_size;
+  }
+  return weight_buffer_data;
 }
 
 void MPIController::MemcpyInFusionBuffer(

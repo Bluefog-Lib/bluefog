@@ -195,6 +195,14 @@ class NCCLController {
                                          const int num_recv_neighbors,
                                          const int64_t fused_data_size);
 
+  void MemcpyInWeightFusionBuffer(void*& weight_buffer_data, size_t num_dst,
+                                  const void* buffer_data, int64_t num_elements, int element_size,
+                                  std::shared_ptr<OpContext> context, int device);
+
+  const void* GenerateWeightedFusedInputData(const void* fused_input_data,
+                                             const TensorTableEntry& entry,
+                                             int64_t num_elements, int element_size);
+
   void MemcpyOutFusionBufferForInputs(const void* fused_input_data,
                                       std::vector<TensorTableEntry>& entries);
 

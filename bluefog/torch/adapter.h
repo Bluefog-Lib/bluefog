@@ -32,10 +32,10 @@ namespace torch {
 class TorchTensor : public common::Tensor {
  public:
   TorchTensor(::torch::Tensor tensor);
-  virtual const common::DataType dtype() const override;
+  virtual common::DataType dtype() const override;
   virtual const common::TensorShape shape() const override;
   virtual const void* data() const override;
-  virtual std::shared_ptr<common::Tensor> data_weight(float weight) override;
+  virtual std::unique_ptr<common::Tensor> data_weight(float weight) override;
   virtual int64_t size() const override;
   
   // TODO(ybc) Figure out a better encapsulated way to do it.
@@ -70,6 +70,7 @@ class TorchOpContext : public common::OpContext {
   virtual common::Status AllocateZeros(
       int64_t num_elements, common::DataType dtype,
       std::shared_ptr<common::Tensor>* tensor) override;
+  virtual std::shared_ptr<common::ReadyEvent> RecordReadyEvent(int device) override;
   virtual common::Framework framework() const override;
 
  private:

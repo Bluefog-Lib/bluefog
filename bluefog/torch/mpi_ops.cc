@@ -82,8 +82,6 @@ void MaybeCopyBufferBack(::torch::Tensor tensor, ::torch::Tensor buffer) {
   if (IsCPUHalfTensor(tensor)) tensor.copy_(buffer.to(::torch::kFloat16));
 }
 
-}  // namespace
-
 std::function<std::function<void(const Status&)>(std::function<void()>)>
     GetCallbackWrapper(int handle, Timeline* timeline_ptr, const std::string& op_name,
     std::thread::id tid) {
@@ -97,6 +95,75 @@ std::function<std::function<void(const Status&)>(std::function<void()>)>
         };
     };
 }
+
+void PerformNeighborAllreduceCallback(::torch::Tensor tensor, ::torch::Tensor output,
+                                      double self_weight,
+                                      const std::map<int, double>& src_weights,
+                                      bool avg_computation,
+                                      bool dynamic_neighbors_enabled,
+                                      bool is_hierarchical) {
+  int src_size = bluefog_neighbor_size();
+  if (dynamic_neighbors_enabled) src_size = src_weights.size();
+  if (src_size > 0) {
+    ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+    ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
+
+    int first_dim = output_buffer.size(0) / src_size;
+    std::vector<int64_t> shape_vector;
+    shape_vector.push_back(first_dim);
+    for (int idx = 1; idx < tensor_buffer.dim(); ++idx) {
+      shape_vector.push_back(tensor_buffer.size(idx));
+    }
+
+    // if avg_computation is set to be False, sum computation will be taken place.
+    if (avg_computation) {
+      auto output_reduced = output_buffer.slice(0, 0, first_dim);
+      int i = 0;
+      for (auto kv : src_weights) {
+        double weight = kv.second;
+        if (i == 0) {
+          output_reduced.mul_(weight);
+        } else {
+          output_reduced.add_(
+              output_buffer.slice(0, i * first_dim, (i + 1) * first_dim), weight);
+        }
+        ++i;
+      }
+      output_buffer.resize_(shape_vector);
+      output_buffer.add_(tensor_buffer, self_weight);
+      if (is_hierarchical){
+        // Because there is ncclAllreduce just take sum.
+        output_buffer.div_(bluefog_local_size());
+      }
+    } else { // avg_computation is False, using sum operation
+      if (src_size > 1) {
+        auto output_reduced = output_buffer.slice(0, 0, first_dim);
+        for (int i = 1; i < src_size; i++) {
+          output_reduced.add_(
+              output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
+        }
+        output_buffer.resize_(shape_vector);
+      }
+      // Include self data as well.
+      output_buffer.add_(tensor_buffer);
+      if (is_hierarchical){
+        // Because there is ncclAllreduce just take sum.
+        output_buffer.div_(bluefog_local_size() * (src_size + 1));
+      } else {
+        output_buffer.div_(src_size + 1);
+      }
+    }
+    output.resize_(shape_vector);
+    MaybeCopyBufferBack(output, output_buffer);
+  } else {  // recv_size == 0
+    output.set_(tensor);
+    ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
+    output_buffer.mul_(self_weight);
+    MaybeCopyBufferBack(output, output_buffer);
+  }
+}
+
+}  // namespace
 
 int DoAllreduce(::torch::Tensor tensor, ::torch::Tensor output, int average,
                 bool is_hierarchical_local, const std::string& name) {
@@ -320,8 +387,10 @@ int DoNeighborAllgather(::torch::Tensor tensor, ::torch::Tensor output,
 }
 
 int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
-                        double self_weight, const std::unordered_map<int, double>& neighbor_weights,
-                        const std::vector<int>& send_neighbors, bool dynamic_neighbors_enabled,
+                        double self_weight,
+                        const std::unordered_map<int, double>& src_weights,
+                        const std::unordered_map<int, double>& dst_weights,
+                        bool dynamic_neighbors_enabled, bool dst_weighting_enabled,
                         bool enable_topo_check, bool avg_computation, bool is_hierarchical,
                         const std::string& name) {
   ThrowIfError(common::CheckInitialized());
@@ -338,113 +407,49 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
 
   auto callback_wrapper = GetCallbackWrapper(handle, timeline_ptr, op_name, tid);
 
-  std::vector<int> recv_neighbors;
-  for (auto kv : neighbor_weights)
-      recv_neighbors.push_back(kv.first);
-  std::sort(recv_neighbors.begin(), recv_neighbors.end());
+  // src_neighbors, dst_neighbors --> list of ranks only used in Enqueue
+  // src_weights_ordered_map --> used in callback only
+  // dst_weights_vec --> used in Enqueue for sending (same order of dst_neighbors)
+  std::map<int, double> src_weights_ordered_map;
+  for (auto kv : src_weights)
+    src_weights_ordered_map.insert(kv);
+  std::vector<int> src_neighbors;
+  for (auto kv : src_weights_ordered_map)
+    src_neighbors.push_back(kv.first);
 
+  std::vector<int> dst_neighbors;
+  for (auto kv : dst_weights)
+    dst_neighbors.push_back(kv.first);
+  std::sort(dst_neighbors.begin(), dst_neighbors.end());
+  std::vector<double> dst_weights_vec;
+  for (int rank : dst_neighbors)
+    dst_weights_vec.push_back(dst_weights.at(rank));
+
+  auto bf_src_neighbors = std::make_shared<std::vector<int>>(src_neighbors);
+  auto bf_dst_neighbors = std::make_shared<std::vector<int>>(dst_neighbors);
+  auto bf_dst_weights_vec = std::make_shared<std::vector<double>>(dst_weights_vec);
+  auto ready_event = RecordReadyEvent(device);
   if (OPS_ON_CPU && tensor.device().is_cuda()) {
     ::torch::Tensor cpu_buffer =
         tensor.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     ::torch::Tensor cpu_output =
         output.to(::torch::Device(::torch::kCPU), /*non_blocking=*/false);
     auto bf_tensor = std::make_shared<TorchTensor>(cpu_buffer);
-    auto bf_context =
-        std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
+    auto bf_context = std::make_shared<TorchOpContext>(CPU_DEVICE_ID, cpu_output);
     auto bf_output = std::make_shared<TorchTensor>(cpu_output);
-    auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
-    auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
-    auto ready_event = RecordReadyEvent(device);
+
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors,
-        bf_send_neighbors, dynamic_neighbors_enabled, is_hierarchical,
+        bf_tensor, bf_output, bf_context, ready_event,
+        bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
+        dynamic_neighbors_enabled, dst_weighting_enabled, is_hierarchical,
         enable_topo_check, op_name, CPU_DEVICE_ID,
-        callback_wrapper([self_weight, neighbor_weights, avg_computation,
-                          cpu_output, tensor, recv_neighbors, send_neighbors,
-                          dynamic_neighbors_enabled, is_hierarchical, output,
-                          device]() mutable {
+        callback_wrapper([self_weight, src_weights_ordered_map, avg_computation, cpu_output, tensor,
+                          dynamic_neighbors_enabled, is_hierarchical, output, device]() mutable {
           with_device device_guard(device);
           output.copy_(cpu_output);
-          int recv_size = bluefog_neighbor_size();
-          if (dynamic_neighbors_enabled) recv_size = recv_neighbors.size();
-          if (recv_size > 0) {
-            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
-            
-            int first_dim = output_buffer.size(0) / recv_size;
-            std::vector<int64_t> shape_vector;
-            shape_vector.push_back(first_dim);
-            for (int idx = 1; idx < tensor_buffer.dim(); ++idx) {
-              shape_vector.push_back(tensor_buffer.size(idx));
-            }
-
-            // if avg_computation is set to be False, sum computation will be taken place.
-            if (avg_computation) {
-              // 1) For a distributed graph topology, created with
-              // MPI_Dist_graph_create, the sequence of neighbors in the send and
-              // receive buffers at each process is defined as the sequence returned
-              // by MPI_Dist_graph_neighbors for destinations and sources,
-              // respectively. 2) MPI_Dist_graph_neighbors: If the communicator was
-              // created with MPI_Dist_graph_create_adjacent then the order of the
-              // values in sources and destinations is identical to the input that
-              // was used by the process with the same rank in comm_old in the
-              // creation call.
-              int indgree = 0;
-              int outdegree = 0;
-              int* sources_ptr = nullptr;
-              int* destinations_ptr = nullptr;
-              bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                    destinations_ptr);
-
-              auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              if (dynamic_neighbors_enabled) indgree = recv_neighbors.size();
-              for (int i = 0; i < indgree; i++) {
-                double weight = 0.0;
-                int recv_rank;
-                if (!dynamic_neighbors_enabled) recv_rank = *(sources_ptr+i);
-                else recv_rank = recv_neighbors[i];
-                auto it = neighbor_weights.find(recv_rank);
-                if (it != neighbor_weights.end()) {
-                  weight = it->second;
-                }
-
-                if (i == 0) {
-                  output_reduced.mul_(weight);
-                } else {
-                  output_reduced.add_(
-                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim), weight);
-                }
-              }
-              output_buffer.resize_(shape_vector);
-              output_buffer.add_(tensor_buffer, self_weight);
-              if (is_hierarchical){
-                // Because there is ncclAllreduce just take sum.
-                output_buffer.div_(bluefog_local_size());
-              }
-            } else {
-              int neighbor_size = !dynamic_neighbors_enabled
-                                  ? bluefog_neighbor_size()
-                                  : recv_neighbors.size();
-              if (neighbor_size > 1) {
-                auto output_reduced = output_buffer.slice(0, 0, first_dim);
-                for (int i = 1; i < neighbor_size; i++) {
-                  output_reduced.add_(
-                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim));
-                }
-                output_buffer.resize_(shape_vector);
-              }
-              // Include self data as well.
-              output_buffer.add_(tensor_buffer);
-              if (is_hierarchical){
-                // Because there is ncclAllreduce just take sum.
-                output_buffer.div_(bluefog_local_size() * (neighbor_size + 1));
-              } else {
-                output_buffer.div_(neighbor_size + 1);
-              }
-            }
-            output.resize_(shape_vector);
-            MaybeCopyBufferBack(output, output_buffer);
-          }
+          PerformNeighborAllreduceCallback(tensor, output, self_weight, src_weights_ordered_map,
+                                           avg_computation, dynamic_neighbors_enabled,
+                                           is_hierarchical);
         }));
 
     ThrowIfError(enqueue_result);
@@ -452,91 +457,17 @@ int DoNeighborAllreduce(::torch::Tensor tensor, ::torch::Tensor output,
     auto bf_tensor = std::make_shared<TorchTensor>(tensor);
     auto bf_context = std::make_shared<TorchOpContext>(device, output);
     auto bf_output = std::make_shared<TorchTensor>(output);
-    auto bf_recv_neighbors = std::make_shared<std::vector<int>>(recv_neighbors);
-    auto bf_send_neighbors = std::make_shared<std::vector<int>>(send_neighbors);
-    auto ready_event = RecordReadyEvent(device);
 
     auto enqueue_result = EnqueueTensorNeighborAllreduce(
-        bf_tensor, bf_output, bf_context, ready_event, bf_recv_neighbors,
-        bf_send_neighbors, dynamic_neighbors_enabled, is_hierarchical,
-        enable_topo_check, op_name, device,
-        callback_wrapper([self_weight, neighbor_weights, avg_computation,
-                          recv_neighbors, send_neighbors, dynamic_neighbors_enabled,
-                          is_hierarchical, tensor, output]() mutable {
-          int recv_size = bluefog_neighbor_size();
-          if (dynamic_neighbors_enabled) recv_size = recv_neighbors.size();
-          if (recv_size > 0) {
-            ::torch::Tensor output_buffer = MaybeCopyToTensorBuffer(output);
-            ::torch::Tensor tensor_buffer = MaybeCopyToTensorBuffer(tensor);
-
-            int first_dim = output_buffer.size(0) / recv_size;
-            std::vector<int64_t> shape_vector;
-            shape_vector.push_back(first_dim);
-            for (int idx = 1; idx < tensor_buffer.dim(); ++idx) {
-              shape_vector.push_back(tensor_buffer.size(idx));
-            }
-            // if avg_computation is set to be True, average computation will be taken place.
-            if (avg_computation) {
-              int indgree = 0;
-              int outdegree = 0;
-              int* sources_ptr = nullptr;
-              int* destinations_ptr = nullptr;
-              auto output_reduced = output_buffer.slice(0, 0, first_dim);
-              if (!dynamic_neighbors_enabled) {
-                bluefog_load_topology(&indgree, sources_ptr, &outdegree,
-                                      destinations_ptr);
-              } else {
-                indgree = recv_neighbors.size();
-              }
-              for (int i = 0; i < indgree; i++) {
-                double weight = 0.0;
-                int recv_rank;
-                if (!dynamic_neighbors_enabled) recv_rank = *(sources_ptr+i);
-                else recv_rank = recv_neighbors[i];
-                auto it = neighbor_weights.find(recv_rank);
-                if (it != neighbor_weights.end()) {
-                  weight = it->second;
-                }
-
-                if (i == 0) {
-                  output_reduced.mul_(weight);
-                } else {
-                  output_reduced.add_(
-                      output_buffer.slice(0, i * first_dim, (i + 1) * first_dim), weight);
-                }
-              }
-              output_buffer.resize_(shape_vector);
-              output_buffer.add_(tensor_buffer, self_weight);
-              if (is_hierarchical){
-                // Because there is ncclAllreduce just take sum.
-                output_buffer.div_(bluefog_local_size());
-              }
-            } else {
-              int neighbor_size = !dynamic_neighbors_enabled
-                                  ? bluefog_neighbor_size()
-                                  : recv_neighbors.size();
-              if (neighbor_size > 1) {
-                auto output_reduced = output_buffer.slice(0, 0, first_dim);
-                for (int i = 1; i < neighbor_size; i++) {
-                  output_reduced.add_(
-                      output.slice(0, i * first_dim, (i + 1) * first_dim));
-                }
-              }
-              output_buffer.resize_(shape_vector);
-              // Include self data as well.
-              output_buffer.add_(tensor_buffer);
-              if (is_hierarchical){
-                // Because there is ncclAllreduce just take sum.
-                output_buffer.div_(bluefog_local_size() * (neighbor_size + 1));
-              } else {
-                output_buffer.div_(neighbor_size + 1);
-              }
-            }
-            output.resize_(shape_vector);
-            MaybeCopyBufferBack(output, output_buffer);
-          } else {
-            output.set_(tensor);
-          }
+        bf_tensor, bf_output, bf_context, ready_event,
+        bf_src_neighbors, bf_dst_neighbors, bf_dst_weights_vec,
+        dynamic_neighbors_enabled, dst_weighting_enabled,
+        is_hierarchical, enable_topo_check, op_name, device,
+        callback_wrapper([self_weight, src_weights_ordered_map, avg_computation,
+                          dynamic_neighbors_enabled, is_hierarchical, tensor, output]() mutable {
+          PerformNeighborAllreduceCallback(tensor, output, self_weight, src_weights_ordered_map,
+                                           avg_computation, dynamic_neighbors_enabled,
+                                           is_hierarchical);
         }));
     ThrowIfError(enqueue_result);
   }

@@ -324,8 +324,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         named_parameters, models = _check_named_parameters(self, model)
         # knobs for neighbor communication behavior
         self.self_weight = None
-        self.neighbor_weights = None
-        self.send_neighbors = None
+        self.src_weights = None
+        self.dst_weights = None
         self.neighbor_machine_weights = None
         self.send_neighbor_machines = None
         self.enable_topo_check = False
@@ -394,8 +394,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
         handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
-                                                   neighbor_weights=self.neighbor_weights,
-                                                   send_neighbors=self.send_neighbors,
+                                                   src_weights=self.src_weights,
+                                                   dst_weights=self.dst_weights,
                                                    enable_topo_check=self.enable_topo_check)
         return handle
 
@@ -489,8 +489,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         named_parameters, models = _check_named_parameters(self, model)
         # knobs for neighbor communication behavior
         self.self_weight = None
-        self.neighbor_weights = None
-        self.send_neighbors = None
+        self.src_weights = None
+        self.dst_weights = None
         self.neighbor_machine_weights = None
         self.send_neighbor_machines = None
         self.enable_topo_check = False
@@ -762,8 +762,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
     def _neighbor_allreduce_data_async(self, p):
         name = self._parameter_names.get(p)
         handle = bf.neighbor_allreduce_nonblocking(p.data, name=name, self_weight=self.self_weight,
-                                                   neighbor_weights=self.neighbor_weights,
-                                                   send_neighbors=self.send_neighbors,
+                                                   src_weights=self.src_weights,
+                                                   dst_weights=self.dst_weights,
                                                    enable_topo_check=self.enable_topo_check)
         return handle
 

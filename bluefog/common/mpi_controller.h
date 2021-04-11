@@ -27,8 +27,11 @@ namespace common {
 
 // Function to check if the sending and receiving neighbors match in the
 // topology.
-bool CheckNeighborSendRecvPattern(int size, const TensorTableEntry& entry,
-                                  Timeline* timeline_ptr, const MPI_Comm& comm);
+bool CheckNeighborSendRecvPattern(
+  const std::vector<int>& send_neighbors, const std::vector<int>& recv_neighbors,
+  const std::string& tensor_name, int size, Timeline* timeline_ptr, const MPI_Comm& comm);
+bool CheckNeighborSendRecvPatternForEntry(
+  const TensorTableEntry& entry, const MPIContext& mpi_ctx, Timeline* timeline_ptr);
 
 class MPIController {
  public:
@@ -119,6 +122,14 @@ class MPIController {
                                          std::vector<TensorTableEntry>& entries,
                                          const int num_recv_neighbors,
                                          const int64_t fused_data_size);
+
+  void MemcpyInWeightFusionBuffer(void*& weight_buffer_data, size_t num_dst,
+                                  const void* buffer_data, int64_t num_elements, int element_size,
+                                  std::shared_ptr<OpContext> context, int device);
+
+  const void* GenerateWeightedFusedInputData(const void* fused_input_data,
+                                             const TensorTableEntry& entry,
+                                             int64_t num_elements, int element_size);
 
   void MemcpyOutFusionBufferForInputs(const void* fused_input_data,
                                       std::vector<TensorTableEntry>& entries);
