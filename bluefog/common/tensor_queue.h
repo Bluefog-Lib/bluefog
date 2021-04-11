@@ -46,15 +46,20 @@ class TensorQueue {
 
   void PushMessageToQueue(Request& message);
 
-  // Used when setting Topology, which require the tensor queue should be empty always.
+  // Used when setting Topology, which require the tensor queue should be empty
+  // always.
   inline void LockTensorQueue() { mutex_.lock(); }
   inline void UnlockTensorQueue() { mutex_.unlock(); }
-  inline size_t size() { return message_queue_.size(); }
+  inline size_t size() {
+    std::lock_guard<std::mutex> guard(mutex_);
+    return message_queue_.size();
+  }
 
  protected:
   // Tensors waiting to be processed.
-  // Key is based upon the message name since tensor_name in table entry for win ops
-  // is for window and we need to add "win_put."/"win_create." before it in message.
+  // Key is based upon the message name since tensor_name in table entry for win
+  // ops is for window and we need to add "win_put."/"win_create." before it in
+  // message.
   std::unordered_map<std::string, TensorTableEntry> tensor_table_;
 
   // Queue of MPI requests waiting to be sent to the coordinator node.
@@ -65,8 +70,8 @@ class TensorQueue {
   mutable std::mutex mutex_;
 };
 
-// Encapsulates the process of creating and destroying fusion buffers as the requested
-// threshold is changed.
+// Encapsulates the process of creating and destroying fusion buffers as the
+// requested threshold is changed.
 class FusionBufferManager {
  public:
   // Initializes a buffer of the given threshold size if not already cached.
@@ -82,10 +87,11 @@ class FusionBufferManager {
                           std::function<void()> on_start_init,
                           std::function<void()> on_end_init);
 
-  // Initializes a buffer of the given threshold size times MPI size if not already cached.
-  // There is one constraint to noticed here. We need WeightBuffer is always larger than
-  // (size-1)*fusion Buffer since we don't want to tensor being able to put into the fusion
-  // buffer but not able to put into weightbuffer.
+  // Initializes a buffer of the given threshold size times MPI size if not
+  // already cached. There is one constraint to noticed here. We need
+  // WeightBuffer is always larger than (size-1)*fusion Buffer since we don't
+  // want to tensor being able to put into the fusion buffer but not able to put
+  // into weightbuffer.
   //
   // Args:
   //  threshold: Size of the buffer in bytes.
@@ -94,9 +100,7 @@ class FusionBufferManager {
   //  context: Framework used to create the buffer and associate it.
   //  on_start_init: Callback on starting buffer initialization.
   //  on_end_init: Callback on completing buffer initialization.
-  Status InitializeWeightBuffer(int64_t threshold,
-                                int world_size,
-                                int device,
+  Status InitializeWeightBuffer(int64_t threshold, int world_size, int device,
                                 std::shared_ptr<OpContext> context,
                                 std::function<void()> on_start_init,
                                 std::function<void()> on_end_init);
@@ -104,7 +108,8 @@ class FusionBufferManager {
   // Returns the buffer associated with the given device and framework, or null.
   std::shared_ptr<PersistentBuffer> GetBuffer(int device);
 
-  // Returns the weight buffer associated with the given device and framework, or null.
+  // Returns the weight buffer associated with the given device and framework,
+  // or null.
   std::shared_ptr<PersistentBuffer> GetWeightBuffer(int device);
 
  private:
@@ -112,7 +117,8 @@ class FusionBufferManager {
   std::unordered_map<int, std::pair<std::shared_ptr<PersistentBuffer>, int64_t>>
       tensor_fusion_buffers_;
 
-  // Memory buffers for Tensor Fusion with dst weight.  They are keyed by device ID.
+  // Memory buffers for Tensor Fusion with dst weight.  They are keyed by device
+  // ID.
   std::unordered_map<int, std::pair<std::shared_ptr<PersistentBuffer>, int64_t>>
       weight_tensor_fusion_buffers_;
 };

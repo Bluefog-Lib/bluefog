@@ -406,7 +406,8 @@ def main():
     signal.signal(signal.SIGINT, handler)
 
     env = os.environ.copy()
-    env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
+    # No longer needed after using condition variable.
+    # env['BLUEFOG_CYCLE_TIME'] = str(20)  # Increase the cycle time
 
     # action of stop
     if args.action == "stop":

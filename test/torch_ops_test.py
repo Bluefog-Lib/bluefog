@@ -171,6 +171,7 @@ class OpsTests(unittest.TestCase):
 
         dims = [1, 2, 3]
         for dtype, dim in itertools.product(dtypes, dims):
+            torch.manual_seed(123456)
             tensor = torch.FloatTensor(*([23] * dim)).random_(-100, 100)
             tensor = self.cast_and_place(tensor, dtype)
             name = "allreduce_tensor_{}_{}".format(dim, dtype)
@@ -1207,7 +1208,7 @@ class OpsTests(unittest.TestCase):
                   torch.ByteTensor, torch.CharTensor, torch.ShortTensor, torch.HalfTensor]
         if TEST_ON_GPU:
             dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
-        
+
         # Connect to all other ranks
         neighbor_ranks = [i for i in range(size) if i != rank]
         dims = [1, 2, 3]
@@ -1222,10 +1223,11 @@ class OpsTests(unittest.TestCase):
             tensor = torch.FloatTensor(
                 *([tensor_sizes[rank]] + [17] * (dim - 1))).fill_(1).mul_(rank)
             tensor = self.cast_and_place(tensor, dtype)
-            gathered = bf.neighbor_allgather(tensor, dst_ranks=neighbor_ranks, src_ranks=neighbor_ranks)
+            gathered = bf.neighbor_allgather(
+                tensor, dst_ranks=neighbor_ranks, src_ranks=neighbor_ranks)
             tensor, gathered = self.convert_cpu_fp16_to_fp32(tensor, gathered)
 
-            tensor_sizes[rank] = 0 # remove self-size since neighbor_allgather does not include self.
+            tensor_sizes[rank] = 0  # remove self since neighbor_allgather does not include self
             expected_size = sum(tensor_sizes)
             assert list(gathered.shape) == [expected_size] + [17] * (dim - 1)
 
