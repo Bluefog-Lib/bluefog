@@ -63,8 +63,8 @@ def parse_args():
                               type=str, default="bluefog",
                               help="The profile name for ipython environment.")
 
-    parser_start.add_argument('--disable-heartbeat', action="store_true", dest="disable_heartbeat",
-                              help='Disable the heartbeat checking service between '
+    parser_start.add_argument('--enable-heartbeat', action="store_true", dest="enable_heartbeat",
+                              help='Enable the heartbeat checking service between '
                               'ipcontroller and ipengines.')
 
     group_hosts_parent = parser_start.add_argument_group('host arguments')
@@ -284,7 +284,7 @@ def local_machine_launch(args, env: Dict[str, str]):
                                     stderr=subprocess.STDOUT)
     _wait_engine_file_ready(args.profile)
     print("Starting the engines.")
-    if args.disable_heartbeat:
+    if not args.enable_heartbeat:
         disabled = _disable_heart_beatcheck(args.profile)
         print(f"Heartbeat Service Disabled: {disabled}")
 
