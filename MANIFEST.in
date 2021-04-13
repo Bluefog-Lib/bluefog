@@ -4,3 +4,4 @@ include README.rst LICENSE requirements.txt
 prune .eggs
 
 graft third_party/boost
+graft third_party/flatbuffers
