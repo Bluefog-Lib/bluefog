@@ -15,11 +15,13 @@
 # ==============================================================================
 
 from typing import Any, List, Optional
+from functools import wraps
 import collections
 
 import numpy as np
 import torch
 import bluefog.torch as bf
+
 
 def broadcast_parameters(params, root_rank):
     """
@@ -212,3 +214,16 @@ def broadcast_optimizer_state(optimizer, root_rank):
     for key, p in params:
         if key in callbacks:
             callbacks[key]()
+
+
+def deprecated_function_args(args_name: str, fix: str):
+    def deprecated_decorator(f):
+        @wraps(f)
+        def wrapper(*arg, **kwargs):
+            if args_name in kwargs:
+                raise ValueError(f"{args_name} is deprecated in {f.__name__}: {fix}")
+            return f(*arg, **kwargs)
+
+        return wrapper
+
+    return deprecated_decorator
