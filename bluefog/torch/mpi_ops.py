@@ -21,7 +21,7 @@ import numpy as np
 import torch
 
 from bluefog.torch import mpi_lib  # C library
-from bluefog.torch.utility import deprecated_function_args
+from bluefog.torch.utility import deprecated_function_arg
 from bluefog.common.basics import BlueFogBasics, logger
 from bluefog.common.topology_util import GetRecvWeights
 
@@ -529,8 +529,8 @@ def _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
     _handle_map[handle] = (tensor, output)
     return handle
 
-@deprecated_function_args(args_name="neighbor_weights", fix="Use src_weights instead")
-@deprecated_function_args(args_name="send_neighbors", fix="Use dst_weights instead")
+@deprecated_function_arg(arg_name="neighbor_weights", fix="Use src_weights instead")
+@deprecated_function_arg(arg_name="send_neighbors", fix="Use dst_weights instead")
 def neighbor_allreduce(tensor: torch.Tensor, *,
                        self_weight: Optional[float] = None,
                        src_weights: Optional[Dict[int, float]] = None,
@@ -586,8 +586,8 @@ def neighbor_allreduce(tensor: torch.Tensor, *,
     return synchronize(handle)
 
 
-@deprecated_function_args(args_name="neighbor_weights", fix="Use src_weights instead")
-@deprecated_function_args(args_name="send_neighbors", fix="Use dst_weights instead")
+@deprecated_function_arg(arg_name="neighbor_weights", fix="Use src_weights instead")
+@deprecated_function_arg(arg_name="send_neighbors", fix="Use dst_weights instead")
 def neighbor_allreduce_nonblocking(tensor: torch.Tensor, *,
                                    self_weight: Optional[float] = None,
                                    src_weights: Optional[Dict[int, float]] = None,

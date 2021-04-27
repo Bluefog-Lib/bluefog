@@ -216,12 +216,12 @@ def broadcast_optimizer_state(optimizer, root_rank):
             callbacks[key]()
 
 
-def deprecated_function_args(args_name: str, fix: str):
+def deprecated_function_arg(arg_name: str, fix: str):
     def deprecated_decorator(f):
         @wraps(f)
         def wrapper(*arg, **kwargs):
-            if args_name in kwargs:
-                raise ValueError(f"{args_name} is deprecated in {f.__name__}: {fix}")
+            if arg_name in kwargs:
+                raise ValueError(f"{arg_name} is deprecated in {f.__name__}: {fix}")
             return f(*arg, **kwargs)
 
         return wrapper
