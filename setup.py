@@ -452,7 +452,7 @@ def build_nvcc_extra_objects(nvcc_cmd: str, cxx11_abi: bool) -> List[str]:
     #      cuda_kernels.o -lcudart
     nvcc_flags = f'-fPIC -D_GLIBCXX_USE_CXX11_ABI={int(cxx11_abi)}'
 
-    extra_object_dir = 'bluefog/common/cuda/'
+    extra_object_dir = os.path.join(os.path.dirname(__file__), 'bluefog/common/cuda/')
     source = extra_object_dir+'cuda_kernels.cu'
     object_file = extra_object_dir+'cuda_kernels.o'
     object_link = extra_object_dir+'cuda_kernels_link.o'
@@ -478,6 +478,7 @@ def build_torch_extension(build_ext, global_options, torch_version):
     options = copy.deepcopy(global_options)
     have_cuda = is_torch_cuda(build_ext, include_dirs=options['INCLUDES'],
                               extra_compile_args=options['COMPILE_FLAGS'])
+    have_cuda = have_cuda and torch.cuda.is_available()
     if have_cuda:
         cuda_include_dirs, cuda_lib_dirs = get_cuda_dirs(
             build_ext, options['COMPILE_FLAGS'])
