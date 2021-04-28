@@ -1,4 +1,4 @@
-recursive-include * *.h *.hpp *.cc *.md *.rst
+recursive-include * *.h *.hpp *.cc *.md *.rst *.cu
 
 include README.rst LICENSE requirements.txt
 prune .eggs
