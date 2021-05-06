@@ -14,8 +14,10 @@
 # limitations under the License.
 # ==============================================================================
 
+from typing import Any, List, Optional
 import collections
 
+import numpy as np
 import torch
 import bluefog.torch as bf
 
