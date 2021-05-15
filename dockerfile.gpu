@@ -77,9 +77,9 @@ RUN pip install "Pillow<7.0" --no-deps
 RUN pip install bluefog
 
 RUN mkdir /bluefog
+COPY examples.tar.gz /bluefog/examples.tar.gz
 RUN cd /bluefog && \
-    wget https://github.com/Bluefog-Lib/bluefog/releases/download/v0.2.2/examples_v0.2.2.tar.gz && \
-    tar -zxv -f examples_v0.2.2.tar.gz && \
-    rm examples_v0.2.2.tar.gz
+    tar -zxv -f examples.tar.gz && \
+    rm examples.tar.gz
 
 WORKDIR "bluefog"
