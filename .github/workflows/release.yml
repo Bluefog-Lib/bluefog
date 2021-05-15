@@ -59,29 +59,3 @@ jobs:
         run: |
           python setup.py sdist
           twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-  docker:
-    name: DockerHub Release
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Obtain VERSION
-        run: |
-          # Strip git ref prefix from version
-          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          # Strip "v" prefix from tag name
-          VERSION=$(echo $VERSION | sed -e 's/^v//')
-          echo VERSION=$VERSION
-      - name: Log into DockerHub
-        run: echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-      - name: Build GPU image
-        run: docker build . --file dockerfile.gpu --tag bluefog:gpu
-      - name: Build CPU image
-        run: docker build . --file dockerfile.cpu --tag bluefog:cpu
-      - name: Push image
-        run: |
-          docker tag bluefog:cpu bluefog:cpu-$VERSION
-          docker tag bluefog:gpu bluefog:gpu-$VERSION
-          docker push bluefog:cpu-$VERSION
-          docker push bluefog:gpu-$VERSION
