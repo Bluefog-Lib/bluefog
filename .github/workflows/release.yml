@@ -66,9 +66,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Wrap the examples
-        run: |
-          bash scripts/wrap_examples.sh
       - name: Build CPU image
         run: docker build . --file dockerfile.cpu --tag bluefog:cpu
       - name: Build GPU image

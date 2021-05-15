@@ -34,12 +34,6 @@ Downloading Docker Image From Docker Hub
 Building Your Own Docker Image
 ##############################
 
-Before building the docker images, we need to first wrap the examples for usage.
-Run the following command first before building the images.
-
-.. code-block:: bash
-    bash ./scripts/wrap_examples.sh
-
 1. Build docker image with CUDA support:
 
 .. code-block:: bash
