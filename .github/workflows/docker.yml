@@ -5,7 +5,8 @@ on: [push]
 jobs:
   docker:
     name: DockerHub Release
-    needs: deploy
+    # Add Dependency !!!
+    # needs: deploy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
