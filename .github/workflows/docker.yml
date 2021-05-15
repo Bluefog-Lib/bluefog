@@ -25,7 +25,7 @@ jobs:
           VERSION=$(echo $VERSION | sed -e 's/^v//')
           VERSION=0.3.0
           echo VERSION=$VERSION
-          docker tag bluefog:cpu bluefog:cpu-$VERSION
-          docker tag bluefog:gpu bluefog:gpu-$VERSION
+          docker tag bluefog:cpu bluefoglib/bluefog:cpu-$VERSION
+          docker tag bluefog:gpu bluefoglib/bluefog:gpu-$VERSION
           docker push bluefoglib/bluefog:cpu-$VERSION
           docker push bluefoglib/bluefog:gpu-$VERSION
