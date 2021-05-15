@@ -74,13 +74,12 @@ RUN pip install torch==${PYTORCH_VERSION} torchvision==${TORCHVISION_VERSION} -f
 RUN pip install "Pillow<7.0" --no-deps
 
 # Install Bluefog
-RUN pip install bluefog
-
-RUN mkdir /bluefog
-RUN cd /bluefog && \
+CMD pip install bluefog && \
+    cd /bluefog && \
     VERSION=`python -c "import bluefog; print(bluefog.__version__)"` && \
     wget https://github.com/Bluefog-Lib/bluefog/releases/download/v$VERSION/examples.tar.gz && \
-    tar -zxv -f examples.tar.gz && \
-    rm examples.tar.gz
+    tar -zx -f examples.tar.gz && \
+    rm examples.tar.gz && \
+    bash
 
 WORKDIR "bluefog"
