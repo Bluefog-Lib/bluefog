@@ -59,3 +59,27 @@ jobs:
         run: |
           python setup.py sdist
           twine upload dist/*
+  docker:
+    name: DockerHub Release
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Build CPU image
+        run: docker build . --file dockerfile.cpu --tag bluefog:cpu
+      - name: Build GPU image
+        run: docker build . --file dockerfile.gpu --tag bluefog:gpu
+      - name: Log into DockerHub
+        run: echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+      - name: Push image
+        run: |
+          # Strip git ref prefix from version
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          # Strip "v" prefix from tag name
+          VERSION=$(echo $VERSION | sed -e 's/^v//')
+          echo VERSION=$VERSION
+          docker tag bluefog:cpu bluefoglib/bluefog:cpu-$VERSION
+          docker tag bluefog:gpu bluefoglib/bluefog:gpu-$VERSION
+          docker push bluefoglib/bluefog:cpu-$VERSION
+          docker push bluefoglib/bluefog:gpu-$VERSION

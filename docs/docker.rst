@@ -23,13 +23,13 @@ Downloading Docker Image From Docker Hub
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:gpu-0.2.2
+    sudo docker pull bluefoglib/bluefog:gpu-0.3.0
 
 2. Download docker image with only CPU support:
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:cpu-0.2.2
+    sudo docker pull bluefoglib/bluefog:cpu-0.3.0
 
 Building Your Own Docker Image
 ##############################
