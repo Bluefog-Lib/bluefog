@@ -23,7 +23,7 @@
 #include "half.h"
 
 // Bluefog knobs.
-#define NODES_PER_MACHINE "NODES_PER_MACHINE"
+#define BLUEFOG_NODES_PER_MACHINE "BLUEFOG_NODES_PER_MACHINE"
 
 namespace bluefog {
 namespace common {
@@ -317,7 +317,7 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
   MPI_Comm_rank(mpi_comm, &world_rank);
   MPI_Comm_size(mpi_comm, &world_size);
 
-  const char* nodes_per_machine_ptr = std::getenv(NODES_PER_MACHINE);
+  const char* nodes_per_machine_ptr = std::getenv(BLUEFOG_NODES_PER_MACHINE);
   if (nodes_per_machine_ptr == nullptr) {
     // Create local comm, Determine local rank by querying the local
     // communicator.

@@ -54,7 +54,7 @@ class BasicsTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(BasicsTests, self).__init__(*args, **kwargs)
         warnings.simplefilter("module")
-        os.environ['NODES_PER_MACHINE'] = '2'
+        os.environ['BLUEFOG_NODES_PER_MACHINE'] = '2'
 
     def test_bluefog_rank(self):
         """Test that the rank returned by bf.rank() is correct."""
