@@ -73,15 +73,16 @@ class BasicsTests(unittest.TestCase):
         assert true_size == size
 
     def test_bluefog_local_size(self):
+        _, true_size = mpi_env_rank_and_size()
         bf.init()
         local_size = bf.local_size()
-        assert local_size == 2
+        assert local_size == min(2, true_size)
 
     def test_bluefog_local_rank(self):
-        true_rank, _ = mpi_env_rank_and_size()
+        true_rank, true_size = mpi_env_rank_and_size()
         bf.init()
         local_rank = bf.local_rank()
-        assert true_rank % 2 == local_rank
+        assert true_rank % min(2, true_size) == local_rank
 
     def test_set_topology_fail_with_win_create(self):
         bf.init()
