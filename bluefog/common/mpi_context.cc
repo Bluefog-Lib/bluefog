@@ -22,6 +22,9 @@
 #include "timeline.h"
 #include "half.h"
 
+// Bluefog knobs.
+#define BLUEFOG_NODES_PER_MACHINE "BLUEFOG_NODES_PER_MACHINE"
+
 namespace bluefog {
 namespace common {
 
@@ -310,13 +313,31 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
     BFLOG(DEBUG) << "Using the existing mpi_comm.";
   }
 
-  // Create local comm, Determine local rank by querying the local communicator.
-  MPI_Comm_split_type(mpi_comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
-                      &local_comm);
+  int world_rank, world_size;
+  MPI_Comm_rank(mpi_comm, &world_rank);
+  MPI_Comm_size(mpi_comm, &world_size);
+
+  const char* nodes_per_machine_ptr = std::getenv(BLUEFOG_NODES_PER_MACHINE);
+  if (nodes_per_machine_ptr == nullptr) {
+    // Create local comm, Determine local rank by querying the local
+    // communicator.
+    MPI_Comm_split_type(mpi_comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
+                        &local_comm);
+  } else {
+    const int local_size = atoi(nodes_per_machine_ptr);
+    if (local_size <= 0) {
+      BFLOG(FATAL) << "The provided NODES_PER_MACHINE must be positive integer.";
+    }
+    if (world_size % local_size) {
+      BFLOG(WARNING) << "The number of world size is not the multiplier of "
+                        "provided NODES_PER_MACHINE";
+    }
+    int machine_rank = world_rank / local_size;
+    MPI_Comm_split(mpi_comm, machine_rank, world_rank, &local_comm);
+  }
 
   // Get local rank and world rank for cross comm establishment.
-  int local_rank, world_rank;
-  MPI_Comm_rank(mpi_comm, &world_rank);
+  int local_rank;
   MPI_Comm_rank(local_comm, &local_rank);
 
   // Create cross node communicator.

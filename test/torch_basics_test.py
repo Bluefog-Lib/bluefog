@@ -18,6 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import inspect
+import os
 import warnings
 import unittest
 
@@ -53,6 +54,7 @@ class BasicsTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(BasicsTests, self).__init__(*args, **kwargs)
         warnings.simplefilter("module")
+        os.environ['BLUEFOG_NODES_PER_MACHINE'] = '2'
 
     def test_bluefog_rank(self):
         """Test that the rank returned by bf.rank() is correct."""
@@ -69,6 +71,18 @@ class BasicsTests(unittest.TestCase):
         size = bf.size()
         # print("Size: ", true_size, size)
         assert true_size == size
+
+    def test_bluefog_local_size(self):
+        _, true_size = mpi_env_rank_and_size()
+        bf.init()
+        local_size = bf.local_size()
+        assert local_size == min(2, true_size)
+
+    def test_bluefog_local_rank(self):
+        true_rank, true_size = mpi_env_rank_and_size()
+        bf.init()
+        local_rank = bf.local_rank()
+        assert true_rank % min(2, true_size) == local_rank
 
     def test_set_topology_fail_with_win_create(self):
         bf.init()
@@ -135,8 +149,10 @@ class BasicsTests(unittest.TestCase):
         out_neighbors = bf.out_neighbor_ranks()
 
         degree = int(np.ceil(np.log2(size)))
-        expected_in_neighbors = sorted([(rank - 2 ** i) % size for i in range(degree)])
-        expected_out_neighbors = sorted([(rank + 2 ** i) % size for i in range(degree)])
+        expected_in_neighbors = sorted(
+            [(rank - 2 ** i) % size for i in range(degree)])
+        expected_out_neighbors = sorted(
+            [(rank + 2 ** i) % size for i in range(degree)])
         assert sorted(in_neighbors) == expected_in_neighbors
         assert sorted(out_neighbors) == expected_out_neighbors
 
@@ -148,7 +164,8 @@ class BasicsTests(unittest.TestCase):
         in_neighbors = bf.in_neighbor_ranks()
         out_neighbors = bf.out_neighbor_ranks()
 
-        expected_in_neighbors = list(set(map(lambda x: x % size, [rank - 1, rank + 1])))
+        expected_in_neighbors = list(
+            set(map(lambda x: x % size, [rank - 1, rank + 1])))
         expected_out_neighbors = list(
             set(map(lambda x: x % size, [rank - 1, rank + 1]))
         )
