@@ -15,7 +15,7 @@ build:
 	python setup.py build_ext -i
 
 test: test_torch
-test_torch: test_torch_basic test_torch_ops test_torch_win_ops test_torch_optimizer
+test_torch: test_torch_basic test_torch_ops test_torch_hier_ops test_torch_win_ops test_torch_optimizer
 test_tensorflow: test_tensorflow_basic test_tensorflow_ops
 test_all: test_torch test_tensorflow
 
@@ -28,6 +28,10 @@ test_torch_basic:
 .PHONY: test_torch_ops
 test_torch_ops:
 	${MPIRUN} ${PYTEST} ./test/torch_ops_test.py
+
+.PHONY: test_torch_hier_ops
+test_torch_hier_ops:
+	${MPIRUN} ${PYTEST} ./test/torch_hierarchical_test.py
 
 .PHONY: test_timeline
 test_timeline:
