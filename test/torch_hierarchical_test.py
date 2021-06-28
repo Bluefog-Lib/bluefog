@@ -25,7 +25,7 @@ def cast_and_place(tensor, dtype):
     return tensor.type(dtype)
 
 
-def numerical_date_type():
+def numerical_data_type():
     dtypes = [torch.FloatTensor, torch.DoubleTensor]
     if TEST_ON_GPU:
         dtypes += [torch.cuda.FloatTensor, torch.cuda.DoubleTensor]
@@ -40,6 +40,7 @@ def dimensions():
 def hier_setup():
     os.environ['BLUEFOG_NODES_PER_MACHINE'] = '2'
     bf.init()
+    assert bf.size() % 2 == 0
     machine_size = int(bf.size() // 2)
     bf.set_machine_topology(bf.ExponentialGraph(machine_size))
     return bf.rank(), bf.size(), bf.local_rank(), bf.local_size()
@@ -59,7 +60,7 @@ def test_bluefog_local_rank(hier_setup):
 
 @pytest.mark.parametrize(
     "dtype,dim",
-    itertools.product(numerical_date_type(), dimensions()),
+    itertools.product(numerical_data_type(), dimensions()),
 )
 def test_hier_allreduce(hier_setup, dtype, dim):
     rank, size, local_rank, local_size = hier_setup
@@ -81,7 +82,7 @@ def test_hier_allreduce(hier_setup, dtype, dim):
 
 @pytest.mark.parametrize(
     "dtype,dim",
-    itertools.product(numerical_date_type(), dimensions()),
+    itertools.product(numerical_data_type(), dimensions()),
 )
 def test_hier_allreduce_inplace(hier_setup, dtype, dim):
     rank, size, local_rank, local_size = hier_setup
@@ -103,7 +104,7 @@ def test_hier_allreduce_inplace(hier_setup, dtype, dim):
 
 @pytest.mark.parametrize(
     "dtype,dim",
-    itertools.product(numerical_date_type(), dimensions()),
+    itertools.product(numerical_data_type(), dimensions()),
 )
 def test_hier_neighbor_allreduce(hier_setup, dtype, dim):
     rank, size, local_rank, local_size = hier_setup
@@ -112,4 +113,3 @@ def test_hier_neighbor_allreduce(hier_setup, dtype, dim):
     tensor = cast_and_place(tensor, dtype)
 
     # TODO(hhb): add real test after the hierarchical is fixed.
-    pass
