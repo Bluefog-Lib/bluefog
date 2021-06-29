@@ -644,15 +644,17 @@ def neighbor_allreduce_nonblocking(tensor: torch.Tensor, *,
     return _neighbor_allreduce_nonblocking(tensor, output, self_weight, src_weights,
                                            dst_weights, enable_topo_check, name=name)
 
-# TODO(hanbinhu) #81 Add dst_weight for hierarchical neighbor allreduce.
-def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
-                                    self_weight: float = None,
-                                    neighbor_machine_weights: Dict[int, float] = None,
-                                    send_neighbor_machines: List[int] = None,
-                                    enable_topo_check: bool = False,
+@deprecated_function_arg(arg_name="neighbor_machine_weights", fix="Use src_machine_weights instead")
+@deprecated_function_arg(arg_name="send_neighbor_machines", fix="Use dst_machine_weights instead")
+def hierarchical_neighbor_allreduce(tensor: torch.Tensor, *,
+                                    self_weight: Optional[float] = None,
+                                    src_machine_weights: Optional[Dict[int, float]] = None,
+                                    dst_machine_weights: Optional[Union[Dict[int, float],
+                                                                        List[int]]] = None,
+                                    enable_topo_check: Optional[bool] = False,
                                     name: Optional[str] = None) -> torch.Tensor:
     """
-    A function that performs weighted averaging of the input tensor over the negihbor machines and
+    A function that performs weighted averaging of the input tensor over the neighbor machines and
     itself in the Bluefog processes. It is similar to neighbor_allreduce. But each machine runs
     allreduce internal first to form a super node then executes the neighbor allreduce at machine
     level. The default behavior is (uniformly) average.
@@ -670,11 +672,15 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
     Arguments:
         tensor: A tensor to execute weighted average with neighbor machines.
         self_weight: The weight for self node, used with neighbor_weights.
-        neighbor_machine_weights: The weights for in-neighbor nodes, used with self weight.
+        src_machine_weights: The weights for in-neighbor machines, used with self weight.
             The data structure of weights should be {machine id : weight}.  All processes under
             same machine should specifiy the same weights dictionary.
-        send_neighbor_machines: The list of neighbor machines to be sent to. All processes under
-            same machine should specifiy the same machine id.
+        dst_machine_weights: The weights for out-neighbor machines. If set to be None, assume the
+            current node sends to all of its (out-)neighbors. If having values, assume only
+            part of (out-)neighbors will be sent to. If set to be a list, assume all the weights
+            are one. In this mode, this node sends its value to partial neighbors listed in this
+            variable in a dynamic graph, and `self_weight` and `src_weights` must be present.
+            All processes under the same machine should specifiy the same machine id.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
             sending and recieving neighbors match with each other. Disabling this check can boost
             the performance.
@@ -683,25 +689,29 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor,
     Returns:
         A tensor of the same shape and type as `tensor`,  across all processes.
     """
-    # TODO(hhb) Implement the logics for topo check for hierarchical_neighbor_allreduce.
-
     # TODO(ybc) add check for self_weight and neighbor_machine_weights.
-    if (self_weight is None and neighbor_machine_weights is not None) or \
-       (self_weight is not None and send_neighbor_machines is None):
-        raise ValueError("Arguments self_weight and neighbor_machine_weights have to "
-                         "be presented at the same time")
-    handle = hierarchical_neighbor_allreduce_nonblocking(
-        tensor, self_weight, neighbor_machine_weights, send_neighbor_machines,
-        enable_topo_check, name)
+    if (self_weight is None and src_machine_weights is not None) or \
+       (self_weight is not None and src_machine_weights is None):
+        raise ValueError("Arguments self_weight and src_machine_weights have to be presented at "
+                         "the same time")
+    handle = hierarchical_neighbor_allreduce_nonblocking(tensor,
+                                                         self_weight=self_weight,
+                                                         src_machine_weights=src_machine_weights,
+                                                         dst_machine_weights=dst_machine_weights,
+                                                         enable_topo_check=enable_topo_check,
+                                                         name=name)
     return synchronize(handle)
 
-
-def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
-                                                self_weight: float = None,
-                                                neighbor_machine_weights: Dict[int, float] = None,
-                                                send_neighbor_machines: List[int] = None,
-                                                enable_topo_check: bool = False,
-                                                name: Optional[str] = None) -> int:
+@deprecated_function_arg(arg_name="neighbor_machine_weights", fix="Use src_machine_weights instead")
+@deprecated_function_arg(arg_name="send_neighbor_machines", fix="Use dst_machine_weights instead")
+def hierarchical_neighbor_allreduce_nonblocking(
+    tensor: torch.Tensor, *,
+    self_weight: Optional[float] = None,
+    src_machine_weights: Optional[Dict[int, float]] = None,
+    dst_machine_weights: Optional[Union[List[int],
+                                        Dict[int, float]]] = None,
+    enable_topo_check: Optional[bool] = False,
+    name: Optional[str] = None) -> int:
     """
     A function that nonblockingly performs weighted averaging of the input tensor over the negihbor
     machines and itself in the Bluefog processes. It is similar to neighbor_allreduce. But
@@ -721,11 +731,15 @@ def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
     Arguments:
         tensor: A tensor to execute weighted average with neighbor machines.
         self_weight: The weight for self node, used with neighbor_weights.
-        neighbor_machine_weights: The weights for in-neighbor nodes, used with self weight.
+        src_machine_weights: The weights for in-neighbor machines, used with self weight.
             The data structure of weights should be {machine id : weight}.  All processes under
             same machine should specifiy the same weights dictionary.
-        send_neighbor_machines: The list of neighbor machines to be sent to. All processes under
-            same machine should specifiy the same machine id.
+        dst_machine_weights: The weights for out-neighbor machines. If set to be None, assume the
+            current node sends to all of its (out-)neighbors. If having values, assume only
+            part of (out-)neighbors will be sent to. If set to be a list, assume all the weights
+            are one. In this mode, this node sends its value to partial neighbors listed in this
+            variable in a dynamic graph, and `self_weight` and `src_weights` must be present.
+            All processes under the same machine should specifiy the same machine id.
         enable_topo_check: When send_neighbors is present, enabling this option checks if the
             sending and recieving neighbors match with each other. Disabling this check can boost
             the performance.
@@ -735,61 +749,62 @@ def hierarchical_neighbor_allreduce_nonblocking(tensor: torch.Tensor,
         A handle to the hierarchical_neighbor_allreduce operation that can be used with `poll()` or
         `synchronize()`.
     """
-    if (self_weight is None and neighbor_machine_weights is not None) or \
-       (self_weight is not None and neighbor_machine_weights is None):
+    # TODO(hanbinhu) #82 Symmetrical argument for self_weight, src_weights, dst_weights
+    if (self_weight is None and src_machine_weights is not None) or \
+       (self_weight is not None and src_machine_weights is None):
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at "
                          "the same time")
 
-    if send_neighbor_machines is None:
+    if dst_machine_weights is None:
         first_dim = tensor.shape[0] * len(in_neighbor_machine_ranks())
     else:
-        first_dim = tensor.shape[0] * len(neighbor_machine_weights)
+        first_dim = tensor.shape[0] * len(dst_machine_weights)
     new_shape = torch.Size([first_dim] + list(tensor.shape[1:]))
     output = tensor.new(new_shape)  # Pre-allocate the memory for the output.
 
     return _hierarchical_neighbor_allreduce_nonblocking(
-        tensor, output, self_weight, neighbor_machine_weights,
-        send_neighbor_machines, enable_topo_check, name=name)
+        tensor, output, self_weight, src_machine_weights,
+        dst_machine_weights, enable_topo_check, name=name)
 
 
 def _hierarchical_neighbor_allreduce_nonblocking(
-        tensor, output, self_weight, neighbor_machine_weights,
-        send_neighbor_machines, enable_topo_check, name):
+        tensor, output, self_weight, src_machine_weights,
+        dst_machine_weights, enable_topo_check, name):
     assert is_homogeneous, \
         "hierarchical_neighbor_allreduce should be used under homogeneous environment only"
     assert local_size() > 1, "If local size is 1, you should use neighbor allreduce directly."
     function = _check_function(_neighbor_allreduce_function_factory, tensor)
-    if self_weight is None and neighbor_machine_weights is None and send_neighbor_machines is None:
+    if self_weight is None and src_machine_weights is None and dst_machine_weights is None:
         # Implying this is static machine graph.
         topology = load_machine_topology()
         if topology is None:
             raise RuntimeError("Machine topology must be set before the use of hierarchical "
                                "neighbor allreduce")
         if is_machine_topo_weighted():
-            self_weight, neighbor_machine_weights = GetRecvWeights(topology, machine_rank())
+            self_weight, src_machine_weights = GetRecvWeights(topology, machine_rank())
             weighted_average_computation = True
         else:
             weight = 1.0/(len(in_neighbor_machine_ranks())+1)
             self_weight = weight
-            neighbor_machine_weights = {r: weight for r in in_neighbor_machine_ranks()}
+            src_machine_weights = {r: weight for r in in_neighbor_machine_ranks()}
             weighted_average_computation = False
-        send_neighbor_machines = out_neighbor_machine_ranks()
-    elif self_weight is not None and neighbor_machine_weights is not None:
-        if not isinstance(neighbor_machine_weights, dict):
+        dst_machine_weights = out_neighbor_machine_ranks()
+    elif self_weight is not None and src_machine_weights is not None:
+        if not isinstance(dst_machine_weights, dict):
             raise ValueError("Argument neighbor_weights has to be a dictionary map from the "
                              "(in-)neighbor rank to the weights.")
         if not isinstance(self_weight, float):
             raise ValueError(
                 "Argument self_weight has to be a float for self rank.")
-        uniform_weights = 1.0/(len(neighbor_machine_weights)+1)
+        uniform_weights = 1.0/(len(src_machine_weights)+1)
         weighted_average_computation = False
         if abs(self_weight - uniform_weights) > 1e-6:
             weighted_average_computation = True
-        for n_weights in neighbor_machine_weights.values():
+        for n_weights in src_machine_weights.values():
             if abs(n_weights - uniform_weights) > 1e-6:
                 weighted_average_computation = True
                 break
-        if not send_neighbor_machines:
+        if not dst_machine_weights:
             raise ValueError("Argument send_neighbor_machines has to be presented and non-empty.")
     else:
         raise ValueError("Arguments self_weight and neighbor_weights have to be presented at the "
@@ -800,13 +815,13 @@ def _hierarchical_neighbor_allreduce_nonblocking(
     # Translate machine id into rank id.
     node_per_machine = local_size()
     neighbor_weights = {}
-    for (m, weights) in neighbor_machine_weights.items():
+    for (m, weights) in src_machine_weights.items():
         if m >= machine_size:
             raise ValueError(
                 f"machine id is larger than number of machine we detected ({node_per_machine})."
                 "Note it is 0-based index.")
         neighbor_weights[node_per_machine*m] = weights
-    send_neighbors = [node_per_machine*m for m in send_neighbor_machines]
+    send_neighbors = [node_per_machine*m for m in dst_machine_weights]
     tensor_buffer = tensor.detach().clone()
     is_hierarchical = True
     #TODO(ybc) support static machine topology case

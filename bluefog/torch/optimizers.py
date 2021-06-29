@@ -326,8 +326,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         self.self_weight = None
         self.src_weights = None
         self.dst_weights = None
-        self.neighbor_machine_weights = None
-        self.send_neighbor_machines = None
+        self.src_machine_weights = None
+        self.dst_machine_weights = None
         self.enable_topo_check = False
 
         self._models = models
@@ -403,8 +403,8 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         name = self._parameter_names.get(p)
         handle = bf.hierarchical_neighbor_allreduce_nonblocking(
             p.data, name=name, self_weight=self.self_weight,
-            neighbor_machine_weights=self.neighbor_machine_weights,
-            send_neighbor_machines=self.send_neighbor_machines,
+            src_machine_weights=self.src_machine_weights,
+            dst_machine_weights=self.dst_machine_weights,
             enable_topo_check=self.enable_topo_check)
         return handle
 
@@ -491,8 +491,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         self.self_weight = None
         self.src_weights = None
         self.dst_weights = None
-        self.neighbor_machine_weights = None
-        self.send_neighbor_machines = None
+        self.src_machine_weights = None
+        self.dst_machine_weights = None
         self.enable_topo_check = False
 
         self._models = models
@@ -771,8 +771,8 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         name = self._parameter_names.get(p)
         handle = bf.hierarchical_neighbor_allreduce_nonblocking(
             p.data, name=name, self_weight=self.self_weight,
-            neighbor_machine_weights=self.neighbor_machine_weights,
-            send_neighbor_machines=self.send_neighbor_machines,
+            src_machine_weights=self.src_machine_weights,
+            dst_machine_weights=self.dst_machine_weights,
             enable_topo_check=self.enable_topo_check)
         return handle
 
@@ -1183,7 +1183,7 @@ def DistributedPushSumOptimizer(optimizer, model,
     An distributed optimizer that wraps another torch.optim.Optimizer through
     win_accumulate ops to implement the gradient push algorithm.
 
-    Returned optimizer has two extra parameters `self_weight` and `neighbor_weights`.
+    Returned optimizer has two extra parameters `self_weight` and `src_weights`.
     Set self_weight as some scalar and dst_weights dictionary as {rank: scaling} differently
     per iteration to achieve win_put over dynamic graph behavior.
 
@@ -1443,8 +1443,8 @@ def DistributedAdaptThenCombineOptimizer(optimizer, model,
     torch.optimizer provided, which can store the auxuilary information or state of
     optimizer like learning_rate, weight_decay, etc.
 
-    Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
-    `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
+    Returned optimizer has three extra parameters `self_weight`, `src_weights` and
+    `dst_weights`, `src_machine_weights` and `dst_machine_weights` to control
     the behavior of hierarchical neighbor allreduce. Changing the values
     of these knobs to achieve dynamic topologies.
 
@@ -1503,8 +1503,8 @@ def DistributedAdaptWithCombineOptimizer(optimizer, model,
     communication is overlapped with both forward and backward phase. Unlike AdaptThenCombine,
     this dist-optimizer do not need to register customized step function.
 
-    Returned optimizer has three extra parameters `self_weight`, `neighbor_weights` and
-    `send_neighbors`, `neighbor_machine_weights` and `send_neighbor_machines` to control
+    Returned optimizer has three extra parameters `self_weight`, `src_weights` and
+    `dst_weights`, `src_machine_weights` and `dst_machine_weights` to control
     the behavior of hierarchical neighbor allreduce. Changing the values
     of these knobs to achieve dynamic topologies.
 
