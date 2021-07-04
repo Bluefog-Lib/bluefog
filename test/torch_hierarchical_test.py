@@ -108,8 +108,23 @@ def test_hier_allreduce_inplace(hier_setup, dtype, dim):
 )
 def test_hier_neighbor_allreduce(hier_setup, dtype, dim):
     rank, size, local_rank, local_size = hier_setup
-    tensor = torch.FloatTensor(*([3] * dim)).fill_(1).mul_(rank)
+    # This particular value is chosen such that the local allreduce will result in the machine rank.
+    # For example, there are 8 nodes with 4 nodes per machine.
+    # The allreduce result from node 0 to 3 will be 0, and the one from node 4 to 7 will 1.
+    tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_((rank-(local_size-1)/2.0)/local_size)
     name = "hier_neighbor_allreduce_tensor_{}_{}".format(dim, dtype)
     tensor = cast_and_place(tensor, dtype)
 
-    # TODO(hhb): add real test after the hierarchical is fixed.
+    reduced_tensor = bf.hierarchical_neighbor_allreduce(tensor, name=name)
+    neighbor_ranks = bf.in_neighbor_machine_ranks()
+    expected_value = ((rank-local_rank)/local_size + sum(neighbor_ranks))/(len(neighbor_ranks)+1)
+    print(rank, tensor[0])
+    print(rank, reduced_tensor[0])
+    print(rank, expected_value)
+    print(rank, neighbor_ranks)
+    assert (
+        list(reduced_tensor.shape) == [23] * dim
+    ), "bf.hierarchical_neighbor_allreduce (hier_NA) produces incorrect reduced shape"
+    assert (
+        (reduced_tensor.data - expected_value).abs().max() < EPSILON
+    ), "bf.hierarchical_neighbor_allreduce (hier_NA) produces incorrect reduced tensor"
