@@ -111,20 +111,122 @@ def test_hier_neighbor_allreduce(hier_setup, dtype, dim):
     # This particular value is chosen such that the local allreduce will result in the machine rank.
     # For example, there are 8 nodes with 4 nodes per machine.
     # The allreduce result from node 0 to 3 will be 0, and the one from node 4 to 7 will 1.
-    tensor = torch.FloatTensor(*([23] * dim)).fill_(1).mul_((rank-(local_size-1)/2.0)/local_size)
+    tensor = torch.FloatTensor(*([23] * dim)).fill_((rank-(local_size-1)/2.0)/local_size)
     name = "hier_neighbor_allreduce_tensor_{}_{}".format(dim, dtype)
     tensor = cast_and_place(tensor, dtype)
 
     reduced_tensor = bf.hierarchical_neighbor_allreduce(tensor, name=name)
     neighbor_ranks = bf.in_neighbor_machine_ranks()
     expected_value = ((rank-local_rank)/local_size + sum(neighbor_ranks))/(len(neighbor_ranks)+1)
-    print(rank, tensor[0])
-    print(rank, reduced_tensor[0])
-    print(rank, expected_value)
-    print(rank, neighbor_ranks)
     assert (
         list(reduced_tensor.shape) == [23] * dim
     ), "bf.hierarchical_neighbor_allreduce (hier_NA) produces incorrect reduced shape"
     assert (
         (reduced_tensor.data - expected_value).abs().max() < EPSILON
     ), "bf.hierarchical_neighbor_allreduce (hier_NA) produces incorrect reduced tensor"
+
+@pytest.mark.parametrize(
+    "dtype,dim",
+    itertools.product(numerical_data_type(), dimensions()),
+)
+def test_hier_neighbor_allreduce_dynamic_move(hier_setup, dtype, dim):
+    rank, size, local_rank, local_size = hier_setup
+    machine_rank = (rank-local_rank)//local_size
+    machine_size = size//local_size
+    # This particular value is chosen such that the local allreduce will result in the machine rank.
+    # For example, there are 8 nodes with 4 nodes per machine.
+    # The allreduce result from node 0 to 3 will be 0, and the one from node 4 to 7 will 1.
+    tensor = torch.FloatTensor(*([23] * dim)).fill_((rank-(local_size-1)/2.0)/local_size)
+    name = "hier_neighbor_allreduce_tensor_{}_{}".format(dim, dtype)
+    tensor = cast_and_place(tensor, dtype)
+
+    reduced_tensor = bf.hierarchical_neighbor_allreduce(
+        tensor, self_weight=0.0,
+        src_machine_weights={(machine_rank+1)%machine_size: 1.0},
+        dst_machine_weights=[(machine_rank-1)%machine_size], name=name)
+    expected_value = (machine_rank+1)%machine_size
+    assert (
+        list(reduced_tensor.shape) == [23] * dim
+    ), "bf.hierarchical_neighbor_allreduce (hier_NA) produces incorrect reduced shape"
+    assert (
+        (reduced_tensor.data - expected_value).abs().max() < EPSILON
+    ), "bf.hierarchical_neighbor_allreduce (hier_NA) produces incorrect reduced tensor"
+
+@pytest.mark.parametrize(
+    "dtype,dim",
+    [(torch.cuda.FloatTensor, 1)]
+)
+def test_hier_neighbor_allreduce_fusion(hier_setup, dtype, dim):
+    rank, size, local_rank, local_size = hier_setup
+    machine_rank = (rank-local_rank)//local_size
+    machine_size = size//local_size
+
+    neighbor_ranks = bf.in_neighbor_machine_ranks()
+    expected_value = (machine_rank + sum(neighbor_ranks))/(len(neighbor_ranks)+1)
+
+    K = 50 # number of tensors send in short time
+    tensor_list, handles, names = [], [], []
+    for i in range(K):
+        tensor = torch.FloatTensor(*([23] * dim)).fill_(i+(rank-(local_size-1)/2.0)/local_size)
+        tensor = cast_and_place(tensor, dtype)
+        tensor_list.append(tensor)
+        names.append("index{}_{}_{}".format(i, dtype, dim))
+
+    for i in range(K):
+        handle = bf.hierarchical_neighbor_allreduce_nonblocking(
+            tensor_list[i], name=names[i])
+        handles.append(handle)
+
+    outputs = []
+    for i in range(K):
+        output = bf.synchronize(handles[i])
+        outputs.append(output)
+
+    for i in range(K):
+        assert (
+            list(outputs[i].shape) == [23] * dim
+        ), f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced shape"
+        assert (
+            (outputs[i]-expected_value-i).abs().max() < EPSILON
+        ), f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced tensor"
+
+@pytest.mark.parametrize(
+    "dtype,dim",
+    itertools.product(numerical_data_type(), dimensions()),
+)
+def test_hier_neighbor_allreduce_dynamic_move_fusion(hier_setup, dtype, dim):
+    rank, size, local_rank, local_size = hier_setup
+    machine_rank = (rank-local_rank)//local_size
+    machine_size = size//local_size
+
+    expected_value = (machine_rank+1)%machine_size
+    src_machine_weights = {(machine_rank+1)%machine_size: 1.0}
+    dst_machine_weights = [(machine_rank-1)%machine_size]
+
+    K = 50 # number of tensors send in short time
+    tensor_list, handles, names = [], [], []
+    for i in range(K):
+        tensor = torch.FloatTensor(*([23] * dim)).fill_(i+(rank-(local_size-1)/2.0)/local_size)
+        tensor = cast_and_place(tensor, dtype)
+        tensor_list.append(tensor)
+        names.append("index{}_{}_{}".format(i, dtype, dim))
+
+    for i in range(K):
+        handle = bf.hierarchical_neighbor_allreduce_nonblocking(
+            tensor_list[i], self_weight=0.0,
+            src_machine_weights=src_machine_weights,
+            dst_machine_weights=dst_machine_weights, name=names[i])
+        handles.append(handle)
+
+    outputs = []
+    for i in range(K):
+        output = bf.synchronize(handles[i])
+        outputs.append(output)
+
+    for i in range(K):
+        assert (
+            list(outputs[i].shape) == [23] * dim
+        ), f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced shape"
+        assert (
+            (outputs[i]-expected_value-i).abs().max() < EPSILON
+        ), f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced tensor"
