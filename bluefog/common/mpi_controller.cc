@@ -515,21 +515,61 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
           "Local size is smaller than 2, in this case, you should use "
           "neighbor_allreduce instead of hierarchical_neighbor_allreduce.");
     }
-    if (entry.dst_weighting_enabled) {
-      throw std::runtime_error(
-          "Under hierarchical neighbor_allreduce, argument "
-          "dst_weight should not be enabled for now.");
-    }
     // 1. In-place allreduce
     MPI_Allreduce(MPI_IN_PLACE, (void*)sendbuf, num_elements,
                   mpi_ctx_.GetMPIDataType(entry.tensor), MPI_SUM,
                   mpi_ctx_.GetMPICommunicator(Communicator::LOCAL));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
-      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
-        sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
-        entry.send_neighbors.get(), entry.recv_neighbors.get()
-      );
+      if (!entry.dst_weighting_enabled) {
+        error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
+          sendbuf, (void *)entry.output->data(), num_elements, entry.output->dtype(),
+          entry.send_neighbors.get(), entry.recv_neighbors.get()
+        );
+      } else {
+        int nsend = entry.send_neighbors->size();
+        int nrecv = entry.recv_neighbors->size();
+
+        // Ensure the lifecycle of the weighted tensors are alive after communication.
+        std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
+        for (int i = 0; i < nsend; ++i) {
+          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
+          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+        }
+        // TODO(ybc) #83 Better design pattern for data_weight synchronization
+        // This ready event makes sure the data_weight computation is done before communication, as
+        // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
+        // it is running on CPU.
+        std::shared_ptr<common::ReadyEvent> ready_event =
+            entry.context->RecordReadyEvent(entry.device);
+
+        std::vector<MPI_Request> requests(nsend + nrecv);
+        std::vector<MPI_Status> statuses(nsend + nrecv);
+        int element_size = mpi_ctx_.GetMPITypeSize(entry.output->dtype());
+        for (int i = 0; i < nrecv; ++i) {
+          void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                  num_elements * i * element_size);
+          MPICHECK(MPI_Irecv(recvbuf, num_elements,
+              mpi_ctx_.GetMPIDataType(entry.output), entry.recv_neighbors->at(i),
+              /*tag=*/mpi_ctx_.rank_ + entry.recv_neighbors->at(i),
+              mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i + nsend]));
+        }
+
+        while ((ready_event != nullptr) && !ready_event->Ready()) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+        }
+        for (int i = 0; i < nsend; ++i) {
+          const void* buffer_send = weighted_tensors[i]->data();
+          MPICHECK(MPI_Isend(buffer_send, num_elements,
+              mpi_ctx_.GetMPIDataType(entry.tensor), entry.send_neighbors->at(i),
+              /*tag=*/mpi_ctx_.rank_ + entry.send_neighbors->at(i),
+              mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i]));
+        }
+        MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+        error_message =
+            GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
+
+      }
     } else {
       // Do nothing here.
     }
@@ -626,7 +666,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
   const void* fused_input_data = buffer_data;
 
   const void* weighted_fused_input_data = nullptr;
-  if (first_entry.dst_weighting_enabled) {
+  if (first_entry.dst_weighting_enabled && !first_entry.is_hierarchical) {
     // Generate weighted data fusion for sending
     timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_WEIGHT_FUSION_BUFFER");
     weighted_fused_input_data = GenerateWeightedFusedInputData(fused_input_data, first_entry,
@@ -697,21 +737,52 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
           "Local size is smaller than 2, in this case, you should use "
           "neighbor_allreduce instead of hierarchical_neighbor_allreduce.");
     }
-    if (first_entry.dst_weighting_enabled) {
-      throw std::runtime_error(
-          "Under hierarchical neighbor_allreduce, argument "
-          "dst_weight should not be enabled for now.");
-    }
     // 1. In-place allreduce
     MPI_Allreduce(MPI_IN_PLACE, (void*)fused_input_data, num_elements,
                   mpi_ctx_.GetMPIDataType(first_entry.tensor), MPI_SUM,
                   mpi_ctx_.GetMPICommunicator(Communicator::LOCAL));
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
-      error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
-        fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
-        first_entry.send_neighbors.get(), first_entry.recv_neighbors.get()
-      );
+      if (!first_entry.dst_weighting_enabled) {
+        error_message = mpi_ctx_.NeighborValueExchangeWithConstantElements(
+          fused_input_data, buffer_data, num_elements, first_entry.output->dtype(),
+          first_entry.send_neighbors.get(), first_entry.recv_neighbors.get()
+        );
+      } else {
+        // Generate weighted data fusion for sending
+        timeline_ptr->ActivityStartAll(entries, "MEMCPY_IN_WEIGHT_FUSION_BUFFER");
+        weighted_fused_input_data = GenerateWeightedFusedInputData(fused_input_data, first_entry,
+                                                                   num_elements, element_size);
+        timeline_ptr->ActivityEndAll(entries);
+        int nsend = first_entry.send_neighbors->size();
+        int nrecv = first_entry.recv_neighbors->size();
+        std::vector<MPI_Request> requests(nsend + nrecv);
+        std::vector<MPI_Status> statuses(nsend + nrecv);
+        for (int i = 0; i < nrecv; ++i) {
+          void* recvbuf =
+              (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+          MPICHECK(MPI_Irecv(recvbuf, num_elements,
+              mpi_ctx_.GetMPIDataType(first_entry.output), first_entry.recv_neighbors->at(i),
+              /*tag=*/mpi_ctx_.rank_ + first_entry.recv_neighbors->at(i),
+              mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i + nsend]));
+        }
+#if HAVE_CUDA
+        if (first_entry.device != CPU_DEVICE_ID) {
+          cudaStreamSynchronize(mpi_ctx_.stream);
+        }
+#endif
+        for (int i = 0; i < nsend; ++i) {
+          const void* sendbuf =
+              (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
+          MPICHECK(MPI_Isend(sendbuf, num_elements,
+              mpi_ctx_.GetMPIDataType(first_entry.tensor), first_entry.send_neighbors->at(i),
+              /*tag=*/mpi_ctx_.rank_ + first_entry.send_neighbors->at(i),
+              mpi_ctx_.GetMPICommunicator(Communicator::GLOBAL), &requests[i]));
+        }
+        MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+        error_message =
+            GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
+      }
     } else {
       // Do nothing here.
     }
