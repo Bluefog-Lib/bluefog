@@ -794,11 +794,6 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
           "send_machine_neighbors should "
           "not be empty.");
     }
-    if (entry.dst_weighting_enabled) {
-      throw std::runtime_error(
-          "Under hierarchical neighbor_allreduce, argument "
-          "dst_weight should not be enabled for now.");
-    }
     // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
     // divided by local size at call back stage.
     NCCLCHECK(ncclAllReduce(sendbuf, (void*)sendbuf, num_elements,
@@ -807,16 +802,44 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
     // 2. Local_rank = 0 do the neighbor all with other machines local_rank=0.
     if (mpi_ctx_.local_rank_ == 0) {
       ncclGroupStart();
-      for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
-        int recv_rank = entry.recv_neighbors->at(i);
-        void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
-                                num_elements * i * element_size);
-        NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
-                           recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
-      }
-      for (int send_rank : *entry.send_neighbors) {
-        NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
-                           send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      if (!entry.dst_weighting_enabled) {
+        for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+          int recv_rank = entry.recv_neighbors->at(i);
+          void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                  num_elements * i * element_size);
+          NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                             recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+        for (int send_rank : *entry.send_neighbors) {
+          NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(entry.tensor),
+                             send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+      } else {
+        for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+          auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
+          weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+        }
+        // TODO(ybc) #83 Better design pattern for data_weight synchronization
+        // This ready event makes sure the data_weight computation is done before communication, as
+        // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
+        // it is running on CPU.
+        std::shared_ptr<common::ReadyEvent> ready_event =
+            entry.context->RecordReadyEvent(entry.device);
+        for (size_t i = 0; i < entry.recv_neighbors->size(); ++i) {
+          int recv_rank = entry.recv_neighbors->at(i);
+          void* recvbuf = (void*)(static_cast<const char*>(entry.output->data()) +
+                                  num_elements * i * element_size);
+          NCCLCHECK(ncclRecv(recvbuf, num_elements, GetNCCLDataType(entry.tensor),
+                            recv_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+        while ((ready_event != nullptr) && !ready_event->Ready()) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+        }
+        for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
+          const void* buffer_send = weighted_tensors[i]->data();
+          NCCLCHECK(ncclSend(buffer_send, num_elements, GetNCCLDataType(entry.tensor),
+                             entry.send_neighbors->at(i), nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
       }
       ncclGroupEnd();
     } else {
@@ -1018,11 +1041,11 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     RecordEvent(event_queue, "MEM_CPY_IN");
   }
 
-  const void* weighted_fused_input_data =
-      (first_entry.dst_weighting_enabled)
-          ? GenerateWeightedFusedInputData(fused_input_data, first_entry,
-                                           num_elements, element_size)
-          : nullptr;
+  const void* weighted_fused_input_data = nullptr;
+  if (first_entry.dst_weighting_enabled && !first_entry.is_hierarchical) {
+    weighted_fused_input_data = GenerateWeightedFusedInputData(fused_input_data, first_entry,
+                                                               num_elements, element_size);
+  }
 
   // Unlike allreduce, the storage for neighbor_allreduce in fusion buffer
   // is like [t_1, t_2 | t_1_n1, t_2_n1, t_1_n2, t_2_n2].
@@ -1079,12 +1102,6 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
         "neighbor_allreduce instead of hierarchical_neighbor_allreduce."
       );
     }
-    if (first_entry.dst_weighting_enabled) {
-      throw std::runtime_error(
-          "Under hierarchical neighbor_allreduce, argument "
-          "dst_weight should not be enabled for now.");
-    }
-
     // 1. In-place allreduce for all local ranks. Note it is sum, so we need to
     // divided by local size at call back stage.
     NCCLCHECK(ncclAllReduce(fused_input_data, (void*)fused_input_data,
@@ -1095,18 +1112,39 @@ void NCCLController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
     if (mpi_ctx_.local_rank_ == 0) {
       // Use local rank 0 for receiving 
       ncclGroupStart();
-      for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
-        int recv_rank = first_entry.recv_neighbors->at(i);
-        void* recvbuf =
-            (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
-        NCCLCHECK(ncclRecv(recvbuf, num_elements,
-                           GetNCCLDataType(first_entry.tensor), recv_rank,
-                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+      if (!first_entry.dst_weighting_enabled) {
+        for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+          int recv_rank = first_entry.recv_neighbors->at(i);
+          void* recvbuf =
+              (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+          NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                             GetNCCLDataType(first_entry.tensor), recv_rank,
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+        for (int send_rank : *first_entry.send_neighbors) {
+          NCCLCHECK(ncclSend(fused_input_data, num_elements,
+                             GetNCCLDataType(first_entry.tensor), send_rank,
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+      } else {
+        weighted_fused_input_data = GenerateWeightedFusedInputData(fused_input_data, first_entry,
+                                                                   num_elements, element_size);
+        for (size_t i = 0; i < first_entry.recv_neighbors->size(); ++i) {
+          int recv_rank = first_entry.recv_neighbors->at(i);
+          void* recvbuf =
+              (void*)((uint8_t*)buffer_data + num_elements * i * element_size);
+          NCCLCHECK(ncclRecv(recvbuf, num_elements,
+                             GetNCCLDataType(first_entry.tensor), recv_rank,
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+        }
+        for (size_t i = 0; i < first_entry.send_neighbors->size(); ++i) {
+          const void* sendbuf =
+              (void*)((uint8_t*)weighted_fused_input_data + num_elements * i * element_size);
+          NCCLCHECK(ncclSend(sendbuf, num_elements, GetNCCLDataType(first_entry.tensor),
+                             first_entry.send_neighbors->at(i),
+                             nccl_ctx_.nccl_comm, nccl_ctx_.stream));
       }
-      for (int send_rank : *first_entry.send_neighbors) {
-        NCCLCHECK(ncclSend(fused_input_data, num_elements,
-                           GetNCCLDataType(first_entry.tensor), send_rank,
-                           nccl_ctx_.nccl_comm, nccl_ctx_.stream));
+
       }
       ncclGroupEnd();
     } else {
