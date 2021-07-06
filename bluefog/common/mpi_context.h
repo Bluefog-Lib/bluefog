@@ -164,6 +164,11 @@ class MPIContext {
       const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
       const std::vector<int>* dst_ranks,
       const std::vector<int>* src_ranks);
+  std::string NeighborValueExchangeWithConstantWeightedElements(
+      const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+      const std::vector<int>* dst_ranks, const std::vector<double>* dst_weights,
+      const std::vector<int>* src_ranks, bool dst_weighting_enabled,
+      common::ReadyEvent* ready_event, Tensor* tensor);
   std::string NeighborValueExchangeWithVaryingElements(
       const void* input_ptr, void* output_ptr, const int sendcount,
       const int* recvcounts, const int* displcmnts, DataType dtype,
