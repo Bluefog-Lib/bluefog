@@ -181,7 +181,7 @@ def test_hier_neighbor_allreduce_dynamic_move_dst_weight(hier_setup, dtype, dim)
 
 @pytest.mark.parametrize(
     "dtype,dim",
-    [(torch.cuda.FloatTensor, 1)]
+    itertools.product(numerical_data_type(), dimensions()),
 )
 def test_hier_neighbor_allreduce_fusion(hier_setup, dtype, dim):
     rank, size, local_rank, local_size = hier_setup
