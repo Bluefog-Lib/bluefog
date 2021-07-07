@@ -4,9 +4,6 @@ BlueFog
 .. image:: https://github.com/Bluefog-Lib/bluefog/actions/workflows/ci.yml/badge.svg
     :target: https://github.com/Bluefog-Lib/bluefog/actions/workflows/ci.yml/badge.svg
 
-.. image:: https://travis-ci.com/Bluefog-Lib/bluefog.svg?branch=master
-    :target: https://travis-ci.com/Bluefog-Lib/bluefog
-
 .. image:: https://img.shields.io/badge/License-Apache%202.0-blue.svg
     :target: https://img.shields.io/badge/License-Apache%202.0-blue.svg
     :alt: License
