@@ -1520,7 +1520,7 @@ void MPIController::MemcpyOutFusionBufferForInputs(
                            cudaMemcpyDeviceToDevice));
     } else {
 #endif
-      std::memcpy(dst_data, fused_input_data, count);
+      std::memcpy(dst_data, fused_input_data_at_offset, count);
 #if HAVE_CUDA
     }
 #endif

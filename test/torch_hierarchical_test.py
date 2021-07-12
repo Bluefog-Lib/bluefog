@@ -215,7 +215,8 @@ def test_hier_neighbor_allreduce_fusion(hier_setup, dtype, dim):
         ), f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced shape"
         assert (
             (outputs[i]-expected_value-i).abs().max() < EPSILON
-        ), f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced tensor"
+        ), (f"{names[i]} (hierarchical neighbor allreduce fusion) produces incorrect reduced tensor"
+            f" when K = {i}")
 
 @pytest.mark.parametrize(
     "dtype,dim",
