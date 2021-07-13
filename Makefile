@@ -1,12 +1,22 @@
 NUM_PROC ?= 4
 $(info $(shell mpirun --version))
 ifeq ($(findstring Open MPI, $(shell mpirun --version)), Open MPI)
-  EXTRA_MPI_FLAG = --allow-run-as-root
+  MPI_FLAG_ROOT = --allow-run-as-root
 else
-  EXTRA_MPI_FLAG = 
+  MPI_FLAG_ROOT = 
 endif
+ifdef OVERSUBSCRIBE
+  ifeq (${OVERSUBSCRIBE}, 1)
+    MPI_FLAG_OVERSUBSCRIBE = --oversubscribe
+  else
+    MPI_FLAG_OVERSUBSCRIBE =
+  endif
+else
+  MPI_FLAG_OVERSUBSCRIBE =
+endif
+EXTRA_MPI_FLAGS = ${MPI_FLAG_ROOT} ${MPI_FLAG_OVERSUBSCRIBE}
 
-MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
+MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAGS}
 PYTEST = pytest -s -vv
 MPICH_NOT_EXIST = $(shell which mpichversion)
 
