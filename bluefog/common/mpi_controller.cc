@@ -461,13 +461,12 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
       // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
       // it is running on CPU.
       error_message =
-          mpi_ctx_.NeighborValueExchangeWithConstantWeightedElements(
-              sendbuf, (void *)entry.output->data(),
+          mpi_ctx_.NeighborValueExchangeWithConstantElementsAndWeights(
+              entry.tensor.get(), (void *)entry.output->data(),
               num_elements, entry.output->dtype(),
               entry.send_neighbors.get(), entry.send_weights.get(),
               entry.recv_neighbors.get(), entry.dst_weighting_enabled,
-              entry.context->RecordReadyEvent(entry.device).get(),
-              entry.tensor.get());
+              entry.context->RecordReadyEvent(entry.device).get());
       }
   } else {  // hierarchical neighbor allreduce
     if (entry.send_neighbors->empty()) {
@@ -491,13 +490,12 @@ void MPIController::NeighborAllreduce(TensorTableEntry& entry) {
       // Pytorch CUDA stream is not synchronized with our CUDA stream, and it does nothing when
       // it is running on CPU.
       error_message =
-          mpi_ctx_.NeighborValueExchangeWithConstantWeightedElements(
-              sendbuf, (void *)entry.output->data(),
+          mpi_ctx_.NeighborValueExchangeWithConstantElementsAndWeights(
+              entry.tensor.get(), (void *)entry.output->data(),
               num_elements, entry.output->dtype(),
               entry.send_neighbors.get(), entry.send_weights.get(),
               entry.recv_neighbors.get(), entry.dst_weighting_enabled,
-              entry.context->RecordReadyEvent(entry.device).get(),
-              entry.tensor.get());
+              entry.context->RecordReadyEvent(entry.device).get());
     } else {
       // Do nothing here.
     }

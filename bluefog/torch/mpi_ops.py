@@ -666,6 +666,12 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor, *,
     Bluefog processes for a given name. The reduction will not start until all processes
     are ready to send and receive the tensor.
 
+    In short, this API functions as the following equation.
+    w^{+}_i = self_weight * w_i
+              + \sum_{j \in Neighbor(i)} dst_weight(i<-j) * scr_weight(j->i) * w_j 
+                                             ^                  ^
+                    defined in remote node j |                  | defined in local node i
+
     Warning: This function should be called only under homogenerous environment, all machines have
     same number of Bluefog processes -- bf.local_size().
 
@@ -724,6 +730,12 @@ def hierarchical_neighbor_allreduce_nonblocking(
     auto-generated name is used. The tensor type and shape must be the same on all
     Bluefog processes for a given name. The reduction will not start until all processes
     are ready to send and receive the tensor.
+
+    In short, this API functions as the following equation.
+    w^{+}_i = self_weight * w_i
+              + \sum_{j \in Neighbor(i)} dst_weight(i<-j) * scr_weight(j->i) * w_j 
+                                             ^                  ^
+                    defined in remote node j |                  | defined in local node i
 
     Warning: This function should be called only under homogenerous environment, all machines have
     same number of Bluefog processes -- bf.local_size().

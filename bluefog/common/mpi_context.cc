@@ -490,11 +490,52 @@ std::string GenerateNeighborExchangeErrorMessage(const std::vector<MPI_Status>& 
   return error_message;
 }
 
-std::string MPIContext::NeighborValueExchangeWithConstantWeightedElements(
-      const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+std::string MPIContext::NeighborValueExchangeWithConstantElements(
+    const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
+    const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks) {
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+  std::vector<MPI_Request> requests(nsend + nrecv);
+  std::vector<MPI_Status> statuses(nsend + nrecv);
+  int element_size = GetMPITypeSize(dtype);
+  for (int i = 0; i < nrecv; ++i) {
+    void* recvbuf = (void*)(static_cast<const char*>(output_ptr) +
+                            num_elements * i * element_size);
+    int ret_code = MPI_Irecv(
+        recvbuf, num_elements, GetMPIDataType(dtype), src_ranks->at(i),
+        /*tag=*/rank_ + src_ranks->at(i),
+        GetMPICommunicator(Communicator::GLOBAL),
+        &requests[i + nsend]);
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI "
+          "output for details.");
+    }
+  }
+  for (int i = 0; i < nsend; ++i) {
+    int ret_code = MPI_Isend(
+        input_ptr, num_elements, GetMPIDataType(dtype), dst_ranks->at(i),
+        /*tag=*/rank_ + dst_ranks->at(i),
+        GetMPICommunicator(Communicator::GLOBAL), &requests[i]);
+    if (ret_code != MPI_SUCCESS) {
+      throw std::runtime_error(
+          "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI "
+          "output for details.");
+    }
+  }
+  MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+  return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
+}
+
+// Neighbor allreduce the values with the same number of elements, but the 
+// value may be weighted according to dst_weights before sending the values to
+// neighbors.
+std::string MPIContext::NeighborValueExchangeWithConstantElementsAndWeights(
+      Tensor* tensor, void* output_ptr, int num_elements, DataType dtype,
       const std::vector<int>* dst_ranks, const std::vector<double>* dst_weights,
       const std::vector<int>* src_ranks, bool dst_weighting_enabled,
-      common::ReadyEvent* ready_event, Tensor* tensor) {
+      common::ReadyEvent* ready_event) {
+  const void* input_ptr = (void *)tensor->data();
   int nsend = dst_ranks->size();
   int nrecv = src_ranks->size();
 
@@ -532,43 +573,6 @@ std::string MPIContext::NeighborValueExchangeWithConstantWeightedElements(
         buffer_send, num_elements, GetMPIDataType(dtype), dst_ranks->at(i),
         /*tag=*/rank_ + dst_ranks->at(i),
         GetMPICommunicator(Communicator::GLOBAL), &requests[i]));
-  }
-  MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
-  return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
-}
-
-std::string MPIContext::NeighborValueExchangeWithConstantElements(
-    const void* input_ptr, void* output_ptr, int num_elements, DataType dtype,
-    const std::vector<int>* dst_ranks, const std::vector<int>* src_ranks) {
-  int nsend = dst_ranks->size();
-  int nrecv = src_ranks->size();
-  std::vector<MPI_Request> requests(nsend + nrecv);
-  std::vector<MPI_Status> statuses(nsend + nrecv);
-  int element_size = GetMPITypeSize(dtype);
-  for (int i = 0; i < nrecv; ++i) {
-    void* recvbuf = (void*)(static_cast<const char*>(output_ptr) +
-                            num_elements * i * element_size);
-    int ret_code = MPI_Irecv(
-        recvbuf, num_elements, GetMPIDataType(dtype), src_ranks->at(i),
-        /*tag=*/rank_ + src_ranks->at(i),
-        GetMPICommunicator(Communicator::GLOBAL),
-        &requests[i + nsend]);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error(
-          "MPI_Irecv (for dynamic neighbor_allreduce) failed, see MPI "
-          "output for details.");
-    }
-  }
-  for (int i = 0; i < nsend; ++i) {
-    int ret_code = MPI_Isend(
-        input_ptr, num_elements, GetMPIDataType(dtype), dst_ranks->at(i),
-        /*tag=*/rank_ + dst_ranks->at(i),
-        GetMPICommunicator(Communicator::GLOBAL), &requests[i]);
-    if (ret_code != MPI_SUCCESS) {
-      throw std::runtime_error(
-          "MPI_Isend (for dynamic neighbor_allreduce) failed, see MPI "
-          "output for details.");
-    }
   }
   MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
   return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
