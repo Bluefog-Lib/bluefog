@@ -1,9 +1,14 @@
 NUM_PROC ?= 4
+OVERSUBSCRIBE ?= 0
 $(info $(shell mpirun --version))
 ifeq ($(findstring Open MPI, $(shell mpirun --version)), Open MPI)
   EXTRA_MPI_FLAG = --allow-run-as-root
 else
   EXTRA_MPI_FLAG = 
+endif
+
+ifeq (${OVERSUBSCRIBE}, 1)
+  EXTRA_MPI_FLAG += --oversubscribe
 endif
 
 MPIRUN = mpirun -np ${NUM_PROC} ${EXTRA_MPI_FLAG}
