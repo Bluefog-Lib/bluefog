@@ -7,7 +7,7 @@ ifeq ($(findstring Open MPI, $(shell mpirun --version)), Open MPI)
     EXTRA_MPI_FLAG += --oversubscribe
   endif
 else
-  EXTRA_MPI_FLAG =
+  EXTRA_MPI_FLAG = 
 endif
 
 
