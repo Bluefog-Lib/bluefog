@@ -92,7 +92,8 @@ void NCCLContext::Initialize(const int rank, const int size,
   // Assume one device per process
   int nDevices = 0;
   CUDACHECK(cudaGetDeviceCount(&nDevices));
-  CUDACHECK(cudaSetDevice(local_rank % nDevices));
+  // Make sure the right GPU is used when node_per_machine not equal to nDevices
+  CUDACHECK(cudaSetDevice(rank % nDevices));
   int greatest_priority;
   CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
   CUDACHECK(cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking,

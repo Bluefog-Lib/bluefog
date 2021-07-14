@@ -21,7 +21,7 @@ def cast_and_place(tensor, dtype):
             raise EnvironmentError(
                 "Cannot run number of processes in one machine more than GPU device count"
                 " in NCCL environment")
-        return tensor.cuda(bf.local_rank() % torch.cuda.device_count()).type(dtype)
+        return tensor.cuda(bf.rank() % torch.cuda.device_count()).type(dtype)
     return tensor.type(dtype)
 
 
