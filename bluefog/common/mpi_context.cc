@@ -527,6 +527,57 @@ std::string MPIContext::NeighborValueExchangeWithConstantElements(
   return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
 }
 
+// Neighbor allreduce the values with the same number of elements, but the 
+// value may be weighted according to dst_weights before sending the values to
+// neighbors.
+std::string MPIContext::NeighborValueExchangeWithConstantElementsAndWeights(
+      Tensor* tensor, void* output_ptr, int num_elements, DataType dtype,
+      const std::vector<int>* dst_ranks, const std::vector<double>* dst_weights,
+      const std::vector<int>* src_ranks, bool dst_weighting_enabled,
+      common::ReadyEvent* ready_event) {
+  const void* input_ptr = (void *)tensor->data();
+  int nsend = dst_ranks->size();
+  int nrecv = src_ranks->size();
+
+  // Ensure the lifecycle of the weighted tensors are alive after communication.
+  std::vector<std::unique_ptr<common::Tensor>> weighted_tensors;
+  if (dst_weighting_enabled) {
+    for (int i = 0; i < nsend; ++i) {
+      auto weighted_tensor_ptr = tensor->data_weight(dst_weights->at(i));
+      weighted_tensors.push_back(std::move(weighted_tensor_ptr));
+    }
+  }
+  std::vector<MPI_Request> requests(nsend + nrecv);
+  std::vector<MPI_Status> statuses(nsend + nrecv);
+  int element_size = GetMPITypeSize(dtype);
+  for (int i = 0; i < nrecv; ++i) {
+    void* recvbuf = (void*)(static_cast<const char*>(output_ptr) +
+                            num_elements * i * element_size);
+    MPICHECK(MPI_Irecv(
+        recvbuf, num_elements, GetMPIDataType(dtype), src_ranks->at(i),
+        /*tag=*/rank_ + src_ranks->at(i),
+        GetMPICommunicator(Communicator::GLOBAL),
+        &requests[i + nsend]));
+  }
+
+  if (dst_weighting_enabled) {
+    while ((ready_event != nullptr) && !ready_event->Ready()) {
+      std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+    }
+  }
+  for (int i = 0; i < nsend; ++i) {
+    const void* buffer_send = dst_weighting_enabled
+                                ? weighted_tensors[i]->data()
+                                : input_ptr;
+    MPICHECK(MPI_Isend(
+        buffer_send, num_elements, GetMPIDataType(dtype), dst_ranks->at(i),
+        /*tag=*/rank_ + dst_ranks->at(i),
+        GetMPICommunicator(Communicator::GLOBAL), &requests[i]));
+  }
+  MPI_Waitall(nsend + nrecv, requests.data(), statuses.data());
+  return GenerateNeighborExchangeErrorMessage(statuses, nsend, nrecv);
+}
+
 std::string MPIContext::NeighborValueExchangeWithVaryingElements(
   const void* input_ptr, void* output_ptr, const int sendcount,
   const int* recvcounts, const int* displcmnts, DataType dtype,

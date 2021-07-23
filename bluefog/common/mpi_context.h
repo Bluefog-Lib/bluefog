@@ -169,6 +169,11 @@ class MPIContext {
       const int* recvcounts, const int* displcmnts, DataType dtype,
       const std::vector<int>* dst_ranks,
       const std::vector<int>* src_ranks);
+  std::string NeighborValueExchangeWithConstantElementsAndWeights(
+      Tensor* tensor, void* output_ptr, int num_elements, DataType dtype,
+      const std::vector<int>* dst_ranks, const std::vector<double>* dst_weights,
+      const std::vector<int>* src_ranks, bool dst_weighting_enabled,
+      common::ReadyEvent* ready_event);
 
   Status AllocateOutput(TensorTableEntry& entry, int*& recvcounts,
                         Communicator comm_type);
