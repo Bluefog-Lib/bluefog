@@ -666,7 +666,7 @@ def hierarchical_neighbor_allreduce(tensor: torch.Tensor, *,
     Bluefog processes for a given name. The reduction will not start until all processes
     are ready to send and receive the tensor.
 
-    In short, this API functions as the following equation.
+    In short, this API function implements the following equation.
     w^{+}_i = self_weight * w_i
               + \sum_{j \in Neighbor(i)} dst_weight(i<-j) * scr_weight(j->i) * w_j 
                                              ^                  ^
@@ -731,7 +731,7 @@ def hierarchical_neighbor_allreduce_nonblocking(
     Bluefog processes for a given name. The reduction will not start until all processes
     are ready to send and receive the tensor.
 
-    In short, this API functions as the following equation.
+    In short, this API function implements the following equation.
     w^{+}_i = self_weight * w_i
               + \sum_{j \in Neighbor(i)} dst_weight(i<-j) * scr_weight(j->i) * w_j 
                                              ^                  ^
