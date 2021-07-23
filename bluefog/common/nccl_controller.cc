@@ -816,6 +816,7 @@ void NCCLController::NeighborAllreduce(TensorTableEntry& entry) {
                              send_rank, nccl_ctx_.nccl_comm, nccl_ctx_.stream));
         }
       } else {
+        cudaStreamSynchronize(nccl_ctx_.stream);
         for (size_t i = 0; i < entry.send_neighbors->size(); ++i) {
           auto weighted_tensor_ptr = entry.tensor->data_weight(entry.send_weights->at(i));
           weighted_tensors.push_back(std::move(weighted_tensor_ptr));
