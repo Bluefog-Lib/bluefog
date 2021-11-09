@@ -147,24 +147,22 @@ The Bluefog source code was based off `Horovod <https://github.com/horovod/horov
 
 Materials
 ---------
+*Bluefog: Make decentralized algorithms practical for optimization and deep learning*. B. Ying, K. Yuan, H. Hu, Y. Chen, and W. Yin.  arXiv preprint arXiv:2111.04287, 2021. `[link] <https://arxiv.org/abs/2111.04287>`_
+
 *Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA, 2020 `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
 
-*BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning*, BlueFog Team, To Appear in 2021
 
 Cite
 ----
 Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
   
 .. code-block::
-
-    @software{bluefog2021_4616052,
-      author       = {BlueFog team},
-      title        = {BlueFog},
-      month        = Mar.,
-      year         = 2021,
-      publisher    = {Zenodo},
-      doi          = {10.5281/zenodo.4616052},
-      url          = {https://doi.org/10.5281/zenodo.4616052}
+    
+    @article{bluefog,
+      author       = {Ying, Bicheng and Yuan, Kun and Hu, Hanbin and Chen, Yiming and Yin, Wotao },
+      title        = {BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning},
+      journal.     = {arXiv preprint arXiv:2111.04287},
+      year         = {2021},
     }
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
