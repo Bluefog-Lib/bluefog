@@ -154,11 +154,12 @@ Materials
 Troubleshooting
 ---------
 Import bluefog.torch failed
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you see the error message below, it means that bluefog is not installed properly. Please install bluefog using github source and recompile bluefog （e.g. make clean && make -j $(nproc)  && BLUEFOG_WITH_NCCL=1 pip install .）
 
 .. code-block:: python
+
     import bluefog.torch as bf
     Traceback (most recent call last):
     File "<stdin>", line 1, in <module>
@@ -170,7 +171,7 @@ If you see the error message below, it means that bluefog is not installed prope
 
 
 Cite
-----
+---------
 Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
   
 .. code-block::
