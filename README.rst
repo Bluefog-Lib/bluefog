@@ -157,13 +157,24 @@ Cite
 Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
   
 .. code-block::
-    
+
+    % System paper
     @article{bluefog,
       author       = {Ying, Bicheng and Yuan, Kun and Hu, Hanbin and Chen, Yiming and Yin, Wotao },
       title        = {BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning},
       journal.     = {arXiv preprint arXiv:2111.04287},
       year         = {2021},
     }
+    
+    % Theoratical Paper
+    @article{ying2021exponential,
+      title={Exponential Graph is Provably Efficient for Decentralized Deep Training},
+      author={Ying, Bicheng and Yuan, Kun and Chen, Yiming and Hu, Hanbin and Pan, Pan and Yin, Wotao},
+      journal={To appear on the 35th conference on Advances in Neural Information Processing Systems.
+               Also available at arXiv:2110.13363},
+      year={2021}
+    }
+    
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
