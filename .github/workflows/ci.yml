@@ -51,5 +51,5 @@ jobs:
         git submodule update --init --recursive
         python -m pip install -e .
     - name: Unit Test
-      run: make test_torch_basic
+      run: NUM_PROC=2 make test_torch_basic
       
