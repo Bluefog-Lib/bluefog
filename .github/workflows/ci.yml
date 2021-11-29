@@ -24,6 +24,9 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt
         git submodule update --init --recursive
+        python --version
+        mpirun --version
+        pip list
         python -m pip install -e .
     - name: Unit test
       run: make test_torch_basic test_torch_ops
@@ -49,5 +52,8 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt
         git submodule update --init --recursive
+        python --version
+        mpirun --version
+        pip list
         python -m pip install -e .
       
