@@ -26,6 +26,7 @@ jobs:
         git submodule update --init --recursive
         python -m pip install -e .
     - name: Record Version
+      run: |
         gcc --version
         python --version
         mpiexec --version
@@ -56,6 +57,7 @@ jobs:
         git submodule update --init --recursive
         python -m pip install -e .
     - name: Record Version
+      run: |
         gcc --version
         python --version
         mpiexec --version
