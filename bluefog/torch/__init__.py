@@ -56,6 +56,9 @@ from bluefog.torch.mpi_ops import poll, synchronize, wait, barrier
 
 from bluefog.torch.mpi_ops import win_create, win_free
 from bluefog.torch.mpi_ops import win_update, win_update_then_collect
+from bluefog.torch.mpi_ops import neighbor_win_put_nonblocking, neighbor_win_put
+from bluefog.torch.mpi_ops import neighbor_win_get_nonblocking, neighbor_win_get
+from bluefog.torch.mpi_ops import neighbor_win_accumulate_nonblocking, neighbor_win_accumulate
 from bluefog.torch.mpi_ops import win_put_nonblocking, win_put
 from bluefog.torch.mpi_ops import win_get_nonblocking, win_get
 from bluefog.torch.mpi_ops import win_accumulate_nonblocking, win_accumulate
