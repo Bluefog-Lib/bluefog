@@ -25,8 +25,14 @@ jobs:
         python -m pip install -r requirements.txt
         git submodule update --init --recursive
         python -m pip install -e .
+    - name: Record Version
+      run: |
+        gcc --version
+        python --version
+        mpiexec --version
+        pip list
     - name: Unit Test
-      run: make test_torch_basic test_torch_hier_ops test_torch_ops
+      run: make test_torch_basic test_torch_ops test_torch_hier_ops
       
   macos-unit-test:
     
@@ -50,6 +56,11 @@ jobs:
         python -m pip install -r requirements.txt
         git submodule update --init --recursive
         python -m pip install -e .
+    - name: Record Version
+      run: |
+        gcc --version
+        python --version
+        mpiexec --version
+        pip list
     - name: Unit Test
       run: OVERSUBSCRIBE=1 make test_torch_basic test_torch_hier_ops test_torch_ops test_torch_win_ops
-      

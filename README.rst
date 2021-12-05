@@ -151,6 +151,30 @@ Materials
 
 *Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA, 2020 `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
 
+
+Cite
+---------
+Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
+  
+.. code-block::
+
+     % System paper
+     @article{bluefog,
+       author       = {Ying, Bicheng and Yuan, Kun and Hu, Hanbin and Chen, Yiming and Yin, Wotao },
+       title        = {BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning},
+       journal.     = {arXiv preprint arXiv:2111.04287},
+       year         = {2021},
+     }
+
+     % Theoratical Paper
+     @article{ying2021exponential,
+       title={Exponential Graph is Provably Efficient for Decentralized Deep Training},
+       author={Ying, Bicheng and Yuan, Kun and Chen, Yiming and Hu, Hanbin and Pan, Pan and Yin, Wotao},
+       journal={To appear on the 35th conference on Advances in Neural Information Processing Systems.
+                Also available at arXiv:2110.13363},
+       year={2021}
+     }
+
 Troubleshooting
 ---------
 Import bluefog.torch failed
@@ -169,30 +193,6 @@ If you see the error message below, it means that bluefog is not installed prope
         from bluefog.torch import mpi_lib  # C library
     ImportError: /usr/local/lib/python3.7/dist-packages/bluefog/torch/mpi_lib.cpython-37m-x86_64-linux-gnu.so: undefined symbol: _ZN7bluefog6common14NCCLController9AllreduceERNS0_16TensorTableEntryE
 
-
-Cite
----------
-Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
-  
-.. code-block::
-
-    % System paper
-    @article{bluefog,
-      author       = {Ying, Bicheng and Yuan, Kun and Hu, Hanbin and Chen, Yiming and Yin, Wotao },
-      title        = {BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning},
-      journal.     = {arXiv preprint arXiv:2111.04287},
-      year         = {2021},
-    }
-    
-    % Theoratical Paper
-    @article{ying2021exponential,
-      title={Exponential Graph is Provably Efficient for Decentralized Deep Training},
-      author={Ying, Bicheng and Yuan, Kun and Chen, Yiming and Hu, Hanbin and Pan, Pan and Yin, Wotao},
-      journal={To appear on the 35th conference on Advances in Neural Information Processing Systems.
-               Also available at arXiv:2110.13363},
-      year={2021}
-    }
-    
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
