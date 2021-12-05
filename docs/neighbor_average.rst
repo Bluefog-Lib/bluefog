@@ -54,8 +54,8 @@ for most cases, you need a little bit more code:
         avg_weight = 1/(len(from_neighbors) + 1)
         x = bf.neighbor_allreduce(x, name='x',
             self_weight=avg_weight,
-            neighbor_weights={r: avg_weight for r in from_neighbors},
-            send_neighbors=to_neighbors)
+            src_weights={r: avg_weight for r in from_neighbors},
+            dst_weights=to_neighbors)
 
 Notice here we use extra argument in the ``neighbor_allreduce`` function to change its behavior.
 Although here we use the pre-defined utility function, you can implementation your own dynamic topology

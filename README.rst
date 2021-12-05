@@ -151,8 +151,9 @@ Materials
 
 *Faster Learning over Networks and BlueFog*, BlueFog Team, invited talk at MLA, 2020 `[slides] <https://github.com/Bluefog-Lib/bluefog/blob/master/resources/Faster_Learning_over_Networks_and_BlueFog.pdf>`_
 
+
 Cite
-----
+---------
 Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
   
 .. code-block::
@@ -173,6 +174,25 @@ Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below fo
                 Also available at arXiv:2110.13363},
        year={2021}
      }
+
+Troubleshooting
+---------
+Import bluefog.torch failed
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you see the error message below, it means that bluefog is not installed properly. Please install bluefog using github source and recompile bluefog （e.g. make clean && make -j $(nproc)  && BLUEFOG_WITH_NCCL=1 pip install .）
+
+.. code-block:: python
+
+    import bluefog.torch as bf
+    Traceback (most recent call last):
+    File "<stdin>", line 1, in <module>
+    File "/usr/local/lib/python3.7/dist-packages/bluefog/torch/__init__.py", line 34, in <module>
+        from bluefog.torch.mpi_ops import init, shutdown
+    File "/usr/local/lib/python3.7/dist-packages/bluefog/torch/mpi_ops.py", line 23, in <module>
+        from bluefog.torch import mpi_lib  # C library
+    ImportError: /usr/local/lib/python3.7/dist-packages/bluefog/torch/mpi_lib.cpython-37m-x86_64-linux-gnu.so: undefined symbol: _ZN7bluefog6common14NCCLController9AllreduceERNS0_16TensorTableEntryE
+
 
 .. _AWS: https://aws.amazon.com/about-aws/whats-new/2018/12/introducing-amazon-ec2-p3dn-instances-our-most-powerful-gpu-instance-yet/
 .. _examples: https://github.com/Bluefog-Lib/bluefog/tree/master/examples
