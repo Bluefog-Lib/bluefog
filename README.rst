@@ -156,7 +156,7 @@ Cite
 ---------
 Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below for all the versions:
   
-.. code-block::
+.. code-block:: bibtex
 
      % System paper
      @article{bluefog,
