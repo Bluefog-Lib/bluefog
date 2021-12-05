@@ -170,7 +170,7 @@ Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below fo
      @article{ying2021exponential,
        title={Exponential Graph is Provably Efficient for Decentralized Deep Training},
        author={Ying, Bicheng and Yuan, Kun and Chen, Yiming and Hu, Hanbin and Pan, Pan and Yin, Wotao},
-       journal={To appear on the 35th conference on Advances in Neural Information Processing Systems.
+       journal={Advances in Neural Information Processing Systems (NeurIPS), 34.
                 Also available at arXiv:2110.13363},
        year={2021}
      }
