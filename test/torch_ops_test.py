@@ -1060,7 +1060,6 @@ class OpsTests(unittest.TestCase):
                  sum_value).abs().max() < eps
             ), "bf.neighbor_allreduce_2 (fusion) produces incorrect reduced tensor"
 
-    @unittest.skip('???')
     def test_neighbor_allreduce_dst_weight_fusion(self):
         """Test neighbor allreduce works with destination weights under tensor fusion."""
         size = bf.size()
