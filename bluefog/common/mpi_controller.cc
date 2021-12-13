@@ -635,6 +635,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
       }
 #if HAVE_CUDA
       if (first_entry.dst_weighting_enabled && first_entry.device != CPU_DEVICE_ID) {
+        // This synchronization is used to wait until our destination tensor scaling is finished.
         cudaStreamSynchronize(mpi_ctx_.stream);
       }
 #endif
@@ -695,6 +696,7 @@ void MPIController::NeighborAllreduce(std::vector<TensorTableEntry>& entries) {
         }
 #if HAVE_CUDA
         if (first_entry.device != CPU_DEVICE_ID) {
+          // This synchronization is used to wait until our destination tensor scaling is finished.
           cudaStreamSynchronize(mpi_ctx_.stream);
         }
 #endif
@@ -1441,6 +1443,7 @@ const void* MPIController::GenerateWeightedFusedInputData(const void* fused_inpu
                      entry.tensor->dtype());
     } else {
 #if HAVE_CUDA
+      mpi_ctx_.InitCudaStreamOnce();
       ScaleBufferCudaImpl(dst_weight, weight_buffer_data_offset, num_elements,
                           entry.tensor->dtype(), mpi_ctx_.stream);
 #endif

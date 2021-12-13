@@ -353,12 +353,23 @@ void MPIContext::Initialize(const std::vector<int>& ranks,
 
   // Create custom MPI float16 summation op.
   MPI_Op_create(&float16_sum, 1, &mpi_float16_sum);
+}
 
+void MPIContext::InitCudaStreamOnce() {
 #if HAVE_CUDA
+  if (cuda_stream_initialized_) {
+    return;
+  }
+  // Assume one device per process
+  int nDevices = 0;
+  CUDACHECK(cudaGetDeviceCount(&nDevices));
+  // Make sure the right GPU is used when node_per_machine not equal to nDevices
+  CUDACHECK(cudaSetDevice(rank_ % nDevices));
   int greatest_priority;
   CUDACHECK(cudaDeviceGetStreamPriorityRange(NULL, &greatest_priority));
   CUDACHECK(cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking,
                                          greatest_priority));
+  cuda_stream_initialized_ = true;
 #endif
 }
 

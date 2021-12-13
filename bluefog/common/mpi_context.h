@@ -185,6 +185,9 @@ class MPIContext {
   void SetDisplacements(const int* recvcounts, int*& displcmnts,
                         Communicator comm_type, int source_neighbor_cnt = -1);
 
+  
+  void InitCudaStreamOnce();
+
   // Flag indicating whether mpi is enabled.
   bool enabled_ = false;
 
@@ -246,6 +249,7 @@ class MPIContext {
 #if HAVE_CUDA
   // CUDA Stream
   cudaStream_t stream;
+  bool cuda_stream_initialized_ = false;
 #endif
 };
 
