@@ -29,6 +29,8 @@ import h5py
 warnings.simplefilter('ignore')
 import collections
 
+print("hello world")
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
