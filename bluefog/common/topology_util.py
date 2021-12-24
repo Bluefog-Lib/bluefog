@@ -280,6 +280,42 @@ def RingGraph(size: int, connect_style: int = 0) -> nx.DiGraph:
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
+def HyperCubeGraph(size: int) -> nx.DiGraph:
+    """Generate hypercube structure of graph (uniliteral).
+    Argument size must be a power of 2.
+    Example: A HyperCubeGraph with 16 nodes:
+
+    .. plot::
+
+        >>> import networkx as nx
+        >>> from bluefog.common import topology_util
+        >>> G = topology_util.HyperCubeGraph(16)
+        >>> nx.draw_circular(G)
+    """
+    assert np.power(2,int(np.log2(size))) == size, \
+        "Network size must be a power of 2. "
+    if size == 1:
+        return nx.from_numpy_array(np.array([[1.0]]), create_using=nx.DiGraph)
+    if size == 2:
+        return nx.from_numpy_array(np.array([[0.5, 0.5], [0.5, 0.5]]), create_using=nx.DiGraph)
+
+    # uniform weight is used in hypercube
+    weight = 1/(np.log2(size) + 1)
+    W = np.zeros((size, size))
+    for i in range(size):
+        for j in range(i, size):
+
+            if i == j:
+                W[i,j] = weight
+                continue
+            
+            diff = i^j
+            if np.power(2,int(np.log2(diff))) == diff:
+                W[i,j] = weight
+                W[j,i] = weight
+
+    G = nx.from_numpy_array(W, create_using=nx.DiGraph)
+    return G
 
 def FullyConnectedGraph(size: int) -> nx.DiGraph:
     """Generate fully connected structure of graph.

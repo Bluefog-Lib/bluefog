@@ -29,8 +29,6 @@ import h5py
 warnings.simplefilter('ignore')
 import collections
 
-print("hello world")
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -118,7 +116,7 @@ bf.init()
 if args.topology == 'ring':
     bf.set_topology(bf.RingGraph(bf.size()))
 elif args.topology == 'hypercube':
-    bf.set_topology(bf.HypercubeGraph(bf.size()))
+    bf.set_topology(bf.HyperCubeGraph(bf.size()))
 torch.manual_seed(args.seed)
 
 if args.cuda:

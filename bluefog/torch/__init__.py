@@ -93,6 +93,7 @@ from bluefog.common.topology_util import (
     FullyConnectedGraph,
     MeshGrid2DGraph,
     RingGraph,
+    HyperCubeGraph,
     StarGraph,
     SymmetricExponentialGraph,
 )
