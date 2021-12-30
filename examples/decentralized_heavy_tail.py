@@ -26,8 +26,10 @@ import math
 import warnings
 import resnet
 import h5py
+import decentlam_opt
 warnings.simplefilter('ignore')
 import collections
+import time
 
 import torch
 import torch.nn as nn
@@ -52,7 +54,7 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument('--log-dir', default='./logs',
                     help='tensorboard log directory')
-parser.add_argument('--checkpoint-format', default='./checkpoint-{epoch}.pth.tar',
+parser.add_argument('--checkpoint-format', default='./checkpoints/checkpoint-{counter}-optimizer-{optimizer}-topology-{topology}-time-{time}.pth.tar',
                     help='checkpoint file format')
 parser.add_argument('--batches-per-allreduce', type=int, default=1,
                     help='number of batches processed locally before '
@@ -232,19 +234,19 @@ if args.dist_optimizer != 'horovod':
     base_dist_optimizer = (
         bf.DistributedAdaptThenCombineOptimizer if args.atc_style else
         bf.DistributedAdaptWithCombineOptimizer)
-if args.dist_optimizer == 'win_put':
-    optimizer = bf.DistributedWinPutOptimizer(optimizer, model=model)
-elif args.dist_optimizer == 'allreduce':
+if args.dist_optimizer == 'allreduce':
     optimizer = base_dist_optimizer(
         optimizer, model=model, communication_type=bf.CommunicationType.allreduce)
 elif args.dist_optimizer == 'neighbor_allreduce':
-    optimizer = base_dist_optimizer(
-        optimizer, model=model, communication_type=bf.CommunicationType.neighbor_allreduce,
-        num_steps_per_communication = args.batches_per_allreduce)
-elif args.dist_optimizer == 'hierarchical_neighbor_allreduce':
-    optimizer = base_dist_optimizer(
-        optimizer, model=model,
-        communication_type=bf.CommunicationType.hierarchical_neighbor_allreduce)
+    optimizer = decentlam_opt.DSGDOptimizer(
+        model.parameters(), model, nu=args.nu,
+        lr=(args.base_lr * args.batches_per_allreduce * bf.size()),
+        momentum=args.momentum,
+        weight_decay = args.wd,
+    )
+    # optimizer = base_dist_optimizer(
+    #     optimizer, model=model, communication_type=bf.CommunicationType.neighbor_allreduce,
+    #     num_steps_per_communication = args.batches_per_allreduce)
 elif args.dist_optimizer == 'empty':
     optimizer = base_dist_optimizer(
         optimizer, model=model,
@@ -265,8 +267,7 @@ else:
 bf.broadcast_parameters(model.state_dict(), root_rank=0)
 bf.broadcast_optimizer_state(optimizer, root_rank=0)
 
-
-def train(epoch):
+def train(epoch, counter):
     model.train()
     train_sampler.set_epoch(epoch)
     train_loss = Metric("train_loss")
@@ -300,6 +301,10 @@ def train(epoch):
                 }
             )
             t.update(1)
+
+            # if epoch >= args.epochs - 5:
+            #     save_checkpoint(counter[0])
+            #     counter[0] += 1
 
     if log_writer:
         log_writer.add_scalar("train/loss", train_loss.avg, epoch)
@@ -341,21 +346,6 @@ def validate(epoch, record):
 # the first five epochs. See https://arxiv.org/abs/1706.02677 for details.
 # After the warmup reduce learning rate by 10 on the 30th, 60th and 80th epochs.
 def adjust_learning_rate(epoch, batch_idx):
-    # if epoch < args.warmup_epochs:
-    #     epoch += float(batch_idx + 1) / len(train_loader)
-    #     lr_adj = 1.0 / bf.size() * (epoch * (bf.size() - 1) / args.warmup_epochs + 1)
-    # elif epoch < 30:
-    #     lr_adj = 1.0
-    # elif epoch < 60:
-    #     lr_adj = 1e-1
-    # elif epoch < 80:
-    #     lr_adj = 1e-2
-    # else:
-    #     lr_adj = 1e-3
-    # for param_group in optimizer.param_groups:
-    #     param_group["lr"] = (
-    #         args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj
-    #     )
     if epoch < args.warmup_epochs:
         epoch += float(batch_idx + 1) / len(train_loader)
         lr_adj = 1.0 / bf.size() * (epoch * (bf.size() - 1) / args.warmup_epochs + 1)
@@ -370,17 +360,17 @@ def adjust_learning_rate(epoch, batch_idx):
             args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj
         )
 
-    # if batch_idx == 0:
-    #     print("Epoch {0:8.4f}: learning rate: {1:8.4f}".format(epoch, args.base_lr * bf.size() * args.batches_per_allreduce * lr_adj))
-
 def accuracy(output, target):
     # get the index of the max log-probability
     pred = output.max(1, keepdim=True)[1]
     return pred.eq(target.view_as(pred)).cpu().float().mean()
 
-def save_checkpoint(epoch):
+def save_checkpoint(counter):
     if bf.rank() == 0:
-        filepath = args.checkpoint_format.format(epoch=epoch + 1)
+        if args.dist_optimizer == 'neighbor_allreduce':
+            filepath = args.checkpoint_format.format(counter=counter, optimizer=args.dist_optimizer, topology=args.topology, time = tt)
+        else:
+            filepath = args.checkpoint_format.format(counter=counter, optimizer=args.dist_optimizer, topology="None", time = tt)
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
             os.makedirs(dirpath)
@@ -408,10 +398,15 @@ def store_status(data_dict, h5file, suffix):
             hf.create_dataset(label, data=data)
 
 if __name__ == "__main__":
+    
+    timearray=time.localtime(float(time.time()))
+    tt=time.strftime('%Y-%m-%d-%H-%M-%S',timearray)
+    counter = [0]
+
     data_dict = collections.defaultdict(list)
     test_record = []
     for epoch in range(args.epochs):
-        train_loss, train_acc = train(epoch)
+        train_loss, train_acc = train(epoch, counter)
         val_loss, val_acc = validate(epoch, test_record)
 
         data_dict['train_loss'].append(train_loss)
@@ -422,6 +417,25 @@ if __name__ == "__main__":
     bf.barrier()
     store_status(data_dict, args.h5file, bf.rank())
     if bf.rank() == 0:
+
+        # print basic experimental information
+        print()
+        print("Seed: ", args.seed)
+        print("Optimizer: ", args.dist_optimizer)
+        if args.dist_optimizer == "gradient_allreduce":
+            print("Topology: None")
+        else:
+            print("Topology: ", args.topology)
+        if args.atc_style:
+            print("ATC_style: True")
+        else:
+            print("ATC_style: False")
+        print("Dirichlet Beta: ", args.dirichlet_beta)
+        print("Nu: ", args.nu)
+        print("Batchsize: ", args.batch_size)
+        print("Momentum: ", args.momentum)
+        print("Weight Deacy ", args.wd)
+
         print()
         if args.dirichlet_beta >= 0:
             print('Sample distribution:')
@@ -430,4 +444,5 @@ if __name__ == "__main__":
             print('Sample number of each node:')
             print(np.sum(np.array(train_sampler.idx_list), axis=1))
         for epoch, (loss, acc) in  enumerate(test_record):
-            print(f'[Epoch {epoch+1:2d}] Loss: {loss}, acc: {acc}%')
+            train_loss, train_acc = data_dict['train_loss'][epoch], data_dict['train_accuracy'][epoch]
+            print(f'[Epoch {epoch+1:2d}] Train Loss: {train_loss}, Train Acc: {train_acc}, Test Loss: {loss}, Test Acc: {acc}%')
