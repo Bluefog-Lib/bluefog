@@ -3,6 +3,24 @@ name: Continuous Integration
 on: [push]
 
 jobs:
+   mypy:
+    name: mypy check
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.7'
+    - name: Install mypy
+      run: |
+      cat scripts/requirements_dev.txt | grep "mypy" | xargs pip install
+    - name: Check
+      run: |
+        scripts/mypy.sh --version
+        scripts/mypy.sh
+
   ubuntu-unit-test:
 
     runs-on: ubuntu-18.04
