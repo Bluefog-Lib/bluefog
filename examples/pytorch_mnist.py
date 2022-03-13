@@ -17,6 +17,7 @@
 from __future__ import print_function
 
 from bluefog.common import topology_util
+from typing import Tuple, List
 import bluefog.torch as bf
 import argparse
 import os
@@ -304,7 +305,7 @@ def test(record):
         )
     record.append((test_loss, 100.0 * test_accuracy))
 
-test_record = []
+test_record: List[Tuple[float, float]] = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
     test(test_record)

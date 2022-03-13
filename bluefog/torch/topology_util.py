@@ -6,7 +6,7 @@ import torch
 import bluefog.torch as bf
 
 
-def _check_ranks(rank_list: List[Any], self_rank: int, size: int) -> [bool, str]:
+def _check_ranks(rank_list: List[Any], self_rank: int, size: int) -> Tuple[bool, str]:
     for rank in rank_list:
         if not isinstance(rank, int):
             return False, "contain element that is not integer."
@@ -21,7 +21,7 @@ def _check_ranks(rank_list: List[Any], self_rank: int, size: int) -> [bool, str]
 
 def InferSourceFromDestinationRanks(
     dst_ranks: List[int], construct_adjacency_matrix: bool = False,
-) -> Union[List[int], Tuple[List[int], np.array]]:
+) -> Union[List[int], Tuple[List[int], np.ndarray]]:
     """Infer the source ranks from destination ranks. This is collective communication call.
 
     Args:
@@ -49,7 +49,7 @@ def InferSourceFromDestinationRanks(
 
 def InferDestinationFromSourceRanks(
     src_ranks: List[int], construct_adjacency_matrix: bool = False,
-) -> Union[List[int], np.array]:
+) -> Union[List[int], np.ndarray]:
     """Infer the destination ranks from source ranks. This is collective communication call.
 
     Args:

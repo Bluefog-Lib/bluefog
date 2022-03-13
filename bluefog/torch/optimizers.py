@@ -23,6 +23,7 @@ import os
 import warnings
 
 import torch
+from torch.optim import Optimizer
 import bluefog.torch as bf
 
 class CommunicationType(Enum):
@@ -163,7 +164,7 @@ def _register_timeline(optimizer, models, parameter_names, parent_name=None):
             *pre_forward_hook_handles, *forward_end_hook_handles]
 
 
-class _DistributedOptimizer(torch.optim.Optimizer):
+class _DistributedOptimizer(Optimizer):
     def __init__(self, params, model, backward_passes_per_step=1):
         super(self.__class__, self).__init__(params)
 
@@ -294,7 +295,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).zero_grad()
 
 
-class _DistributedReduceOptimizer(torch.optim.Optimizer):
+class _DistributedReduceOptimizer(Optimizer):
     """ A distributed optimizer wrapper over torch optimizer.
 
     Arguments:
@@ -482,7 +483,7 @@ class _DistributedReduceOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
-class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
+class _DistributedAdaptThenCombineOptimizer(Optimizer):
     def __init__(self, params, model, communication_type, backward_passes_per_step=1):
         super(self.__class__, self).__init__(params)
 
@@ -841,7 +842,7 @@ class _DistributedAdaptThenCombineOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).zero_grad()
 
 
-class _DistributedWinOptimizer(torch.optim.Optimizer):
+class _DistributedWinOptimizer(Optimizer):
 
     def __init__(self, params, model, num_steps_per_communication, window_prefix, pull_style):
         super(self.__class__, self).__init__(params)
@@ -1023,7 +1024,7 @@ class _DistributedWinOptimizer(torch.optim.Optimizer):
         return super(self.__class__, self).step(closure)
 
 
-class _DistributedPushSumOptimizer(torch.optim.Optimizer):
+class _DistributedPushSumOptimizer(Optimizer):
 
     def __init__(self, params, model, num_steps_per_communication):
         super(self.__class__, self).__init__(params)
