@@ -14,7 +14,7 @@
 # ==============================================================================
 
 import base64
-import cloudpickle
+import cloudpickle # type: ignore
 
 
 def loads_base64(encoded):

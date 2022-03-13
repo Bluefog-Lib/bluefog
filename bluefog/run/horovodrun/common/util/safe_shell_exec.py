@@ -14,7 +14,7 @@
 # ==============================================================================
 
 import os
-import psutil
+import psutil # type: ignore
 import signal
 import subprocess
 import sys

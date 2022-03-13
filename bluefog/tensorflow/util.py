@@ -16,11 +16,11 @@
 
 from distutils.version import LooseVersion
 
-import tensorflow
+import tensorflow # type: ignore
 
 # Eager Mode has been introduced in TF 1.7.0
 if LooseVersion(tensorflow.__version__) >= LooseVersion('1.7.0'):
-    from tensorflow.python.eager import context
+    from tensorflow.python.eager import context # type: ignore
     _has_eager = True
 else:
     _has_eager = False

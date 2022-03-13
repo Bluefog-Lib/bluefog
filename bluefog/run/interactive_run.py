@@ -22,7 +22,7 @@ import subprocess
 import time
 from typing import Dict, List
 
-import ipyparallel as ipp
+import ipyparallel as ipp # type: ignore
 import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 

@@ -17,7 +17,7 @@ import datetime
 import errno
 import os
 import threading
-import cloudpickle
+import cloudpickle # type: ignore
 
 
 class Cache(object):

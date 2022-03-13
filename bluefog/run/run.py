@@ -16,14 +16,8 @@
 
 import argparse
 import os
-import re
 import shlex
-import socket
-import subprocess
-import sys
-import traceback
 
-import psutil
 import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 

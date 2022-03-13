@@ -52,7 +52,7 @@ def is_open_mpi_installed():
 
 def is_ipyparallel_installed():
     try:
-        import ipyparallel  # pylint: disable=unused-import
+        import ipyparallel # type: ignore # pylint: disable=unused-import
         return True
     except ImportError:
         return False

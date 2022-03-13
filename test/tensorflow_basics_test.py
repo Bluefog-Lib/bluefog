@@ -22,7 +22,7 @@ import warnings
 import numpy as np
 import networkx as nx
 import pytest
-import tensorflow as tf
+import tensorflow as tf # type: ignore
 
 from common import mpi_env_rank_and_size
 import bluefog.tensorflow as bf

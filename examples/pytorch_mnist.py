@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data.distributed
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms # type: ignore
 
 sys.path.insert(0, os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")))
@@ -75,7 +75,7 @@ torch.manual_seed(args.seed)
 
 if args.dist_optimizer == 'horovod':
     print("importing horovod")
-    import horovod.torch as bf
+    import horovod.torch as bf # type: ignore
 
 bf.init()
 

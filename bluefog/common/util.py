@@ -22,7 +22,7 @@ import sysconfig
 EXTENSIONS = ['tensorflow', 'torch']
 
 def is_running_from_ipython():
-    from IPython import get_ipython
+    from IPython import get_ipython # type: ignore
     return get_ipython() is not None
 
 def get_ext_suffix():

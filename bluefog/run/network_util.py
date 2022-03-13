@@ -20,7 +20,7 @@ import os
 import re
 import socket
 
-import psutil
+import psutil # type: ignore
 from bluefog.run.horovodrun.common.util import safe_shell_exec
 
 # Number of retries for sshing into the hosts

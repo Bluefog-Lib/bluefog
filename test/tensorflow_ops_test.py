@@ -20,9 +20,9 @@ from __future__ import print_function
 import itertools
 import numpy as np
 import os
-import tensorflow as tf
+import tensorflow as tf # type: ignore
 from bluefog.tensorflow.util import _executing_eagerly, _has_eager
-from tensorflow.python.framework import ops
+from tensorflow.python.framework import ops # type: ignore
 import warnings
 
 import bluefog.tensorflow as bf

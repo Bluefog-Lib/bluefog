@@ -30,9 +30,9 @@ import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data.distributed
-from torchvision import datasets, transforms, models
-import tensorboardX
-from tqdm import tqdm
+from torchvision import datasets, transforms, models # type: ignore
+import tensorboardX # type: ignore
+from tqdm import tqdm # type: ignore
 
 sys.path.insert(0, os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")))
@@ -96,7 +96,7 @@ allreduce_batch_size = args.batch_size * args.batches_per_allreduce
 
 if args.dist_optimizer == 'horovod':
     print("importing horovod")
-    import horovod.torch as bf
+    import horovod.torch as bf # type: ignore
 
 # Bluefog: initialize library.
 bf.init()
