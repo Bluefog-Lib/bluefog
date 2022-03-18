@@ -178,7 +178,7 @@ Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below fo
 Troubleshooting
 ---------
 Import bluefog.torch failed
-^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you see the error message below, it means that bluefog is not installed properly. Please install bluefog using github source and recompile bluefog （e.g. make clean && make -j $(nproc)  && BLUEFOG_WITH_NCCL=1 pip install .）
 
