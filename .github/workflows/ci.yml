@@ -15,7 +15,7 @@ jobs:
         python-version: '3.7'
     - name: Install mypy
       run: |
-      cat scripts/requirements_dev.txt | grep "mypy" | xargs pip install
+        cat scripts/requirements_dev.txt | grep "mypy" | xargs pip install
     - name: Check
       run: |
         scripts/mypy.sh --version
