@@ -3,10 +3,9 @@ name: Continuous Integration
 on: [push]
 
 jobs:
-   mypy:
+  mypy:
     name: mypy check
     runs-on: ubuntu-18.04
-
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python 3.7
@@ -20,15 +19,13 @@ jobs:
       run: |
         scripts/mypy.sh --version
         scripts/mypy.sh
-      
-  ubuntu-unit-test:
 
+  ubuntu-unit-test:
     runs-on: ubuntu-18.04
     strategy:
       matrix:
         mpi-vendor: ['openmpi', 'mpich']
         python-version: [3.7, 3.8]
-
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
@@ -51,15 +48,13 @@ jobs:
         pip list
     - name: Unit Test
       run: make test_torch_basic test_torch_ops test_torch_hier_ops
-      
+
   macos-unit-test:
-    
     runs-on: macos-10.15
     strategy:
       matrix:
         mpi-vendor: ['openmpi', 'mpich']
         python-version: [3.7, 3.8]
-
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
