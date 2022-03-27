@@ -20,7 +20,7 @@ jobs:
       run: |
         scripts/mypy.sh --version
         scripts/mypy.sh
-
+      
   ubuntu-unit-test:
 
     runs-on: ubuntu-18.04
