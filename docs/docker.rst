@@ -57,13 +57,13 @@ if you download the docker image from `Docker Hub <https://hub.docker.com/r/blue
 
 .. code-block:: bash
 
-    sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --shm-size=64g --network=host -v /mnt/share/ssh:/root/.ssh bluefog_gpu:latest
+    sudo docker run --privileged -it --gpus all --name bluefog_gpu_deploy --shm-size=64g --network=host -v /mnt/share/ssh:/root/.ssh bluefoglib/bluefog:gpu-0.3.0
 
 2. Run docker container with only CPU support:
 
 .. code-block:: bash
 
-    sudo docker run --privileged -it --name bluefog_cpu_deploy --network=host -v /mnt/share/ssh:/root/.ssh bluefog_cpu:latest
+    sudo docker run --privileged -it --name bluefog_cpu_deploy --network=host -v /mnt/share/ssh:/root/.ssh bluefoglib/bluefog:gpu-0.3.0
 
 3. Clean up docker system after running:
 
