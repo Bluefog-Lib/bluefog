@@ -166,13 +166,31 @@ Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below fo
        year         = {2021},
      }
 
-     % Theoratical Paper
+     % Theoratical Papers
      @article{ying2021exponential,
        title={Exponential Graph is Provably Efficient for Decentralized Deep Training},
        author={Ying, Bicheng and Yuan, Kun and Chen, Yiming and Hu, Hanbin and Pan, Pan and Yin, Wotao},
        journal={Advances in Neural Information Processing Systems (NeurIPS), 34.
                 Also available at arXiv:2110.13363},
        year={2021}
+     }
+
+     @inproceedings{yuan2021decentlam,
+        title={DecentLaM: Decentralized Momentum SGD for Large-Batch Deep Training},
+        author={Yuan, Kun and Chen, Yiming and Huang, Xinmeng and Zhang, Yingya and Pan, Pan and Xu, Yinghui and Yin, Wotao},
+        booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
+        pages={3029--3039},
+        year={2021}
+     }
+
+     @article{yuan2020influence,
+        title={On the influence of bias-correction on distributed stochastic optimization},
+        author={Yuan, Kun and Alghunaim, Sulaiman A and Ying, Bicheng and Sayed, Ali H},
+        journal={IEEE Transactions on Signal Processing},
+        volume={68},
+        pages={4352--4367},
+        year={2020},
+        publisher={IEEE}
      }
 
 Troubleshooting
