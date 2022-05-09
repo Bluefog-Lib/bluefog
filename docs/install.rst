@@ -86,13 +86,13 @@ For more details, check :ref:`Docker Usage` page.
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:gpu-0.2.2
+    sudo docker pull bluefoglib/bluefog:gpu-0.3.0
 
 2. Download docker image with only CPU support:
 
 .. code-block:: bash
 
-    sudo docker pull bluefoglib/bluefog:cpu-0.2.2
+    sudo docker pull bluefoglib/bluefog:cpu-0.3.0
 
 .. _conda: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 .. _download link: https://www.open-mpi.org/software/ompi/v4.0/
