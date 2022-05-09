@@ -160,7 +160,7 @@ Bluefog is uploaded to Zenodo. An equivalent BibTex format reference is below fo
 
      % System paper
      @article{bluefog,
-       author       = {Ying, Bicheng and Yuan, Kun and Hu, Hanbin and Chen, Yiming and Yin, Wotao },
+       author       = {Ying, Bicheng and Yuan, Kun and Hu, Hanbin and Chen, Yiming and Yin, Wotao},
        title        = {BlueFog: Make Decentralized Algorithms Practical for Optimization and Deep Learning},
        journal.     = {arXiv preprint arXiv:2111.04287},
        year         = {2021},
