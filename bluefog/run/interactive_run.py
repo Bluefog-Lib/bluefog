@@ -347,7 +347,7 @@ def multiple_machines_launch(args, env: Dict[str, str],
     subprocess.run('ipcluster nbextension enable --user',
                    shell=True, env=env)
     print("Starting the controller.")
-    if args.disable_heartbeat:
+    if not args.enable_heartbeat:
         _disable_heart_beatcheck(args.profile)
     stdout = None if args.verbose else subprocess.PIPE
     p_controller = subprocess.Popen(ipcontroller_command, shell=True, env=env, stdout=stdout,
