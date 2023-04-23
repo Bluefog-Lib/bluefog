@@ -17,6 +17,7 @@
 from __future__ import print_function
 
 from bluefog.common import topology_util
+from typing import Tuple, List
 import bluefog.torch as bf
 import argparse
 import os
@@ -28,7 +29,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data.distributed
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms # type: ignore
 
 sys.path.insert(0, os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")))
@@ -75,7 +76,7 @@ torch.manual_seed(args.seed)
 
 if args.dist_optimizer == 'horovod':
     print("importing horovod")
-    import horovod.torch as bf
+    import horovod.torch as bf # type: ignore
 
 bf.init()
 
@@ -304,7 +305,7 @@ def test(record):
         )
     record.append((test_loss, 100.0 * test_accuracy))
 
-test_record = []
+test_record: List[Tuple[float, float]] = []
 for epoch in range(1, args.epochs + 1):
     train(epoch)
     test(test_record)

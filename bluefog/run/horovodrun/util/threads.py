@@ -15,7 +15,7 @@
 
 import threading
 
-from six.moves import queue
+from six.moves import queue # type: ignore
 
 
 def execute_function_multithreaded(fn,

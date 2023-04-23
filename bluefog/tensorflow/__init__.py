@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import collections
 import os
-import tensorflow as tf
+import tensorflow as tf # type: ignore
 
 from bluefog.common.util import check_extension
 check_extension('bluefog.tensorflow', __file__, 'mpi_lib')

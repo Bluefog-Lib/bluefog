@@ -116,11 +116,11 @@ def ExponentialGraph(size: int, base: int = 2) -> nx.DiGraph:
             x.append(1.0)
         else:
             x.append(0.0)
-    x = np.array(x)
-    x /= x.sum()
+    y = np.array(x)
+    y /= y.sum()
     topo = np.empty((size, size))
     for i in range(size):
-        topo[i] = np.roll(x, i)
+        topo[i] = np.roll(y, i)
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 
@@ -148,11 +148,11 @@ def SymmetricExponentialGraph(size: int, base: int = 4) -> nx.DiGraph:
             x.append(1.0)
         else:
             x.append(0.0)
-    x = np.array(x)
-    x /= x.sum()
+    y = np.array(x)
+    y /= y.sum()
     topo = np.empty((size, size))
     for i in range(size):
-        topo[i] = np.roll(x, i)
+        topo[i] = np.roll(y, i)
     G = nx.from_numpy_array(topo, create_using=nx.DiGraph)
     return G
 

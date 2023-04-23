@@ -19,10 +19,10 @@ from __future__ import division
 from __future__ import print_function
 
 import re
-import tensorflow as tf
-from tensorflow.python.framework import load_library
-from tensorflow.python.framework import ops
-from tensorflow.python.platform import resource_loader
+import tensorflow as tf # type: ignore
+from tensorflow.python.framework import load_library # type: ignore
+from tensorflow.python.framework import ops # type: ignore
+from tensorflow.python.platform import resource_loader # type: ignore
 
 from bluefog.common.basics import BlueFogBasics
 from bluefog.common.util import get_ext_suffix

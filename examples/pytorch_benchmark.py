@@ -23,7 +23,7 @@ from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data.distributed
-from torchvision import models
+from torchvision import models # type: ignore
 import bluefog.torch as bf
 from bluefog.common import topology_util
 
@@ -66,7 +66,7 @@ args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 if args.dist_optimizer == 'horovod':
-    import horovod.torch as bf
+    import horovod.torch as bf # type: ignore
 
 bf.init()
 

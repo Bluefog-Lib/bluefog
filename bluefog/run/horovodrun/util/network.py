@@ -1,5 +1,5 @@
 import socket
-import psutil
+import psutil # type: ignore
 
 from bluefog.run.horovodrun.util import threads
 

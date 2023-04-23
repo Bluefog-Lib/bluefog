@@ -18,7 +18,7 @@
 import os
 import sys
 
-import six
+import six # type: ignore
 from bluefog.run.horovodrun.common.util import codec, safe_shell_exec, timeout, secret
 from bluefog.run.horovodrun.driver import driver_service
 from bluefog.run.horovodrun.task import task_service

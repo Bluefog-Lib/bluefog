@@ -17,10 +17,10 @@ import random
 import socket
 import struct
 import threading
-import cloudpickle
-import psutil
+import cloudpickle # type: ignore
+import psutil # type: ignore
 
-from six.moves import queue, socketserver
+from six.moves import queue, socketserver # type: ignore
 
 from bluefog.run.horovodrun.common.util import secret
 

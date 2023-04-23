@@ -22,7 +22,7 @@ import subprocess
 import time
 from typing import Dict, List
 
-import ipyparallel as ipp
+import ipyparallel as ipp # type: ignore
 import bluefog
 from bluefog.run import env_util, network_util, horovod_driver
 
@@ -318,7 +318,7 @@ def multiple_machines_launch(args, env: Dict[str, str],
         common_intfs = horovod_driver.driver_fn(all_host_names, local_host_names,
                                                 args.ssh_port, args.verbose)
     else:
-        common_intfs = [args.nic]
+        common_intfs = set(args.nic)
 
     tcp_intf_arg = '-mca btl_tcp_if_include {common_intfs}'.format(
         common_intfs=','.join(common_intfs)) if common_intfs else ''
@@ -384,8 +384,6 @@ def multiple_machines_launch(args, env: Dict[str, str],
                 ib_arg=ib_arg,
                 nccl_socket_intf_arg=nccl_socket_intf_arg,
                 extra_flags=extra_flags,
-                env=' '.join('-x %s' % key for key in env.keys()
-                             if env_util.is_exportable(key)),
                 command=ipengine_command)
     )
     p_engine = subprocess.Popen(mpi_ipengine_command, shell=True, env=env)

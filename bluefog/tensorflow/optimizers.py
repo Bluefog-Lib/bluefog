@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 
-import tensorflow as tf
+import tensorflow as tf # type: ignore
 
 from bluefog.tensorflow.mpi_ops import allreduce, broadcast, size
 from bluefog.tensorflow.util import _executing_eagerly, _cache
